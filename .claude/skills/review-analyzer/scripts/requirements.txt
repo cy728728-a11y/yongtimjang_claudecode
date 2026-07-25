@@ -1,0 +1,11 @@
+# review-analyzer 필수 의존성
+# 크롤링 코어 (--no-login 모드는 이것만 있으면 됨)
+selenium>=4.6.0
+
+# --selenium(로그인) 모드를 쓸 때만 필요 (공개 리뷰엔 불필요):
+# pyperclip>=1.8.0
+# python-dotenv>=1.0.0
+
+# 구글 시트 업로드(--sheet)를 쓸 때만 필요:
+# gspread>=6.0.0
+# google-auth>=2.0.0

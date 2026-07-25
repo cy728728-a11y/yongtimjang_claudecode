@@ -1,0 +1,2 @@
+# 이 폴더는 수집 스킬(kakao-read 카톡 체크 등)이 미처리 source를 떨구는 곳입니다.
+# inbox-triage 스킬이 여기 있는 processed:false 파일을 읽어 업무로 분류·라우팅합니다.
