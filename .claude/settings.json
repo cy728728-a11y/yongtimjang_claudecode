@@ -2,5 +2,31 @@
   "statusLine": {
     "type": "command",
     "command": "bash .claude/statusline.sh"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git fetch:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git rev-list:*)",
+      "Bash(git config:*)",
+      "PowerShell(git status:*)",
+      "PowerShell(git add:*)",
+      "PowerShell(git commit:*)",
+      "PowerShell(git push:*)",
+      "PowerShell(git pull:*)",
+      "PowerShell(git fetch:*)",
+      "PowerShell(git log:*)",
+      "PowerShell(git diff:*)",
+      "PowerShell(git rev-list:*)",
+      "PowerShell(git config:*)",
+      "PowerShell(./sync.ps1:*)",
+      "PowerShell(.\\sync.ps1:*)"
+    ]
   }
 }
