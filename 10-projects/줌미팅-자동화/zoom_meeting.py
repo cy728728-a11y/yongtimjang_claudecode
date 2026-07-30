@@ -109,5 +109,34 @@ def create_meeting(access_token: str, user_email: str, topic: str, start_time: s
         raise RuntimeError(f"Zoom 미팅 생성 실패 ({e.code}): {body_text}")
 
 
+def main():
+    parser = argparse.ArgumentParser(description="줌 미팅 생성 (Server-to-Server OAuth)")
+    parser.add_argument("--topic", required=True, help="미팅 제목")
+    parser.add_argument("--start", required=True, help="시작시간, KST, 예: 2026-08-05T14:00:00")
+    parser.add_argument("--duration", required=True, type=int, help="소요시간(분)")
+    args = parser.parse_args()
+
+    env = load_env(find_env())
+    try:
+        creds = load_credentials(env)
+    except ValueError as e:
+        print(f"[설정 오류] {e}", file=sys.stderr)
+        print(
+            "marketplace.zoom.us > Developer > Build App > Server-to-Server OAuth 로 앱을 만들고 "
+            ".env에 ZOOM_ACCOUNT_ID/ZOOM_CLIENT_ID/ZOOM_CLIENT_SECRET/ZOOM_USER_EMAIL을 채워주세요.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    try:
+        token = get_access_token(creds["ZOOM_ACCOUNT_ID"], creds["ZOOM_CLIENT_ID"], creds["ZOOM_CLIENT_SECRET"])
+        meeting = create_meeting(token, creds["ZOOM_USER_EMAIL"], args.topic, args.start, args.duration)
+    except RuntimeError as e:
+        print(f"[오류] {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(json.dumps(meeting, ensure_ascii=False))
+
+
 if __name__ == "__main__":
-    pass
+    main()

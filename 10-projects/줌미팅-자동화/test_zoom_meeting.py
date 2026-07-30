@@ -1,3 +1,4 @@
+import io
 import json
 import sys
 import tempfile
@@ -132,6 +133,47 @@ class TestCreateMeeting(unittest.TestCase):
             )
 
         self.assertIn("400", str(ctx.exception))
+
+
+class TestMain(unittest.TestCase):
+    @patch("zoom_meeting.create_meeting")
+    @patch("zoom_meeting.get_access_token")
+    @patch("zoom_meeting.find_env")
+    def test_main_success_prints_json_to_stdout(self, mock_find_env, mock_get_token, mock_create_meeting):
+        mock_find_env.return_value = Path("dummy/.env")
+        with patch("zoom_meeting.load_env", return_value={
+            "ZOOM_ACCOUNT_ID": "acc", "ZOOM_CLIENT_ID": "cid",
+            "ZOOM_CLIENT_SECRET": "secret", "ZOOM_USER_EMAIL": "user@example.com",
+        }):
+            mock_get_token.return_value = "token123"
+            mock_create_meeting.return_value = {
+                "topic": "테스트 미팅", "start_time": "2026-08-05T14:00:00Z",
+                "duration": 120, "join_url": "https://zoom.us/j/111",
+                "start_url": "https://zoom.us/s/111",
+            }
+            test_args = ["zoom_meeting.py", "--topic", "테스트 미팅",
+                          "--start", "2026-08-05T14:00:00", "--duration", "120"]
+            captured = io.StringIO()
+            with patch("sys.argv", test_args), patch("sys.stdout", captured):
+                zoom_meeting.main()
+
+        output = json.loads(captured.getvalue().strip())
+        self.assertEqual(output["join_url"], "https://zoom.us/j/111")
+        self.assertEqual(output["start_url"], "https://zoom.us/s/111")
+
+    @patch("zoom_meeting.find_env")
+    def test_main_missing_credentials_exits_with_error(self, mock_find_env):
+        mock_find_env.return_value = Path("dummy/.env")
+        with patch("zoom_meeting.load_env", return_value={}):
+            test_args = ["zoom_meeting.py", "--topic", "테스트",
+                          "--start", "2026-08-05T14:00:00", "--duration", "60"]
+            captured_err = io.StringIO()
+            with patch("sys.argv", test_args), patch("sys.stderr", captured_err):
+                with self.assertRaises(SystemExit) as ctx:
+                    zoom_meeting.main()
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("ZOOM_ACCOUNT_ID", captured_err.getvalue())
 
 
 if __name__ == "__main__":
