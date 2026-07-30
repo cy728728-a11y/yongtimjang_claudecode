@@ -78,5 +78,61 @@ class TestGetAccessToken(unittest.TestCase):
         self.assertIn("401", str(ctx.exception))
 
 
+class TestCreateMeeting(unittest.TestCase):
+    @patch("zoom_meeting.urllib.request.urlopen")
+    def test_create_meeting_success_returns_expected_fields(self, mock_urlopen):
+        api_response = {
+            "topic": "구매대행 실전반 3주차",
+            "start_time": "2026-08-05T14:00:00Z",
+            "duration": 120,
+            "join_url": "https://zoom.us/j/1234567890",
+            "start_url": "https://zoom.us/s/1234567890?zak=xyz",
+            "id": 1234567890,
+        }
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps(api_response).encode()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_urlopen.return_value = mock_resp
+
+        result = zoom_meeting.create_meeting(
+            access_token="token123",
+            user_email="bulsaja23@gmail.com",
+            topic="구매대행 실전반 3주차",
+            start_time="2026-08-05T14:00:00",
+            duration_minutes=120,
+        )
+
+        self.assertEqual(result["topic"], "구매대행 실전반 3주차")
+        self.assertEqual(result["join_url"], "https://zoom.us/j/1234567890")
+        self.assertEqual(result["start_url"], "https://zoom.us/s/1234567890?zak=xyz")
+        self.assertEqual(result["duration"], 120)
+
+        sent_request = mock_urlopen.call_args[0][0]
+        self.assertIn("bulsaja23%40gmail.com", sent_request.full_url)
+        sent_body = json.loads(sent_request.data.decode())
+        self.assertEqual(sent_body["settings"]["waiting_room"], False)
+        self.assertEqual(sent_body["timezone"], "Asia/Seoul")
+        self.assertEqual(sent_body["type"], 2)
+
+    @patch("zoom_meeting.urllib.request.urlopen")
+    def test_create_meeting_http_error_raises_runtime_error(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="https://api.zoom.us/v2/users/x/meetings", code=400,
+            msg="Bad Request", hdrs=None,
+            fp=__import__("io").BytesIO(b'{"message":"Invalid start_time"}'),
+        )
+
+        with self.assertRaises(RuntimeError) as ctx:
+            zoom_meeting.create_meeting(
+                access_token="token123",
+                user_email="bulsaja23@gmail.com",
+                topic="테스트",
+                start_time="잘못된형식",
+                duration_minutes=60,
+            )
+
+        self.assertIn("400", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

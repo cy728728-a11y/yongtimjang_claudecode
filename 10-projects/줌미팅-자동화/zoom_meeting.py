@@ -76,5 +76,38 @@ def get_access_token(account_id: str, client_id: str, client_secret: str) -> str
         raise RuntimeError(f"Zoom 토큰 발급 실패 ({e.code}): {body}")
 
 
+def create_meeting(access_token: str, user_email: str, topic: str, start_time: str, duration_minutes: int) -> dict:
+    """줌 미팅 생성. start_time은 'YYYY-MM-DDTHH:MM:SS' (KST) 형식."""
+    url = f"https://api.zoom.us/v2/users/{urllib.parse.quote(user_email)}/meetings"
+    payload = {
+        "topic": topic,
+        "type": 2,
+        "start_time": start_time,
+        "duration": duration_minutes,
+        "timezone": "Asia/Seoul",
+        "settings": {
+            "waiting_room": False,
+        },
+    }
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(url, data=body, method="POST", headers={
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+            return {
+                "topic": data["topic"],
+                "start_time": data["start_time"],
+                "duration": data["duration"],
+                "join_url": data["join_url"],
+                "start_url": data["start_url"],
+            }
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode() if e.fp else ""
+        raise RuntimeError(f"Zoom 미팅 생성 실패 ({e.code}): {body_text}")
+
+
 if __name__ == "__main__":
     pass
