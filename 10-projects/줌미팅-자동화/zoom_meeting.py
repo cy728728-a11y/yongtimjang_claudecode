@@ -25,14 +25,17 @@ REQUIRED_KEYS = ["ZOOM_ACCOUNT_ID", "ZOOM_CLIENT_ID", "ZOOM_CLIENT_SECRET", "ZOO
 def load_env(env_path: Path) -> dict:
     """.env 파일을 파싱해 dict 로 반환 (KEY=VALUE, # 주석 무시)."""
     data = {}
-    if not env_path.exists():
-        return data
-    for raw in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, val = line.split("=", 1)
-        data[key.strip()] = val.strip().strip('"').strip("'")
+    try:
+        if not env_path.exists():
+            return data
+        for raw in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            data[key.strip()] = val.strip().strip('"').strip("'")
+    except Exception as e:
+        print(f"[경고] .env 읽기 실패: {e}", file=sys.stderr)
     return data
 
 
@@ -57,6 +60,21 @@ def load_credentials(env: dict) -> dict:
     return {k: env[k].strip() for k in REQUIRED_KEYS}
 
 
+def _call_zoom_api(req: urllib.request.Request, action_label: str):
+    """urlopen을 감싸 HTTPError/URLError를 일관된 RuntimeError로 변환.
+
+    - HTTPError: 응답은 왔지만 에러 상태 (자격증명/요청 오류 등)
+    - URLError: 응답 자체가 없음 (오프라인, DNS 실패, 방화벽 차단 등)
+    """
+    try:
+        return urllib.request.urlopen(req, timeout=30)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode() if e.fp else ""
+        raise RuntimeError(f"{action_label} 실패 ({e.code}): {body}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Zoom 서버에 연결할 수 없습니다: {e.reason}")
+
+
 def get_access_token(account_id: str, client_id: str, client_secret: str) -> str:
     """Server-to-Server OAuth로 access token 발급."""
     url = "https://zoom.us/oauth/token?" + urllib.parse.urlencode({
@@ -67,18 +85,14 @@ def get_access_token(account_id: str, client_id: str, client_secret: str) -> str
     req = urllib.request.Request(url, method="POST", headers={
         "Authorization": f"Basic {auth}",
     })
-    try:
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode())
-            return data["access_token"]
-    except urllib.error.HTTPError as e:
-        body = e.read().decode() if e.fp else ""
-        raise RuntimeError(f"Zoom 토큰 발급 실패 ({e.code}): {body}")
+    with _call_zoom_api(req, "Zoom 토큰 발급") as resp:
+        data = json.loads(resp.read().decode())
+        return data["access_token"]
 
 
 def create_meeting(access_token: str, user_email: str, topic: str, start_time: str, duration_minutes: int) -> dict:
     """줌 미팅 생성. start_time은 'YYYY-MM-DDTHH:MM:SS' (KST) 형식."""
-    url = f"https://api.zoom.us/v2/users/{urllib.parse.quote(user_email)}/meetings"
+    url = f"https://api.zoom.us/v2/users/{urllib.parse.quote(user_email, safe='')}/meetings"
     payload = {
         "topic": topic,
         "type": 2,
@@ -94,22 +108,21 @@ def create_meeting(access_token: str, user_email: str, topic: str, start_time: s
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     })
-    try:
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode())
-            return {
-                "topic": data["topic"],
-                "start_time": data["start_time"],
-                "duration": data["duration"],
-                "join_url": data["join_url"],
-                "start_url": data["start_url"],
-            }
-    except urllib.error.HTTPError as e:
-        body_text = e.read().decode() if e.fp else ""
-        raise RuntimeError(f"Zoom 미팅 생성 실패 ({e.code}): {body_text}")
+    with _call_zoom_api(req, "Zoom 미팅 생성") as resp:
+        data = json.loads(resp.read().decode())
+        return {
+            "topic": data["topic"],
+            "start_time": data["start_time"],
+            "duration": data["duration"],
+            "join_url": data["join_url"],
+            "start_url": data["start_url"],
+        }
 
 
 def main():
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(description="줌 미팅 생성 (Server-to-Server OAuth)")
     parser.add_argument("--topic", required=True, help="미팅 제목")
     parser.add_argument("--start", required=True, help="시작시간, KST, 예: 2026-08-05T14:00:00")

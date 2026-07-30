@@ -78,6 +78,17 @@ class TestGetAccessToken(unittest.TestCase):
 
         self.assertIn("401", str(ctx.exception))
 
+    @patch("zoom_meeting.urllib.request.urlopen")
+    def test_get_access_token_url_error_raises_runtime_error(self, mock_urlopen):
+        """오프라인/DNS 실패 등 응답 자체가 없는 경우(URLError)도
+        RuntimeError로 변환되어 main()에서 처리 가능해야 한다."""
+        mock_urlopen.side_effect = urllib.error.URLError("temporary failure in name resolution")
+
+        with self.assertRaises(RuntimeError) as ctx:
+            zoom_meeting.get_access_token("acc", "cid", "secret")
+
+        self.assertIn("연결할 수 없습니다", str(ctx.exception))
+
 
 class TestCreateMeeting(unittest.TestCase):
     @patch("zoom_meeting.urllib.request.urlopen")

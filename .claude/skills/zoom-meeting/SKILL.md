@@ -3,7 +3,6 @@ name: zoom-meeting
 description: 자연어 요청("줌미팅 잡아줘", "줌 링크 만들어줘")을 받아 Zoom Server-to-Server OAuth API로 실제 미팅을 생성하고 join 링크를 반환. 날짜/시작시간/소요시간이 빠지면 먼저 질문하고, 제목은 명시돼도 없어도 항상 확인 질문. 생성 직후 (시작시간-30분)에 "줌 오픈" 리마인더를 todo에 자동 등록.
 allowed-tools:
   - Read
-  - Write
   - Edit
   - Bash
 ---
@@ -17,6 +16,7 @@ Zoom Server-to-Server OAuth로 실제 미팅을 예약하고 join_url을 대화�
 
 - 자격증명은 워크스페이스 루트 `.env`의 `ZOOM_ACCOUNT_ID`/`ZOOM_CLIENT_ID`/`ZOOM_CLIENT_SECRET`/`ZOOM_USER_EMAIL`에서 읽음 (git 제외)
 - 값이 없으면 스크립트가 안내 메시지 출력 → 사용자에게 Server-to-Server OAuth 앱 생성 안내 (marketplace.zoom.us > Developer > Build App)
+- 앱은 marketplace.zoom.us에서 **Activation(활성화)** 까지 완료돼야 하고, `meeting:write:meeting:admin` 스코프가 있어야 함. 둘 중 하나라도 빠지면 Zoom이 "does not contain scopes"류의 불친절한 에러를 그대로 돌려줌 (현재 스크립트는 이 메시지를 번역 없이 그대로 전달)
 
 ## 수행 순서
 
@@ -76,7 +76,11 @@ Windows(이 워크스페이스)에서는 venv 파이썬 사용:
   - priority: normal
 ```
 
-Zoom은 호스트가 `start_url`로 접속하는 순간 예약 시간과 무관하게 즉시 미팅을 열기 때문에, 이 리마인더 시각에 접속하면 30분 조기 오픈이 그대로 달성된다.
+Zoom은 호스트가 `start_url`로 접속하는 순간 예약 시간과 무관하게 즉시 미팅을 연다. 단, 이 리마인더는 자동으로 알림이 울리는 게 아니라 todo 목록에 남는 체크리스트 항목일 뿐이다 — 사용자가 그 시각 즈음 todo를 직접 확인해야 실제로 30분 조기 오픈이 동작한다.
+
+**엣지 케이스**:
+- 미팅 시작까지 30분이 안 남은 경우: 리마인더 시각이 이미 과거가 됨. 이때는 (시작시간-30분)을 계산하지 말고, "곧 시작하는 미팅"이라는 점만 안내한다.
+- 미팅 시작이 자정 직후라 (시작시간-30분)이 전날로 넘어가는 경우: `due:`는 미팅 날짜가 아니라 **리마인더가 실제로 표시돼야 할 날짜**(= 리마인더 시각 자신의 날짜)로 설정한다. 그렇지 않으면 리마인더가 엉뚱한 날짜에 묻힌다.
 
 ## 참고
 
