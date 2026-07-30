@@ -22,9 +22,10 @@ except Exception:
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gws_util import sheets_get  # noqa: E402
+from eroomlib.config import cfg as _cfg  # noqa: E402
 
-# 25-2 기본 대상
-DEFAULT_SHEET = "1DbR2upLX_DXjgjXpGPdide2SUifli_X6DTqhUTr9Syk"
+# 시트를 안 주면 쓰는 폴백. workspace.toml 로 뺐다(없으면 DEFAULTS = 현행 값).
+DEFAULT_SHEET = _cfg("sheets.keyword_default")
 DEFAULT_TAB = "시트1"
 
 

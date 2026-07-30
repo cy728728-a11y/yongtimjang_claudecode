@@ -24,12 +24,10 @@ DEFAULT_PROTOCOL = "2025-06-18"
 CLIENT_INFO = {"name": "bulsaja-bulk", "version": "1.0"}
 # 재시도 대상 HTTP 상태
 _RETRY_STATUS = {429, 500, 502, 503, 504}
-# ~/.claude.json 의 mcpServers 키. "bulsaja"=용팀장 계정, "bulsaja-yongssaem"=용쌤 계정.
-DEFAULT_SERVER = "bulsaja-yongssaem"
 
 
 def load_config():
-    """~/.claude.json 의 mcpServers[DEFAULT_SERVER] 에서 url + Authorization 로드.
+    """~/.claude.json 의 mcpServers.bulsaja 에서 url + Authorization 로드.
     환경변수 BULSAJA_MCP_URL / BULSAJA_MCP_TOKEN 가 있으면 우선.
     반환: (url, authorization_header_value). 토큰 값은 호출부에서도 출력 금지.
     """
@@ -48,7 +46,7 @@ def load_config():
 
     def walk(obj):
         if isinstance(obj, dict):
-            b = obj.get(DEFAULT_SERVER)
+            b = obj.get("bulsaja")
             if isinstance(b, dict) and "url" in b and not found:
                 found["url"] = b["url"]
                 found["auth"] = (b.get("headers") or {}).get("Authorization", "")
@@ -57,7 +55,7 @@ def load_config():
 
     walk(cfg)
     if not found:
-        raise RuntimeError(f"~/.claude.json 에서 mcpServers.{DEFAULT_SERVER} 를 찾지 못했습니다.")
+        raise RuntimeError("~/.claude.json 에서 mcpServers.bulsaja 를 찾지 못했습니다.")
     return url or found["url"], auth or found["auth"]
 
 

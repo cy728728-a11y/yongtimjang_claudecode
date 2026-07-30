@@ -33,7 +33,20 @@ except Exception:
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable
-SHEET = "1DbR2upLX_DXjgjXpGPdide2SUifli_X6DTqhUTr9Syk"
+
+# 경로·시트 id 는 workspace.toml 1벌에서 온다(없으면 DEFAULTS = 현행 값).
+# `.claude` 앵커를 찾아 lib 를 sys.path 에 올린 뒤 eroomlib 를 든다.
+_d = SCRIPT_DIR
+while _d and _d != os.path.dirname(_d):
+    _lib = os.path.join(_d, "lib")
+    if os.path.isdir(os.path.join(_lib, "eroomlib")):
+        if _lib not in sys.path:
+            sys.path.insert(0, _lib)
+        break
+    _d = os.path.dirname(_d)
+from eroomlib.config import cfg as _cfg  # noqa: E402
+
+SHEET = _cfg("sheets.keyword_default")
 TAB = "시트1"
 
 
@@ -58,7 +71,7 @@ def _p(run_dir, name):
     return os.path.join(run_dir, name)
 
 
-def _fetch_thumbs(run_dir, prods):
+def _fetch_thumbs(run_dir, prods, refresh=False):
     """전건 대표 썸네일 다운로드 → {productId: 로컬경로}.
 
     fetch_thumbs.py 는 입력 순서대로 한 줄씩(성공=절대경로 / 실패='FAIL\\t..') 출력한다.
@@ -75,7 +88,7 @@ def _fetch_thumbs(run_dir, prods):
     os.makedirs(thumbs_dir, exist_ok=True)
     print(f"[3/4] 썸네일 {len(items)}장 다운로드 중...")
     cmd = [PY, os.path.join(SCRIPT_DIR, "fetch_thumbs.py"),
-           "--input", thumbs_json, "--out-dir", thumbs_dir]
+           "--input", thumbs_json, "--out-dir", thumbs_dir] + (["--refresh"] if refresh else [])
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     proc = subprocess.run(cmd, env=env, capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
@@ -95,19 +108,67 @@ def cmd_prep(args):
 
     # 1) 대상수집 (G 빈 행만, --limit 청크)
     collect_args = ["--sheet", args.sheet, "--tab", args.tab, "-o", targets]
-    if args.limit:
+    if args.limit and not args.ids:
         collect_args += ["--limit", args.limit]
+    if args.ids and args.include_done:
+        collect_args += ["--all"]  # 상태가 이미 찬 행도 대상에 넣는다(재작업)
     sh("collect_targets.py", *collect_args)
 
-    # 2) workdata (현재 카테고리 + 정체증거 4종) — 대화 밖 직접 MCP
-    sh("bulsaja_mcp.py", "workdata", "-i", targets, "-o", products,
-       "--sleep", args.sleep)
+    # 1b) --ids: 특정 상품만 남긴다. 세로 러너(onestep)가 상품 1건을 지정하는 경로이자,
+    #     보류 건 애드혹 재작업용. 수집 뒤에 거르는 이유 = 시트 행번호·원장 상태를
+    #     collect_targets 가 붙여 주므로 그 산출물을 그대로 쓰는 게 안전하다.
+    if args.ids:
+        want = [i.strip() for i in args.ids if i.strip()]
+
+        def _filter():
+            with open(targets, encoding="utf-8") as f:
+                allt = json.load(f)
+            kept = [t for t in allt if t.get("productId") in want]
+            miss = [i for i in want
+                    if not any(t.get("productId") == i for t in kept)]
+            return kept, miss
+
+        kept, missing = _filter()
+
+        # 시트1에 **행이 없는** 상품은 대상이 될 수 없다(collect_targets 가 시트를 읽으므로).
+        # 현황판에는 있는데 여기엔 없는 상품이 그룹당 수백 건이다(용쌤1-1: 833/833).
+        # → 현황판의 상품명으로 A·B열만 채워 행을 만들고 다시 수집한다. 그래야 대상 선정이
+        #   "현황판 쿼리 1줄"이라는 계약과 실제가 맞는다.
+        if missing and not args.no_seed:
+            from eroomlib import matrix
+            from eroomlib.gsheets import append_rows
+            m = matrix.read(args.sheet)
+            seed = [[pid, (m.get(pid) or {}).get("상품", "")]
+                    for pid in missing if pid in m]
+            if seed:
+                append_rows(args.sheet, args.tab, seed)
+                print(f"[1b] 시트1에 행 신설 {len(seed)}건 (현황판에는 있으나 원장에 없던 상품)")
+                sh("collect_targets.py", *collect_args)
+                kept, missing = _filter()
+
+        with open(targets, "w", encoding="utf-8") as f:
+            json.dump(kept, f, ensure_ascii=False, indent=2)
+        print(f"[1b] --ids {len(want)}건 지정 → {len(kept)}건 매칭")
+        if missing:
+            print(f"  [경고] 대상에 못 넣음 {len(missing)}건: {missing[:5]}")
+            print("   상태열이 이미 차 있거나(--include-done) 현황판에 없는 상품이다.")
+        if not kept:
+            print("[중단] 대상 0건.")
+            sys.exit(2)   # 조용한 성공 금지 — 러너가 다음 단계로 넘어가면 안 된다
+
+    # 2) workdata (현재 카테고리 + 정체증거 4종) — 대화 밖 직접 MCP.
+    #    공용 스냅샷을 먼저 본다(상품명 스킬이 이미 받아둔 상품이면 MCP 0회).
+    wd_args = ["workdata", "-i", targets, "-o", products, "--sleep", args.sleep]
+    if args.refresh:
+        wd_args.append("--refresh")
+    sh("bulsaja_mcp.py", *wd_args)
 
     with open(products, encoding="utf-8") as f:
         prods = json.load(f)
 
     # 3) 썸네일 전건 다운로드 (2026-07-24: 폴백이 아니라 기본 경로)
-    thumb_map = {} if args.skip_thumbs else _fetch_thumbs(args.run_dir, prods)
+    thumb_map = ({} if args.skip_thumbs
+                 else _fetch_thumbs(args.run_dir, prods, refresh=args.refresh))
 
     # 4) 정체판별용 names.json — 증거 4종을 한 장에 모아 넘긴다.
     #    한국어 상품명은 '정답'이 아니라 '용의자'다. 원문명·옵션명은 가공 전 원본이라
@@ -274,9 +335,17 @@ def main():
     p = sub.add_parser("prep", help="collect+workdata → products.json/names.json")
     p.add_argument("--run-dir", required=True)
     p.add_argument("--limit", type=int, default=0, help="청크 크기(0=전체 남은 것)")
+    p.add_argument("--ids", nargs="+", default=None,
+                   help="특정 productId 만 대상으로(세로 러너·애드혹 1건 작업). --limit 무시")
+    p.add_argument("--include-done", action="store_true",
+                   help="--ids 와 함께. 상태열이 이미 찬 행도 대상에 넣는다(재작업)")
+    p.add_argument("--no-seed", action="store_true",
+                   help="--ids 와 함께. 시트1에 행이 없어도 새로 만들지 않는다")
     p.add_argument("--sleep", default="0.3")
     p.add_argument("--skip-thumbs", action="store_true",
                    help="썸네일 다운로드 생략(텍스트 증거만으로 판정할 때)")
+    p.add_argument("--refresh", action="store_true",
+                   help="공용 스냅샷 무시하고 불사자에서 다시 받는다")
     p.set_defaults(func=cmd_prep)
 
     f = sub.add_parser("finish", help="sellha→merge→apply(실저장)")

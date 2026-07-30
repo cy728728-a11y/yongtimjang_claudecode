@@ -9,6 +9,10 @@
   bulsaja   — 불사자 원격 HTTP MCP transport(BulsajaMCP: open/list_tools/call_tool/close)
   textnorm  — 텍스트 정규화 1벌(nows / cat_key / sanitize_part)
   envload   — .env 로더 1벌(load_env)
+  runner    — 스킬 순회 러너. onestep(세로: 상품 1개 × 작업 전부) · signals · approval_log
+  config    — 워크스페이스 설정 1벌(cfg / run_dir / group_sheet_name).
+              경로·드라이브 폴더ID·시트ID·계정을 `workspace.toml` 로 뺀다.
+              파일이 없으면 DEFAULTS(= 현행 하드코딩 값)로 동작하므로 무설정도 안전.
 
 소비 규약: 상위로 `.claude` 앵커를 탐색해 `lib` 를 sys.path 에 1회 insert 한 뒤
   `import eroomlib.xxx`. 무거운 단계형 도구는 CLI(JSON in/out) subprocess 로 빌린다.
@@ -18,4 +22,4 @@
 requests 는 bulsaja 모듈 최상단 import(그 모듈을 import 할 때만 필요).
 """
 
-__all__ = ["gsheets", "webdriver", "bulsaja", "textnorm", "envload"]
+__all__ = ["gsheets", "webdriver", "bulsaja", "textnorm", "envload", "config", "runner"]

@@ -24,7 +24,6 @@ Claude 대화 컨텍스트를 태우지 않고 수백~수천 건을 처리할 �
 import argparse
 import json
 import os
-import re
 import sys
 import time
 import urllib.parse
@@ -47,48 +46,15 @@ while _d and _d != os.path.dirname(_d):
         break
     _d = os.path.dirname(_d)
 
-from eroomlib.bulsaja import BulsajaMCP as _BaseMCP  # 불사자 HTTP MCP transport(저수준)
+from eroomlib import snapshot  # 공용 상품 스냅샷(workdata 캐시)  # noqa: E402
+from eroomlib.snapshot import ProductMCP as _BaseMCP  # transport + workdata  # noqa: E402
 
 
 class BulsajaMCP(_BaseMCP):
-    """불사자 MCP — 저수준 transport(open/list_tools/call_tool/close 등)는
-    eroomlib.bulsaja.BulsajaMCP 에서 상속하고, 여기서는 카테고리 교정 **도메인 헬퍼**
-    (workdata/category_preview/category_commit)만 얹는다.
+    """불사자 MCP — transport(open/list_tools/call_tool/close)는 eroomlib.bulsaja,
+    `workdata` 등 상품 공통 조회는 eroomlib.snapshot.ProductMCP 에서 상속하고,
+    여기서는 카테고리 교정 **고유 도구**(category_preview/category_commit)만 얹는다.
     """
-
-    def workdata(self, product_id, mode="full"):
-        """상품의 현재 카테고리 + **정체 판별 증거 4종**을 뽑아 반환(경량).
-
-        증거 4종 (2026-07-24 개편). 한국어 상품명·썸네일은 불사자 가공 '후' 산출물이라
-        같이 틀릴 수 있다 → 가공 '전' 원본(중국어 원문명·옵션명)을 독립 증거로 함께 넘긴다.
-          ① 한국어 상품명  data.productName / uploadSmartStoreProductName  (용의자)
-          ② 중국어 원문명  data.originalProductName                        (타오바오 원 리스팅)
-          ③ 옵션명         data.uploadSkus[].text / ._text                 (실제 판매 단위)
-          ④ 썸네일         data.uploadThumbnails[]                         (최대 6장)
-        옵션 이미지(uploadSkus[].urlRef)는 2바퀴(정체불명 큐) 확인용으로만 보관.
-        """
-        raw = self.call_tool("bulsaja_product_workdata",
-                             {"productId": product_id, "mode": mode})
-        data = raw.get("data", raw) if isinstance(raw, dict) else {}
-        cat = (data.get("uploadCategory") or {}).get("ss_category") or {}
-        ss_name = cat.get("name") or ""
-        thumbs = data.get("uploadThumbnails") or []
-        if not isinstance(thumbs, list):
-            thumbs = []
-        name = (data.get("productName")
-                or data.get("uploadSmartStoreProductName") or "")
-        opt_ko, opt_cn, opt_img = _sku_evidence(data.get("uploadSkus"))
-        return {
-            "productId": product_id,
-            "상품명": name,
-            "원문명": data.get("originalProductName") or "",
-            "옵션명": opt_ko,
-            "옵션명원문": opt_cn,
-            "옵션이미지": opt_img,
-            "기존카테고리": ss_name if ss_name else "미설정",
-            "썸네일": thumbs[:6],
-            "원본링크": data.get("product_url") or "",
-        }
 
     def category_preview(self, product_id, keyword):
         """confirm=False 로 저장 미리보기. 저장하지 않고 '지정될카테고리'+토큰 반환.
@@ -115,38 +81,8 @@ class BulsajaMCP(_BaseMCP):
                             "confirm": True, "confirmationToken": token})
         return {"success": bool(r.get("success")), "raw_message": r.get("message", "")}
 
-    # close()·open()·call_tool() 등 transport 는 _BaseMCP(eroomlib.bulsaja) 에서 상속.
-
-
-_OPT_MAX = 8      # 키워드 추출에 넘길 옵션명 최대 개수(이룸님 확정, 2026-07-24)
-_OPT_IMG_MAX = 4  # 2바퀴(정체불명) 확인용 옵션 이미지 최대 장수
-_OPT_PREFIX = re.compile(r"^\s*[A-Za-z가-힣]?\s*[.)]\s*")
-
-
-def _sku_evidence(skus):
-    """uploadSkus[] → (옵션명 한국어, 옵션명 원문, 옵션 이미지URL) 각각 중복제거·상한.
-
-    옵션은 '실제 판매 단위'라 상품명이 왜곡돼도 정체가 드러난다
-    (예 상품명 '자키 받침대' / 옵션 '3톤 세단 모델잭에어펌프' → 실제는 자키+에어펌프 세트).
-    전건 22개씩 넘기면 토큰이 커지므로 중복 제거 후 앞 8개만 쓴다.
-    exclude=True(판매 제외) 옵션은 실물이 아니므로 건너뛴다.
-    """
-    if not isinstance(skus, list):
-        return [], [], []
-    ko, cn, img = [], [], []
-    for s in skus:
-        if not isinstance(s, dict) or s.get("exclude"):
-            continue
-        t = _OPT_PREFIX.sub("", str(s.get("text") or "")).strip()
-        if t and t not in ko and len(ko) < _OPT_MAX:
-            ko.append(t)
-        c = str(s.get("_text") or "").strip()
-        if c and c not in cn and len(cn) < _OPT_MAX:
-            cn.append(c)
-        u = str(s.get("urlRef") or "").strip()
-        if u and u not in img and len(img) < _OPT_IMG_MAX:
-            img.append(u)
-    return ko, cn, img
+    # close()·open()·call_tool()·workdata() 는 _BaseMCP(eroomlib.snapshot.ProductMCP) 에서 상속.
+    # workdata 와 옵션 증거 추출(_sku_evidence)은 스킬 2개 이상이 쓰므로 eroomlib 로 옮겼다.
 
 
 def _norm_path(p):
@@ -199,20 +135,25 @@ def _dump_json(path, obj):
 def cmd_workdata(args):
     """targets.json([{productId,..}]) → 현재 카테고리+썸네일 요약(workdata.json).
     무거운 workdata 응답을 대화 밖에서 소비하고 경량 요약만 남긴다.
+
+    실제 조회는 **공용 스냅샷**(eroomlib.snapshot)이 한다 — 이미 다른 스킬이 받아둔
+    상품이면 MCP 를 타지 않는다. 출력 형식은 종전과 동일.
     """
     targets = _load_json(args.input)
-    mcp = BulsajaMCP()
-    mcp.open()
+    pids = [t.get("productId") or t.get("id") for t in targets]
+    recs, errors = snapshot.ensure(pids, refresh=args.refresh,
+                                   sleep=args.sleep, mode=args.mode)
     out = []
-    for i, t in enumerate(targets, 1):
+    for t in targets:
         pid = t.get("productId") or t.get("id")
         rec = {"productId": pid, "row": t.get("row")}
-        try:
-            wd = mcp.workdata(pid, mode=args.mode)
+        got = recs.get(pid)
+        if got is not None:
+            wd = snapshot.as_workdata(got)
             if not wd.get("상품명"):
                 wd["상품명"] = t.get("상품명", "")  # 시트 값 fallback
             rec.update(wd)
-        except Exception as e:
+        else:
             rec["상품명"] = t.get("상품명", "")
             rec["원문명"] = ""
             rec["옵션명"] = []
@@ -220,12 +161,8 @@ def cmd_workdata(args):
             rec["옵션이미지"] = []
             rec["기존카테고리"] = "미설정"
             rec["썸네일"] = []
-            rec["error"] = f"{type(e).__name__}: {e}"[:200]
+            rec["error"] = errors.get(pid, "조회 실패")
         out.append(rec)
-        if i % 20 == 0:
-            print(f"  ...{i}/{len(targets)}", flush=True)
-        time.sleep(args.sleep)
-    mcp.close()
     _dump_json(args.output, out)
     ok = sum(1 for r in out if not r.get("error"))
     print(f"###WORKDATA### {ok}/{len(out)} OK -> {args.output}")
@@ -307,6 +244,10 @@ def cmd_apply(args):
                         else:
                             cm = mcp.category_commit(pid, keyword, pv["token"])
                             d["상태"] = "자동저장완료" if cm["success"] else "변경대상"
+                            if cm["success"]:
+                                # 저장한 쪽이 스냅샷의 그 필드만 되쓴다 → 다른 스킬이
+                                # 옛 카테고리를 읽는 일이 없다(재조회·TTL 불필요).
+                                snapshot.update(pid, 기존카테고리=pv["ss_name"])
                     else:
                         d["상태"] = "변경대상"
                 elif applied.split(">")[-1] == sell_path.split(">")[-1]:
@@ -337,6 +278,39 @@ def cmd_apply(args):
         time.sleep(args.sleep)
     mcp.close()
     _dump_json(args.output, decisions)
+
+    # 현황판(00_진행) 카테고리 열 갱신 — 자기 열 1개만, 열 통짜 1회 호출.
+    # 매트릭스는 파생본이라 실패해도 저장 결과에 영향이 없다(rebuild 로 언제든 복구).
+    if sheet and not args.dry_run:
+        try:
+            from eroomlib import matrix
+            m = matrix.read(args.sheet)
+            n = matrix.mark_many(
+                args.sheet, "카테고리",
+                {d["productId"]: matrix.map_catfix(d.get("상태", ""))
+                 for d in decisions if d.get("productId")},
+                matrix=m)
+            print(f"  현황판({matrix.TAB}) 카테고리: {n}칸 갱신")
+
+            # 카테고리가 실제로 바뀌면 그 상품의 상품명은 폐기 대상이다
+            # (SKILL 계약: "카테고리 재교정 = 그 상품 상품명 전부 폐기, 부분회수 금지").
+            # 이미 `완료`인 건은 이걸로 다시 대상이 되고, 미착수는 사유만 붙는다.
+            redo = {}
+            for d in decisions:
+                pid = d.get("productId")
+                if not pid or d.get("상태") != "자동저장완료":
+                    continue
+                prev, new = (d.get("기존카테고리") or ""), (d.get("변경카테고리") or "")
+                if not new or _norm_path(prev) == _norm_path(new):
+                    continue
+                redo[pid] = "카테고리 변경 — 키워드 재선정 필요"
+            if redo:
+                k = matrix.flag_many(args.sheet, "상품명", redo,
+                                     from_task="카테고리", matrix=m)
+                print(f"  상품명 재작업 표시: {k}건 (카테고리가 바뀐 상품)")
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 현황판 갱신 실패: {str(e)[:120]}", file=sys.stderr)
+
     print("###APPLY### " + json.dumps(stats, ensure_ascii=False))
     print(f"결과 -> {args.output} ({'DRY-RUN(저장안함)' if args.dry_run else '실저장'})")
 
@@ -362,6 +336,8 @@ def main():
     w.add_argument("--output", "-o", required=True, help="workdata.json 저장 경로")
     w.add_argument("--mode", default="full", choices=["full", "summary"])
     w.add_argument("--sleep", type=float, default=0.3, help="호출 간 대기(초)")
+    w.add_argument("--refresh", action="store_true",
+                   help="스냅샷 무시하고 불사자에서 다시 받는다")
     w.set_defaults(func=cmd_workdata)
 
     a = sub.add_parser("apply", help="match+저장 1패스(미리보기→비교→커밋)")

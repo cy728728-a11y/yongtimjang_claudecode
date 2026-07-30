@@ -10,7 +10,7 @@ Usage:
 Options:
   --max-products N    기본 상품수 컷 (default: 10000)
   --expand N          부족 시 확장 상품수 컷 (default: 20000)
-  --min-count N       이 개수 미만이면 확장 발동 (default: 5)
+  --min-count N       이 개수 미만이면 확장 발동 (default: 6)
   --top N             출력 상위 개수 (default: 10)
   --keep-info         정보성 키워드도 유지 (기본은 정보성 제외 = 쇼핑성만)
   --output <path>     후보 JSON 저장 경로 (미지정 시 stdout만)
@@ -18,163 +18,19 @@ Options:
 
 import argparse
 import json
-import re
+import os
 import sys
-from collections import Counter
-from datetime import date
 from pathlib import Path
 
-try:
-    import openpyxl
-except ImportError:
-    print("ERROR: openpyxl not installed. Run: pip install openpyxl>=3.1.0", file=sys.stderr)
-    sys.exit(1)
+# kwlib.py가 같은 폴더에 있으므로, 어느 경로에서 실행해도 import 가능하도록 경로 추가
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-
-# 아이템스카우트 헤더(한글) → 내부 키 매핑. 부분일치로 유연하게 잡는다.
-COLUMN_ALIASES = {
-    "keyword": ["키워드"],
-    "category": ["대표 카테고리", "카테고리"],
-    "classification": ["키워드 분류", "분류"],
-    "total_search": ["총 검색수", "총검색수", "총 검색"],
-    "product_count": ["상품수", "상품 수"],
-    "competition": ["경쟁강도"],
-}
-
-
-def find_header_index(headers):
-    """헤더 행에서 각 내부 키의 컬럼 인덱스를 찾는다. 정확일치 우선, 없으면 부분일치."""
-    norm = [(str(h).strip() if h is not None else "") for h in headers]
-    idx = {}
-    for key, aliases in COLUMN_ALIASES.items():
-        found = None
-        # 정확 일치 우선 (긴 별칭부터)
-        for alias in aliases:
-            for i, h in enumerate(norm):
-                if h == alias:
-                    found = i
-                    break
-            if found is not None:
-                break
-        # 부분 일치 fallback
-        if found is None:
-            for alias in aliases:
-                for i, h in enumerate(norm):
-                    if alias in h:
-                        found = i
-                        break
-                if found is not None:
-                    break
-        idx[key] = found
-    return idx
-
-
-def to_number(value):
-    """'-', 콤마, 공백 섞인 셀을 정수로. 실패 시 None."""
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return int(value)
-    s = str(value).strip().replace(",", "")
-    if s in ("", "-"):
-        return None
-    try:
-        return int(float(s))
-    except ValueError:
-        return None
-
-
-def is_informational(classification):
-    """키워드 분류가 '정보성'이면 True."""
-    if classification is None:
-        return False
-    return "정보" in str(classification)
-
-
-def sanitize_part(s):
-    """카테고리 조각을 파일명 안전 문자열로. 슬래시·공백·특수문자 제거."""
-    s = str(s).strip()
-    s = s.replace("/", "").replace("\\", "")
-    s = re.sub(r'[<>:"|?*]', "", s)
-    s = s.replace(" ", "")
-    return s
-
-
-def representative_category(idx, data):
-    """대표 카테고리 컬럼에서 전체 행의 최빈(mode) 경로를 반환. 예: '생활/건강 > 청소용품 > 휴지통 > 다용도휴지통'."""
-    ci = idx.get("category")
-    if ci is None:
-        return None
-    paths = []
-    for row in data:
-        if ci < len(row) and row[ci] is not None and str(row[ci]).strip():
-            paths.append(str(row[ci]).strip())
-    if not paths:
-        return None
-    return Counter(paths).most_common(1)[0][0]
-
-
-def suggested_filename(rep_category):
-    """오늘날짜6자리_1차_2차_3차_4차 형식 파일명(확장자 제외)을 만든다."""
-    ymd = date.today().strftime("%y%m%d")
-    if not rep_category:
-        return f"{ymd}_미분류"
-    parts = [sanitize_part(p) for p in rep_category.split(">")]
-    parts = [p for p in parts if p]
-    return "_".join([ymd] + parts)
-
-
-def load_rows(xlsx_path):
-    """xlsx의 첫 시트를 읽어 헤더 인덱스와 데이터 행을 반환."""
-    wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
-    ws = wb.active
-    rows = list(ws.iter_rows(values_only=True))
-    wb.close()
-    if not rows:
-        return {}, []
-    # 첫 번째 비어있지 않은 행을 헤더로
-    header_row_idx = 0
-    for i, r in enumerate(rows):
-        if any(c is not None and str(c).strip() for c in r):
-            header_row_idx = i
-            break
-    idx = find_header_index(rows[header_row_idx])
-    data = rows[header_row_idx + 1:]
-    return idx, data
-
-
-def build_candidates(idx, data, max_products, exclude_info):
-    """상품수 <= max_products 이고 (옵션) 정보성 제외한 후보 목록을 만든다."""
-    if idx.get("keyword") is None or idx.get("product_count") is None:
-        raise ValueError("필수 컬럼(키워드/상품수)을 찾지 못했습니다. 아이템스카우트 익스포트가 맞는지 확인하세요.")
-
-    candidates = []
-    for row in data:
-        def cell(key):
-            i = idx.get(key)
-            return row[i] if (i is not None and i < len(row)) else None
-
-        keyword = cell("keyword")
-        if keyword is None or not str(keyword).strip():
-            continue
-
-        classification = cell("classification")
-        if exclude_info and is_informational(classification):
-            continue
-
-        product_count = to_number(cell("product_count"))
-        if product_count is None or product_count > max_products:
-            continue
-
-        candidates.append({
-            "키워드": str(keyword).strip(),
-            "대표카테고리": (str(cell("category")).strip() if cell("category") is not None else ""),
-            "총검색수": to_number(cell("total_search")),
-            "상품수": product_count,
-            "분류": (str(classification).strip() if classification is not None else ""),
-            "경쟁강도": cell("competition"),
-        })
-    return candidates
+from kwlib import (
+    build_candidates,
+    load_rows,
+    representative_category,
+    suggested_filename,
+)
 
 
 def main():
@@ -182,7 +38,7 @@ def main():
     parser.add_argument("xlsx", help="아이템스카우트 익스포트 .xlsx 경로")
     parser.add_argument("--max-products", type=int, default=10000, help="기본 상품수 컷 (default: 10000)")
     parser.add_argument("--expand", type=int, default=20000, help="부족 시 확장 상품수 컷 (default: 20000)")
-    parser.add_argument("--min-count", type=int, default=5, help="이 개수 미만이면 확장 (default: 5)")
+    parser.add_argument("--min-count", type=int, default=6, help="이 개수 미만이면 확장 (default: 6)")
     parser.add_argument("--top", type=int, default=10, help="출력 상위 개수 (default: 10)")
     parser.add_argument("--keep-info", action="store_true", help="정보성 키워드도 유지 (기본: 제외)")
     parser.add_argument("--output", help="후보 JSON 저장 경로")

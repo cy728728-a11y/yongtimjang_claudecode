@@ -12,7 +12,6 @@ import argparse
 import json
 import os
 import sys
-import time
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -33,31 +32,13 @@ def main():
 
     mcp = BulsajaMCP()
     mcp.open()
-    out = []
-    seen = set()
-    page = 1
-    while True:
-        r = mcp.call_tool("bulsaja_market_group_products",
-                          {"groupId": args.group_id, "page": page,
-                           "pageSize": args.page_size})
-        items = r.get("항목") or []
-        if not items:
-            break
-        for it in items:
-            pid = it.get("productId")
-            if not pid or pid in seen:
-                continue
-            seen.add(pid)
-            out.append({"productId": pid,
-                        "상품명": it.get("상품명", ""),
-                        "상태코드": it.get("상태코드")})
-        total = r.get("총상품수")
-        print(f"  page {page}: +{len(items)} (누적 {len(out)}/{total})", flush=True)
-        if not r.get("더있음"):
-            break
-        page += 1
-        time.sleep(args.sleep)
-    mcp.close()
+    try:
+        # 페이징 본체는 eroomlib.snapshot.ProductMCP 로 옮겼다(러너·다른 스킬도 쓴다).
+        out = mcp.collect_group(args.group_id, page_size=args.page_size,
+                                sleep=args.sleep,
+                                log=lambda m: print(m, flush=True))
+    finally:
+        mcp.close()
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
     print(f"###GROUP### {len(out)}건 -> {args.output}")

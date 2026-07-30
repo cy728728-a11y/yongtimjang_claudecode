@@ -22,8 +22,12 @@ while _d and _d != os.path.dirname(_d):
         break
     _d = os.path.dirname(_d)
 from eroomlib.gsheets import _run_gws, sheets_get  # noqa: E402
+from eroomlib.gsheets import append_rows as _gs_append_rows  # noqa: E402
+from eroomlib.gsheets import ensure_tab as _gs_ensure_tab  # noqa: E402
+from eroomlib.config import cfg as _cfg  # noqa: E402
 
-DEFAULT_SHEET = "1DbR2upLX_DXjgjXpGPdide2SUifli_X6DTqhUTr9Syk"
+# 그룹 지정이 없을 때의 폴백 시트. workspace.toml 로 뺐다(없으면 DEFAULTS = 현행 값).
+DEFAULT_SHEET = _cfg("sheets.keyword_default")
 ENTRY_TAB = "시트1"
 
 # 카테고리교정 "완료"로 간주하는 상태값 (시트1 G열)
@@ -87,73 +91,10 @@ def read_done_ids(spreadsheet_id=DEFAULT_SHEET, tab="02-키워드"):
     return {str(r[0]).strip() for r in rows if r and str(r[0]).strip()}
 
 
-def append_rows(spreadsheet_id, tab, rows, max_retries=4):
-    """rows(2차원 리스트)를 탭 끝에 append (USER_ENTERED, INSERT_ROWS).
-
-    429/쿼터 초과 오류는 지수 백오프(2·4·8·16초) 후 최대 max_retries 회 재시도.
-    그 외 오류(4xx 등)는 즉시 예외를 올린다.
-    rows 가 크면 그대로 한 호출로 보낸다 — 청크 분할(상품 10개 단위)은 호출자 책임.
-
-    반환: 추가된 행수(len(rows)). 실패 시 RuntimeError.
-    """
-    if not rows:
-        return 0
-
-    rng = f"'{tab}'!A1"
-    args = [
-        "sheets", "spreadsheets", "values", "append",
-        "--params", json.dumps({
-            "spreadsheetId": spreadsheet_id,
-            "range": rng,
-            "valueInputOption": "USER_ENTERED",
-            "insertDataOption": "INSERT_ROWS",
-        }, ensure_ascii=False),
-    ]
-    body = {"values": rows}
-
-    last_err = None
-    for attempt in range(max_retries):
-        try:
-            _run_gws(args, body=body)
-            return len(rows)
-        except Exception as e:
-            msg = str(e)
-            last_err = e
-            if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
-                wait = 2 ** (attempt + 1)
-                print(f"[sheet_io] append 429/쿼터 오류, {wait}초 대기 후 재시도 "
-                      f"({attempt + 1}/{max_retries}): {msg[:150]}", file=sys.stderr)
-                time.sleep(wait)
-                continue
-            raise RuntimeError(f"append_rows 실패(tab={tab}, {len(rows)}행): {msg}")
-    raise RuntimeError(f"append_rows 최대 재시도 초과(tab={tab}): {last_err}")
-
-
-def ensure_tab(spreadsheet_id, tab, header):
-    """탭이 없으면 addSheet + 헤더(1행) 기록. 있으면 아무것도 하지 않는다."""
-    try:
-        meta = _run_gws(["sheets", "spreadsheets", "get",
-                          "--params", json.dumps({"spreadsheetId": spreadsheet_id})])
-    except Exception as e:
-        raise RuntimeError(f"ensure_tab 실패(메타 조회): {e}")
-
-    existing = {s["properties"]["title"] for s in meta.get("sheets", [])}
-    if tab in existing:
-        return False  # 이미 존재
-
-    try:
-        _run_gws(["sheets", "spreadsheets", "batchUpdate",
-                   "--params", json.dumps({"spreadsheetId": spreadsheet_id})],
-                  body={"requests": [{"addSheet": {"properties": {"title": tab}}}]})
-        rng = f"'{tab}'!A1"
-        _run_gws(["sheets", "spreadsheets", "values", "update",
-                   "--params", json.dumps({"spreadsheetId": spreadsheet_id,
-                                           "range": rng,
-                                           "valueInputOption": "RAW"})],
-                  body={"values": [header]})
-    except Exception as e:
-        raise RuntimeError(f"ensure_tab 실패(탭 생성, tab={tab}): {e}")
-    return True
+# append_rows · ensure_tab 는 eroomlib.gsheets 로 승격했다(스킬 2개 이상이 쓴다).
+# 여기서는 이름만 다시 내보낸다 — 기존 호출부(`sheet_io.append_rows(...)`)를 그대로 둔다.
+append_rows = _gs_append_rows
+ensure_tab = _gs_ensure_tab
 
 
 if __name__ == "__main__":

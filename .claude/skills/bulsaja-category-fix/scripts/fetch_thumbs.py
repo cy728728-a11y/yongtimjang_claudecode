@@ -5,8 +5,10 @@
 Claude(비전)가 이 로컬 이미지를 Read 로 열어 "상품의 실제 정체"를 판단하고
 셀하 검색용 핵심어를 바로잡는 데 쓴다(카테고리 교정 스킬 Step 3b).
 
-alicdn / bulsaja S3 등이 헤더 없는 요청을 403 하는 경우가 있어
-브라우저 User-Agent/Referer 를 붙여 받는다.
+실제 다운로드는 **공용 스냅샷 캐시**(eroomlib.snapshot)가 한다 — 같은 URL 을 다른 스킬이
+이미 받아뒀으면 복사만 하고 네트워크를 타지 않는다. 출력 파일명·형식은 종전과 동일.
+(alicdn / bulsaja S3 등이 헤더 없는 요청을 403 하므로 브라우저 UA/Referer 를 붙이는 것도
+ 그쪽에 있다.)
 
 사용법:
   # URL 직접
@@ -22,7 +24,7 @@ import argparse
 import json
 import os
 import sys
-import urllib.parse
+
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -30,50 +32,22 @@ except Exception:
     pass
 
 try:
-    import requests
+    import requests  # noqa: F401  (실제 요청은 eroomlib.snapshot 이 한다)
 except ImportError:
     print("Error: requests 패키지가 필요합니다 (.venv). pip install requests")
     sys.exit(1)
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-    ),
-    "Referer": "https://www.taobao.com/",
-    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-}
+# eroomlib 로드: 상위로 `.claude` 앵커(= lib/eroomlib)를 찾아 lib 를 1회 insert.
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d and _d != os.path.dirname(_d):
+    _lib = os.path.join(_d, "lib")
+    if os.path.isdir(os.path.join(_lib, "eroomlib")):
+        if _lib not in sys.path:
+            sys.path.insert(0, _lib)
+        break
+    _d = os.path.dirname(_d)
 
-EXT_BY_CT = {
-    "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
-    "image/webp": ".webp", "image/gif": ".gif", "image/avif": ".avif",
-}
-
-
-def _ext_from(url, content_type):
-    ct = (content_type or "").split(";")[0].strip().lower()
-    if ct in EXT_BY_CT:
-        return EXT_BY_CT[ct]
-    path = urllib.parse.urlparse(url).path
-    _, dot, ext = path.rpartition(".")
-    if dot and 1 <= len(ext) <= 5:
-        return "." + ext.lower()
-    return ".jpg"
-
-
-def download(url, out_dir, name_hint, idx):
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=20)
-        if r.status_code != 200 or not r.content:
-            return None, f"HTTP {r.status_code}"
-        ext = _ext_from(url, r.headers.get("Content-Type"))
-        safe = "".join(c for c in (name_hint or "thumb") if c.isalnum() or c in "-_")[:24] or "thumb"
-        fn = os.path.join(out_dir, f"{safe}_{idx}{ext}")
-        with open(fn, "wb") as f:
-            f.write(r.content)
-        return os.path.abspath(fn), None
-    except Exception as e:
-        return None, str(e)
+from eroomlib import snapshot  # noqa: E402
 
 
 def main():
@@ -81,6 +55,8 @@ def main():
     ap.add_argument("--url", "-u", nargs="+", help="다운로드할 이미지 URL(들)")
     ap.add_argument("--input", "-i", help='배치 JSON: [{"productId","url"}]')
     ap.add_argument("--out-dir", "-o", required=True, help="저장 폴더")
+    ap.add_argument("--refresh", action="store_true",
+                    help="스냅샷 캐시 무시하고 원본 서버에서 다시 받는다")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -99,7 +75,9 @@ def main():
         if not url:
             print(f"FAIL\t(빈 URL)\t상품 {hint}")
             continue
-        path, err = download(url, args.out_dir, hint, idx)
+        # 같은 URL 을 이미 받아둔 스킬이 있으면 스냅샷 캐시에서 복사만 한다(네트워크 0).
+        path, err = snapshot.materialize_image(url, args.out_dir, hint, idx,
+                                               refresh=args.refresh)
         if path:
             print(path)
         else:

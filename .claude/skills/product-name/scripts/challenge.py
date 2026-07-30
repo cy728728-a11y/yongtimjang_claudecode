@@ -174,7 +174,7 @@ def main():
         if not os.path.exists(path):
             p["반증"] = {"오류": f"카테고리 파일 없음: {path}"}
             continue
-        adopted = [str(p.get(f"키워드{i}") or "").strip() for i in (1, 2, 3)]
+        adopted = [str(p.get(f"키워드{i}") or "").strip() for i in range(1, 6)]
         adopted = [k for k in adopted if k]
         ch = build_challenge(path, adopted, drop_brand, args.max_items)
         p["반증목록"] = ch["목록"]
