@@ -17,8 +17,11 @@ sellha.kr 카테고리 조회 — 상품명/키워드 → 네이버 카테고리
   # 상품ID+상품명 매핑 파일(JSON: [{"productId":"..","name":".."}]) 배치 조회
   python sellha.py --input products.json --output result.json
 
-  # 결과 JSON 저장 / 창 숨김
-  python sellha.py --query "낚시텐트" --output out.json --headless
+  # 결과 JSON 저장 (창 숨김이 기본값)
+  python sellha.py --query "낚시텐트" --output out.json
+
+  # 렌더 이슈 디버깅 시에만 창 표시
+  python sellha.py --query "낚시텐트" --no-headless
 
 반환(항목별):
   검색어 · productId(입력시) · 카테고리경로 · 최종차수 · 확신도 · 마켓 · url · 상태 · error
@@ -164,7 +167,10 @@ def main():
     ap.add_argument("--query", "-q", nargs="+", help="조회할 상품명/키워드(들)")
     ap.add_argument("--input", "-i", help='배치 입력 JSON: [{"productId":"..","name":".."}]')
     ap.add_argument("--output", "-o", help="결과 JSON 저장 경로")
-    ap.add_argument("--headless", action="store_true", help="Chrome 창 숨김")
+    ap.add_argument("--headless", dest="headless", action="store_true", default=True,
+                    help="Chrome 창 숨김(기본값)")
+    ap.add_argument("--no-headless", dest="headless", action="store_false",
+                    help="Chrome 창 표시(디버그용, 사이트 렌더 이슈 확인 시에만)")
     ap.add_argument("--resume", action="store_true",
                     help="output 에 이미 있는 productId(성공/조회실패)는 건너뜀")
     ap.add_argument("--restart-every", type=int, default=150,

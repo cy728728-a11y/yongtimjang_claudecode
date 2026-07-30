@@ -194,6 +194,11 @@
   - due: 2026-08-13
   - priority: normal
 
+- [ ] 줌 오픈: 용감한용팀장2기 2주차 줌보강 (19:30 접속 → start_url로 열기)
+  - added: 2026-07-30
+  - due: 2026-08-05
+  - priority: normal
+
 ## This Week
 
 - [ ]

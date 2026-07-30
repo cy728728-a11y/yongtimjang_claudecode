@@ -36,10 +36,14 @@ S=".claude/skills/sellha-category/scripts/sellha.py"
 "$PY" "$S" --query "무선 마우스" "낚시텐트"
 
 # 2) 배치: [{"productId":"..","name":".."}] JSON → 결과 JSON
-"$PY" "$S" --input targets.json --output result.json --headless --resume
+"$PY" "$S" --input targets.json --output result.json --resume
 ```
 
-주요 옵션: `--headless`(창 숨김) · `--resume`(output 의 성공건 스킵, 실패건만 재시도) ·
+**창 숨김(headless)이 기본값**이다(2026-07-30, 이룸님 확정 — 카테고리 교정 중 크롬창이 화면에
+반복적으로 뜨는 게 방해가 됨). 렌더 이슈(파싱실패 다발 등)를 눈으로 직접 확인해야 할 때만
+`--no-headless` 로 창을 띄운다.
+
+주요 옵션: `--no-headless`(디버깅용 창 표시) · `--resume`(output 의 성공건 스킵, 실패건만 재시도) ·
 `--restart-every N`(N건마다 브라우저 재시작, 장시간 드라이버 행 방지).
 
 ## 반환 (항목별 dict)
