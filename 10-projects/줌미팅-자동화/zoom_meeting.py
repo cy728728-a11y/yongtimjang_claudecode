@@ -11,8 +11,12 @@
 """
 
 import argparse
+import base64
 import json
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 REQUIRED_KEYS = ["ZOOM_ACCOUNT_ID", "ZOOM_CLIENT_ID", "ZOOM_CLIENT_SECRET", "ZOOM_USER_EMAIL"]
@@ -51,6 +55,25 @@ def load_credentials(env: dict) -> dict:
     if missing:
         raise ValueError(f"다음 값이 .env에 없습니다: {', '.join(missing)}")
     return {k: env[k].strip() for k in REQUIRED_KEYS}
+
+
+def get_access_token(account_id: str, client_id: str, client_secret: str) -> str:
+    """Server-to-Server OAuth로 access token 발급."""
+    url = "https://zoom.us/oauth/token?" + urllib.parse.urlencode({
+        "grant_type": "account_credentials",
+        "account_id": account_id,
+    })
+    auth = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+    req = urllib.request.Request(url, method="POST", headers={
+        "Authorization": f"Basic {auth}",
+    })
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+            return data["access_token"]
+    except urllib.error.HTTPError as e:
+        body = e.read().decode() if e.fp else ""
+        raise RuntimeError(f"Zoom 토큰 발급 실패 ({e.code}): {body}")
 
 
 if __name__ == "__main__":
