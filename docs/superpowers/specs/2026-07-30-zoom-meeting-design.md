@@ -12,6 +12,7 @@
   - `ZOOM_ACCOUNT_ID`
   - `ZOOM_CLIENT_ID`
   - `ZOOM_CLIENT_SECRET`
+  - `ZOOM_USER_EMAIL` — Server-to-Server OAuth는 `me` 축약을 지원하지 않아, 미팅 생성 API 경로(`/users/{userId}/meetings`)에 실제 유저ID(=Zoom 로그인 이메일)를 명시해야 함
 
 ## 아키텍처
 
@@ -52,7 +53,7 @@
 
 **동작**:
 1. `POST https://zoom.us/oauth/token` (`grant_type=account_credentials`, `account_id=...`) 로 access token 발급
-2. `POST https://api.zoom.us/v2/users/me/meetings` 로 미팅 생성
+2. `POST https://api.zoom.us/v2/users/{ZOOM_USER_EMAIL}/meetings` 로 미팅 생성 (scope가 `meeting:write:meeting:admin`이라 `me` 대신 실제 유저ID 필요)
    - `type: 2` (예약)
    - `timezone: Asia/Seoul`
    - `settings.waiting_room: false`
