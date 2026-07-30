@@ -56,11 +56,23 @@ Windows(이 워크스페이스)에서는 venv 파이썬 사용:
 
 ### 4. 조기 오픈 리마인더 자동 등록
 
-미팅 생성 성공 직후, (시작시간 - 30분) 시각을 계산해 `40-personal/46-todos/active-todos.md`의 `## 🔥 Today` (당일이면) 또는 `## 📅 This Week` 섹션에 아래 형식으로 직접 추가 (todo 스킬과 동일 포맷, 별도 확인 질문 없이 바로 등록):
+미팅 생성 성공 직후, (시작시간 - 30분) 시각을 계산해 `40-personal/46-todos/active-todos.md`에 아래 규칙으로 직접 추가 (별도 확인 질문 없이 바로 등록):
+
+- **당일 미팅**: `## Today` 섹션에 추가 (added 필드만, due 필드 불필요)
+- **미래 날짜**: `## Scheduled` 섹션에 추가 (due 필드는 미팅 날짜로 설정)
+
+예시:
 
 ```markdown
+# 당일 미팅 (## Today에 추가)
 - [ ] 줌 오픈: [제목] (HH:MM 접속 → start_url로 열기)
   - added: YYYY-MM-DD HH:MM
+  - priority: normal
+
+# 미래 날짜 미팅 (## Scheduled에 추가)
+- [ ] 줌 오픈: [제목] (HH:MM 접속 → start_url로 열기)
+  - added: YYYY-MM-DD
+  - due: YYYY-MM-DD
   - priority: normal
 ```
 
