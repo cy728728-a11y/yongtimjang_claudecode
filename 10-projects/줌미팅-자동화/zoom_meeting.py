@@ -135,7 +135,7 @@ def main():
         print(f"[오류] {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(json.dumps(meeting, ensure_ascii=False))
+    print(json.dumps(meeting))
 
 
 if __name__ == "__main__":

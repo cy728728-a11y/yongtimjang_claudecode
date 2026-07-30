@@ -175,6 +175,35 @@ class TestMain(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
         self.assertIn("ZOOM_ACCOUNT_ID", captured_err.getvalue())
 
+    @patch("zoom_meeting.create_meeting")
+    @patch("zoom_meeting.get_access_token")
+    @patch("zoom_meeting.find_env")
+    def test_main_stdout_is_ascii_safe_and_roundtrips_korean(self, mock_find_env, mock_get_token, mock_create_meeting):
+        """stdout은 콘솔 인코딩에 안전하도록 ASCII만 포함해야 하고,
+        json.loads로 원래 한글 문자열을 정확히 복원할 수 있어야 한다."""
+        mock_find_env.return_value = Path("dummy/.env")
+        with patch("zoom_meeting.load_env", return_value={
+            "ZOOM_ACCOUNT_ID": "acc", "ZOOM_CLIENT_ID": "cid",
+            "ZOOM_CLIENT_SECRET": "secret", "ZOOM_USER_EMAIL": "user@example.com",
+        }):
+            mock_get_token.return_value = "token123"
+            mock_create_meeting.return_value = {
+                "topic": "[테스트] 삭제예정", "start_time": "2026-08-01T10:00:00Z",
+                "duration": 30, "join_url": "https://zoom.us/j/222",
+                "start_url": "https://zoom.us/s/222",
+            }
+            test_args = ["zoom_meeting.py", "--topic", "[테스트] 삭제예정",
+                          "--start", "2026-08-01T10:00:00", "--duration", "30"]
+            captured = io.StringIO()
+            with patch("sys.argv", test_args), patch("sys.stdout", captured):
+                zoom_meeting.main()
+
+        raw_output = captured.getvalue().strip()
+        self.assertTrue(raw_output.isascii())
+
+        output = json.loads(raw_output)
+        self.assertEqual(output["topic"], "[테스트] 삭제예정")
+
 
 if __name__ == "__main__":
     unittest.main()
