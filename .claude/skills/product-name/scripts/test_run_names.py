@@ -8,6 +8,8 @@
   F2 반영 결과를 시트 상태열에 되쓰지 않는다
 """
 import argparse
+import contextlib
+import io
 import json
 import os
 import sys
@@ -21,6 +23,7 @@ for _s in (sys.stdout, sys.stderr):  # 콘솔 cp949 에서 한글 테스트명�
         pass
 
 import run_names  # noqa: E402
+import name_check  # noqa: E402  (BASE_SUFFIX = 마커의 단일 출처)
 
 
 def _targets(n, prefix="P"):
@@ -172,6 +175,65 @@ class RenameCascadeTest(unittest.TestCase):
         ok, bad, err = run_names._rename_cascade([], submit)
 
         self.assertEqual((ok, bad, err, calls), ([], [], [], []))
+
+
+class RenameIdsFilterTest(unittest.TestCase):
+    """--ids 필터 — propagate 가 자기 append 분만 rename 대상으로 잡게 하는
+    승인 게이트 가드(피어리뷰 #9). commit=False 경로만 확인(MCP 미호출)."""
+
+    def _rows(self):
+        h = run_names.NAME_HEADER
+        i_id, i_orig = h.index("상품id"), h.index("원본상품명")
+        i_new, i_status = h.index("새상품명"), h.index("상태")
+
+        def row(pid, status="생성완료"):
+            r = [""] * len(h)
+            r[i_id], r[i_orig], r[i_new], r[i_status] = pid, "원본", "새이름", status
+            return r
+
+        return [row("P001"), row("P002"), row("P003"), row("P004", status="보류")]
+
+    def _patch_sheet(self, rows):
+        import eroomlib.gsheets as g
+        orig = g.sheets_get
+        g.sheets_get = lambda s, r: rows
+        self.addCleanup(lambda: setattr(g, "sheets_get", orig))
+
+    def _run(self, ids=None):
+        args = argparse.Namespace(sheet="SHEET", tab=run_names.NAME_TAB,
+                                   commit=False, limit=None, ids=ids)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_names.cmd_rename(args)
+        return buf.getvalue()
+
+    def test_ids_지정시_해당_pid만_대상이_된다(self):
+        self._patch_sheet(self._rows())
+        out = self._run(ids=["P002"])
+        self.assertIn("반영 대상: 1건", out)
+        self.assertIn("P002", out)
+        self.assertNotIn("P001", out)
+        self.assertNotIn("P003", out)
+
+    def test_ids_미지정시_기존과_동일한_대상이_된다(self):
+        """생성완료 3건(P001~P003) 그대로 — 보류(P004)는 원래도 제외."""
+        self._patch_sheet(self._rows())
+        out = self._run(ids=None)
+        self.assertIn("반영 대상: 3건", out)
+        for pid in ("P001", "P002", "P003"):
+            self.assertIn(pid, out)
+
+    def test_시트에_없는_pid를_줘도_에러_없이_대상_0건이_된다(self):
+        self._patch_sheet(self._rows())
+        out = self._run(ids=["P999"])
+        self.assertIn("반영 대상: 0건", out)
+
+    def test_ids에_있어도_생성완료가_아니면_대상에서_빠진다(self):
+        """--ids 는 상태=생성완료 필터 위에 얹는 추가 필터일 뿐,
+        상태 조건 자체를 우회하면 안 된다."""
+        self._patch_sheet(self._rows())
+        out = self._run(ids=["P004"])
+        self.assertIn("반영 대상: 0건", out)
 
 
 class StatusColumnTest(unittest.TestCase):
@@ -422,6 +484,189 @@ class PooledModeTest(unittest.TestCase):
             with self.assertRaises(RuntimeError) as cm:
                 run_names.cmd_prep(args)
             self.assertIn("--targets-json", str(cm.exception))
+
+
+def _snap(rows):
+    """스냅샷 레코드 흉내 — 판매행만 있으면 된다."""
+    return {"옵션": {"차원": [], "판매행": rows, "vid고유": True}}
+
+
+def _row(rid, price, exclude=False, main=False, text=""):
+    return {"id": rid, "text": text or f"opt{rid}", "sale_price": price,
+            "stock": 10, "exclude": exclude, "main_product": main}
+
+
+class SamePriceOptionTest(unittest.TestCase):
+    """색상 예외 규칙의 근거 — 워커는 옵션 가격을 못 보므로 prep 이 계산한다."""
+
+    def _f(self, rec):
+        return run_names._same_price_options("P1", load=lambda _pid: rec)
+
+    def test_전부_동가면_참이다(self):
+        self.assertTrue(self._f(_snap([_row("1", 9900), _row("2", 9900),
+                                       _row("3", 9900)])))
+
+    def test_하나라도_다르면_거짓이다(self):
+        self.assertFalse(self._f(_snap([_row("1", 9900), _row("2", 12000)])))
+
+    def test_제외행은_보지_않는다(self):
+        # 판매에서 빠진 행의 가격은 고객이 보는 추가금과 무관하다
+        self.assertTrue(self._f(_snap([_row("1", 9900), _row("2", 9900),
+                                       _row("3", 50000, exclude=True)])))
+
+    def test_판매행이_1개면_거짓이다(self):
+        # 구분할 대상이 없으면 색상을 생략할 이유도 없다
+        self.assertFalse(self._f(_snap([_row("1", 9900)])))
+
+    def test_가격이_비면_보수적으로_거짓이다(self):
+        self.assertFalse(self._f(_snap([_row("1", 9900), _row("2", None)])))
+
+    def test_옵션이_없으면_거짓이다(self):
+        self.assertFalse(self._f({}))
+
+    def test_스냅샷_읽기가_터져도_prep_을_멈추지_않는다(self):
+        def boom(_pid):
+            raise OSError("깨진 스냅샷")
+        self.assertFalse(run_names._same_price_options("P1", load=boom))
+
+
+class BaseSuffixHandoffTest(unittest.TestCase):
+    """상품명엔 기본형, 옵션명엔 없는 반쪽 상품을 옵션 단계로 넘긴다(결정 6)."""
+
+    def setUp(self):
+        self.calls = []
+
+    def _flag(self, sheet, task, items, from_task=None):
+        self.calls.append((sheet, task, dict(items), from_task))
+        return len(items)
+
+    def _run(self, recs, ok_ids=("P1",)):
+        return run_names._handoff_base_suffix(
+            "SHEET", list(ok_ids),
+            load=lambda pid: recs.get(pid), flag=self._flag)
+
+    def test_대표옵션명에_기본형이_없으면_플래그를_찍는다(self):
+        recs = {"P1": _snap([_row("1", 9900, main=True, text="블랙"),
+                             _row("2", 12000)])}
+        self.assertEqual(self._run(recs), 1)
+        sheet, task, items, from_task = self.calls[0]
+        self.assertEqual((sheet, task, from_task), ("SHEET", "옵션", "상품명"))
+        self.assertIn("P1", items)
+        self.assertIn(name_check.BASE_SUFFIX, items["P1"])
+
+    def test_이미_붙어_있으면_넘기지_않는다(self):
+        recs = {"P1": _snap([_row("1", 9900, main=True, text="블랙 기본형")])}
+        self.assertEqual(self._run(recs), 0)
+        self.assertEqual(self.calls, [], "짝이 맞는 상품까지 재작업으로 만들면 안 된다")
+
+    def test_옵션이_없는_단일상품은_제외한다(self):
+        # 마커를 붙일 대상이 없다 — 재작업 플래그가 영원히 해소되지 않는다
+        self.assertEqual(self._run({"P1": {}}), 0)
+        self.assertEqual(self.calls, [])
+
+    def test_대표가_아직_없으면_넘기지_않는다(self):
+        # 옵션 단계를 안 거친 상품 — 그 단계가 오면 규칙대로 마커가 붙는다
+        recs = {"P1": _snap([_row("1", 9900), _row("2", 12000)])}
+        self.assertEqual(self._run(recs), 0)
+        self.assertEqual(self.calls, [])
+
+    def test_여러_상품을_한_번에_모아_찍는다(self):
+        recs = {
+            "P1": _snap([_row("1", 9900, main=True, text="블랙")]),
+            "P2": _snap([_row("1", 9900, main=True, text="화이트 기본형")]),
+            "P3": _snap([_row("1", 9900, main=True, text="베이지")]),
+        }
+        self.assertEqual(self._run(recs, ok_ids=("P1", "P2", "P3")), 2)
+        self.assertEqual(len(self.calls), 1, "열 통짜 1회로 써야 한다")
+        self.assertEqual(sorted(self.calls[0][2]), ["P1", "P3"])
+
+    def test_시트나_대상이_없으면_아무것도_하지_않는다(self):
+        self.assertEqual(run_names._handoff_base_suffix("", ["P1"]), 0)
+        self.assertEqual(run_names._handoff_base_suffix("SHEET", []), 0)
+
+    def test_플래그_쓰기_실패는_반영결과를_뒤엎지_않는다(self):
+        def boom(*_a, **_k):
+            raise RuntimeError("gws 응답 없음")
+        recs = {"P1": _snap([_row("1", 9900, main=True, text="블랙")])}
+        n = run_names._handoff_base_suffix(
+            "SHEET", ["P1"], load=lambda pid: recs.get(pid), flag=boom)
+        self.assertEqual(n, 0)
+
+
+class PlacementR9Test(unittest.TestCase):
+    """R9 — 원본 단어와 키워드를 `a 1 b 2 c` 로 번갈아 놓았는가 (2026-07-31 이룸님).
+
+    실측 계기: 3-1 그룹 `스파게티냄비 면삶는냄비 업소용 뜰채 깊은` — 키워드를 앞에 몰아
+    실물 직결어(탕면기·우동)가 잘려 나갔다.
+    """
+
+    def _check(self, name, terms, keywords):
+        return name_check.check_one(
+            {"새상품명": name, "term분해": terms, "키워드": keywords}, strict=False)
+
+    def _r9(self, r):
+        return [v for v in r["위반"] if v.startswith("R9")]
+
+    def test_키워드를_앞에_몰고_원본을_뒤에_붙이면_실패한다(self):
+        r = self._check("스파게티냄비 면삶는냄비 업소용 뜰채 깊은 기본형",
+                        ["스파게티", "냄비", "면", "삶는", "냄비", "업소용", "뜰채", "깊은",
+                         name_check.BASE_SUFFIX],
+                        ["스파게티냄비", "면삶는냄비"])
+        self.assertTrue(self._r9(r), "R9가 잡아야 한다")
+        self.assertIn("업소용", self._r9(r)[0], "밀려난 원본 단어를 지목해야 한다")
+
+    def test_a1b2_로_번갈아_놓으면_통과한다(self):
+        r = self._check("탕면기 스파게티냄비 우동 면삶는냄비 기본형",
+                        ["탕면기", "스파게티", "냄비", "우동", "면", "삶는", "냄비",
+                         name_check.BASE_SUFFIX],
+                        ["스파게티냄비", "면삶는냄비"])
+        self.assertEqual(r["위반"], [])
+        self.assertEqual(r["term수"], 6)
+
+    def test_자리가_모자라_키워드가_붙는_건_정상이다(self):
+        # 내용어 6을 키워드가 다 먹으면 원본 단어는 a 하나뿐 — c·b가 없어 붙는다
+        r = self._check("탕면기 스파게티냄비 면삶는냄비 기본형",
+                        ["탕면기", "스파게티", "냄비", "면", "삶는", "냄비",
+                         name_check.BASE_SUFFIX],
+                        ["스파게티냄비", "면삶는냄비"])
+        self.assertEqual(self._r9(r), [])
+
+    def test_원본_단어가_아예_없으면_키워드만_이어도_된다(self):
+        r = self._check("이발의자 전동미용의자 기본형",
+                        ["이발", "의자", "전동", "미용", "의자", name_check.BASE_SUFFIX],
+                        ["이발의자", "전동미용의자"])
+        self.assertEqual(self._r9(r), [])
+
+    def test_두_어절에_걸친_키워드도_한_덩어리로_본다(self):
+        # '각얼음빙수기' = 각얼음 + 빙수기 두 어절. 앞뒤에 원본 단어가 있으니 통과
+        r = self._check("가정용 무선 각얼음 빙수기 눈꽃 슬러시 기본형",
+                        ["가정용", "무선", "각얼음", "빙수기", "눈꽃", "슬러시",
+                         name_check.BASE_SUFFIX],
+                        ["무선빙수기", "각얼음빙수기"])
+        self.assertEqual(self._r9(r), [])
+
+    def test_부분반영_레시피_결과는_통과한다(self):
+        # 구별 term('자바라')이 a 자리를 채운다 → 회귀 방지
+        r = self._check("자바라 조립식캐노피천막 원터치 접이식 기본형",
+                        ["자바라", "조립식", "캐노피", "천막", "원터치", "접이식",
+                         name_check.BASE_SUFFIX],
+                        ["조립식캐노피천막", "자바라캐노피천막"])
+        self.assertEqual(r["위반"], [])
+
+    def test_키워드3개도_계속_번갈아야_한다(self):
+        bad = self._check("업소용 이발의자 전동미용의자 미용실의자 높이조절 기본형",
+                          ["업소용", "이발", "의자", "전동", "미용", "의자", "미용실",
+                           "의자", "높이조절", name_check.BASE_SUFFIX],
+                          ["이발의자", "전동미용의자", "미용실의자"])
+        self.assertTrue(self._r9(bad), "2·3번 키워드가 붙었는데 뒤에 원본 단어가 남았다")
+
+    def test_마커는_배치_판정에서_빼고_본다(self):
+        # 마지막 gap 이 마커뿐이면 '원본 단어가 남은 것'이 아니다
+        r = self._check("업소용 이발의자 전동미용의자 기본형",
+                        ["업소용", "이발", "의자", "전동", "미용", "의자",
+                         name_check.BASE_SUFFIX],
+                        ["이발의자", "전동미용의자"])
+        self.assertEqual(self._r9(r), [])
 
 
 if __name__ == "__main__":

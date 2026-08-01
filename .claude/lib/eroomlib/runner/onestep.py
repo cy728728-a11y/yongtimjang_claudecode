@@ -150,7 +150,9 @@ STEPS = [
         # `output` 은 **run 이 만드는 것**이어야 한다. generated.json 은 preview 산출물이라
         # 그걸 적으면 record 가 영영 통과하지 못한다(상세에서 실제로 났던 교착).
         "output":  "results/",
-        "prep_out": "batches/batch_001.json",
+        # 2026-08-01: prep 이 대표옵션 확정건을 result_000 에 선기록하고 배치에서 빼므로
+        # batch_001.json 은 없을 수 있다(1건 세로 실행이 정확히 그 경우). 인덱스가 산출물.
+        "prep_out": "batches_index.json",
         "preview": lambda c: _thumb(c, "apply", "--generate"),
         "commit":  lambda c: _thumb(c, "apply", "--commit"),
     },

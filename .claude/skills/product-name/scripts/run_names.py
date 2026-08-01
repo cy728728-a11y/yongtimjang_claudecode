@@ -548,6 +548,36 @@ def _restore_thumb_map(run_dir):
     return out
 
 
+def _same_price_options(pid, load=None):
+    """판매 옵션이 **전부 같은 가격**인가 — 색상 예외 규칙(2026-07-30 이룸님)의 근거.
+
+    이룸님 규칙: 옵션이 전부 추가금 0원이고 색상만 다르면 상품명에 컬러명을 안 넣어도 된다
+    (대표옵션의 색은 썸네일이 보여주므로 대표상품 지칭이 깨지지 않는다).
+    그런데 **워커는 이걸 판단할 수 없다** — 배치의 `옵션명`은 문자열 리스트뿐이고 가격이 없다
+    (`snapshot.sku_evidence` 가 `text` 만 뽑는다). 그래서 여기서 계산해 배치에 싣는다.
+
+    옵션 전량(`옵션`)은 workdata.json 투영(`snapshot.WD_FIELDS`)에서 파일 비대 때문에
+    일부러 빠져 있다 → 스냅샷 레코드를 직접 읽는다(설계상 의도된 경로).
+
+    보수적으로 판정한다 — 판매 가능한 행이 2개 미만이거나 가격이 하나라도 비면 False.
+    (구분할 대상이 없거나 근거가 불완전하면 색상을 생략할 이유가 없다.)
+
+    `load` 는 테스트 주입점(기본 `snapshot.load`).
+    """
+    if load is None:
+        load = snapshot.load
+    try:
+        rec = load(pid) or {}
+    except Exception:  # noqa: BLE001  스냅샷이 없거나 깨져도 prep 을 멈추지 않는다
+        return False
+    rows = [r for r in ((rec.get("옵션") or {}).get("판매행") or [])
+            if not r.get("exclude")]
+    prices = [r.get("sale_price") for r in rows]
+    if len(rows) < 2 or not all(isinstance(p, (int, float)) for p in prices):
+        return False
+    return len(set(prices)) == 1
+
+
 def _build_views_and_batches(run_dir, targets, thumb_map, no_parent, skipped_n=0,
                              wd_by_id=None, jk_by_id=None):
     """카테고리 뷰(D) 생성 + 카테고리 단위 배치.
@@ -618,6 +648,9 @@ def _build_views_and_batches(run_dir, targets, thumb_map, no_parent, skipped_n=0
                 "썸네일URL": jk.get("썸네일URL", ""),        # K열. 로컬 없을 때 여기서 fetch
                 "원문명": wd.get("원문명", ""),              # 중국어 원문(가공 전)
                 "옵션명": wd.get("옵션명", []),              # 실제 판매 단위(가공 전)
+                # 색상 예외 규칙(2026-07-30)의 유일한 기계적 근거 — 워커는 옵션 '가격'을
+                # 볼 수 없으므로(배치의 `옵션명`은 문자열뿐) 여기서 계산해 넘긴다.
+                "옵션동일가": _same_price_options(pid),
             })
         if not prods:
             continue
@@ -775,6 +808,58 @@ def _mark_matrix(sheet, status_by_id):
         return n
     except Exception as e:  # noqa: BLE001
         print(f"  [경고] 현황판 갱신 실패: {str(e)[:120]}", file=sys.stderr)
+        return 0
+
+
+def _handoff_base_suffix(sheet, ok_ids, load=None, flag=None):
+    """상품명엔 `기본형` 이 붙었는데 대표옵션명엔 없는 상품을 옵션 단계로 넘긴다.
+
+    왜 필요한가 (2026-07-30 이룸님 결정 3·6): 마커는 신규 처리분에만 적용하고 기존
+    완료건은 소급하지 않는다. 그런데 두 스킬은 각자 다른 날 돈다 — **옵션은 이미 옛
+    규칙으로 끝났고 상품명만 이번에 도는 상품**이 생긴다(용쌤1-1 등 실제로 많다).
+    그 상품은 상품명만 `…기본형` 이고 옵션 목록에는 그 단어가 없어 **짝이 깨진다.**
+    고객이 어느 옵션이 기본인지 못 찾는다.
+
+    그래서 현황판 `옵션` 열에 재작업 플래그만 찍는다(기존 이관 메커니즘 재사용).
+    나중에 옵션명만 가볍게 보완하면 된다.
+
+    - **append 가 아니라 rename 성공 후**에 부른다 — append 시점의 상품명은 아직 불사자
+      미반영이라, rename 이 실패하면 불필요한 플래그가 남는다.
+    - **옵션이 아예 없는 상품(단일상품)은 제외** — 마커를 붙일 대상이 없다.
+    - 현황판은 원장의 파생본이라 실패해도 반영 결과에 영향이 없다 → 예외를 삼킨다.
+
+    `load`·`flag` 는 테스트 주입점(기본 `snapshot.load` / `matrix.flag_many`).
+    """
+    if not sheet or not ok_ids:
+        return 0
+    if load is None:
+        load = snapshot.load
+    if flag is None:
+        flag = matrix.flag_many
+    need = {}
+    for pid in ok_ids:
+        try:
+            rec = load(pid) or {}
+        except Exception:  # noqa: BLE001
+            continue
+        rows = (rec.get("옵션") or {}).get("판매행") or []
+        if not rows:
+            continue                      # 옵션 없는 단일상품 — 보완할 대상이 없다
+        main = next((r for r in rows if r.get("main_product")), None)
+        if main is None:
+            # 대표가 아직 안 세워짐 = 옵션 단계를 안 거쳤다. 그 단계가 오면 마커를 붙인다.
+            continue
+        if not str(main.get("text") or "").strip().endswith(name_check.BASE_SUFFIX):
+            need[pid] = f"상품명에 {name_check.BASE_SUFFIX} 부착 — 대표옵션명 보완 필요"
+    if not need:
+        return 0
+    try:
+        n = flag(sheet, "옵션", need, from_task="상품명")
+        print(f"  현황판({matrix.TAB}) 옵션 재작업 플래그: {n}칸 "
+              f"(상품명에만 {name_check.BASE_SUFFIX}이 붙은 상품)")
+        return n
+    except Exception as e:  # noqa: BLE001
+        print(f"  [경고] 옵션 이관 플래그 실패: {str(e)[:120]}", file=sys.stderr)
         return 0
 
 
@@ -1194,6 +1279,9 @@ def cmd_rename(args):
     i_id = NAME_HEADER.index("상품id")
     i_orig = NAME_HEADER.index("원본상품명")
     i_new = NAME_HEADER.index("새상품명")
+    # --ids 지정 시 그 pid만 대상으로 좁힌다(전파가 자기 append 분만 커밋하도록 —
+    # 미지정이면 필터 없이 기존 동작과 바이트 단위로 동일해야 한다).
+    ids = set(getattr(args, "ids", None) or [])
     targets = []
     for r in rows:
         r = list(r) + [""] * (ncol - len(r))
@@ -1202,6 +1290,8 @@ def cmd_rename(args):
         if not str(pid).strip() or status != "생성완료":
             continue
         if not str(newname).strip():
+            continue
+        if ids and str(pid).strip() not in ids:
             continue
         targets.append({"productId": str(pid).strip(),
                         "name": str(newname).strip(),
@@ -1277,6 +1367,9 @@ def cmd_rename(args):
     _mark_matrix(args.sheet,
                  {**{pid: "반영완료" for pid in ok_ids},
                   **{pid: "상품삭제(이룸님)" for pid, _ in bad}})
+
+    # 상품명엔 마커가 붙었는데 대표옵션명엔 없는 상품 → 옵션 단계로 이관(짝 복구용)
+    _handoff_base_suffix(args.sheet, ok_ids)
     print(f"  https://docs.google.com/spreadsheets/d/{args.sheet}/edit")
 
 
@@ -1392,6 +1485,8 @@ def main():
     p3 = sub.add_parser("rename", help="시트 생성완료 건을 불사자에 반영")
     p3.add_argument("--run-dir", required=True)
     p3.add_argument("--commit", action="store_true", help="실제 반영(없으면 미리보기)")
+    p3.add_argument("--ids", nargs="+", default=None,
+                    help="지정 시 이 상품id들만 대상(전파가 자기 append 분만 커밋할 때 사용)")
     p3.add_argument("--limit", type=int, default=None)
     p3.add_argument("--sleep", type=float, default=1.0)
     p3.add_argument("--group-name", default="", help="마켓그룹명(시트 조회 키)")

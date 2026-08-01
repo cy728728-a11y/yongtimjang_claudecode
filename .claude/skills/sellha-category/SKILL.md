@@ -24,7 +24,37 @@ SELLHA_EMAIL=<셀하 이메일>
 SELLHA_PW=<셀하 비밀번호>
 ```
 
-드라이버는 `eroomlib.webdriver`(봇 감지 우회 Chrome)를 쓴다. selenium 이 venv 에 있어야 한다.
+드라이버는 selenium + Chrome. venv 에 selenium 이 있어야 한다.
+
+## ★ 확장 프로필 준비 (2026-07-31 신설 — 이거 없으면 전건 실패)
+
+**셀하는 이제 카테고리·상품수를 서버가 아니라 크롬 확장이 브라우저에서 직접 가져온다**
+(네이버 API 종료, 셀하 공지 2026-07-29). 확장 없는 크롬으로 돌리면 **로그인·검색은 다 되는데
+응답이 비어서** 전건 `파싱실패` 가 된다.
+
+기본 프로필: `D:/python_work/data/sellha/profile` (환경변수 `SELLHA_PROFILE` 로 교체 가능)
+
+**만드는 절차** (한 번만. 이후 계속 재사용):
+
+1. 크롬을 **완전히 종료**한다(트레이 아이콘 포함). 실행 중이면 복사본의 확장이 비활성으로 온다
+2. 크롬 프로필 폴더를 통째로 복사한다 — `Extensions` · `Extension State` · `Extension Rules` ·
+   `Extension Scripts` · `Local Extension Settings` · `Sync Extension Settings` ·
+   `Preferences` · `Secure Preferences` · `Network`(쿠키) · `Local Storage`, 그리고
+   User Data 루트의 `Local State`
+3. 그 프로필로 크롬을 띄워(`--user-data-dir=<사본> --profile-directory=Default`)
+   웹스토어에서 **Sellha 확장을 정식 설치**한다.
+   ⚠️ 복사만으로는 크롬이 확장을 신뢰하지 않아 목록에 안 뜬다. **웹스토어 설치가 필요하다.**
+   ⚠️ `--load-extension` 은 **쓸 수 없다** — Chrome 137+ 에서 차단, 150 에서 우회 플래그 전부 실패
+4. 같은 창에서 **셀하 로그인** + **네이버 로그인**을 하고, 셀하가 "네이버 보안 확인"을 요구하면
+   `네이버쇼핑 열기` 로 통과시킨다
+5. 아무 키워드나 조회해 `100.0% 대분류 > … > 최종` 줄이 뜨면 완료
+
+**세션이 만료되면 4번만 다시 하면 된다**(프로필·확장은 그대로).
+
+> ⚠️ **`--headless` 를 쓰지 않는다.** 헤드리스에서는 확장이 안 돌아 전건 실패한다(실측 확인).
+> 창이 뜬 채로 도는 게 정상이다.
+> ⚠️ **네이버 차단 주의.** 확장이 네이버쇼핑을 직접 긁는 구조라 요청이 몰리면
+> "쇼핑 서비스 접속이 일시적으로 제한되었습니다" 가 뜬다. `--sleep` 을 늘리고 나눠 돌린다.
 
 ## 사용
 
@@ -32,19 +62,41 @@ SELLHA_PW=<셀하 비밀번호>
 PY=".venv/Scripts/python.exe"     # 저장소 루트 기준
 S=".claude/skills/sellha-category/scripts/sellha.py"
 
+P="D:/python_work/data/sellha/profile"
+
 # 1) 키워드 하나 이상 즉시 조회 (stdout JSON)
-"$PY" "$S" --query "무선 마우스" "낚시텐트"
+"$PY" "$S" --profile "$P" --query "무선 마우스" "낚시텐트"
 
 # 2) 배치: [{"productId":"..","name":".."}] JSON → 결과 JSON
-"$PY" "$S" --input targets.json --output result.json --resume
+"$PY" "$S" --profile "$P" --input targets.json --output result.json --resume
+
+# 3) 이미 떠 있는 크롬에 붙기(수동 점검용)
+"$PY" "$S" --debugger 127.0.0.1:9222 --query "낚시텐트"
 ```
 
-**창 숨김(headless)이 기본값**이다(2026-07-30, 이룸님 확정 — 카테고리 교정 중 크롬창이 화면에
-반복적으로 뜨는 게 방해가 됨). 렌더 이슈(파싱실패 다발 등)를 눈으로 직접 확인해야 할 때만
-`--no-headless` 로 창을 띄운다.
-
-주요 옵션: `--no-headless`(디버깅용 창 표시) · `--resume`(output 의 성공건 스킵, 실패건만 재시도) ·
+주요 옵션: **`--profile`(필수)** · `--debugger`(기존 창에 붙기) ·
+`--resume`(output 의 성공건 스킵, 실패건만 재시도) ·
 `--restart-every N`(N건마다 브라우저 재시작, 장시간 드라이버 행 방지).
+
+### 네이버 차단 회피 (2026-07-31)
+
+네이버가 명시한 차단 사유가 **"짧은 시간 내에 너무 많은 요청이 이루어진 IP"** 다.
+**고정 간격은 그 자체가 봇 신호**라 오히려 위험하므로 전부 난수로 흔든다.
+
+| 옵션 | 기본 | 뜻 |
+|---|:---:|---|
+| `--sleep` | 2.0 | 조회 간 **최소** 대기(초) |
+| `--sleep-max` | `--sleep`×3 | 조회 간 **최대** 대기. 실제 대기는 이 사이 난수 |
+| `--rest-every` | 30 | 평균 N건마다 **긴 휴식**(주기도 길이도 난수). 0=끔 |
+| `--block-wait` | 300 | **차단 감지 시** 대기(초). 그 뒤 1회 재시도 |
+
+**차단 감지**: 페이지에 `일시적으로 제한`·`접속이 제한`·`비정상적인 접근` 이 뜨면
+상태를 `차단감지` 로 반환하고 **즉시 멈춘다**(계속 두드리면 더 오래 막힌다).
+`--block-wait` 만큼 쉬고 1회 재시도, 그래도 막히면 **중단**한다.
+시간을 두고 `--resume` 으로 이어서 돌리면 성공분은 건너뛴다.
+
+> 대량(수백 건)은 `--sleep 3 --sleep-max 10 --rest-every 25` 정도로 시작해
+> 실제로 어디서 걸리는지 보고 조절한다. **실측된 안전 속도는 아직 없다.**
 
 ## 반환 (항목별 dict)
 
@@ -63,5 +115,11 @@ S=".claude/skills/sellha-category/scripts/sellha.py"
 ## 트러블슈팅
 
 - **로그인 실패**: 비번 변경 시 `.env` 갱신. 로그인 폼 구조 변경 시 `sellha.py` 의 `login()` 셀렉터 갱신.
-- **파싱실패 다발**: 셀하 페이지 구조 변경 가능 → `sellha.py` 의 `CAT_PAT` 정규식 점검.
+- **파싱실패 다발**: 십중팔구 **확장 문제**다. 순서대로 본다 —
+  ① `--profile` 을 줬나 ② `--headless` 를 쓰지 않았나 ③ 그 프로필 크롬을 직접 띄워
+  `chrome://extensions` 에 Sellha 가 **켜져** 있나 ④ 셀하·네이버 로그인이 살아 있나
+  ⑤ 네이버가 "쇼핑 서비스 접속 제한" 을 띄우지 않았나. 그 다음에야 `CAT_PAT` 정규식을 의심한다.
+- **결과가 이전 키워드 것 같다**: 셀하는 SPA 라 URL 로 keyword 를 갈아끼워도 화면이 안 바뀐다.
+  `lookup_category_ui` 가 **카드에 그 키워드가 있는지 확인한 뒤** 읽는 이유다.
+  로그인 전에는 예시 카드(늘 '사과')가 떠 있다.
 - **장시간 배치 드라이버 행**: `--restart-every 150` 로 주기적 재시작(기본값).

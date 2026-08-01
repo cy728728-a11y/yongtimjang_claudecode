@@ -340,6 +340,53 @@ class _StubDetailMCP(snapshot.ProductMCP):
         return {"data": dict(self._raw)}
 
 
+class CollectGroupTest(SnapshotBase):
+    """마켓그룹 수집 — 잠금 필드 보존."""
+
+    def setUp(self):
+        super().setUp()
+        # 스톱 MCP: bulsaja_market_group_products 응답을 흉내낸다
+        class _StubCollectMCP(snapshot.ProductMCP):
+            def __init__(self):
+                pass
+            def call_tool(self, name, payload):
+                assert name == "bulsaja_market_group_products"
+                # 1페이지만 반환 (더있음=False)
+                return {
+                    "항목": [
+                        {"productId": "P1", "상품명": "상품1", "상태코드": 4, "잠금": True},
+                        {"productId": "P2", "상품명": "상품2", "상태코드": 2, "잠금": False},
+                        {"productId": "P3", "상품명": "상품3", "상태코드": 0},  # 잠금 필드 없는 경우
+                    ],
+                    "총상품수": 3,
+                    "더있음": False,
+                }
+        self.mcp = _StubCollectMCP()
+
+    def test_collect_group이_잠금_필드를_보존한다(self):
+        out = self.mcp.collect_group("1001114", sleep=0)
+        self.assertEqual(len(out), 3)
+        # 첫 번째 상품: 잠금=True
+        self.assertEqual(out[0]["productId"], "P1")
+        self.assertEqual(out[0]["상품명"], "상품1")
+        self.assertEqual(out[0]["상태코드"], 4)
+        self.assertTrue(out[0]["잠금"])
+        # 두 번째 상품: 잠금=False
+        self.assertEqual(out[1]["productId"], "P2")
+        self.assertFalse(out[1]["잠금"])
+        # 세 번째 상품: 잠금 필드 없는 경우 None
+        self.assertEqual(out[2]["productId"], "P3")
+        self.assertIsNone(out[2]["잠금"])
+
+    def test_collect_group_출력이_필수_필드를_포함한다(self):
+        out = self.mcp.collect_group("1001114", sleep=0)
+        for item in out:
+            self.assertIn("productId", item)
+            self.assertIn("상품명", item)
+            self.assertIn("상태코드", item)
+            self.assertIn("잠금", item)
+
+
 class DetailFieldTest(SnapshotBase):
     """상세 스킬(Step6)이 쓰는 `상세` 필드 추출."""
 

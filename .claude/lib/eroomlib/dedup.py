@@ -145,3 +145,49 @@ def save_json(path, obj):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
+
+
+def shuffle_name(name, keywords, code, group_id, rep_group_id=None):
+    """마켓별 상품명 변형 — 블록 순서만 결정적으로 바꾼다(중복 노출 회피).
+
+    키워드는 불가분 블록: 공백 제거 연속 문자열이 보존돼야 적합도(R5) 만점이 유지된다.
+    seed = sha1(code:groupId) — 그룹명이 아니라 groupId(불변 정수)를 쓴다(개명 안전).
+    대표가 속한 그룹은 항등(확정명 그대로).
+    """
+    import hashlib
+    import random
+    if rep_group_id is not None and group_id == rep_group_id:
+        return name
+    tokens = name.split()
+    used = [False] * len(tokens)
+    blocks = []
+    # 긴 키워드부터 토큰 연속 구간에 매칭(공백 제거 비교) — 겹치지 않게 잠근다
+    for kw in sorted((k for k in keywords if k), key=len, reverse=True):
+        flat = kw.replace(" ", "")
+        for i in range(len(tokens)):
+            if used[i]:
+                continue
+            acc = ""
+            for j in range(i, len(tokens)):
+                if used[j]:
+                    break
+                acc += tokens[j]
+                if acc == flat:
+                    blocks.append((i, tokens[i:j + 1]))
+                    for k in range(i, j + 1):
+                        used[k] = True
+                    break
+                if len(acc) > len(flat):
+                    break
+            else:
+                continue
+            if used[i]:
+                break
+    for i, t in enumerate(tokens):
+        if not used[i]:
+            blocks.append((i, [t]))
+    blocks.sort(key=lambda b: b[0])          # 원 순서 기준으로 정렬한 뒤
+    seq = [b[1] for b in blocks]
+    seed = int(hashlib.sha1(f"{code}:{group_id}".encode()).hexdigest()[:12], 16)
+    random.Random(seed).shuffle(seq)         # 결정적 순열
+    return " ".join(t for blk in seq for t in blk)

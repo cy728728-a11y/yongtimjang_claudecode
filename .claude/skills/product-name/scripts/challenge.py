@@ -76,13 +76,19 @@ def build_challenge(path, adopted, drop_brand=True, max_items=DEFAULT_MAX):
     cats = find_categories(rows)
     by_kw = {r["kw"]: r for r in rows}
 
-    roots, cutoff = set(), 0
+    roots, cutoff, found_any = set(), 0, False
     for kw in adopted:
         roots |= roots_of(kw, cats)
         r = by_kw.get(kw)
         if r:
             # 채택 키워드 각각을 '더 싼 것으로 바꿀 수 있나' 묻는 것이므로 최대값이 기준
             cutoff = max(cutoff, r["pc"])
+            found_any = True
+    if not found_any:
+        # 채택 키워드가 전부 이 카테고리 파일 밖(예: 상위뷰)에서 온 경우 —
+        # 기준 상품수를 정할 수 없어 접미사만으로 광범위 매칭하면 무의미/충돌(None 포맷 에러) 하므로 건너뛴다.
+        return {"목록": [], "총": 0, "잘림": 0, "기준상품수": None, "어근": sorted(roots),
+                "생략사유": "채택 키워드가 이 카테고리 파일에 없음(상위뷰 등 외부 출처로 추정) — 반증 생략"}
     if not cutoff:
         cutoff = 10 ** 9
 

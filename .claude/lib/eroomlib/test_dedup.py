@@ -85,5 +85,43 @@ class IoTest(unittest.TestCase):
             self.assertEqual(dedup.load_json(p, None), {"tb:700": [1, 2]})
 
 
+class ShuffleTest(unittest.TestCase):
+    NAME = "이발의자 전동미용의자 업소용 높이조절 고급"
+    KWS = ["이발의자", "전동미용의자"]
+
+    def test_같은_입력은_항상_같은_결과다(self):
+        a = dedup.shuffle_name(self.NAME, self.KWS, "tb:1", 22)
+        b = dedup.shuffle_name(self.NAME, self.KWS, "tb:1", 22)
+        self.assertEqual(a, b)
+
+    def test_그룹이_다르면_대체로_다른_순서다(self):
+        outs = {dedup.shuffle_name(self.NAME, self.KWS, "tb:1", g) for g in range(2, 30)}
+        self.assertGreater(len(outs), 1)   # 순열이 갈리는지(전부 같으면 셔플이 아님)
+
+    def test_키워드는_연속_문자열로_보존된다(self):
+        out = dedup.shuffle_name(self.NAME, self.KWS, "tb:1", 23)
+        for kw in self.KWS:
+            self.assertIn(kw, out.replace(" ", ""))
+
+    def test_토큰_집합은_변하지_않는다(self):
+        out = dedup.shuffle_name(self.NAME, self.KWS, "tb:1", 24)
+        self.assertEqual(sorted(out.split()), sorted(self.NAME.split()))
+
+    def test_대표_그룹은_원문_그대로다(self):
+        self.assertEqual(
+            dedup.shuffle_name(self.NAME, self.KWS, "tb:1", 22, rep_group_id=22), self.NAME)
+
+    def test_여러_토큰에_걸친_키워드도_인접_순서가_보존된다(self):
+        # 피어리뷰 #4: 단일 토큰 픽스처만으로는 블록 매칭 루프를 지우고
+        # 토큰 단위 셔플로 짜도 전부 통과한다 — 멀티토큰 키워드가 진짜 그물이다.
+        name = "자바라 조립식 캐노피천막 원터치 접이식"
+        kws = ["조립식 캐노피천막"]          # 토큰 2개에 걸친 키워드
+        for g in range(2, 20):
+            out = dedup.shuffle_name(name, kws, "tb:9", g)
+            self.assertIn("조립식 캐노피천막", out,
+                          f"g={g}: 키워드 블록이 쪼개졌다 → {out}")
+            self.assertEqual(sorted(out.split()), sorted(name.split()))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

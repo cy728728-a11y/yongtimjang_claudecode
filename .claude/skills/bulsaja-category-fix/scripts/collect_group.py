@@ -6,7 +6,7 @@
 
 사용:
   python collect_group.py --group-id 1001115 -o group.json
-출력: [{"productId","상품명","상태코드"}]
+출력: [{"productId","상품명","상태코드","잠금"}]
 """
 import argparse
 import json

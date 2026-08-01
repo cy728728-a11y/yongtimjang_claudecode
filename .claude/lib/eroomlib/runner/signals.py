@@ -192,6 +192,19 @@ def options(run_dir, pid):
                         f"최종 검증 실패: {'; '.join(map(str, p['검증실패']))[:200]}",
                         p["검증실패"]))
 
+    # 대표옵션 마커 — 상품명 끝의 `기본형` 과 짝을 이루는 유일한 표식(2026-07-30 이룸님).
+    # 상태가 `보류(기본형)` 이라 opt.not_ready 로도 걸리지만, 게이트 화면에서 **무엇이
+    # 틀렸는지** 보이게 따로 낸다(사유 없는 정지는 이룸님이 판단할 수 없다).
+    if p.get("기본형누락"):
+        out.append(_sig("opt.base_suffix_missing", "옵션",
+                        "대표옵션 이름이 '기본형'으로 끝나지 않는다 — 상품명과 짝이 안 맞는다",
+                        p.get("대표값키") or ""))
+    if p.get("기본형오부착"):
+        out.append(_sig("opt.base_suffix_stray", "옵션",
+                        f"대표가 아닌 옵션에 '기본형'이 붙었다: "
+                        f"{'; '.join(map(str, p['기본형오부착']))[:120]}",
+                        p["기본형오부착"]))
+
     keep = p.get("유지수")
     excl = p.get("제외수")
     if isinstance(keep, int) and isinstance(excl, int) and (keep + excl) > 0:

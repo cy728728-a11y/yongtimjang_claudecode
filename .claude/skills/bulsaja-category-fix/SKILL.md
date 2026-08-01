@@ -18,7 +18,14 @@ allowed-tools:
 불사자 상품의 잘못된/미설정 카테고리를 **네이버 정답 카테고리**로 교정하는 스킬.
 
 핵심 아이디어: **셀하(sellha.kr)** 가 상품명(또는 키워드)이 속한 네이버 카테고리 경로를
-`생활/건강 > 공구 > 원예공구 > 농기계` 처럼 보여준다(아이템스카우트와 달리 **확장 프로그램 없이** 렌더).
+`생활/건강 > 공구 > 원예공구 > 농기계` 처럼 보여준다.
+
+> ⚠️ **2026-07-31: 셀하 확장 프로필이 필수가 됐다.** 네이버 API 종료 이후 셀하는 카테고리를
+> **확장이 브라우저에서 직접** 가져온다 — 확장 없는 크롬은 로그인·검색이 다 되는데도 빈 응답을
+> 받아 **전건 `파싱실패`** 다. `run_all.py` 가 `--profile` 을 넘기며, 기본값은
+> `D:/python_work/data/sellha/profile`(환경변수 `SELLHA_PROFILE` 로 교체).
+> **헤드리스 불가**(확장이 안 돈다). 프로필 준비 →
+> [`../sellha-category/SKILL.md`](../sellha-category/SKILL.md) §확장 프로필 준비
 그 경로의 **최종 차수(예 `농기계`)** 를 불사자 카테고리 검색에 넣으면 동일 경로가 나오고, 그걸로 저장한다.
 셀하 = 네이버 카테고리이므로, 불사자 스마트스토어 후보의 전체 경로가 셀하 경로와 **정확히 일치**한다 → 매칭이 자명.
 
@@ -36,6 +43,7 @@ allowed-tools:
 | 찾는 것 | 파일 |
 |---|---|
 | 증거 4종 판별 기준 · 대표검색어 12규칙 프롬프트 전문 | [`references/대표검색어-도출.md`](references/대표검색어-도출.md) — **단일 출처**(`product-name`도 참조) |
+| 팬아웃 워커가 실제로 실행하는 절차(도구 규율·입출력·실패 처리) | [`references/판정-워커-프롬프트.md`](references/판정-워커-프롬프트.md) |
 | 저장 4단계 폴백 전문 · 대량처리 스크립트/실행순서 | [`references/저장폴백-대량처리.md`](references/저장폴백-대량처리.md) |
 | 셀하 동작 원리 · 트러블슈팅 · 버전 이력 | [`references/운영-트러블슈팅-버전.md`](references/운영-트러블슈팅-버전.md) |
 
@@ -83,14 +91,42 @@ allowed-tools:
 - **A·B** → 실물 기준 대표 검색어 도출 → 셀하. **B는 미루지 않고**(셀하 두 번 방지) `실물판정` 기재.
 - **C** → `상태:"보류(정체불명)"`, 셀하를 태우지 않고 2바퀴(Step 3b)로. **조금이라도 애매하면 C.**
 
-#### 위임 — 하네스-무관 팬아웃
+#### Step 3a 실행 = Workflow 모드 (기본, 2026-07-31)
 
-정체판별(Step 3a)은 자기완결 청크(`names.json`)에 대한 병렬 작업이다. **디스크 우선 설계**라
-워커 띄우는 수단만 하네스별로 다르다(상태저장소 = `keywords.json` + 시트 G열, 멱등):
-- **모드 A — Claude Code**: `Agent` 도구로 Sonnet 서브에이전트 팬아웃. 각자 청크 Read → `kwout_i.json` Write.
-- **모드 B — 하네스-무관(코덱스 등, 서브에이전트 없음)**: `names.json`(또는 청크 파일들)을 인덱스
-  범위로 K등분 → K개 독립 프로세스가 자기 범위만 처리. 서브에이전트 프리미티브 불필요.
-- **재개**: `kwout_i.json`(또는 `keywords.json`의 그 productId) 있으면 완료. 겹쳐 돌려도 멱등.
+**대량(수백 건)은 메인 세션이 오케스트레이션하지 않는다.** 배분·수합 턴이 메인 컨텍스트에
+쌓여 `/clear` 가 필요해지고, 그게 지금까지 세션이 쪼개지던 유일한 이유였다(상품명 실측 92M 토큰).
+백그라운드 워크플로(`catfix-fanout`)로 빼면 그 재과금과 수동 중단점이 **사라진다.**
+
+```bash
+# ① 배치 만들기 (names.json → batches/batch_NNN.json + index)
+run_all.py batch --run-dir <R> [--size 8]
+
+# ② 남은 배치를 Workflow args 로 그대로 찍는다 (디스크 = 정본, named 없는 것만)
+run_all.py pending --run-dir <R>
+```
+③ `Workflow` 도구를 `{name: "catfix-fanout", args: <②의 출력>}` 로 호출.
+   워커는 `agent(model: sonnet, effort: low)` — **메인 모델과 무관하다.**
+   워커 지시서 = [`references/판정-워커-프롬프트.md`](references/판정-워커-프롬프트.md)
+   (판정 규칙 자체는 `대표검색어-도출.md` 를 워커가 직접 Read 한다).
+
+④ 반환의 `재팬아웃필요배치` 가 비어야 다음으로 간다. 워크플로가 이미 **1회 자동 재팬아웃**한다.
+   그래도 남으면 `pending` 을 다시 찍어 재호출.
+
+```bash
+# ⑤ merge → finish → steer 를 한 프로세스로. **백그라운드로 띄운다**
+run_all.py auto --run-dir <R>
+```
+셀하가 ~15초/건이라 수백 건이면 몇 시간이다. `auto` 는 그 전 구간(병합·셀하·저장·유도저장)을
+한 프로세스로 묶어 두었으므로 **메인은 띄우고 끝나면 결과만 읽는다.**
+중간에 죽어도 셀하는 `--resume`, 시트 G열은 체크포인트라 다시 돌리면 이어간다.
+
+> **이룸님 개입 = 시작 1회 + 끝에 보류 큐 판정 1회.** 자동 유도저장은 확신도 ≥ 임계인 것만
+> 건드리고(`steer_items`), 미달분은 손대지 않고 수동 큐로 남긴다.
+
+**폴백 — Workflow 를 못 쓰는 하네스**
+- **모드 A**: `Agent` 도구로 Sonnet 팬아웃. 워커 1명 = 배치 1~2개. 지시서는 같은 파일을 쓴다
+- **모드 B — 서브에이전트 없음(코덱스 등)**: `batches_index.json` 을 K등분해 K개 독립 프로세스
+- **재개**: `named/named_NNN.json` 존재 = 그 배치 완료. 겹쳐 돌려도 멱등 덮어쓰기
 
 > **증거 4종 상세·실증·판정 기준·대표검색어 12규칙 프롬프트 전문(실측 튜닝)·예시 →
 > [`references/대표검색어-도출.md`](references/대표검색어-도출.md).**
@@ -178,6 +214,10 @@ PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe \
 → `finish` 재실행(셀하 `--resume` 라 기존 성공분은 재조회하지 않는다).
 
 ### Step 4. 최종 차수 → 불사자 매칭 (불사자 MCP)
+
+> **이 매칭·저장은 `finish` 가 스크립트 안에서 수행한다.** 아래는 그 **판정 규칙**이지
+> 메인이 상품마다 손으로 돌 절차가 아니다(→ Step 6 저장 규율).
+
 셀하 `최종차수` 를 `bulsaja_product_category(keyword=최종차수)` 로 조회 →
 `마켓별후보.스마트스토어` 후보 중 **전체 경로가 셀하 경로와 일치**하는 것을 고른다.
 - 경로 정규화: 양쪽 모두 `>` 주변 공백 제거 후 비교
@@ -198,7 +238,7 @@ PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe \
 
 | 단계 | 방법 | 도구 |
 |---|---|---|
-| 1 | **leaf + 분야 한정어 유도 저장** — preview 후 목표 경로와 정확일치할 때만 commit | `category_steer.py` (exact) |
+| 1 | **leaf + 분야 한정어 유도 저장** — preview 후 목표 경로와 정확일치할 때만 commit | `category_steer.py` (exact) — 대량은 `run_all.py steer` 가 자동 (확신도 ≥ 임계만) |
 | 2 | **실물 재확인 후 재검색** — 원문명·옵션명·추가 이미지로 실물 정정 → 셀하 재조회 | `run_all.py recheck` → `sellha.py` |
 | 3 | **근접 카테고리 저장** — 셀하 경로가 불사자에 아예 없을 때. **이룸님 승인 사항**, I열 플래그 | `category_steer.py` (near) |
 | 4 | **보고 → 이룸님 수동지정** — 알려준 경로를 target으로 1단계 재실행 | — |
@@ -256,7 +296,32 @@ PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe \
 - **`보류(정체불명)`**: 셀하를 안 태웠으므로 저장 대상이 아니다. **한 바퀴를 다 돈 뒤** Step 3b(`recheck`)로
   실물을 확정한 다음 다시 `finish` 를 태운다.
 
-승인(자동/수동)된 행 저장:
+#### ★ 저장 규율 — 저장은 스크립트가 한다 (2026-07-31)
+
+**메인이 `bulsaja_product_category` 를 직접 호출해 저장하지 않는다. 건수 예외 없다.**
+
+| 대상 | 명령 |
+|---|---|
+| 정규 경로(셀하 정확일치) 대량 | `run_all.py finish` (또는 `auto` = merge→finish→steer 한 번에, 백그라운드) |
+| 유도(1단계)·근접(3단계) 저장 | `category_steer.py` = `run_all.py steer` |
+| **1~2건** (보류 재작업·수동지정) | 같은 `category_steer.py`. `--sheet`·`row` 는 선택 인자라 `[{"productId":"U01…","target":"<셀하경로>"}]` 두 줄 JSON이면 돈다 |
+| 원스텝 1건 | `eroomlib/runner/onestep.py` (가결정 카테고리까지 스냅샷으로 관리) |
+
+**이유 두 가지 — 비용보다 스냅샷이 먼저다:**
+
+1. **스냅샷** — 직접 호출은 **로컬 스냅샷을 갱신하지 않는 유일한 경로**다. 스크립트는 commit
+   성공 직후 `snapshot.update(pid, 기존카테고리=…)` 를 한다. 이게 빠지면 캐시에 옛 카테고리가
+   남아 상품명 `prep` 이 **방금 고친 이유였던 그 옛 카테고리로 뷰를 만든다** — 2026-07-30 에
+   이 경로로 상품명 76건이 통째로 무효가 됐다. **1건이어도 위험하다.**
+2. **비용** — 2026-07-29, 메인이 이 도구를 **149회 직접 호출**(preview→confirm 2단계)한
+   한 시간에 **$266**이 나갔다(186턴 × 컨텍스트 ~350K, 캐시쓰기 64M, 호출 1건당 ≈ $1.8).
+   응답에 `마켓별후보` 전체가 실려 남은 턴마다 재과금된다. 스크립트는 **메인 턴 1회**이고
+   나머지는 subprocess라 컨텍스트 재과금이 0이다.
+   (같은 원리의 상품명 쪽 대책 = Workflow 팬아웃 → `product-name/references/팬아웃-비용.md`)
+
+> **조회(preview)만 하는 직접 호출은 무방하다** — 이 규율은 **저장(commit)** 에 걸린다.
+
+스크립트가 실제로 하는 호출:
 ```
 bulsaja_product_category(productId=<id>, keyword=<셀하 최종차수>)
 ```
@@ -321,13 +386,19 @@ bulsaja_product_category(productId=<id>, keyword=<셀하 최종차수>)
 스크립트 안에서 소비하고 요약만 파일·시트로 남긴다.
 
 ```bash
-bulsaja_mcp.py probe                       # 1순위: HTTP MCP 실동작 검증
-run_all.py prep   --run-dir <R> [--limit N]  # collect → workdata → 썸네일 → names.json
-#   (Claude/워커가 names.json 증거 4종 → keywords.json)
-run_all.py finish --run-dir <R>              # sellha(resume) → merge → apply(저장+시트)
-run_all.py recheck --run-dir <R> [--ids ...] # 2바퀴: 보류 건 이미지 사다리
+bulsaja_mcp.py probe                        # 1순위: HTTP MCP 실동작 검증
+run_all.py prep    --run-dir <R> [--limit N]  # collect → workdata → 썸네일 → names.json
+run_all.py batch   --run-dir <R> [--size 8]   # names.json → batches/ (팬아웃 단위)
+run_all.py pending --run-dir <R>              # 남은 배치 → Workflow args JSON
+#   (Workflow `catfix-fanout` 이 워커에 분배 → named/named_NNN.json)
+run_all.py auto    --run-dir <R>              # merge → finish(sellha·저장) → steer(유도)
+run_all.py recheck --run-dir <R> [--ids ...]  # 2바퀴: 보류 건 이미지 사다리
 ```
-**run-dir = `D:\python_work\data\category-fixuns\<이름>\`** (그룹당 썸네일 ~1000장이라
+`auto` 를 쪼개 쓰려면 `merge` / `finish` / `steer` 를 따로 부른다(같은 동작).
+**회귀 테스트**: `python .claude/skills/bulsaja-category-fix/scripts/test_run_all.py`
+— `run_all.py` 의 batch/merge/steer 계산부를 손대면 이걸 먼저 돌린다.
+**run-dir = `D:\python_work\data\category-fix
+uns\<이름>\`** (그룹당 썸네일 ~1000장이라
 스킬 폴더에 두면 git 레포가 부푼다).
 
 **현황판** — 저장이 끝나면 그룹 시트 `00_진행` 탭의 **카테고리 열만** 갱신한다

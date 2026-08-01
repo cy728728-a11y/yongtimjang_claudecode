@@ -35,3 +35,6 @@ venv/
 .cache/
 NTUSER.DAT*
 err.txt
+
+# PC별 경로 오버라이드 (per-machine, 커밋 금지)
+workspace.toml

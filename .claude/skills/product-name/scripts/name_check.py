@@ -6,10 +6,12 @@ Claude가 만든 상품명(키워드 2개 조합 + term 분해)이 이룸님 규
 
 검증 규칙:
   R1. term 분해가 상품명을 정확히 분할하는가  ("".join(terms) == 상품명 공백제거)
-  R2. 고유 term 수 4~7 (목표 7 무조건)          (4~6=경고 / 3 이하·8 이상=실패)
+  R2. 고유 **내용어** term 수 4~6 (목표 6 무조건) (4~5=경고 / 3 이하·7 이상=실패)
   R3. 중복 term 최대 1개, 각 2회까지           (3회 이상 / 중복 2종 이상 = 실패)
   R4. 사용 키워드 2~5개가 서로 다른가
   R5. **적합도** — 키워드가 상품명에 연속 문자열 그대로 있는가 (하나도 없으면 실패)
+  R8. **대표옵션 마커** — 상품명이 `기본형` 으로 끝나고, 그게 1번만 나오는가
+  R9. **배치** — 원본 단어와 키워드를 `a 1 b 2 c` 로 번갈아 놓았는가 (앞자리부터 채운다)
 
 적합도가 왜 핵심인가 (2026-07-24 이룸님):
   네이버는 검색어가 상품명에 **그대로** 있을 때 적합도 점수를 높게 준다.
@@ -34,12 +36,36 @@ R6·R7이 왜 산술 검증기에 들어왔나:
     실제로 잡아야 할 #9(베이비그라인더=다른 공구)는 '그라인더'가 겹쳐서 안 걸린다.
     그 건은 B(challenge.py)가 잡는다 — 되던지기 51개에 일자그라인더가 들어온다.
 
-term 예산 (2026-07-24 이룸님 변경): 옵션명 몫을 빼고 상품명만으로 7을 무조건 채운다.
-  네이버 패널티 임계가 카테고리별 7 또는 9 — 7은 카테고리에 따라 패널티 시작점이라
-  꽉 채우는 건 의도적 실험이다(순위 반응을 검수에서 관찰).
+term 예산 (2026-07-30 이룸님 변경): **내용어 6 + 맨 끝에 `기본형`** = 실질 7단어.
   채우는 순서: ① 저상품수 직결어 → ② 적합한 대형 키워드 → ③ **원본 상품명 단어**.
-  원본은 판매자가 단 것이라 관련이 보장되므로, 그래도 7이 안 되면 원본에서 term을 가져온다
-  (예: 자키 상품의 '작키·받침대·수리'). 원본조차 부족하면 4~6으로 내보낸다(경고).
+  원본은 판매자가 단 것이라 관련이 보장되므로, 그래도 6이 안 되면 원본에서 term을 가져온다
+  (예: 자키 상품의 '작키·받침대·수리'). 원본조차 부족하면 4~5로 내보낸다(경고).
+  (이전 규칙은 '내용어 7 무조건'이었다 — 네이버 패널티 임계가 카테고리별 7 또는 9라
+   7을 꽉 채우는 건 의도적 실험이었다. 2026-07-30에 마커 자리를 만들려고 6으로 내렸다.)
+
+대표옵션 마커 `기본형` (2026-07-30 이룸님) — R8:
+  네이버는 **'대표상품'(추가금 0원인 대표옵션)을 상품명으로 작성**하라고 요구한다.
+  따라서 **썸네일 = 대표옵션 = 상품명**이 같은 옵션 하나를 지칭해야 한다.
+  대표옵션명 끝에도 같은 `기본형` 이 붙어(→ bulsaja-option-cleanup 규칙 17)
+  **같은 단어가 짝을 지목한다.** 이 방식의 요점은 스킬 간 데이터 계약이 필요 없다는 것 —
+  이 스킬은 대표옵션이 무엇인지 몰라도 무조건 끝에 붙이면 된다.
+  `기본형` 은 **term 수에 세지 않는다**(결정: 별도 부착). 단 `term분해` 에는 마지막 원소로
+  포함돼야 한다 — R1(상품명 전체 분할 검사)을 그대로 유지하기 위해서다.
+
+배치 규칙 `a 1 b 2 c` (2026-07-31 이룸님) — R9:
+  원본 상품명 단어(a·b·c)와 채택 키워드(1·2)를 **번갈아** 놓는다. 키워드끼리 앞에 몰고
+  원본 단어를 뒤에 붙이면 안 된다.
+    원본  면삶는냄비 업소용 탕면기 우동 스테인레스 뜰채 깊은
+    키워드 1=스파게티냄비 2=면삶는냄비
+    ✗  스파게티냄비 면삶는냄비 업소용 뜰채 깊은     (키워드 2개가 앞에 몰림 = R9 실패)
+    ✓  탕면기 스파게티냄비 우동 면삶는냄비 업소용   (a 1 b 2 c)
+  - **a·b·c는 실물 직결어 우선 순서** — 실물을 정확히 지칭하는 단어가 a, 약한 수식어가 뒤로.
+  - **자리가 모자라면 c → b → a 순으로 지운다.** 키워드는 절대 자르지 않는다
+    (내용어 6 예산을 키워드가 다 먹으면 원본 단어는 a 하나만 들어간다:
+     `탕면기 스파게티냄비 면삶는냄비` — 이때 키워드가 붙어 있는 건 정상이다).
+  - 키워드가 3개 이상이면 계속 번갈아: `a 1 b 2 c 3`.
+  - 검사 방법: 상품명을 어절로 쪼개 키워드 덩어리를 찾고, 그 사이 빈칸(gap)이
+    **앞에서부터** 채워졌는지 본다. 빈 gap 뒤에 원본 단어가 남아 있으면 실패.
 
 키워드 선택 우선순위 (2026-07-24 이룸님 재편):
   ① 실제 상품과 맞는가(썸네일 대조) → ② 상품수 낮은 직결어 먼저 → ③ term 7 무조건 채우기
@@ -53,8 +79,8 @@ Usage:
   # 배치 (named_*.json 검증)
   python name_check.py --input named_001.json [--output checked_001.json] [--max-terms 5]
   # 단건 (빠른 확인)
-  python name_check.py --name "가정용 무선 각얼음 빙수기" \
-                       --terms "가정용,무선,각얼음,빙수기" \
+  python name_check.py --name "가정용 무선 각얼음 빙수기 눈꽃 슬러시 기본형" \
+                       --terms "가정용,무선,각얼음,빙수기,눈꽃,슬러시,기본형" \
                        --keywords "무선빙수기,각얼음빙수기"
 """
 import argparse
@@ -68,15 +94,17 @@ try:
 except Exception:
     pass
 
-# term 예산 (2026-07-24 이룸님 변경): 옵션명 몫을 빼고 상품명만으로 7을 무조건 채운다.
-#   네이버 패널티 임계는 카테고리별 7 또는 9 — 7은 카테고리에 따라 패널티 시작점이므로
-#   상한을 7로 꽉 채우는 건 의도적 실험이다(순위 반응을 검수에서 관찰).
-#   목표는 7 하나. 키워드·카테고리 특징어로 부족하면 **원본 상품명 단어로 7까지 채운다**
+# 대표옵션 마커 (2026-07-30 이룸님) — 상품명 맨 끝에 고정 부착. **term 수에 세지 않는다.**
+#   대표옵션명 끝에도 같은 단어가 붙어(bulsaja-option-cleanup 규칙 17) 짝을 지목한다.
+BASE_SUFFIX = "기본형"
+# term 예산 (2026-07-30 이룸님 변경): **내용어 6** + 마커 = 실질 7단어.
+#   키워드·카테고리 특징어로 부족하면 **원본 상품명 단어로 6까지 채운다**
 #   (원본은 판매자가 단 것이라 그 상품과 관련이 보장됨 — 관계없는 걸 붙이는 위험이 없다).
-#   3 이하 = 너무 짧음(실패) / 4~6 = 허용하되 "7까지 채워라" 경고 / 7 = 정상 / 8+ = 실패
-DEFAULT_MIN_TERMS = 4      # 4~6 = 허용(경고) / 7 = 정상 / 3 이하 = 실패
-DEFAULT_MAX_TERMS = 7
-TARGET_MIN_TERMS = 7       # 목표 = 7 무조건. 미달(4~6)이면 경고(탈락은 아님)
+#   3 이하 = 너무 짧음(실패) / 4~5 = 허용하되 "6까지 채워라" 경고 / 6 = 정상 / 7+ = 실패
+#   ※ 아래 셋은 전부 **`기본형` 을 뺀 내용어** 기준이다.
+DEFAULT_MIN_TERMS = 4      # 4~5 = 허용(경고) / 6 = 정상 / 3 이하 = 실패
+DEFAULT_MAX_TERMS = 6
+TARGET_MIN_TERMS = 6       # 목표 = 6 무조건. 미달(4~5)이면 경고(탈락은 아님)
 # 사용 키워드 개수: 2개 기본, term 6~7을 못 채우면 5개까지 붙인다
 MIN_KEYWORDS = 2
 MAX_KEYWORDS = 5
@@ -107,6 +135,46 @@ def is_exact_in_name(keyword, name):
     """
     k, n = nows(keyword), nows(name)
     return bool(k) and k in n
+
+
+def keyword_blocks(name, keywords):
+    """상품명을 어절로 쪼개고, 그 안에서 키워드 덩어리의 위치를 찾는다 (R9용).
+
+    반환: (words, blocks)
+      words  = 마커(`기본형`)를 뺀 어절 리스트
+      blocks = [(start, end)] 반열림 구간. 키워드 하나가 어절 1개일 수도, 여러 개일 수도 있다
+               (`각얼음 빙수기` 두 어절이 키워드 `각얼음빙수기` 하나를 이룬다).
+
+    같은 키워드를 두 번 세지 않으려고 매칭된 키워드는 소진한다. 한 자리에서 여러 키워드가
+    맞으면 **더 긴 쪽**을 택한다(`냄비` 보다 `면삶는냄비`).
+    """
+    words = [w for w in str(name or "").split() if w]
+    if words and words[-1] == BASE_SUFFIX:
+        words = words[:-1]
+    targets = [nows(k) for k in keywords or [] if nows(k)]
+
+    blocks, used, i = [], set(), 0
+    while i < len(words):
+        best = None  # (end, target_index)
+        for ti, t in enumerate(targets):
+            if ti in used:
+                continue
+            acc = ""
+            for j in range(i, len(words)):
+                acc += nows(words[j])
+                if len(acc) > len(t):
+                    break
+                if acc == t:
+                    if best is None or j + 1 > best[0]:
+                        best = (j + 1, ti)
+                    break
+        if best:
+            blocks.append((i, best[0]))
+            used.add(best[1])
+            i = best[0]
+        else:
+            i += 1
+    return words, blocks
 
 
 def _to_int(v):
@@ -165,8 +233,11 @@ def check_one(product, max_terms=DEFAULT_MAX_TERMS, min_terms=DEFAULT_MIN_TERMS,
                 f"R1 term분해 불일치: 결합='{joined}' vs 상품명='{nows(name)}'"
             )
 
-    # R2. 고유 term 수 — 6~7만 정상 (4~5 경고 통과, 8+ 실패)
-    unique_terms = list(dict.fromkeys(terms))  # 순서 보존 중복 제거
+    # R2. 고유 **내용어** term 수 — 6이 정상 (4~5 경고 통과, 7+ 실패)
+    #     마커(`기본형`)는 모든 상품명에 붙는 고정 접미어라 변별력이 0이다 —
+    #     term 예산에 세면 내용어 하나를 빼앗는 셈이라 세지 않는다(2026-07-30 이룸님).
+    content_terms = [t for t in terms if t != BASE_SUFFIX]
+    unique_terms = list(dict.fromkeys(content_terms))  # 순서 보존 중복 제거
     term_count = len(unique_terms)
     if term_count > max_terms:
         violations.append(f"R2 term수 초과: {term_count} > {max_terms} (패널티 구간)")
@@ -179,8 +250,8 @@ def check_one(product, max_terms=DEFAULT_MAX_TERMS, min_terms=DEFAULT_MIN_TERMS,
             f"term {term_count}개 — 목표는 {TARGET_MIN_TERMS}(무조건). "
             f"키워드로 부족하면 원본 상품명 단어로 {TARGET_MIN_TERMS}까지 채울 것")
 
-    # R3. 중복 term
-    counter = Counter(terms)
+    # R3. 중복 term (마커 제외 — 마커는 R8이 따로 본다)
+    counter = Counter(content_terms)
     dups = {t: c for t, c in counter.items() if c >= 2}
     if len(dups) > MAX_DUP_TERMS:
         violations.append(f"R3 중복 term {len(dups)}종 (최대 {MAX_DUP_TERMS}종): {list(dups)}")
@@ -209,6 +280,42 @@ def check_one(product, max_terms=DEFAULT_MAX_TERMS, min_terms=DEFAULT_MIN_TERMS,
         warnings.append(
             f"적합도 만점 {len(exact)}개 / 부분반영 {len(partial)}개({', '.join(partial)}) "
             f"— 부분반영 키워드로는 상위노출이 어렵다")
+
+    # R9. 배치 — 원본 단어와 키워드를 `a 1 b 2 c` 로 번갈아 놓았는가 (2026-07-31 이룸님).
+    #     키워드를 앞에 몰고 원본 단어를 뒤에 붙이면, 실물을 지칭하는 원본 직결어가
+    #     상품명 꼬리로 밀려 노출 조합에서 약해진다. 그래서 **앞자리부터** 번갈아 채운다.
+    #     자리가 모자라 c·b가 빠져 키워드끼리 붙는 건 정상이다(키워드는 자르지 않는다).
+    if name and exact:
+        words, blocks = keyword_blocks(name, exact)
+        if blocks:
+            gaps, prev = [], 0
+            for s, e in blocks:
+                gaps.append(words[prev:s])
+                prev = e
+            gaps.append(words[prev:])
+            # 앞에서부터 채운다 = 빈 gap 뒤에 원본 단어가 남아 있으면 안 된다
+            first_empty = next((i for i, g in enumerate(gaps) if not g), None)
+            if first_empty is not None:
+                misplaced = [w for g in gaps[first_empty + 1:] for w in g]
+                if misplaced:
+                    violations.append(
+                        f"R9 배치 어긋남 — 원본 단어 {', '.join(misplaced)}를 키워드 사이에 "
+                        f"끼워야 한다(a 1 b 2 c). 키워드를 앞에 몰지 말 것")
+
+    # R8. 대표옵션 마커 — 상품명은 `기본형` 으로 끝나고, 그게 딱 1번 나와야 한다.
+    #     네이버는 '대표상품'(추가금 0원 옵션)을 상품명으로 쓰라고 요구한다. 대표옵션명 끝에도
+    #     같은 단어가 붙어(bulsaja-option-cleanup 규칙 17) **같은 단어가 짝을 지목한다.**
+    #     2회 이상 나오면 어느 쪽이 마커인지 알 수 없어 짝이 흐려진다.
+    if name:
+        if not name.strip().endswith(BASE_SUFFIX):
+            violations.append(
+                f"R8 상품명이 '{BASE_SUFFIX}'으로 끝나지 않는다 — 대표옵션과 짝이 안 맞는다")
+        n_mark = nows(name).count(BASE_SUFFIX)
+        if n_mark > 1:
+            violations.append(f"R8 '{BASE_SUFFIX}'이 {n_mark}번 나온다(마커는 1번)")
+        if terms and terms[-1] != BASE_SUFFIX:
+            violations.append(
+                f"R8 term분해의 마지막이 '{BASE_SUFFIX}'이 아니다(현재 '{terms[-1]}')")
 
     # R6. 절차 — 관련어 목록과 반증 답변이 남았는가
     related = product.get("관련어") or []
@@ -262,12 +369,14 @@ def main():
     ap.add_argument("--input", help="named_*.json (products 배열 포함)")
     ap.add_argument("--output", help="검증 결과를 병합해 저장할 경로 (미지정시 stdout 요약만)")
     ap.add_argument("--max-terms", type=int, default=DEFAULT_MAX_TERMS,
-                    help=f"고유 term 상한 (default: {DEFAULT_MAX_TERMS})")
+                    help=f"고유 내용어 term 상한 ('{BASE_SUFFIX}' 제외, "
+                         f"default: {DEFAULT_MAX_TERMS})")
     ap.add_argument("--min-terms", type=int, default=DEFAULT_MIN_TERMS,
-                    help=f"고유 term 하한 (default: {DEFAULT_MIN_TERMS})")
+                    help=f"고유 내용어 term 하한 (default: {DEFAULT_MIN_TERMS})")
     # 단건 모드
-    ap.add_argument("--name", help="단건 검증: 상품명")
-    ap.add_argument("--terms", help="단건 검증: term 분해 (쉼표 구분, 중복 포함)")
+    ap.add_argument("--name", help=f"단건 검증: 상품명 (맨 끝이 '{BASE_SUFFIX}'이어야 한다)")
+    ap.add_argument("--terms", help=f"단건 검증: term 분해 (쉼표 구분, 중복 포함, "
+                                   f"마지막은 '{BASE_SUFFIX}')")
     ap.add_argument("--keywords", help="단건 검증: 사용 키워드 2~3개 (쉼표 구분)")
     args = ap.parse_args()
 

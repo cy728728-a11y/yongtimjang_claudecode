@@ -227,7 +227,8 @@ class ProductMCP(_BaseMCP):
                 seen.add(pid)
                 out.append({"productId": pid,
                             "상품명": it.get("상품명", ""),
-                            "상태코드": it.get("상태코드")})
+                            "상태코드": it.get("상태코드"),
+                            "잠금": it.get("잠금")})
             if log:
                 log(f"  page {page}: +{len(items)} (누적 {len(out)}/{r.get('총상품수')})")
             if not r.get("더있음"):

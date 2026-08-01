@@ -29,6 +29,7 @@ import time
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 from bulsaja_mcp import BulsajaMCP, _norm_path  # noqa
+from eroomlib import snapshot  # noqa  (bulsaja_mcp 가 .claude/lib 를 sys.path 에 올린 뒤)
 import sheet_log  # noqa
 
 try:
@@ -136,6 +137,14 @@ def main():
             rec["saved"] = cm["success"]
             if cm["success"]:
                 saved += 1
+                # ★ 저장한 쪽이 스냅샷의 그 필드만 되쓴다 (2026-07-31 추가).
+                # 이게 없으면 로컬 캐시에 옛 카테고리가 남아, 다음 단계(상품명)가
+                # **방금 고친 이유였던 그 옛 카테고리로 뷰를 만든다.**
+                # 2026-07-30 에 이 경로로 상품명 76건이 통째로 무효가 됐다.
+                try:
+                    snapshot.update(pid, 기존카테고리=hit["ss"])
+                except Exception as e:  # noqa: BLE001
+                    rec["snapshot_err"] = str(e)[:100]
             if logger and row:
                 d = {"상품명": it.get("상품명", ""), "기존카테고리": it.get("기존카테고리", ""),
                      "변경카테고리": hit["ss"], "검색어": hit["kw"], "확신도": it.get("확신도", ""),
