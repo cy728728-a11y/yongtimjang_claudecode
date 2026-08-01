@@ -567,10 +567,17 @@ def _log_sheet(sheet, rows):
             sheets_update(sheet, f"'{TAB}'!A{r}:{last}{r}", [vals],
                           value_input="USER_ENTERED")
             print(f"  시트 갱신: {pid} → '{TAB}'!{r}행")
+            # 구글시트 쓰기 쿼터(분당 60회) — 재실행으로 기존 행을 대량 갱신할 때
+            # 연속호출이 걸린다(2026-08-02 118행에서 실측). 여유 있게 1.1초 간격.
+            time.sleep(1.1)
         else:
             add.append(vals)
     if add:
-        append_rows(sheet, TAB, add)
+        # 청크 분할(호출자 책임, gsheets.append_rows 계약) — 한 번에 다 보내면
+        # Windows 명령줄 길이 제한(WinError 206)에 걸린다(2026-08-02 118행에서 실측).
+        CHUNK = 20
+        for i in range(0, len(add), CHUNK):
+            append_rows(sheet, TAB, add[i:i + CHUNK])
         print(f"  시트 기록: {len(add)}행 → '{TAB}'")
 
 

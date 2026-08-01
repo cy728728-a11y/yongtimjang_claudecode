@@ -349,12 +349,14 @@ def main():
                          "환경변수 SELLHA_PROFILE 로도 지정 가능")
     ap.add_argument("--debugger", default=None,
                     help="이미 떠 있는 크롬에 붙는다(예 127.0.0.1:9222). --profile 대신 사용")
-    ap.add_argument("--sleep", type=float, default=2.0,
-                    help="조회 간 최소 대기(초). 실제 대기는 이 값~--sleep-max 사이 난수")
-    ap.add_argument("--sleep-max", type=float, default=None,
-                    help="조회 간 최대 대기(초). 기본 = --sleep x 3")
-    ap.add_argument("--rest-every", type=int, default=30,
-                    help="평균 N건마다 긴 휴식(실제 주기도 난수). 0=안 함")
+    ap.add_argument("--sleep", type=float, default=5.0,
+                    help="조회 간 최소 대기(초). 실제 대기는 이 값~--sleep-max 사이 난수 "
+                         "(2026-08-01 2.0→5.0 상향 — 실제 IP 차단 발생 이후)")
+    ap.add_argument("--sleep-max", type=float, default=15.0,
+                    help="조회 간 최대 대기(초). (2026-08-01 sleep x 3→고정 15.0 상향)")
+    ap.add_argument("--rest-every", type=int, default=10,
+                    help="평균 N건마다 긴 휴식(실제 주기도 난수). 0=안 함 "
+                         "(2026-08-01 30→10 상향 — 더 잦은 휴식)")
     ap.add_argument("--block-wait", type=float, default=300,
                     help="차단 감지 시 대기(초). 그 뒤 1회 재시도")
     args = ap.parse_args()

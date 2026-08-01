@@ -229,7 +229,9 @@ def cmd_finish(args):
     # 헤드리스에서는 확장이 안 돌아 전건 파싱실패가 된다 → 창 모드 고정.
     # 프로필 준비 → sellha-category/SKILL.md §확장 프로필 준비
     sh(SELLHA_SCRIPT, "--input", keywords_for_sellha, "--output", sellha,
-       "--profile", SELLHA_PROFILE, "--resume")
+       "--profile", SELLHA_PROFILE, "--resume",
+       "--sleep", args.sellha_sleep, "--sleep-max", args.sellha_sleep_max,
+       "--rest-every", args.sellha_rest_every)
 
     # 5) 병합 (products + keywords + sellha, productId 기준)
     with open(products, encoding="utf-8") as f:
@@ -622,12 +624,12 @@ def main():
     f.add_argument("--dry-run", action="store_true", help="미리보기만")
     f.add_argument("--no-sheet", action="store_true")
     f.add_argument("--force", action="store_true", help="셀하 재조회")
-    f.add_argument("--sellha-sleep", default="3",
-                   help="셀하 조회 간 최소 대기(초)")
-    f.add_argument("--sellha-sleep-max", default="10",
-                   help="셀하 조회 간 최대 대기(초). 실제는 최소~최대 난수")
-    f.add_argument("--sellha-rest-every", default="25",
-                   help="평균 N건마다 긴 휴식. 0=끔")
+    f.add_argument("--sellha-sleep", default="5",
+                   help="셀하 조회 간 최소 대기(초) (2026-08-01 3→5 상향 — 실제 IP 차단 발생 이후)")
+    f.add_argument("--sellha-sleep-max", default="15",
+                   help="셀하 조회 간 최대 대기(초). 실제는 최소~최대 난수 (2026-08-01 10→15 상향)")
+    f.add_argument("--sellha-rest-every", default="10",
+                   help="평균 N건마다 긴 휴식. 0=끔 (2026-08-01 25→10 상향 — 더 잦은 휴식)")
     f.set_defaults(func=cmd_finish)
 
     b = sub.add_parser("batch", help="names.json → batches/ (팬아웃 단위)")
@@ -663,12 +665,12 @@ def main():
     au.add_argument("--dry-run", action="store_true")
     au.add_argument("--no-sheet", action="store_true")
     au.add_argument("--force", action="store_true", help="셀하 재조회")
-    au.add_argument("--sellha-sleep", default="3",
-                   help="셀하 조회 간 최소 대기(초)")
-    au.add_argument("--sellha-sleep-max", default="10",
-                   help="셀하 조회 간 최대 대기(초). 실제는 최소~최대 난수")
-    au.add_argument("--sellha-rest-every", default="25",
-                   help="평균 N건마다 긴 휴식. 0=끔")
+    au.add_argument("--sellha-sleep", default="5",
+                   help="셀하 조회 간 최소 대기(초) (2026-08-01 3→5 상향 — 실제 IP 차단 발생 이후)")
+    au.add_argument("--sellha-sleep-max", default="15",
+                   help="셀하 조회 간 최대 대기(초). 실제는 최소~최대 난수 (2026-08-01 10→15 상향)")
+    au.add_argument("--sellha-rest-every", default="10",
+                   help="평균 N건마다 긴 휴식. 0=끔 (2026-08-01 25→10 상향 — 더 잦은 휴식)")
     au.set_defaults(func=cmd_auto)
 
     r = sub.add_parser("recheck", help="2바퀴: 보류(정체불명) 건 증거 보강")
