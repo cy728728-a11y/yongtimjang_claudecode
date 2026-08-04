@@ -287,6 +287,9 @@
   - added: 2026-07-26
   - priority: high
   - project: 2기강의
+- [ ] 2-2 마켓그룹부터 시작해서 상품명 돌리기
+  - added: 2026-08-05 01:16
+  - priority: normal
 
 ## Backlog
 
