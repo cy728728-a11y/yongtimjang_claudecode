@@ -284,6 +284,72 @@ def _expected_by_batch(run_dir):
     return exp
 
 
+def _repair_truncated_ids(run_dir, exp):
+    """결과 JSON 의 잘린 productId 를 배치 정본과 접두사 대조로 복구한다.
+
+    유일하게 맞는 후보가 있을 때만 고친다(둘 이상이면 손대지 않고 감사 경고로 넘긴다).
+    반환: 고친 건수.
+    """
+    valid_by_batch = {n: list(pids) for n, pids in exp.items()}
+    fixed = 0
+    for rf in sorted(glob.glob(os.path.join(run_dir, "results", "result_*.json"))):
+        n = int(os.path.basename(rf)[7:10])
+        valid = valid_by_batch.get(n) or []
+        if not valid:
+            continue
+        try:
+            doc = _load(rf)
+        except Exception:      # noqa: BLE001 — 깨진 JSON 은 감사가 따로 알린다
+            continue
+        changed = False
+        for p in doc.get("products", []):
+            pid = p.get("productId") or ""
+            if not pid or pid in valid:
+                continue
+            cand = [v for v in valid if v.startswith(pid[:20])]
+            if len(cand) == 1:
+                p["productId"] = cand[0]
+                changed = True
+                fixed += 1
+        if changed:
+            _dump(rf, doc)
+    if fixed:
+        print(f"  [감사] 잘린 상품id {fixed}건 복구(배치 정본과 접두사 대조)")
+    return fixed
+
+
+def _fill_prefix_names(rec_options, names):
+    """워커가 이름을 안 준 옵션값 중 **정렬용 접두사가 붙은 것**을 자동 정리한다.
+
+    워커는 '유지'한 옵션만 이름을 짓는데, 저장 후 검증(`check_names`)은 **모든 옵션값**을
+    본다 — 제외된 값에 남은 `A. `·`1) ` 때문에 '정렬용 접두사 잔존'으로 저장이 통째로
+    실패했다(2026-08-04 용쌤2-1: 145개 상품 2,304개 값). 접두사 제거는 판단이 아니라
+    기계 작업이라 여기서 채운다. 이미 워커가 준 이름은 건드리지 않는다.
+    """
+    out = dict(names)
+    used = {str(v).strip() for v in out.values()}
+    for gi, grp in enumerate(rec_options.get("차원") or rec_options.get("groups") or []):
+        for v in (grp.get("values") or []):
+            vid = v.get("vid")
+            cur = str(v.get("현재이름") or v.get("name") or "")
+            stripped = R.strip_prefix(cur)
+            if vid is None or stripped == cur.strip():
+                continue
+            if f"@{gi}:{vid}" in out or str(vid) in out:
+                continue
+            new = stripped[:R.NAME_MAX].strip()
+            if not new:
+                continue
+            base, i = new, 2
+            while new in used:
+                suf = f" {i}"
+                new = base[:R.NAME_MAX - len(suf)] + suf
+                i += 1
+            used.add(new)
+            out[f"@{gi}:{vid}"] = new
+    return out
+
+
 def _audit_results(run_dir):
     """워커 산출물을 배치 대비 대조 — 누락·환각·번호 불일치를 apply 전에 잡는다.
 
@@ -294,6 +360,11 @@ def _audit_results(run_dir):
     exp = _expected_by_batch(run_dir)
     if not exp:
         return [], False          # 구형 run-dir — 대조할 정본이 없다
+    # 잘린 상품id 자동 복구 — 워커가 productId 뒷자리를 빼먹고 적는 일이 흔하다
+    # (2026-08-04 용쌤2-1: 두 번의 재팬아웃에도 재발 → 배치 정본과 접두사로 대조해
+    # 유일하게 맞는 id 가 있으면 확정 복구한다. 재팬아웃보다 싸고 확실하다).
+    _repair_truncated_ids(run_dir, exp)
+
     got, files = set(), {}
     for rf in sorted(glob.glob(os.path.join(run_dir, "results", "result_*.json"))):
         doc = _load(rf)
@@ -351,6 +422,9 @@ def _plans(run_dir):
         if not p.get("상품명"):
             p["상품명"] = rec.get("상품명", "")
         names = {str(k): v for k, v in (p.get("이름") or {}).items()}
+        # 워커가 손대지 않은 값에 남은 정렬용 접두사를 기계적으로 정리한다 —
+        # 저장 후 검증은 모든 값을 보므로, 이게 없으면 저장이 통째로 실패한다.
+        names = _fill_prefix_names(rec["옵션"], names)
         plan = R.plan(rec["옵션"],
                       keep_ids=set(p.get("유지") or ()),
                       names=names,
