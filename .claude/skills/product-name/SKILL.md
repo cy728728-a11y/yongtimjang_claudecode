@@ -133,7 +133,9 @@ allowed-tools:
 
 - 워크스페이스 `.venv` (openpyxl, requests) · `gws` CLI 인증 · 불사자 MCP 연결(`~/.claude.json`)
 - **셀러라이프 통다운 raw** — `D:\python_work\data\sellerlife\runs\<YYMMDD>\raw\`.
-  없으면 `sellerlife-keyword` 스킬로 먼저 받는다
+  **없으면 구글 드라이브 `51-셀러라이프-통다운` 에서 받는다**(셀러라이프 재다운로드 불필요):
+  `python .claude/skills/sellerlife-keyword/scripts/pull_drive.py --date <YYMMDD>`
+  (목록은 `--list`). 드라이브에도 없는 새 통다운만 `sellerlife-keyword` 로 새로 받는다
 - **대상 상품의 카테고리가 교정돼 있어야 한다.** 미교정이면 `bulsaja-category-fix` 먼저
 - **카테고리교정 시트 J열(실물판정)·K열(썸네일URL)을 재활용한다.** 신버전(v1.7.0~) 교정분은
   J열이 채워져 있어 실물을 그대로 이어받고, 구버전은 이 스킬이 판정해 J열에 backfill한다.

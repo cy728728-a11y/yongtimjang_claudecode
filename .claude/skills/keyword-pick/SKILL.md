@@ -53,6 +53,8 @@ allowed-tools:
 - **폴더**: `50-소스자료 / 51-셀러라이프-통다운 / <YYMMDD>/` (로컬 `sellerlife\runs\<YYMMDD>\raw` 미러)
 - **51 folderId**: `1PwNXIpxV-n3pdCuT-3Tu4nqDIGmyvnOK` (하위 날짜폴더는 실행 시 생성)
 - 대분류별 xlsx(가구&인테리어·디지털&가전·생활&건강[+2]) 원본 그대로. 개별 상품 필터는 로컬 파일로 하고, `원본파일링크`는 해당 날짜폴더 링크를 쓴다.
+- **로컬에 raw 가 없는 PC면 이 폴더에서 받는다**(셀러라이프 재다운로드 불필요):
+  `python .claude/skills/sellerlife-keyword/scripts/pull_drive.py --date <YYMMDD>` (목록 `--list`)
 
 ## 추천 기준 (레퍼런스 없는 경우)
 

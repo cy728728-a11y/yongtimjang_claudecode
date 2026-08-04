@@ -27,6 +27,7 @@ allowed-tools:
 - **`.env`** (이 폴더) — `SELLERLIFE_GOOGLE_EMAIL`, `GEMINI_API_KEY`. **구글 비밀번호는 저장하지 않는다.**
 - **최초 1회 구글 로그인** — 아래 Step 0
 - **블랙리스트** — `d:\python_work\data\sellerlife\keyword_blacklist\keyword_blacklist.xlsx` (단일 원본, 계속 누적)
+- **통다운 raw** — 로컬에 없으면 구글 드라이브 `51-셀러라이프-통다운` 에서 받는다 (→ Step 0-b)
 
 ## Workflow
 
@@ -55,6 +56,23 @@ Chrome 창이 `/auth/login` 에서 **'구글로 시작하기'** 를 누른 상�
 
 > 구글은 Selenium 의 자동 비밀번호 입력을 차단한다. 그래서 비밀번호 단계는 딱 한 번 사람이 통과한다. 셀록홈즈 세션 자체는 Chrome 을 닫으면 만료되지만, **구글 세션이 프로필에 남아 다음 실행부터는 계정 선택 화면을 자동 클릭해 비밀번호 없이 재로그인**한다(사람 개입 0). `.env` 에 비밀번호를 저장하지 않는 이유다.
 > 몇 달 뒤 구글 세션이 만료되면 자동 실행이 "비밀번호/2FA 필요"를 감지해 `--setup` 재실행을 안내한다.
+
+### Step 0-b. 통다운을 드라이브에서 받기 (셀러라이프 재다운로드 대신)
+
+통다운 raw 의 **단일 원본은 구글 드라이브 `51-셀러라이프-통다운` 폴더**다
+(`runs/<YYMMDD>/raw/` + `keyword_blacklist/` 구조 그대로).
+PC 를 옮겼거나 로컬에 raw 가 없으면 **셀러라이프에 다시 로그인해 받지 말고 여기서 가져온다.**
+
+```bash
+PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe .claude/skills/sellerlife-keyword/scripts/pull_drive.py --list          # 날짜 목록
+PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe .claude/skills/sellerlife-keyword/scripts/pull_drive.py                  # 최신 날짜
+PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe .claude/skills/sellerlife-keyword/scripts/pull_drive.py --date 260731 --blacklist
+```
+
+- `<DATA_ROOT>/runs/<YYMMDD>/raw/` 로 내려받는다 → 그대로 `product-name --source-date <YYMMDD>` 에 물린다
+- 같은 크기 파일은 건너뛴다(재실행 안전). 전제는 `gws` CLI 인증뿐 — 셀러라이프 로그인 불필요
+- 구버전 레이아웃(raw/ 없이 날짜 폴더에 xlsx 직접)도 인식한다
+- **새로 받은 통다운은 이 드라이브 폴더에 올려 원본을 한 곳으로 유지한다**
 
 ### Step 1. 파이프라인 실행 (매번 이것만)
 ```bash

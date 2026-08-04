@@ -23,8 +23,10 @@ import requests
 from dotenv import load_dotenv
 from PIL import Image
 
-# OpenAI 키는 기존 썸네일 스킬의 .env 재사용
-ENV_DIR = Path(r"C:\Users\workspace\.claude\skills\thumbnail-bg-replace\scripts")
+# OpenAI 키: 이 스킬의 scripts/.env 를 우선 사용
+# (구 thumbnail-bg-replace 스킬은 삭제됨 — 있으면 폴백으로 읽음)
+ENV_DIR = Path(__file__).resolve().parent
+LEGACY_ENV_DIR = Path(r"C:\Users\workspace\.claude\skills\thumbnail-bg-replace\scripts")
 ATTACH_DIR = Path(r"C:\Users\workspace\50-resources\attachments")
 MODEL = "gpt-image-2"  # 고정 — 다른 모델 사용 금지 (용팀장님 지시)
 
@@ -76,19 +78,58 @@ def build_prompt(mode, store_name):
 
     if mode == "mobile":
         layout = (
-            "4) Wide horizontal banner composition (about 3:1). Keep ALL text and key icons centered "
-            "within the MIDDLE horizontal band of the image, leaving generous empty margin at the very "
-            "top and very bottom so the center strip can be safely cropped to a 3:1 banner. "
+            "4) Wide horizontal banner composition (about 3:1). CRITICAL VERTICAL PLACEMENT: place ALL "
+            "text and ALL icons inside the middle third of the image height, VERTICALLY CENTERED on the "
+            "exact middle line of the canvas. The top third and the bottom third of the canvas must be "
+            "COMPLETELY EMPTY background - no text, no icons, no decorative leaves, nothing. The empty "
+            "margin above and below must be EQUAL in height. Do not push the composition upward or "
+            "downward; the visual center of everything must sit exactly at the vertical midpoint. "
         )
     else:  # pc
         layout = (
             "4) VERY WIDE and THIN horizontal banner (about 6.4:1). Lay out the store name, the message "
             "and the icons together in ONE single horizontal row, all on the same eye level, spread "
-            "across the width. Keep everything within a THIN central horizontal strip, leaving large "
-            "empty margin at the very top and very bottom so the center strip can be safely cropped to a "
-            "very wide thin banner. "
+            "across the width. CRITICAL VERTICAL PLACEMENT: that single row must be VERTICALLY CENTERED "
+            "on the exact middle line of the canvas, confined to a thin central strip about one sixth of "
+            "the canvas height. Everything above and below that thin strip must be COMPLETELY EMPTY "
+            "background - no text, no icons, no decorative elements, nothing. The empty margin above and "
+            "below must be EQUAL in height. Do not push the composition upward or downward; the visual "
+            "center of the row must sit exactly at the vertical midpoint. "
         )
     return head + layout + tail
+
+
+def content_center_y(img, threshold=18):
+    """
+    이미지에서 배경이 아닌 '내용'(글자·아이콘)이 차지하는 세로 범위의 중심을 반환.
+
+    배경색은 네 모서리 픽셀의 중앙값으로 추정하고, 각 행마다 배경과
+    threshold 이상 차이나는 픽셀 수를 세어 내용 유무를 판단한다.
+    내용을 못 찾으면 이미지 정중앙으로 폴백.
+    """
+    try:
+        gray = img.convert("L")
+        w, h = gray.size
+        px = gray.load()
+
+        # 네 모서리로 배경 밝기 추정
+        corners = [px[0, 0], px[w - 1, 0], px[0, h - 1], px[w - 1, h - 1]]
+        bg = sorted(corners)[len(corners) // 2]
+
+        # 가로로 듬성듬성 샘플링 (속도)
+        step = max(1, w // 400)
+        min_pixels = max(3, (w // step) // 100)  # 노이즈 무시 임계
+
+        rows = [
+            y for y in range(h)
+            if sum(1 for x in range(0, w, step) if abs(px[x, y] - bg) > threshold) >= min_pixels
+        ]
+        if not rows:
+            return h / 2
+        return (rows[0] + rows[-1]) / 2
+    except Exception:
+        # 어떤 이유로든 실패하면 안전하게 정중앙 사용
+        return img.size[1] / 2
 
 
 # 모드별 설정: (생성 사이즈, 출력 W, 출력 H, 파일명 접미사)
@@ -119,6 +160,8 @@ def main():
 
     # --- 키 로드 ---
     load_dotenv(ENV_DIR / ".env")
+    if not os.getenv("OPENAI_API_KEY"):
+        load_dotenv(LEGACY_ENV_DIR / ".env")  # 구 경로 폴백
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         print(f"OPENAI_API_KEY 없음. {ENV_DIR / '.env'} 에 OPENAI_API_KEY=sk-... 저장 필요.")
@@ -155,12 +198,15 @@ def main():
             # 정사각: 그대로 리사이즈
             final = img.resize((out_w, out_h), Image.LANCZOS)
         else:
-            # 배너: 가로폭 기준 중앙 밴드 크롭 후 목표 크기로 리사이즈
+            # 배너: 콘텐츠(글자·아이콘)의 세로 중심을 기준으로 밴드 크롭 후 리사이즈.
+            # 생성물이 위/아래로 치우쳐도 내용이 잘리지 않도록 중심을 잡아준다.
             w, h = img.size
             target_ratio = out_w / out_h
-            band_h = int(round(w / target_ratio))
-            top = max(0, (h - band_h) // 2)
-            cropped = img.crop((0, top, w, min(h, top + band_h)))
+            band_h = min(h, int(round(w / target_ratio)))
+            center = content_center_y(img)
+            top = int(round(center - band_h / 2))
+            top = max(0, min(top, h - band_h))  # 이미지 밖으로 나가지 않게 보정
+            cropped = img.crop((0, top, w, top + band_h))
             final = cropped.resize((out_w, out_h), Image.LANCZOS)
 
         final.save(output_path, "PNG")

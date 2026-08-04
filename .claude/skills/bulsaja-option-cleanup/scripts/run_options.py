@@ -599,11 +599,22 @@ def _commit(sheet, rows, args):
     print(f"  저장 전 상태 백업: {backup_path} ({len(backup)}건)")
     print(f"  되돌리기: python {os.path.basename(__file__)} restore --run-dir {args.run_dir}")
 
+    # 재개 — 저장은 상품당 수 초~수십 초라 대량 그룹은 한 번에 못 끝낸다(중단·타임아웃).
+    # 성공한 상품을 run-dir 에 남겨 다음 실행이 건너뛴다. 정본은 이 파일이 아니라 불사자지만,
+    # 재저장은 같은 값을 다시 쓰는 것이라 건너뛰어도 안전하다.
+    committed_path = os.path.join(args.run_dir, "committed.json")
+    committed = set(_load(committed_path)) if os.path.exists(committed_path) else set()
+    if committed:
+        print(f"  재개: 이미 저장 완료 {len(committed)}건 건너뜀")
+
     mcp = OptionMCP()
     mcp.open()
     done, failed = {}, {}
     try:
         for pid, plan, w, _ in targets:
+            if pid in committed:
+                done[pid] = "완료"
+                continue
             before = backup.get(pid) or {}
             names = {str(k): v for k, v in (w.get("이름") or {}).items()}
             try:
@@ -635,6 +646,8 @@ def _commit(sheet, rows, args):
                     raise RuntimeError("; ".join(fails)[:300])
                 snapshot.update(pid, 옵션=after)
                 done[pid] = "완료"
+                committed.add(pid)
+                _dump(committed_path, sorted(committed))   # 건별로 남긴다 — 중단돼도 진도가 산다
                 print(f"  [완료] {pid} 유지 {len(keep)} / 제외 {len(drop)} / 대표 {plan['대표']}")
             except Exception as e:  # noqa: BLE001
                 failed[pid] = f"{type(e).__name__}: {e}"[:200]

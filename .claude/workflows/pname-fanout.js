@@ -18,6 +18,35 @@ export const meta = {
 const args_ = (typeof args === 'string') ? JSON.parse(args) : args
 const BUDGET = (args_.budgetKB || 30)
 
+// pendingPath 가 오면 워커 하나가 그 파일을 읽어 목록을 물어온다 — 호출자가 452건짜리
+// 배열을 args 로 실어보내지 않아도 된다(메인 컨텍스트 토큰 절감). 파일 형식은
+// [{n, path?, viewKB}] (pending_batches.json).
+if (!args_.batches && args_.pendingPath) {
+  phase('대상수집')
+  const got = await agent(
+    `Read 로 ${args_.pendingPath} 를 열고, 그 JSON 배열을 그대로 반환 스키마의 batches 에 담아라. ` +
+    `가공·요약 금지. path 필드는 생략해도 된다(n 과 viewKB 는 필수).`,
+    { label: 'pending', phase: '대상수집', model: 'sonnet', effort: 'low',
+      schema: { type: 'object', additionalProperties: false,
+                properties: { batches: { type: 'array', items: {
+                  type: 'object', additionalProperties: false,
+                  properties: { n: { type: 'integer' }, viewKB: { type: 'number' } },
+                  required: ['n', 'viewKB'] } } },
+                required: ['batches'] } })
+  if (!got || !got.batches || !got.batches.length) {
+    return { 오류: 'pendingPath 를 읽지 못했습니다', pendingPath: args_.pendingPath }
+  }
+  args_.batches = got.batches
+  log(`pending ${args_.batches.length}건 수집 (${args_.pendingPath})`)
+}
+
+// batchDir 이 오면 path 를 생략할 수 있다(호출자 args 크기 절감) — n → batch_NNN.json 규칙.
+if (args_.batchDir) {
+  args_.batches = args_.batches.map(b => b.path ? b : ({
+    ...b, path: `${args_.batchDir}/batch_${String(b.n).padStart(3, '0')}.json`,
+  }))
+}
+
 // 뷰예산 빈패킹 — 큰 배치부터 first-fit. 워커 1명이 받는 배치 묶음의 뷰 합 ≤ BUDGET.
 // 뷰가 예산을 단독 초과하는 배치는 혼자 1워커(쪼갤 수 없다).
 const sorted = [...args_.batches].sort((a, b) => (b.viewKB || 0) - (a.viewKB || 0))

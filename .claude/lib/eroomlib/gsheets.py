@@ -155,6 +155,15 @@ def append_rows(spreadsheet_id, tab, rows, max_retries=4):
     if not rows:
         return 0
 
+    # gws 는 요청 본문을 명령행 인자로 받는다 — 윈도우 명령행 상한(약 32KB)을 넘으면
+    # CreateProcess 가 WinError 206 으로 죽는다(검수표처럼 긴 셀이 섞이면 20행도 넘긴다).
+    # 호출자의 청크 크기와 무관하게 여기서 직렬화 크기 기준으로 한 번 더 쪼갠다.
+    _MAX_BODY = 24000
+    if len(rows) > 1 and len(json.dumps({"values": rows}, ensure_ascii=False)) > _MAX_BODY:
+        mid = len(rows) // 2
+        return (append_rows(spreadsheet_id, tab, rows[:mid], max_retries)
+                + append_rows(spreadsheet_id, tab, rows[mid:], max_retries))
+
     args = [
         "sheets", "spreadsheets", "values", "append",
         "--params", json.dumps({
