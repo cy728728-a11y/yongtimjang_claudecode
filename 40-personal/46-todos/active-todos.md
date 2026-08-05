@@ -283,13 +283,13 @@
 - [ ] 파인님 키픽 프로그램 테스트 및 매뉴얼 만들기
   - added: 2026-07-12 12:12
   - priority: normal
-- [ ] 2기 2주차 강의자료 준비하기
-  - added: 2026-07-26
-  - priority: high
-  - project: 2기강의
 - [ ] 2-2 마켓그룹부터 시작해서 상품명 돌리기
   - added: 2026-08-05 01:16
   - priority: normal
+- [ ] 2기 3주차 강의자료 준비하기
+  - added: 2026-08-05 22:18
+  - priority: high
+  - project: 2기강의
 
 ## Backlog
 
