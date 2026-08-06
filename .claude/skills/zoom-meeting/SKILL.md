@@ -1,6 +1,6 @@
 ---
 name: zoom-meeting
-description: 자연어 요청("줌미팅 잡아줘", "줌 링크 만들어줘")을 받아 Zoom Server-to-Server OAuth API로 실제 미팅을 생성하고 join 링크를 반환. 날짜/시작시간/소요시간이 빠지면 먼저 질문하고, 제목은 명시돼도 없어도 항상 확인 질문. 생성 직후 (시작시간-30분)에 "줌 오픈" 리마인더를 todo에 자동 등록.
+description: 자연어 요청("줌미팅 잡아줘", "줌 링크 만들어줘")을 받아 Zoom Server-to-Server OAuth API로 실제 미팅을 생성하고 join 링크를 반환. 날짜/시작시간/소요시간이 빠지면 먼저 질문하고, 제목은 명시돼도 없어도 항상 확인 질문. 생성 직후 (시작시간-30분)에 "줌 오픈" 리마인더를 todo에 자동 등록. 또한 "다시보기 링크", "녹화 링크", "지난 미팅 녹화"처럼 이미 끝난 미팅의 클라우드 녹화 다시보기 링크 조회도 지원(zoom_recordings.py).
 allowed-tools:
   - Read
   - Edit
@@ -82,9 +82,34 @@ Zoom은 호스트가 `start_url`로 접속하는 순간 예약 시간과 무관�
 - 미팅 시작까지 30분이 안 남은 경우: 리마인더 시각이 이미 과거가 됨. 이때는 (시작시간-30분)을 계산하지 말고, "곧 시작하는 미팅"이라는 점만 안내한다.
 - 미팅 시작이 자정 직후라 (시작시간-30분)이 전날로 넘어가는 경우: `due:`는 미팅 날짜가 아니라 **리마인더가 실제로 표시돼야 할 날짜**(= 리마인더 시각 자신의 날짜)로 설정한다. 그렇지 않으면 리마인더가 엉뚱한 날짜에 묻힌다.
 
+## 다시보기(클라우드 녹화) 링크 조회
+
+"어제 줌미팅 다시보기 링크 보내줘", "지난주 녹화 링크", "8월5일 미팅 녹화" 처럼
+**이미 끝난 미팅의 녹화 다시보기 링크**를 요청하면 조회 스크립트를 쓴다.
+(미팅 생성과는 별개 스크립트: `10-projects/줌미팅-자동화/zoom_recordings.py`)
+
+```bash
+# 어제 (기본값)
+.venv/Scripts/python.exe "10-projects/줌미팅-자동화/zoom_recordings.py" --pretty
+
+# 특정 날짜
+.venv/Scripts/python.exe "10-projects/줌미팅-자동화/zoom_recordings.py" --date 2026-08-05 --pretty
+
+# 기간
+.venv/Scripts/python.exe "10-projects/줌미팅-자동화/zoom_recordings.py" --from 2026-08-01 --to 2026-08-06 --pretty
+```
+
+- macOS/Linux는 `python3 ...` 로 실행 (venv 경로는 환경에 맞게)
+- 출력: 미팅별 `share_url`(참석자에게 보내는 다시보기 공유 링크) + 재생 암호(있으면) + 파일별 `play_url`
+- `--pretty` 없으면 JSON 한 줄 (다른 스킬이 파싱해 재사용하기 좋음)
+- **전제**: S2S OAuth 앱에 `cloud_recording:read:list_user_recordings:admin` 스코프 필요.
+  없으면 Zoom이 "does not contain scopes"류 에러를 그대로 돌려줌 → 사용자에게 스코프 추가 안내
+- **주의**: '로컬 저장' 녹화는 이 API에 안 잡힘(호스트 PC에만 존재). 클라우드 녹화만 조회됨.
+  회의 종료 직후엔 클라우드 처리에 수 분~수십 분 걸려 아직 안 보일 수 있음
+
 ## 참고
 
 - `waiting_room: false`로 생성되므로 참가자는 대기실 없이 바로 입장 (단, 호스트가 미팅을 연 이후에만 가능)
 - 반복 미팅/참가자 초대/Google Calendar 등록은 범위 밖 (필요 시 send-email 스킬과 별도 조합)
-- 스크립트 상세: `10-projects/줌미팅-자동화/zoom_meeting.py`
+- 스크립트 상세: 미팅 생성 `10-projects/줌미팅-자동화/zoom_meeting.py`, 녹화 조회 `10-projects/줌미팅-자동화/zoom_recordings.py`
 - 자격증명 템플릿: `10-projects/줌미팅-자동화/.env.example`
