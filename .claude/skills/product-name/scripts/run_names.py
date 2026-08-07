@@ -7,7 +7,7 @@ Claude가 만든 상품명을 검증→시트기록→불사자 반영까지 잇
 흐름:
   prep   : 마켓그룹 → 상품목록 → workdata(카테고리+썸네일) → 썸네일 다운로드
            → 카테고리 프리필터 → 계단 후보 청크(candidates/chunk_*.json)
-  [Claude] 청크별로 썸네일 Read + 후보 대조 → 키워드 2~3개 선택 → 상품명 조립
+  [Claude] 청크별로 썸네일 Read + 후보 대조 → 키워드 2~5개 선택 → 상품명 조립
            → named/named_*.json
   append : name_check 검증 → 상품명 탭 append (보류/실패도 마커로 남김)
   rename : 시트 상태=생성완료 건을 불사자에 실제 반영 (--commit 없으면 미리보기)
@@ -58,6 +58,7 @@ while _d and _d != os.path.dirname(_d):
 
 import sheet_io  # noqa: E402  (keyword-pick 소유)
 import name_check  # noqa: E402  (이 스킬 소유 — 키워드 열 파싱 공유)
+import spec_match  # noqa: E402  (이 스킬 소유 — 규격어↔옵션 정합 판정)
 from eroomlib import config as _cfg  # noqa: E402  (경로·폴더ID·시트ID 1벌)
 from eroomlib import snapshot  # noqa: E402  (공용 상품 스냅샷 — rename 후 상품명 되쓰기)
 from eroomlib import matrix  # noqa: E402  (현황판 00_진행 — 상품명 열 갱신)
@@ -86,6 +87,11 @@ NAME_HEADER = (
     # 불사자 MCP에 속성·태그 저장 API가 없어 자동 반영은 불가 — 이룸님이 스마트스토어
     # 센터에서 직접 입력하는 용도다. 기존 27열 뒤에 붙였으므로 앞 열의 위치는 그대로다.
     + ["속성제안", "태그제안"]
+    # 2026-08-05: 규격어 키워드(`3단서빙카트`)를 쓸 때 그 규격에 해당하는 판매행을
+    # 지정한다 — `<판매행id> | <근거키워드>`. 옵션정리(`run_options.read_spec_main`)가
+    # 읽어 대표옵션으로 세운다. 최저가가 아니어도 수용한다.
+    # 비어 있으면 지정 없음 = 종전대로 최저가가 대표.
+    + ["대표지정"]
 )
 
 # 관련어 탭 — 채택하지 않은 것까지 남긴다. 재검수의 근거이자 "안 본 것"과
@@ -138,6 +144,21 @@ def _dump(path, obj):
         json.dump(obj, f, ensure_ascii=False, indent=2)
 
 
+def _named_files(run_dir):
+    """named/ 의 최종본만 돌려준다 — named_NNN.json 형식 그대로.
+
+    워커가 남기는 중간산출물(named_NNN.chal.json, draft_*.json)이 glob 에 섞이면
+    challenge 이전 스냅샷이 집계를 오염시킨다(1-1 회차에서 두 번째 재발 — 허수 실패 161).
+    문서 주의가 아니라 코드로 막는다: 숫자 3자리 최종본만 잡는다.
+    """
+    return sorted(glob.glob(os.path.join(run_dir, "named", "named_[0-9][0-9][0-9].json")))
+
+
+def _checked_files(checked_dir):
+    """checked/ 의 최종본만 — _named_files 와 같은 이유(checked_NNN.chal.json 배제)."""
+    return sorted(glob.glob(os.path.join(checked_dir, "checked_[0-9][0-9][0-9].json")))
+
+
 def resolve_sheet(args):
     """기록 대상 스프레드시트 id를 확정한다.
 
@@ -186,6 +207,17 @@ def _done_ids(sheet, tab=None):
     except Exception as e:
         print(f"  (재개 조회 생략 — 탭 미존재로 간주: {str(e)[:80]})")
         return set()
+
+
+def _redo_exempt(redo_hit, auto_redo):
+    """prep 이 `redo.json` 으로 append 에 넘길 **A열 중복 면제** 목록.
+
+    두 출처를 합친다 — 손으로 준 `--ids --redo`(`redo_hit`)와 현황판 재작업 자동 편입
+    (`auto_redo`). **한쪽이 비어도 다른 쪽은 남아야 한다**: 전에는 자동 편입이 있을 때만
+    파일을 써서, 현황판 flag 없는 `--ids --redo` 는 면제가 통째로 사라졌다(→ append 가
+    전건 `스킵(이미처리)`, 워커 비용만 쓰고 시트 0행).
+    """
+    return sorted(set(redo_hit or ()) | set(auto_redo or {}))
 
 
 def _read_jk_map(sheet, tab=CATFIX_TAB):
@@ -292,7 +324,8 @@ def cmd_prep(args):
         _shrink_thumbs(_tm.values(), args.thumb_px)  # 기존 원본 썸네일도 여기서 축소된다
         _build_views_and_batches(run_dir, targets, _tm,
                                  args.no_parent, len(skipped),
-                                 wd_by_id=wd_by_id, jk_by_id=jk_by_id)
+                                 wd_by_id=wd_by_id, jk_by_id=jk_by_id,
+                                 nokw_mode=getattr(args, 'nokw_mode', False))
         return
 
     targets_json = getattr(args, "targets_json", None)
@@ -357,6 +390,7 @@ def cmd_prep(args):
         done_ids = set() if args.no_resume else _done_ids(args.sheet, args.tab)
         # --redo: 카테고리가 바뀌어 상품명을 다시 만들어야 하는 건. A열에 이미 있어도 재대상으로 넣는다.
         # 옛 행은 지우지 않는다 — E열 원본상품명이 되돌리기 경로다(SKILL.md §재교정).
+        redo_hit = set()
         if args.redo:
             if not want:
                 print("[중단] --redo 는 --ids 와 함께만 쓴다(전건 재작업 방지).")
@@ -366,11 +400,38 @@ def cmd_prep(args):
             if redo_hit:
                 print(f"  --redo: 이미 기록된 {len(redo_hit)}건을 재대상으로 넣습니다 "
                       f"→ {', '.join(sorted(redo_hit))}")
-                print("  [필수] 시트의 옛 행 상태를 `재작업(카테고리변경)` 으로 바꿔두세요 — "
-                      "안 그러면 rename이 옛 상품명도 함께 반영합니다.")
-            _dump(os.path.join(run_dir, "redo.json"), sorted(want))
+                print("  옛 `생성완료` 행은 append 가 자동으로 재작업으로 내립니다"
+                      "(중복 반영 방지 — `_retire_stale_rows`).")
+        # 현황판 `상품명` 열의 `재작업(옵션: …)` **자동 편입** (2026-08-06 이룸님).
+        #
+        # 다른 축은 현황판이 원장이라 `pending(include_redo=True)` 이 재작업을 자동으로
+        # 집는데, 상품명만 원장이 `상품명` 탭이라 A열에 행이 있으면 **다시 부르는 신호가
+        # 닿지 않았다** — 옵션정리가 `flag` 를 찍어도 집는 쪽이 없어 사람이 `--ids --redo`
+        # 를 손으로 돌려야 했고, 안 돌리면 그냥 사라졌다.
+        auto_redo = _matrix_redo(args.sheet, {g.get("productId") for g in group} & done_ids)
+        if auto_redo:
+            done_ids = done_ids - set(auto_redo)
+            _dump(os.path.join(run_dir, "redo_reasons.json"), auto_redo)
+            print(f"  현황판 재작업 {len(auto_redo)}건 자동 편입 — "
+                  + " · ".join(f"{p}({r[:24]})" for p, r in list(auto_redo.items())[:3])
+                  + (f" 외 {len(auto_redo) - 3}건" if len(auto_redo) > 3 else ""))
+
+        # 면제 목록은 **auto_redo 유무와 무관하게** 남긴다 (2026-08-07).
+        #
+        # 전에는 이 `_dump` 가 `if auto_redo:` 안에 있어서, 현황판 flag 없이 `--ids --redo`
+        # 만 쓰면 redo.json 이 아예 안 만들어졌다. prep 은 대상에 넣어 워커까지 다 돌리는데
+        # append 가 시트 A열을 다시 읽어 전건 `스킵(이미처리)` 로 버렸다 — **워커 비용을 다
+        # 쓰고 시트에 0행**이 되고, 로그의 `###APPEND### 총 0행` 을 놓치면 조용히 사라진다
+        # (3-2 재교정 11건 실측). SKILL.md 는 "면제는 1회용(append 가 redo.json 소진)"이라
+        # 적혀 있었으니 문서가 맞고 코드가 틀렸다.
+        exempt = _redo_exempt(redo_hit, auto_redo)
+        if exempt:
+            _dump(os.path.join(run_dir, "redo.json"), exempt)
 
         pending = [g for g in group if g.get("productId") not in done_ids]
+        for g in pending:
+            if g.get("productId") in auto_redo:
+                g["재작업사유"] = auto_redo[g["productId"]]
         print(f"[2/6] 그룹 {len(group)}건 / 이미처리 {len(done_ids)}건 / 대상 {len(pending)}건")
         if not pending:
             print("처리할 상품이 없습니다.")
@@ -423,13 +484,17 @@ def cmd_prep(args):
         if not cat or cat == "미설정":
             skipped.append({"productId": pid, "상품명": name, "사유": "카테고리미설정"})
             continue
-        targets.append({
+        t = {
             "productId": pid,
             "상품명": name,
             "대표키워드": "",          # 마켓그룹 진입점에는 없음 (cat_prefilter는 카테고리만 사용)
             "카테고리": cat,
             "썸네일": (wd.get("썸네일") or [])[:1],
-        })
+        }
+        # 왜 다시 하는지를 워커에게 실어 보낸다 — 사유 없이 다시 시키면 같은 이름이 또 나온다.
+        if g.get("재작업사유"):
+            t["재작업사유"] = g["재작업사유"]
+        targets.append(t)
     _dump(targets_path, targets)
     _dump(os.path.join(run_dir, "skipped.json"), skipped)
     print(f"[4/6] 대상 {len(targets)}건 / 카테고리미설정 스킵 {len(skipped)}건 -> {targets_path}")
@@ -454,8 +519,11 @@ def cmd_prep(args):
     else:
         print(f"[5/6] 썸네일 {len(thumb_items)}장 다운로드 중...")
         os.makedirs(thumbs_dir, exist_ok=True)
+        # 축소는 fetch_thumbs 쪽에서 이미 일어난다(공용 materialize_image). `--thumb-px` 를
+        # 그대로 넘겨야 `0`(원본 유지)을 지정했을 때 뜻이 뒤집히지 않는다.
         out = _run([py, os.path.join(BULSAJA_SCRIPTS, "fetch_thumbs.py"),
-                    "--input", thumbs_json, "--out-dir", thumbs_dir], "fetch_thumbs.py")
+                    "--input", thumbs_json, "--out-dir", thumbs_dir,
+                    "--max-px", str(args.thumb_px)], "fetch_thumbs.py")
         # fetch_thumbs 는 입력 순서대로 한 줄씩(성공=절대경로 / 실패='FAIL\t...') 출력한다.
         # 파일명은 productId 를 24자로 잘라 쓰므로(불사자 id는 27자) 이름 매칭이 아니라
         # 출력 줄 순서로 매핑한다.
@@ -471,15 +539,12 @@ def cmd_prep(args):
     # 6) 카테고리 프리필터 + 계단 후보 청크
     raw_dir = args.raw_dir
     if not raw_dir:
-        if not args.source_date:
-            raise RuntimeError("--raw-dir 또는 --source-date 중 하나는 필요합니다.")
-        base = os.path.join(_cfg.cfg("paths.sellerlife_runs"), args.source_date)
-        # 통다운 레이아웃이 회차마다 다르다: 예전 것은 `<날짜>/raw/`에 풀려 있고,
-        # 셀러라이프 스킬이 받은 최근 것은 `<날짜>/` 바로 아래에 xlsx + zip 이 있다.
-        # raw/ 가 없으면 날짜 폴더 자체를 쓴다(cat_prefilter 가 zip 을 자동 탐색한다).
-        raw_dir = os.path.join(base, "raw")
-        if not os.path.isdir(raw_dir) and os.path.isdir(base):
-            raw_dir = base
+        # 통다운 원본은 구글드라이브가 보관처다(2026-08-01 이관). 로컬 runs 에 있으면
+        # 그대로 쓰고, 없으면 드라이브에서 캐시로 내려받는다. 레이아웃 2종
+        # (`<날짜>/raw/` 또는 `<날짜>/` 바로 아래 xlsx+zip)은 resolve_raw_dir 가 흡수한다.
+        # --source-date 를 안 주면 최신을 고르고 7일 규칙(낡으면 새로 받기)이 적용된다.
+        from eroomlib import gdrive
+        raw_dir = gdrive.resolve_raw_dir(args.source_date)
     if not os.path.isdir(raw_dir):
         raise RuntimeError(f"통다운 raw-dir가 없습니다: {raw_dir}")
 
@@ -493,21 +558,21 @@ def cmd_prep(args):
     _run(pf_args, "cat_prefilter.py")
 
     _build_views_and_batches(run_dir, targets, thumb_map, args.no_parent, len(skipped),
-                             wd_by_id=wd_by_id, jk_by_id=jk_by_id)
+                             wd_by_id=wd_by_id, jk_by_id=jk_by_id,
+                             nokw_mode=getattr(args, 'nokw_mode', False))
 
 
 def _shrink_thumbs(paths, max_px):
-    """썸네일을 긴 변 max_px 로 축소한다 (0 이하면 건너뜀).
+    """썸네일을 긴 변 max_px 로 축소한다 (0 이하면 건너뜀). 집계만 여기서 하고
+    장별 축소는 공용 `snapshot.shrink_image` 가 한다 — 네 스킬이 같은 방식을 쓴다.
 
-    비전 토큰은 픽셀수에 비례한다(대략 W*H/750). 불사자 썸네일은 1000x1000 이
-    많아 1장에 ~1,330토큰인데, 워커 컨텍스트에 한 번 들어가면 그 뒤 모든 턴에서
-    다시 읽히므로 실질 비용은 수만 토큰이 된다. 512px 로 줄이면 ~350토큰 —
-    실물 정체 판별(§Step 3-1)에는 충분하다.
+    실물 정체 판별(§Step 3-1)에는 512px 로 충분하다. 이미지에 인쇄된 글자를 읽어야
+    하는 판정은 더 큰 값이 필요한데, 상품명 스킬엔 그런 축이 없다.
     """
     if not max_px or max_px <= 0:
         return
     try:
-        from PIL import Image  # Pillow 없으면 원본 유지
+        import PIL  # noqa: F401 — 없으면 축소가 전부 no-op 이므로 미리 알린다
     except ImportError:
         print("  (Pillow 없음 — 썸네일 축소 건너뜀. pip install Pillow 권장)")
         return
@@ -515,14 +580,9 @@ def _shrink_thumbs(paths, max_px):
     for p in list(paths):
         try:
             before = os.path.getsize(p)
-            with Image.open(p) as im:
-                if max(im.size) <= max_px:
-                    continue
-                im = im.convert("RGB")
-                im.thumbnail((max_px, max_px), Image.LANCZOS)
-                im.save(p, "JPEG", quality=85)
-            done += 1
-            saved += before - os.path.getsize(p)
+            if snapshot.shrink_image(p, max_px):
+                done += 1
+                saved += before - os.path.getsize(p)
         except Exception as e:  # 한 장 실패가 prep 전체를 막지 않는다
             print(f"  썸네일 축소 실패({os.path.basename(p)}): {e}")
     if done:
@@ -578,8 +638,35 @@ def _same_price_options(pid, load=None):
     return len(set(prices)) == 1
 
 
+def _spec_view(pid, load=None):
+    """규격 판단용 옵션 구성 — 축분포·가격범위·옵션 전량(원문 포함).
+
+    `옵션명`(앞 8개 요약, `snapshot._OPT_MAX`)과 목적이 다르다. 그건 "이게 무슨 물건인가"를
+    보는 증거고, 이건 "규격이 옵션을 가르는가"를 보는 재료다. 발단 사례에서 44개 중 앞
+    8개가 전부 `餐车`(2층·3층 식당카트)라 실물 라인 `收碗车` 가 보이지 않았고, 워커는
+    제목의 `三层` 을 상품 전체의 규격으로 읽었다.
+
+    `_same_price_options` 와 같은 경로(스냅샷 레코드 직독)를 쓴다 — workdata 투영에는
+    옵션 전량이 파일 비대 때문에 일부러 빠져 있다.
+    """
+    if load is None:
+        load = snapshot.load
+    try:
+        rec = load(pid) or {}
+    except Exception:  # noqa: BLE001  스냅샷이 없어도 prep 을 멈추지 않는다
+        return {}
+    opt = rec.get("옵션") or {}
+    rows = opt.get("판매행") or []
+    if not rows:
+        return {}
+    out = spec_match.analyze([], opt.get("차원") or [], rows,
+                             상품명=rec.get("상품명", ""), 원문명=rec.get("원문명", ""))
+    out.pop("규격축", None)   # 키워드는 아직 안 골랐다 — 지정은 append 단계에서 계산한다
+    return out
+
+
 def _build_views_and_batches(run_dir, targets, thumb_map, no_parent, skipped_n=0,
-                             wd_by_id=None, jk_by_id=None):
+                             wd_by_id=None, jk_by_id=None, nokw_mode=False):
     """카테고리 뷰(D) 생성 + 카테고리 단위 배치.
 
     후보 생성기(batch_candidates)를 더 이상 쓰지 않는다 — 그 필터가 카테고리 전용어를
@@ -651,6 +738,10 @@ def _build_views_and_batches(run_dir, targets, thumb_map, no_parent, skipped_n=0
                 # 색상 예외 규칙(2026-07-30)의 유일한 기계적 근거 — 워커는 옵션 '가격'을
                 # 볼 수 없으므로(배치의 `옵션명`은 문자열뿐) 여기서 계산해 넘긴다.
                 "옵션동일가": _same_price_options(pid),
+                # 옵션 전량(2026-08-05). 위 `옵션명` 은 정체판별용 앞 8개 요약이라
+                # **규격을 판단할 수 없다** — 발단 사례에서 실물 라인(收碗车 11개)이 앞 8개에
+                # 하나도 없어 워커가 제목의 `三层` 만 보고 3단이라 결론냈다.
+                "옵션구성": _spec_view(pid),
             })
         if not prods:
             continue
@@ -671,6 +762,13 @@ def _build_views_and_batches(run_dir, targets, thumb_map, no_parent, skipped_n=0
                 "분할": f"{i // MAX_PER_BATCH + 1}/{(len(prods) - 1) // MAX_PER_BATCH + 1}",
                 "products": prods[i:i + MAX_PER_BATCH],
             })
+
+    # 무키워드 모드 (2026-08-06 이룸님) — 카테고리 재교정까지 소진하고도 직결어가 0인
+    # 잔여분 전용. 워커는 이 플래그가 있을 때만 키워드 없이 원본 단어로 짓는다.
+    # 배치에 실어 보내는 이유 = 워커 지시서는 전 라운드 공용이라 문서로 켤 수 없다.
+    if nokw_mode:
+        for b in batches:
+            b["무키워드모드"] = True
 
     for i, b in enumerate(batches, 1):
         _dump(os.path.join(batches_dir, f"batch_{i:03d}.json"), b)
@@ -708,6 +806,68 @@ def _kw_stat(p, kw):
     return "", ""
 
 
+def _spec_designation(p):
+    """채택 키워드에 규격어가 있으면 그 규격의 판매행을 지정한다 → `<판매행id> | <키워드>`.
+
+    2026-08-05 이룸님 확정. 저상품수 1순위는 그대로고, **고른 키워드에 규격어가 있을 때만**
+    발동하는 조건 분기다. 규격이 옵션을 가르는 값일 때(가)만 지정하고, 전 옵션 공통이거나
+    (나) 근거가 없으면(다) 지정하지 않는다 — 그러면 종전대로 최저가가 대표다.
+
+    워커가 아니라 여기서 계산한다. 워커는 옵션 '가격'을 볼 수 없고(배치는 이름만 준다),
+    규격 표기가 한/중 제각각이라(`3단`·`3층`·`三层`) 사람 눈보다 표가 정확하다.
+    실패해도 append 를 멈추지 않는다 — 지정이 없으면 종전 동작이다.
+    """
+    pid = p.get("productId", "")
+    kws = [k for k in name_check.collect_keywords(p) if k]
+    if not (pid and kws):
+        return ""
+    try:
+        rec = snapshot.load(pid) or {}
+        opt = rec.get("옵션") or {}
+        rows, dims = opt.get("판매행") or [], opt.get("차원") or []
+        if not rows:
+            return ""
+        out = spec_match.analyze(kws, dims, rows,
+                                 상품명=rec.get("상품명", ""), 원문명=rec.get("원문명", ""))
+        for ax in out["규격축"]:
+            if ax["판정"] != "가":
+                continue
+            # 유지 집합은 옵션정리가 정한다 — 여기선 아직 모른다. 판매 가능한 행 중
+            # 최저가를 지정하고, 그 옵션이 나중에 제외되면 옵션정리가 `보류(대표충돌)` 로 세운다.
+            sellable = [r for r in rows if not r.get("exclude")]
+            rid = spec_match.pick_main(ax["값키"], sellable or rows)
+            if rid:
+                kw = next((k for k in kws if ax["규격"] in spec_match.extract(k)), ax["규격"])
+                return f"{rid} | {kw}"
+    except Exception as e:  # noqa: BLE001  지정 실패가 원장 기록을 막지 않는다
+        print(f"  [경고] 대표지정 계산 실패({pid}): {str(e)[:100]}", file=sys.stderr)
+    return ""
+
+
+def _memo_with_kw1(p):
+    """키워드 예외 경로면 메모 앞에 태그 + 사유를 박는다 (2026-08-05~06).
+
+    직결어가 부족해도 원본 단어로 채워 내보내는 예외(R4)를 열었으므로, **왜 그랬는지가
+    시트에서 보여야 한다.** 증빙이 디스크(named_*.json)에만 있으면 표본검수·사후 추적에서
+    "확장을 안 해본 것"과 "다 해봤는데 없던 것"을 구분할 수 없다.
+
+    `[무키워드]` 는 특히 중요하다 — 그 행은 **검색 적합도 기대값이 낮은** 상품명이라
+    나중에 통다운이 갱신되면 1순위로 다시 돌려볼 대상이다.
+    """
+    memo = str(p.get("메모") or "").strip()
+    n_kw = len(name_check.collect_keywords(p))
+    if str(p.get("원본유지사유") or "").strip():
+        # 원본을 그대로 둔 행 — 나중에 "왜 안 바꿨나"를 시트에서 바로 읽을 수 있어야 한다.
+        tag = f"[원본유지] {str(p['원본유지사유']).strip()}"
+    elif n_kw == 0 and str(p.get("무키워드사유") or "").strip():
+        tag = f"[무키워드] {str(p['무키워드사유']).strip()}"
+    elif n_kw == 1 and str(p.get("키워드확장") or "").strip():
+        tag = f"[키워드1개] {str(p['키워드확장']).strip()}"
+    else:
+        return memo
+    return f"{tag} | {memo}" if memo else tag
+
+
 def _build_row(p, group_name):
     """named 상품 1건 -> 상품명 탭 행 (NAME_HEADER 순서)."""
     terms = p.get("term분해") or []
@@ -731,9 +891,10 @@ def _build_row(p, group_name):
         p.get("중복어", ""),
         str(p.get("반증", ""))[:200],
         p.get("상태", ""),
-        p.get("메모", ""),
+        _memo_with_kw1(p),
         _joinlist(p.get("속성제안")),
         _joinlist(p.get("태그제안")),
+        p.get("대표지정") or _spec_designation(p),
     ]
     return row
 
@@ -811,6 +972,57 @@ def _mark_matrix(sheet, status_by_id):
         return 0
 
 
+def _matrix_redo(sheet, candidates, read=None):
+    """현황판 `상품명` 열이 `재작업(...)` 인 상품 → {상품id: 사유}. (2026-08-06 이룸님)
+
+    `candidates` 는 **이미 상품명 탭에 행이 있는** 상품만 넘긴다 — 빈칸(신규)은 어차피
+    대상이라 편입할 게 없고, 신호가 실제로 막혀 있던 자리는 이 교집합뿐이다.
+
+    현황판을 못 읽어도 prep 을 멈추지 않는다 — 현황판은 파생물이고 원장은 상품명 탭이다.
+    다만 조용히 넘어가지 않고 경고를 남긴다(못 집은 재작업이 있다는 뜻이므로).
+    `read` 는 테스트 주입점(기본 `matrix.read`).
+    """
+    if not candidates:
+        return {}
+    try:
+        m = (read or matrix.read)(sheet)
+    except Exception as e:  # noqa: BLE001
+        print(f"  [경고] 현황판 재작업 확인 실패 — 자동 편입 없이 진행합니다: "
+              f"{str(e)[:120]}", file=sys.stderr)
+        return {}
+    return {pid: reason
+            for pid, reason in matrix.redo_pending(m, "상품명").items()
+            if pid in candidates}
+
+
+def _handoff_flip_suspect(sheet, checked_dir, flag=None):
+    """`보류(옵션뒤집힘)` 을 현황판 `옵션` 열 재작업 flag 로 넘긴다 (2026-08-06).
+
+    수집 시점에 본품이 전부 판매제외되고 부속만 판매중인 상품은 상품명을 지을 수 없다 —
+    부속 이름을 지으면 실물 오지칭(슬링랙→풋패드 사례), 본품 이름을 지으면 실판매와
+    어긋난다. 복구 담당은 옵션정리(§현재 상태를 믿지 마라)이므로 현황판 flag 로 넘긴다.
+    메모식 이관은 유실된다(계약 §다른 단계에 일감을 넘길 땐 현황판에 찍는다).
+    `flag` 는 테스트 주입점(기본 `matrix.flag_many`).
+    """
+    if flag is None:
+        flag = matrix.flag_many
+    reasons = {}
+    for cf in _checked_files(checked_dir):
+        for p in _load(cf).get("products", []):
+            if str(p.get("상태", "")) == "보류(옵션뒤집힘)" and p.get("productId"):
+                reasons[p["productId"]] = (str(p.get("메모", "")).strip()[:80]
+                                           or "본품 전부 판매제외 의심")
+    if not reasons:
+        return 0
+    try:
+        n = flag(sheet, "옵션", reasons, from_task="상품명")
+        print(f"  현황판({matrix.TAB}) 옵션 재작업 flag: {n}칸 (옵션뒤집힘 의심)")
+        return n
+    except Exception as e:  # noqa: BLE001  flag 실패가 append 결과를 뒤엎지 않는다
+        print(f"  [경고] 옵션뒤집힘 flag 실패: {str(e)[:120]}", file=sys.stderr)
+        return 0
+
+
 def _handoff_base_suffix(sheet, ok_ids, load=None, flag=None):
     """상품명엔 `기본형` 이 붙었는데 대표옵션명엔 없는 상품을 옵션 단계로 넘긴다.
 
@@ -879,7 +1091,7 @@ def _cmd_append_pooled(args, run_dir, checked_dir):
 
     # 전 청크 + 스킵 마커에서 pid별 (행·관련어행·실물판정·그룹명·상태) 를 먼저 모은다.
     entries = {}
-    for cf in sorted(glob.glob(os.path.join(checked_dir, "checked_*.json"))):
+    for cf in _checked_files(checked_dir):
         data = _load(cf)
         for p in data.get("products", []):
             pid = p.get("productId", "")
@@ -967,7 +1179,7 @@ def _cmd_append_pooled(args, run_dir, checked_dir):
 
 def cmd_append(args):
     run_dir = os.path.abspath(args.run_dir)
-    named_files = sorted(glob.glob(os.path.join(run_dir, "named", "named_*.json")))
+    named_files = _named_files(run_dir)
     if not named_files:
         print(f"named 파일이 없습니다: {os.path.join(run_dir, 'named')}")
         return
@@ -1010,10 +1222,18 @@ def cmd_append(args):
     redo_ids = set(_load(redo_path)) if os.path.exists(redo_path) else set()
     if redo_ids:
         print(f"  재작업 대상 {len(redo_ids)}건 — 이미처리 판정에서 제외합니다")
+        reasons_path = os.path.join(run_dir, "redo_reasons.json")
+        try:
+            _retire_stale_rows(args.sheet, args.tab, redo_ids,
+                               _load(reasons_path) if os.path.exists(reasons_path) else {},
+                               dry_run=args.dry_run)
+        except Exception as e:  # noqa: BLE001  옛 행 정리 실패가 append 를 막지 않는다
+            print(f"  [경고] 옛 생성완료 행 정리 실패 — rename 전에 직접 확인하세요: "
+                  f"{str(e)[:120]}", file=sys.stderr)
 
     total, rel_total = 0, 0
     print("[2/2] 시트 append...")
-    for cf in sorted(glob.glob(os.path.join(checked_dir, "checked_*.json"))):
+    for cf in _checked_files(checked_dir):
         data = _load(cf)
         done_ids = _done_ids(args.sheet, args.tab) - redo_ids  # 직전 재조회(이중실행 방어)
         rows, rel_rows = [], []
@@ -1090,8 +1310,11 @@ def cmd_append(args):
     if not args.dry_run:
         _mark_matrix(args.sheet, {
             p.get("productId", ""): p.get("상태", "")
-            for cf in sorted(glob.glob(os.path.join(checked_dir, "checked_*.json")))
+            for cf in _checked_files(checked_dir)
             for p in _load(cf).get("products", []) if p.get("productId")})
+        # 6b) 옵션뒤집힘 의심 → 옵션 열 재작업 flag(옵션정리가 뒤집힘을 복구해야
+        #     상품명이 가능하다 — 2026-08-06 슬링랙/풋패드 사례)
+        _handoff_flip_suspect(args.sheet, checked_dir)
 
     if not args.dry_run:
         print(f"###APPEND### 총 {total}행 -> {args.tab} / 관련어 {rel_total}행 -> {REL_TAB}")
@@ -1233,7 +1456,7 @@ def cmd_check(args):
     시트를 전혀 안 건드린다 — name_check 만 돌려 checked/ 를 만들고 실패 요약을 찍는다.
     """
     run_dir = os.path.abspath(args.run_dir)
-    named_files = sorted(glob.glob(os.path.join(run_dir, "named", "named_*.json")))
+    named_files = _named_files(run_dir)
     if not named_files:
         print(f"named 파일이 없습니다: {os.path.join(run_dir, 'named')}")
         return
@@ -1249,19 +1472,32 @@ def cmd_check(args):
     # 집계에서 뺀다 — 안 그러면 지워진 배치가 영원히 실패로 잡힌다(피어리뷰 지적).
     named_stems = {os.path.basename(nf)[len("named_"):-len(".json")] for nf in named_files}
     passed, failed, fail_batches = 0, 0, []
-    for cf in sorted(glob.glob(os.path.join(checked_dir, "checked_*.json"))):
+    # 배치 수와 상품 수를 같이 찍는다 — 1-1 회차에서 "통과 390/실패 11"(배치)을
+    # 상품 수로 읽어 판단을 틀렸다. 배치 목록은 재팬아웃 선정용이라 유지.
+    p_pass = p_fail = p_hold = 0
+    for cf in _checked_files(checked_dir):
         stem = os.path.basename(cf)[len("checked_"):-len(".json")]
         if stem not in named_stems:
             continue
         data = _load(cf)
-        has_fail = any(p.get("상태") == "검증실패" for p in data.get("products", []))
+        has_fail = False
+        for p in data.get("products", []):
+            st = str(p.get("상태", ""))
+            if st == "검증실패":
+                p_fail += 1
+                has_fail = True
+            elif st.startswith("보류") or st.startswith("스킵"):
+                p_hold += 1
+            else:
+                p_pass += 1
         if has_fail:
             failed += 1
             digits = "".join(c for c in os.path.basename(cf) if c.isdigit())
             fail_batches.append(int(digits) if digits else 0)
         else:
             passed += 1
-    print(f"###CHECK### 통과 {passed} / 실패 {failed} / 실패배치 {fail_batches}")
+    print(f"###CHECK### 상품 통과 {p_pass} / 실패 {p_fail} / 보류 {p_hold}"
+          f" · 배치 실패 {failed} / {passed + failed} / 실패배치 {fail_batches}")
 
 
 def cmd_rename(args):
@@ -1374,6 +1610,175 @@ def cmd_rename(args):
 
 
 # ---------------------------------------------------------------------------
+# fix-r9 / holds / mark — 자동화 루프 보조 (2026-08-05)
+# ---------------------------------------------------------------------------
+
+def cmd_fix_r9(args):
+    """R9 단독 실패를 기계 재배열(fix_r9.py) — 재팬아웃 전에 먼저 돌린다.
+
+    R9 는 워커 재팬아웃으로 수렴하지 않고(25-2: 144→117) 규칙이 결정론적이라
+    기계가 정확히 고친다(1-1 실측: 124건 교정·재검증 전건 통과·비용 0).
+    """
+    import fix_r9  # noqa: E402  (같은 scripts/ — 지연 임포트로 다른 커맨드에 무영향)
+    fixed, _skipped = fix_r9.run(args.run_dir, commit=args.commit)
+    if fixed and args.commit:
+        print("재검증 필요: run_names.py check 를 다시 돌리세요.")
+
+
+def _catfix_already_correct(catfix_run):
+    """재교정 run-dir 의 `이미정확` pid 집합 — "카테고리는 맞다"고 판정된 것들.
+
+    이게 무키워드 경로(③b)의 게이트다. **카테고리가 맞는데도 뷰에 직결어가 0** 이면
+    재교정을 또 돌려도 안 나온다 — 통다운에 그 카테고리 키워드가 없는 것이다.
+    반대로 `이미정확` 이 아닌 건(경로가 바뀐 건·합의없음 등)은 아직 카테고리 쪽에
+    할 일이 남아 있으므로 무키워드로 이름부터 짓지 않는다.
+    """
+    p = os.path.join(os.path.abspath(catfix_run), "decisions.json")
+    if not os.path.exists(p):
+        print(f"  [경고] 재교정 decisions.json 없음 — 무키워드 분류 생략: {p}",
+              file=sys.stderr)
+        return set()
+    d = _load(p)
+    items = d if isinstance(d, list) else (d.get("decisions") or d.get("결정") or [])
+    return {it.get("productId") for it in items
+            if str(it.get("상태", "")) == "이미정확" and it.get("productId")}
+
+
+def cmd_holds(args):
+    """1바퀴 결과에서 보류 3종 + 스킵(카테고리미설정) pid 를 집계한다(디스크만, 시트 무관).
+
+    Step 5 자동 서브플로(②재교정 / ③키워드부족 원본채움)의 입력이다. run-dir 이름이
+    `_redo`·`_kw1` 계열이면 재진입 금지 경고를 찍는다 — 재진입은 각 1회 한정이고,
+    2회째 의심·2회째 키워드부족은 종합보고로 보낸다(SKILL.md Step 5).
+
+    `--catfix-run` 을 주면 `카테고리의심` 을 두 갈래로 **쪼개서 더 실어 보낸다**
+    (원래 목록은 그대로 둔다 — 부분집합이다):
+      `무키워드대상`   catfix 가 `이미정확` → ③b 무키워드 라운드로 자동 진행
+      `카테고리수동큐` 그 밖 → 종합보고 (카테고리 쪽에 아직 할 일이 남았다)
+    """
+    run_dir = os.path.abspath(args.run_dir)
+    out = {"카테고리의심": [], "실물불명": [], "키워드부족": [], "카테고리미설정": [],
+           "옵션뒤집힘": []}
+    key_by_status = {"보류(카테고리의심)": "카테고리의심", "보류(실물불명)": "실물불명",
+                     "보류(키워드부족)": "키워드부족", "보류(옵션뒤집힘)": "옵션뒤집힘"}
+    for cf in _checked_files(os.path.join(run_dir, "checked")):
+        for p in _load(cf).get("products", []):
+            pid = p.get("productId", "")
+            k = key_by_status.get(str(p.get("상태", "")))
+            if pid and k:
+                out[k].append(pid)
+    sk = os.path.join(run_dir, "skipped.json")
+    if os.path.exists(sk):
+        for it in _load(sk):
+            if it.get("사유") == "카테고리미설정" and it.get("productId"):
+                out["카테고리미설정"].append(it["productId"])
+    for k in out:
+        out[k] = sorted(set(out[k]))
+    if getattr(args, "catfix_run", None):
+        ok = _catfix_already_correct(args.catfix_run)
+        out["무키워드대상"] = [p for p in out["카테고리의심"] if p in ok]
+        out["카테고리수동큐"] = [p for p in out["카테고리의심"] if p not in ok]
+    base = os.path.basename(run_dir.rstrip("/\\"))
+    if "_nokw" in base:
+        print("[재진입금지] 무키워드 run-dir — 여기서 또 의심이 나와도 다시 태우지 않는다.")
+    elif "_redo" in base or "_kw1" in base:
+        print("[재진입금지] 재진입 run-dir — 여기서 나온 의심/미설정/키워드부족은 서브플로를 "
+              "다시 태우지 않고 종합보고로 보낸다.")
+    print(json.dumps(out, ensure_ascii=False))
+
+
+def _retire_stale_rows(sheet, tab, pids, reasons=None, dry_run=False):
+    """재진입 상품의 **옛 `생성완료` 행**을 `재작업(...)` 으로 내린다 (2026-08-06).
+
+    `rename` 은 마지막 행이 아니라 **상태=`생성완료` 인 행 전부**를 반영한다(cmd_rename).
+    그래서 옛 라운드에서 만들어 두고 아직 반영 못 한 행이 남아 있으면, 재진입해 새로 지은
+    이름과 옛 이름이 **둘 다** 실리고 어느 쪽이 이길지는 행 순서가 정한다.
+    지금까지는 이걸 사람이 손으로 바꿔 두게 했다(prep 의 `[필수]` 안내) — 자동 재진입에서는
+    사람이 없으므로 append 가 직접 내린다.
+
+    `반영완료`·`보류`·`스킵` 행은 건드리지 않는다 — rename 대상이 아니고, E열 원본상품명이
+    되돌리기 경로다. 반환: 내린 행 수.
+    """
+    from eroomlib.gsheets import sheets_get, sheets_update  # noqa: E402
+
+    if not pids:
+        return 0
+    ncol = len(NAME_HEADER)
+    rows = sheets_get(sheet, f"'{tab}'!A2:{_col_letter(ncol)}") or []
+    i_id, i_status = NAME_HEADER.index("상품id"), NAME_HEADER.index("상태")
+    col, n = [], 0
+    for r in rows:
+        r = list(r) + [""] * (ncol - len(r))
+        cur = str(r[i_status]).strip()
+        if str(r[i_id]).strip() in pids and cur == "생성완료":
+            reason = str((reasons or {}).get(str(r[i_id]).strip()) or "재진입")[:60]
+            col.append([matrix.redo_value(reason)])
+            n += 1
+        else:
+            col.append([r[i_status]])
+    if not n or dry_run:
+        if n:
+            print(f"--- 옛 생성완료 행 내리기 (dry-run, {n}행) ---")
+        return n
+    sl = _col_letter(i_status + 1)
+    sheets_update(sheet, f"'{tab}'!{sl}2:{sl}{len(col) + 1}", col)
+    print(f"  옛 `생성완료` 행 {n}개를 재작업으로 내렸습니다(중복 반영 방지)")
+    return n
+
+
+def cmd_mark(args):
+    """상품명 탭에서 지정 pid들의 **마지막 행** 상태를 일괄 변경한다.
+
+    append 는 새 행만 쓰고 rename 되쓰기는 생성완료→반영완료 전용이라, 기존 행 상태를
+    바꾸는 자동 수단은 이것뿐이다. 용도: ①카테고리 재교정 저장분 `재작업(카테고리변경)`
+    ②표본검수 의심 `보류(표본의심)` ③실물불명 자동삭제 `상품삭제(실물불명·자동)`.
+    같은 pid 가 여러 행이면 마지막 행만 바꾼다(마지막 행이 최신 — matrix 규약과 동일).
+    상태열(+--note 시 메모열)을 통째로 되쓴다 — rename 과 같은 패턴이므로 도는 동안
+    그 시트의 상태열을 손으로 편집하지 않는다.
+    """
+    from eroomlib.gsheets import sheets_get, sheets_update  # noqa: E402
+
+    ncol = len(NAME_HEADER)
+    rows = sheets_get(args.sheet, f"'{args.tab}'!A2:{_col_letter(ncol)}")
+    i_id = NAME_HEADER.index("상품id")
+    i_status = NAME_HEADER.index("상태")
+    i_memo = NAME_HEADER.index("메모")
+    want = {str(x).strip() for x in args.ids if str(x).strip()}
+    last_row = {}
+    for idx, r in enumerate(rows):
+        r = list(r) + [""] * (ncol - len(r))
+        pid = str(r[i_id]).strip()
+        if pid in want:
+            last_row[pid] = idx
+    missing = sorted(want - set(last_row))
+    if missing:
+        print(f"  [경고] 시트에 없는 상품id {len(missing)}건: "
+              f"{missing[:5]}{' …' if len(missing) > 5 else ''}")
+    if not last_row:
+        print("###MARK### 0건 — 대상 행이 없습니다.")
+        return
+    hit = set(last_row.values())
+    status_col, memo_col = [], []
+    for idx, r in enumerate(rows):
+        r = list(r) + [""] * (ncol - len(r))
+        if idx in hit:
+            status_col.append([args.status])
+            old = str(r[i_memo]).strip()
+            memo_col.append([(old + " | " if old else "") + args.note if args.note
+                             else r[i_memo]])
+        else:
+            status_col.append([r[i_status]])
+            memo_col.append([r[i_memo]])
+    sl = _col_letter(i_status + 1)
+    sheets_update(args.sheet, f"'{args.tab}'!{sl}2:{sl}{len(status_col) + 1}", status_col)
+    if args.note:
+        ml = _col_letter(i_memo + 1)
+        sheets_update(args.sheet, f"'{args.tab}'!{ml}2:{ml}{len(memo_col) + 1}", memo_col)
+    print(f"###MARK### {len(hit)}건 → '{args.status}'"
+          + (" (메모 덧붙임)" if args.note else ""))
+
+
+# ---------------------------------------------------------------------------
 # status — 남은 배치 나열 + 워커 분배표 (순수 파일 glob, LLM·MCP·시트 무관)
 # ---------------------------------------------------------------------------
 
@@ -1442,8 +1847,14 @@ def main():
     p1.add_argument("--sheet-map", default=None,
                     help="--targets-json 과 함께. pid→그룹시트 매핑(sheet_map.json)")
     p1.add_argument("--run-dir", required=True)
-    p1.add_argument("--source-date", default=None, help="셀러라이프 통다운 YYMMDD")
+    p1.add_argument("--source-date", default=None,
+                    help="셀러라이프 통다운 YYMMDD. 생략하면 드라이브 최신 통다운을 쓰고, "
+                         "7일을 넘겼거나 전체카테고리 zip 이 없으면 새로 받는다")
     p1.add_argument("--raw-dir", default=None)
+    p1.add_argument("--nokw-mode", action="store_true",
+                    help="무키워드 모드 — 배치에 `무키워드모드:true` 를 실어 워커가 "
+                         "직결어 0개여도 원본·원문·옵션명 단어로 짓게 한다. "
+                         "카테고리 재교정까지 소진한 잔여분 전용(2026-08-06)")
     p1.add_argument("--zip", default=None)
     p1.add_argument("--limit", type=int, default=None, help="상위 N건만 (파일럿용)")
     p1.add_argument("--ids", nargs="+", default=None,
@@ -1504,12 +1915,33 @@ def main():
     p5.add_argument("--run-dir", required=True)
     p5.set_defaults(func=cmd_check)
 
+    p6 = sub.add_parser("fix-r9", help="R9 단독 실패 기계 재배열(기본 dry-run) — 재팬아웃 전에")
+    p6.add_argument("--run-dir", required=True)
+    p6.add_argument("--commit", action="store_true", help="named 제자리 저장(없으면 dry-run)")
+    p6.set_defaults(func=cmd_fix_r9)
+
+    p7 = sub.add_parser("holds", help="보류 3종+카테고리미설정 pid 집계(JSON, 시트 무관)")
+    p7.add_argument("--run-dir", required=True)
+    p7.add_argument("--catfix-run", help="재교정 run-dir. 주면 `카테고리의심` 을 "
+                                         "`무키워드대상`(catfix=이미정확)과 `카테고리수동큐` 로 쪼갠다")
+    p7.set_defaults(func=cmd_holds)
+
+    p8 = sub.add_parser("mark", help="상품명 탭 기존 행(pid별 마지막 행)의 상태 일괄 변경")
+    p8.add_argument("--ids", nargs="+", required=True)
+    p8.add_argument("--status", required=True,
+                    help="예: '재작업(카테고리변경)' / '보류(표본의심)' / '상품삭제(실물불명·자동)'")
+    p8.add_argument("--note", default="", help="메모열 끝에 덧붙일 사유")
+    p8.add_argument("--group-name", default="", help="마켓그룹명(시트 조회 키)")
+    p8.add_argument("--sheet", default="", help="스프레드시트 id 직접 지정(그룹명 조회 대신)")
+    p8.add_argument("--tab", default=NAME_TAB, help="기록할 탭 이름")
+    p8.set_defaults(func=cmd_mark)
+
     args = ap.parse_args()
     try:
         # dry-run 이어도 재개 판정에 시트를 읽으므로 먼저 확정한다.
         # (prep --no-resume/--views-only/--targets-json, append --sheet-map, status, check 는
         #  시트를 아예 안 읽으므로 예외 — 유니크 풀링(대량다듬기 M3b)이 후자 둘을 추가했다)
-        skip_sheet = args.cmd in ("status", "check") or (
+        skip_sheet = args.cmd in ("status", "check", "fix-r9", "holds") or (
             args.cmd == "prep" and (args.no_resume or args.views_only or args.targets_json)) or (
             args.cmd == "append" and getattr(args, "sheet_map", None))
         if not skip_sheet:

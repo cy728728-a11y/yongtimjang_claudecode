@@ -10,9 +10,10 @@ Claude다(썸네일·중국어 원문을 보는 판단이라 규칙으로 못 �
 기다리는 프로그램"이 아니라 **Claude가 조종하는 진행 관리자**다. 존재 이유는 두 가지 —
 ① Claude가 단계 순서를 착각하지 않게 하고 ② 세션이 끊겨도 진행 상태가 파일에 남게 한다.
 
-**게이트 모드가 설계의 핵심.** 지금은 매 단계 멈추고(`step`), 최종 목적지는 완전 자동(`none`)이다.
-그 사이를 코드 재작성 없이 건너려면, 모드가 바뀌어도 *명령 시퀀스는 동일하고 멈춤 여부만*
-달라져야 한다. `test_onestep.py` 가 이걸 검증한다.
+**게이트 모드가 설계의 핵심.** 2026-08-06부터 기본이 완전 자동(`none`)이다 — 이룸님 개입은
+시작 1회 + 종합보고 1회, 자동 commit 도 승인로그에 남는다. `step`(단계마다 멈춤)은 수동 정밀
+모드로 남아 있고, 모드가 바뀌어도 *명령 시퀀스는 동일하고 멈춤 여부만* 달라진다.
+`test_onestep.py` 가 이걸 검증한다.
 
 설계: `00-system/04-specs/2026-07-28-헤르메스-step4-세로러너-design.md`
 """
@@ -39,10 +40,10 @@ PY = sys.executable or "python"
 # ---------------------------------------------------------------------------
 GATES = ("step", "product", "risky", "none")
 GATE_HELP = {
-    "step":    "단계마다 저장 직전에 멈춘다 (지금 기본 — 승인하며 스킬을 깎는 단계)",
+    "step":    "단계마다 저장 직전에 멈춘다 (수동 정밀 모드 — 명시 지정 시)",
     "product": "3단계 가공을 다 모은 뒤 1번 멈춘다 (계획서 게이트①)",
     "risky":   "이상 신호가 있을 때만 멈춘다",
-    "none":    "안 멈춘다 (완전 자동)",
+    "none":    "안 멈춘다 (완전 자동 — 2026-08-06부터 기본. 승인로그엔 자동으로 남는다)",
 }
 
 # 단계 상태 — 앞으로만 간다.
@@ -106,21 +107,22 @@ STEPS = [
                    "대표 검색어를 정해 keywords.json 을 만든다",
         "output":  "keywords.json",
         "prep_out": "names.json",
-        # 재시도(force)면 셀하를 다시 태운다 — 기본은 --resume 이라 검색어를 바꿔도
-        # 옛 조회 결과를 그대로 쓴다(= 고친 게 반영 안 된다).
+        # 재시도(force)면 카테고리 조회(aside)를 다시 태운다 — 기본은 --resume 이라
+        # 검색어를 바꿔도 옛 조회 결과를 그대로 쓴다(= 고친 게 반영 안 된다).
         "preview": lambda c: _catfix(c, "finish", "--dry-run",
                                      *(["--force"] if c.get("force") else [])),
         "commit":  lambda c: _catfix(c, "finish"),
     },
     {
         "name": "상품명", "dir": "02-상품명", "deps": ["카테고리"],
-        # --source-date = 셀러라이프 통다운 YYMMDD. 카테고리 키워드 후보의 원천이라
-        # 없으면 prep 이 중단된다. state 에 실어 두고 매번 자동 주입한다.
+        # --source-date = 셀러라이프 통다운 YYMMDD. 카테고리 키워드 후보의 원천이다.
+        # state 에 실어 두고 매번 자동 주입한다. 비어 있으면 넘기지 않고,
+        # resolve_raw_dir 이 드라이브 최신 + 7일 규칙으로 알아서 고른다(2026-08-06).
         "prep":    lambda c: _pname(c, "prep", "--group-id", str(c["group_id"]),
                                     "--ids", c["pid"],
                                     *(["--source-date", c["source_date"]]
                                       if c.get("source_date") else [])),
-        "run":     "batches/ 를 읽고 썸네일로 실물을 확인한 뒤 카테고리 키워드 2~3개를 골라 "
+        "run":     "batches/ 를 읽고 썸네일로 실물을 확인한 뒤 카테고리 키워드 2~5개를 골라 "
                    "상품명을 만들어 named/ 에 쓴다",
         "output":  "named/",
         "prep_out": "batches_index.json",
@@ -143,7 +145,10 @@ STEPS = [
         # "무엇을 승인할지"(생성본 이미지) 자체가 실제 생성을 돌려야만 나온다. 그래서
         # preview 에서 크레딧이 든다. commit 은 그 결과를 review.html 로 본 뒤의 최종
         # 반영이다(review.html 은 이미지라 여기 검수표엔 경로만 찍힌다 — signals.py 참조).
-        "name": "썸네일", "dir": "04-썸네일", "deps": ["카테고리"],
+        # deps 에 옵션이 있는 이유: 썸네일 규칙 0(대표옵션 기준)이 옵션 단계가 세운
+        # 대표옵션을 읽는다. 옵션이 보류돼도 썸네일이 대표옵션 없이 앞서가면 안 된다
+        # (SKILL.md §세로 순서가 대표옵션 정합을 만든다 — 2026-08-06 코드로 강제).
+        "name": "썸네일", "dir": "04-썸네일", "deps": ["카테고리", "옵션"],
         "prep":    lambda c: _thumb(c, "prep", "--ids", c["pid"]),
         "run":     "batches/ 를 읽고 원본 적합성 8기준으로 기준 이미지를 고르고(+레시피 "
                    "모드면 배경전략·프롬프트 작성) results/result_NNN.json 에 쓴다",
@@ -290,7 +295,7 @@ def _blocked(st, step):
 
 def next_action(st):
     """다음에 할 일 1개. 반환 dict 의 `종류` = prep / run / preview / gate / commit / 완료."""
-    gate = st.get("gate", "step")
+    gate = st.get("gate", "none")
 
     # 1) 가공(prep→run→preview)을 DAG 순서로 밀어 올린다
     for s in STEPS:
@@ -450,6 +455,17 @@ def do_commit(st, step, dry=False):
     rc = _sh(STEP_BY_NAME[step]["commit"](c), dry)
     if rc != 0:
         raise SystemExit(f"[중단] {step} commit 실패 (exit {rc})")
+    # 자동 모드(게이트 승인 없이 commit)도 승인로그에 남긴다 — 감사 추적은 게이트와
+    # 무관하게 유지한다(2026-08-06 이룸님: 전 스킬 자동 반영 전환).
+    if not dry and not (st["단계"].get(step) or {}).get("승인"):
+        d = st["단계"].get(step) or {}
+        try:
+            approval_log.record(
+                st["sheet"], c["pid"], step, "자동(2026-08-06 정책)",
+                signals=_all_signals(d), gate=st.get("gate", ""),
+                summary=d.get("가결정", ""), attempts=_attempts(d))
+        except Exception as e:            # 로그 실패가 저장을 되돌리진 않는다
+            print(f"  [경고] 승인로그 기록 실패: {e}")
     if step == "카테고리" and not dry:
         snapshot.commit_provisional(c["pid"])
     _set(st, step, 상태=DONE)
@@ -695,7 +711,7 @@ def cmd_hold(a):
 
 # `--from` = 어느 단계부터 다시 하나 → 되돌아갈 상태.
 # 판단(run)만 고쳐 다시 보고 싶을 때 prep 부터 되돌리면 workdata·썸네일을 다시 받는다.
-# 실전 1건에서 바로 걸렸다: 검색어만 바꿔 셀하를 다시 태우면 되는데 경로가 없었다.
+# 실전 1건에서 바로 걸렸다: 검색어만 바꿔 조회를 다시 태우면 되는데 경로가 없었다.
 REDO_FROM = {"prep": TODO, "run": PREPPED, "preview": RAN}
 
 
@@ -764,7 +780,7 @@ def cmd_rebuild(a):
     new = {
         "productId": a.pid, "그룹": group, "sheet": sheet,
         "group_id": a.group_id or (st or {}).get("group_id", 0),
-        "gate": a.gate or (st or {}).get("gate", "step"),
+        "gate": a.gate or (st or {}).get("gate", "none"),
         "source_date": a.source_date or (st or {}).get("source_date", ""),
         "상품": rec.get("상품", ""),
         "생성": (st or {}).get("생성") or time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -802,8 +818,8 @@ def main():
     s.add_argument("--sheet", default="", help="그룹 시트 id 직접 지정")
     s.add_argument("--group-id", type=int, default=0, help="불사자 마켓그룹 id (상품명 prep 필수)")
     s.add_argument("--source-date", default="",
-                   help="셀러라이프 통다운 YYMMDD (상품명 prep 필수)")
-    s.add_argument("--gate", choices=GATES, default="step")
+                   help="셀러라이프 통다운 YYMMDD. 생략하면 드라이브 최신(7일 넘으면 새로 받음)")
+    s.add_argument("--gate", choices=GATES, default="none")
     s.add_argument("--force", action="store_true", help="기존 상태를 버리고 새로 시작")
     s.set_defaults(func=cmd_start)
 

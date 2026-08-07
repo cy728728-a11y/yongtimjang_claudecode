@@ -77,7 +77,10 @@ class MainOptionRenderTest(unittest.TestCase):
         row = {k: v for k, v in self.ROW.items()
                if k not in ("대표옵션명", "대표옵션이미지")}
         out = H.render({"U01": row})
-        self.assertNotIn("대표옵션", out)
+        # 페이지 상단 판정 도움말은 항상 "대표옵션"을 언급한다(2026-08-05) —
+        # 카드 안의 칸(라벨·머리글)만 없어야 한다.
+        self.assertNotIn("대표옵션 = 기준", out)
+        self.assertNotIn("대표옵션:", out)
         self.assertIn("https://a/gen.jpg", out)   # 나머지는 그대로 렌더된다
 
     def test_생성_실패해도_대표옵션명은_보인다(self):

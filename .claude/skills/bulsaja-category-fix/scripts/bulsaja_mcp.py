@@ -48,6 +48,8 @@ while _d and _d != os.path.dirname(_d):
 
 from eroomlib import snapshot  # 공용 상품 스냅샷(workdata 캐시)  # noqa: E402
 from eroomlib.snapshot import ProductMCP as _BaseMCP  # transport + workdata  # noqa: E402
+# '이미 끝난 행' 정의는 eroomlib.matrix 한 곳에만 둔다 — 여기서 다시 나열하면 두 벌이 어긋난다.
+from eroomlib.matrix import CATFIX_DONE, DELETED_PREFIX  # noqa: E402
 
 
 class BulsajaMCP(_BaseMCP):
@@ -92,6 +94,48 @@ def _norm_path(p):
     if not p:
         return ""
     return ">".join(seg.strip() for seg in str(p).split(">"))
+
+
+def is_already_correct(prev_path, target_path):
+    """이전 카테고리 == 조회 카테고리(정규화 비교) → 저장할 게 없다.
+
+    한쪽이라도 비어 있으면 '같다'로 보지 않는다('미설정' 상품이 전부 이미정확이 되면 안 됨).
+    """
+    a, b = _norm_path(prev_path), _norm_path(target_path)
+    return bool(a) and bool(b) and a == b
+
+
+def is_done_status(status):
+    """시트 G열 값이 '이미 끝난 행'인가.
+
+    Step 1(collect_targets)의 재개 규칙과 apply 의 원장 보호가 **같은 정의**를 쓰게 한다.
+    `저장완료`/`자동저장완료`/`이미정확` + `상품삭제…`(상품이 사라진 행).
+    """
+    s = (status or "").strip()
+    return bool(s) and (s in CATFIX_DONE or s.startswith(DELETED_PREFIX))
+
+
+def rows_to_skip(statuses, resume_all=False, force=False):
+    """{시트행: G열상태} → 이번 apply 가 건드리면 안 되는 행 집합.
+
+    - 기본: 완료 상태만 보호(저장완료·자동저장완료·이미정확·상품삭제*)
+    - resume_all(--resume-sheet): 상태가 있기만 하면 전부 스킵(중단 후 이어달리기)
+    - force(--force): 아무것도 스킵하지 않는다(예전 전건 덮어쓰기 동작)
+    """
+    if force:
+        return set()
+    if resume_all:
+        return {r for r, v in statuses.items() if (v or "").strip()}
+    return {r for r, v in statuses.items() if is_done_status(v)}
+
+
+def _read_status_col(spreadsheet_id, tab, max_row):
+    """시트 G열(상태)을 1회 읽어 {행번호: 상태}. 헤더가 1행이라 2행부터."""
+    from eroomlib.gsheets import sheets_get
+    if not max_row or max_row < 2:
+        return {}
+    rows = sheets_get(spreadsheet_id, f"{tab}!G2:G{max_row}")
+    return {i + 2: ((r[0] or "").strip() if r else "") for i, r in enumerate(rows)}
 
 
 # ---- CLI ------------------------------------------------------------
@@ -185,15 +229,29 @@ def cmd_apply(args):
         import sheet_log  # noqa
         sheet = sheet_log.SheetLogger(args.sheet)
 
-    # 시트 기반 재개: G열 채워진 행(이미 처리)은 건너뜀
-    if args.resume_sheet and args.sheet:
-        from eroomlib.gsheets import sheets_get
-        tab = getattr(sheet_log, "DEFAULT_TAB", "시트1")
-        gcol = sheets_get(args.sheet, f"{tab}!G2:G{2 + max((it.get('row') or 0) for it in items)}")
-        done_rows = {i + 2 for i, r in enumerate(gcol) if r and r and r[0].strip()}
-        before = len(items)
-        items = [it for it in items if it.get("row") not in done_rows]
-        print(f"[resume-sheet] 이미 처리 {before - len(items)}행 스킵 → 남은 {len(items)}건")
+    # 시트 원장 보호(+재개): G열(상태)을 1회 읽어 건드리면 안 되는 행을 뺀다.
+    # ★2026-08-04 결함: apply 는 decisions 전건의 B:K 를 무조건 덮어썼다. decisions 는
+    #   조회 결과 기준이라 후처리(steer·근접저장·consensus)로 `저장완료`가 된 행을
+    #   `매칭불가`로 되돌린다. 불사자 저장은 멀쩡한데 원장만 거짓이 되므로 재개 판단·
+    #   상품명 연계가 전부 틀어진다. Step 1 의 재개 규칙을 apply 에도 적용해 막는다.
+    if sheet and items and not args.force:
+        max_row = max((it.get("row") or 0) for it in items)
+        try:
+            statuses = _read_status_col(args.sheet, sheet.tab, max_row)
+        except Exception as e:  # noqa: BLE001
+            # 조용히 진행하면 원장을 덮어쓴다 — 못 읽으면 아예 하지 않는다.
+            print(f"[중단] 시트 상태열 조회 실패: {str(e)[:200]}", file=sys.stderr)
+            print("  강행하려면 --force(전건 덮어쓰기) 또는 --no-sheet", file=sys.stderr)
+            sys.exit(4)
+        skip = rows_to_skip(statuses, resume_all=args.resume_sheet, force=args.force)
+        if skip:
+            before = len(items)
+            items = [it for it in items if it.get("row") not in skip]
+            kinds = sorted({statuses.get(r, "") for r in skip} - {""})
+            print(f"[apply] 시트 기저장 {before - len(items)}건 건너뜀 "
+                  f"({'·'.join(kinds)[:120]}) → 남은 {len(items)}건. 덮어쓰려면 --force")
+    elif args.force:
+        print("[apply] --force: 시트 상태 무시하고 전건 덮어쓴다")
 
     if args.limit and args.limit > 0:
         items = items[:args.limit]
@@ -223,6 +281,11 @@ def cmd_apply(args):
                 d["상태"] = "보류(정체불명)"
             elif (it.get("sellha상태") or "") not in ("성공", "") or not keyword:
                 d["상태"] = "sellha조회실패"
+            elif is_already_correct(it.get("기존카테고리"), sell_path):
+                # 이전 == 조회 카테고리 → 저장할 게 없다. preview·commit 둘 다 태우지 않는다.
+                # (확신도와 무관: 어느 쪽이든 카테고리는 그대로다. 상태표 정의 그대로)
+                d["상태"] = "이미정확"
+                d["변경카테고리"] = it.get("기존카테고리", "")
             else:
                 pv = mcp.category_preview(pid, keyword)
                 applied = _norm_path(pv["ss_name"])
@@ -349,7 +412,9 @@ def main():
     a.add_argument("--sheet", help="구글시트 spreadsheetId(건건 기록)")
     a.add_argument("--no-sheet", action="store_true", help="시트 기록 비활성(테스트)")
     a.add_argument("--resume-sheet", action="store_true",
-                   help="시트 G열 채워진 행(이미 처리)은 건너뜀")
+                   help="시트 G열 채워진 행(이미 처리)은 전부 건너뜀(중단 후 이어달리기)")
+    a.add_argument("--force", action="store_true",
+                   help="시트에 이미 완료로 기록된 행도 재조회·재저장하고 덮어쓴다(기본 off)")
     a.add_argument("--limit", type=int, default=0, help="이번 실행 N건만(청크). 0=전체")
     a.add_argument("--sleep", type=float, default=0.4, help="상품 간 대기(초)")
     a.set_defaults(func=cmd_apply)

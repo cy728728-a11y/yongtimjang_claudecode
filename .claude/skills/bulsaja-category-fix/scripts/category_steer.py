@@ -149,7 +149,9 @@ def main():
                 d = {"상품명": it.get("상품명", ""), "기존카테고리": it.get("기존카테고리", ""),
                      "변경카테고리": hit["ss"], "검색어": hit["kw"], "확신도": it.get("확신도", ""),
                      "상태": "저장완료" if cm["success"] else "저장실패",
-                     "위험": "근접저장(셀하≠불사자)" if hit["near"] else ""}
+                     # I열은 '어떤 경로로 맞췄나'를 사후에 되짚는 유일한 단서다.
+                     # 입력이 지정하면 그걸 쓴다(예 consensus(2/3)·수동지정(이룸님)).
+                     "위험": it.get("위험") or ("근접저장(셀하≠불사자)" if hit["near"] else "")}
                 try:
                     logger.update_row(row, d)
                 except Exception as e:

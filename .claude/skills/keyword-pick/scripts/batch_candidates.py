@@ -39,7 +39,19 @@ except ImportError:
     print("ERROR: openpyxl not installed. Run: pip install openpyxl>=3.1.0", file=sys.stderr)
     sys.exit(1)
 
-DEFAULT_BLACKLIST = r"D:\python_work\data\sellerlife\keyword_blacklist\keyword_blacklist.xlsx"
+# 이관 전 로컬 기본경로(있으면 그대로 쓴다). 마스터는 구글드라이브로 이관됨(2026-08-01)
+# — 로컬에 없으면 eroomlib.gdrive.ensure_blacklist() 가 캐시로 내려받는다.
+LEGACY_LOCAL_BLACKLIST = r"<data_root>\sellerlife\keyword_blacklist\keyword_blacklist.xlsx"
+
+
+def resolve_blacklist(path_arg=None):
+    """--blacklist 명시 > 구 로컬 경로(존재 시) > 드라이브 마스터(캐시 다운로드)."""
+    if path_arg:
+        return path_arg
+    if os.path.exists(LEGACY_LOCAL_BLACKLIST):
+        return LEGACY_LOCAL_BLACKLIST
+    from eroomlib import gdrive  # kwlib import 시 lib 가 sys.path 에 올라 있다
+    return gdrive.ensure_blacklist()
 
 # 계단 구간 상한(상품수) 및 구간별 캡 — 기본값 = ④ keyword-pick 기존 동작
 DEFAULT_TIERS = "10000:15,20000:10,30000:10"
@@ -257,7 +269,8 @@ def main():
     parser = argparse.ArgumentParser(description="프리필터 결과 → 상품별 계단태깅 후보 JSON 청크 생성")
     parser.add_argument("run_dir", help="manifest.json/targets.json이 있는 실행 디렉토리. candidates/ 하위에 출력")
     parser.add_argument("--chunk-size", type=int, default=10, help="청크당 상품 수 (default: 10)")
-    parser.add_argument("--blacklist", default=DEFAULT_BLACKLIST, help="키워드 블랙리스트 xlsx 경로")
+    parser.add_argument("--blacklist", default=None,
+                        help="키워드 블랙리스트 xlsx 경로 (기본: 구 로컬 경로 → 드라이브 마스터)")
     parser.add_argument("--tiers", default=DEFAULT_TIERS,
                         help=f"계단 구간 '상한:캡' 목록. 상한 0=무제한(마지막만). default: {DEFAULT_TIERS}")
     parser.add_argument("--relevance-cap", type=int, default=0,
@@ -298,7 +311,7 @@ def main():
 
     categories = manifest.get("categories", {})
     parents_meta = manifest.get("parents", {})
-    excluded_keywords, brand_roots = load_blacklist(args.blacklist)
+    excluded_keywords, brand_roots = load_blacklist(resolve_blacklist(args.blacklist))
 
     out_dir.mkdir(parents=True, exist_ok=True)
 

@@ -362,6 +362,11 @@ def main():
             if fn.lower().endswith(".zip"):
                 zip_path = os.path.join(args.raw_dir, fn)
                 break
+    if not zip_path:
+        # zip = 12개 대분류 원본. 없으면 raw-dir 에 미리 풀려 있는 대분류(보통 셀러라이프
+        # 가공용 3개)밖에 못 쓰고, 나머지 상품은 아래에서 통째로 '파일확보실패'가 된다.
+        print("[경고] raw-dir 에 전체카테고리 zip 이 없습니다 — 미리 풀려 있는 대분류만 "
+              f"스캔합니다: {args.raw_dir}")
 
     source_date = detect_source_date(args.raw_dir, zip_path)
     targets_hash = compute_targets_hash(targets)
@@ -436,6 +441,16 @@ def main():
     }
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    # 파일확보실패는 "그 상품에 키워드가 없다"가 아니라 "원본이 없어 못 봤다"다.
+    # not_found 에만 적고 지나가면 무키워드로 오인되므로 반드시 눈에 띄게 알린다.
+    missing = [n for n in not_found if n.get("사유") == "파일확보실패"]
+    if missing:
+        majors = sorted({str(n.get("카테고리", "")).split(">")[0].strip() for n in missing})
+        print(f"###WARN_SOURCE_MISSING### 상품 {len(missing)}건이 통다운 원본을 못 찾아 "
+              f"스캔조차 못 했습니다 — 대분류: {', '.join(majors)}")
+        print("  통다운 폴더에 전체카테고리 zip 이 있는지 확인하세요 "
+              "(python -m eroomlib.gdrive runs). 무키워드가 아니라 원본 결손입니다.")
 
     total_rows = sum(v["rows"] for v in categories.values())
     print(f"###DONE### 카테고리 {len(categories)}건 저장, 총 {total_rows}행 / not_found {len(not_found)}건")

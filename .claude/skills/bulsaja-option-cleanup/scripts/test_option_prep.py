@@ -121,16 +121,17 @@ class AuditAndPlansTest(unittest.TestCase):
         self.assertEqual(rows["U01a"]["메모"], "새것")
         self.assertEqual(len(rows), 2, "중복이 두 행으로 불어나면 안 된다")
 
-    def test_마지막_차원_값이_1개면_수동판단_보류(self):
-        # 제품유형 32 × 전력 1 모양(U01KR7VXBEAKCP3392VXQ9B415J 사례) — 어디 붙여도
-        # 문제라 자동 저장을 막는다. 규칙대로 붙인 결과가 검증을 통과해 버리는 게 위험.
+    def test_마커수동은_폐지됐다(self):
+        # 제품유형 32 × 전력 1 모양이면 예전엔 '보류(기본형 수동판단)' 으로 멈췄다.
+        # 규칙 17이 확정되면서(값 2개 이상인 마지막 차원에 붙인다) 오염이 사라져 폐지됐다.
+        # **옛 run-dir 의 계획에 이 키가 남아 있어도 무시해야 한다** — 안 그러면 이미
+        # 해소된 건이 영영 보류로 남는다(용쌤1-1 에서 75건이 그랬다).
         self.assertEqual(
             run_options._status_of({"대표": "1", "이름검사": {}, "마커수동": True}, {}),
-            "보류(기본형 수동판단)")
-        # 마커수동이 없으면 기존 흐름 그대로
-        self.assertNotEqual(
+            "정리대상")
+        self.assertEqual(
             run_options._status_of({"대표": "1", "이름검사": {}}, {}),
-            "보류(기본형 수동판단)")
+            "정리대상")
 
     def test_배치_정본이_없는_구형_run_dir은_대조를_생략한다(self):
         shutil.rmtree(os.path.join(self.run_dir, "batches"))
@@ -140,6 +141,250 @@ class AuditAndPlansTest(unittest.TestCase):
         self.assertEqual((warns, missing), ([], False))
         pids = [pid for pid, _, _ in run_options._plans(self.run_dir)]
         self.assertEqual(pids, ["U01legacy"])
+
+
+class ThumbPreferTest(unittest.TestCase):
+    """대표썸네일과 **바이트가 같은** 옵션 = 동률 자동 해소 (2026-08-06 이룸님).
+
+    비용 0이다 — prep 이 대표썸네일·옵션 이미지를 이미 받아 뒀다. 3-1 w1 실측:
+    `확인요` 5건 중 2건이 이 대조만으로 끝났다(승마가방·미끄럼틀).
+    """
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self._w("rep.jpg", b"THUMB")      # 대표썸네일
+        self._w("v1.jpg", b"other")
+        self._w("v2.jpg", b"THUMB")       # ← 대표썸네일과 동일
+        self.bp = {"대표썸네일": os.path.join(self.d, "rep.jpg"),
+                   "차원": [{"index": 0, "values": [
+                       {"vid": 1, "이미지": os.path.join(self.d, "v1.jpg")},
+                       {"vid": 2, "이미지": os.path.join(self.d, "v2.jpg")}]}]}
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def _w(self, name, data):
+        with open(os.path.join(self.d, name), "wb") as f:
+            f.write(data)
+
+    @staticmethod
+    def _opt(p1, p2):
+        return {"판매행": [
+            {"id": "1", "sale_price": p1, "stock": 9, "exclude": False},
+            {"id": "2", "sale_price": p2, "stock": 9, "exclude": False}]}
+
+    def test_동률이면_썸네일과_같은_파일을_고른다(self):
+        got = run_options._thumb_prefer_id(self.bp, self._opt(1000, 1000), ["1", "2"])
+        self.assertEqual(got, "2")
+
+    def test_동률군_밖이면_지목하지_않는다(self):
+        # 더 비싼 걸 지목하면 plan 이 무시하면서 경고를 하나 더 단다 → 오히려 확인요가 된다
+        got = run_options._thumb_prefer_id(self.bp, self._opt(1000, 2000), ["1", "2"])
+        self.assertEqual(got, "")
+
+    def test_일치가_없으면_빈값(self):
+        self._w("v2.jpg", b"nope")
+        got = run_options._thumb_prefer_id(self.bp, self._opt(1000, 1000), ["1", "2"])
+        self.assertEqual(got, "")
+
+    def test_유지에_없는_행은_후보가_아니다(self):
+        got = run_options._thumb_prefer_id(self.bp, self._opt(1000, 1000), ["1"])
+        self.assertEqual(got, "")
+
+    def test_복합옵션은_해당_차원_조각만_본다(self):
+        bp = {"대표썸네일": os.path.join(self.d, "rep.jpg"),
+              "차원": [{"index": 1, "values": [
+                  {"vid": 7, "이미지": os.path.join(self.d, "v2.jpg")}]}]}
+        opt = {"판매행": [
+            {"id": "1:3", "sale_price": 1000, "stock": 9, "exclude": False},
+            {"id": "1:7", "sale_price": 1000, "stock": 9, "exclude": False}]}
+        self.assertEqual(run_options._thumb_prefer_id(bp, opt, ["1:3", "1:7"]), "1:7")
+
+    def test_대표썸네일이_없으면_조용히_넘어간다(self):
+        self.assertEqual(run_options._thumb_prefer_id({}, self._opt(1000, 1000), ["1"]), "")
+
+
+class PartialSaveTest(unittest.TestCase):
+    """`보류(기본형)` 부분저장 (2026-08-06 이룸님).
+
+    발단: 3-1 워터건 — 워커가 뒤집힘(본품 19행 제외·부속 예비배터리 1행만 판매·대표)을
+    정확히 복구했는데 대표옵션 이름에 `기본형` 이 없다는 이유로 **저장이 통째로** 막혀,
+    스마트스토어에 배터리만 팔리는 채로 남아 있었다(w1 69건 중 12건이 이렇게 빠졌다).
+    """
+
+    @staticmethod
+    def _row(status):
+        return ("U01x", {"대표": "1"}, {"이름": {"1": "블랙"}}, status)
+
+    def test_기본형_보류도_저장_대상이다(self):
+        rows = [self._row("보류(기본형)")]
+        self.assertEqual([r[0] for r in run_options._commit_targets(rows)], ["U01x"])
+
+    def test_정리대상과_함께_고른다(self):
+        rows = [self._row("정리대상"), self._row("보류(기본형)")]
+        self.assertEqual(len(run_options._commit_targets(rows)), 2)
+
+    def test_무엇을_팔지가_안_정해진_보류는_저장하지_않는다(self):
+        for st in ("보류(대표충돌)", "보류(남길 옵션 없음)", "보류(이름규칙)",
+                   "확인요", "보류(스냅샷 없음)"):
+            with self.subTest(st=st):
+                self.assertEqual(run_options._commit_targets([self._row(st)]), [])
+
+    def test_최저가_동률_경고는_저장을_막지_않는다(self):
+        """2026-08-07 이룸님 — 대표는 원본 순서여도 되고, 썸네일만 대표옵션과 맞으면 된다.
+
+        `경고가 하나라도 있으면 확인요` 가 너무 뭉툭해서 3-2 에서 4건이 사람 큐에 쌓였다.
+        규칙이 이미 답을 내는 상황(동률→원본 순서)은 저장하고 썸네일로 넘긴다.
+        """
+        plan = {"대표": "r1", "경고": ["최저가 동률 14건 — 썸네일 최유사 판단 없이 원본 순서로 정했다"]}
+        self.assertEqual(run_options._status_of(plan, {}), "정리대상")
+
+    def test_그_밖의_경고는_종전대로_확인요(self):
+        plan = {"대표": "r1", "경고": ["뭔가 다른 경고"]}
+        self.assertEqual(run_options._status_of(plan, {}), "확인요")
+
+    def test_동률과_다른_경고가_같이_있으면_확인요(self):
+        """비차단 경고가 차단 경고를 덮어 통과시키면 안 된다."""
+        plan = {"대표": "r1", "경고": ["최저가 동률 2건 — …", "뭔가 다른 경고"]}
+        self.assertEqual(run_options._status_of(plan, {}), "확인요")
+
+    def test_부분저장은_옵션명을_보내지_않는다(self):
+        before = {"차원": [{"index": 0, "values": [{"vid": 1, "name": "A. 블랙"}]}]}
+        self.assertEqual(run_options._names_to_save({"이름": {"1": "블랙"}}, before, True), {})
+
+    def test_정상저장은_이름을_그대로_보낸다(self):
+        before = {"차원": [{"index": 0, "values": [{"vid": 1, "name": "A. 블랙"}]}]}
+        got = run_options._names_to_save({"이름": {"1": "블랙 기본형"}}, before, False)
+        self.assertEqual(got.get("1"), "블랙 기본형")
+
+    def test_부분저장_표시는_재작업이라_다음_회차가_집는다(self):
+        from eroomlib import matrix
+        v = matrix.redo_value(run_options.PARTIAL_REASON, from_task=run_options.TASK)
+        self.assertTrue(matrix.is_redo(v))
+        # 현황판 값이 재작업이면 pending 이 다시 골라낸다(보류였다면 영영 안 잡힌다)
+        self.assertEqual(matrix.pending({"U01x": {"옵션": v}}, "옵션"), ["U01x"])
+
+
+class HandoffTest(unittest.TestCase):
+    """이관 — 상품명은 저장 여부와 무관하게 넘어간다 (2026-08-06 이룸님).
+
+    발단: 상품명 이상이 가장 잘 보이는 자리가 `보류(대표충돌)`(상품명이 규격어로 지정한
+    대표를 워커가 본품이 아니라고 뺀 상태)인데, `_handoff` 가 저장 성공분만 넘겨
+    그 신호를 통째로 버리고 있었다.
+    """
+
+    def setUp(self):
+        self.calls = []
+        self._orig = run_options.matrix.flag_many
+        run_options.matrix.flag_many = self._flag
+
+    def tearDown(self):
+        run_options.matrix.flag_many = self._orig
+
+    def _flag(self, sheet, task, items, from_task=None, **kw):
+        self.calls.append((task, dict(items), from_task))
+        return len(items)
+
+    @staticmethod
+    def _row(pid, status, handoffs):
+        return (pid, {"대표": "1"}, {"이관": handoffs}, status)
+
+    def test_보류건도_상품명_이관은_넘어간다(self):
+        rows = [self._row("P1", "보류(대표충돌)",
+                          [{"단계": "상품명", "사유": "규격어 '3단'이 옵션에 없다"}])]
+        run_options._handoff("SHEET", rows, {}, {})       # done 이 비어 있다
+        self.assertEqual(len(self.calls), 1)
+        task, items, from_task = self.calls[0]
+        self.assertEqual((task, from_task), ("상품명", "옵션"))
+        self.assertIn("3단", items["P1"])
+
+    def test_보류건의_썸네일_이관은_넘기지_않는다(self):
+        # 대표가 확정돼야 대조 대상이 생긴다 — 저장 못 한 건은 넘길 근거가 없다
+        rows = [self._row("P1", "보류(대표충돌)",
+                          [{"단계": "썸네일", "사유": "대표색 불일치"}])]
+        run_options._handoff("SHEET", rows, {}, {})
+        self.assertEqual(self.calls, [])
+
+    def test_저장된_건은_종전대로_전부_넘어간다(self):
+        rows = [self._row("P1", "정리대상",
+                          [{"단계": "썸네일", "사유": "x"}, {"단계": "상품명", "사유": "y"}])]
+        run_options._handoff("SHEET", rows, {"P1": "완료"}, {})
+        self.assertEqual(sorted(c[0] for c in self.calls), ["상품명", "썸네일"])
+
+
+class DeletionCandidateTest(unittest.TestCase):
+    """`삭제후보` — 상품명과 옵션 실물이 아예 다른 품목 (2026-08-06 이룸님)."""
+
+    def test_삭제후보면_상태가_삭제대상이다(self):
+        st = run_options._status_of({"대표": "1"}, {"삭제후보": "상품명은 청소기, 옵션은 깔창"})
+        self.assertEqual(st, "보류(삭제대상)")
+
+    def test_계획이_멀쩡해도_삭제후보가_이긴다(self):
+        # 옵션을 정리해 봐야 팔 수 없는 물건이다 — 저장 대상에서 뺀다
+        plan = {"대표": "1", "이름검사": {}, "경고": []}
+        self.assertEqual(run_options._status_of(plan, {"삭제후보": "품목 불일치"}),
+                         "보류(삭제대상)")
+        self.assertEqual(run_options._commit_targets(
+            [("P1", plan, {"삭제후보": "x"}, "보류(삭제대상)")]), [])
+
+    def test_빈_삭제후보는_무시한다(self):
+        plan = {"대표": "1", "이름검사": {}, "경고": []}
+        self.assertEqual(run_options._status_of(plan, {"삭제후보": "  "}), "정리대상")
+
+
+class PrepCarriesRedoReasonTest(unittest.TestCase):
+    """배치에 `재작업사유` 를 실어야 워커가 §2-10(대표옵션 이미지 실물 확인)을 켠다.
+
+    안 실어 보내면 워커는 그 상품이 **썸네일에서 되돌아온 건**이라는 걸 모른다 —
+    옵션명만 보고 대표를 다시 세우고, 그 이미지가 또 도면이면 썸네일이 또 되돌린다.
+    옵션명으로는 알 수 없다(2026-08-07 실측: `1m 원목벤치 월넛 기본형`=도면 vs
+    `브러시 단일노즐 기본형`=실물 — 이름만으로는 전혀 구분되지 않았다).
+    """
+
+    REASON = "썸네일: 대표옵션 이미지가 비제품(도면·배너)"
+
+    def setUp(self):
+        import argparse
+        from eroomlib import matrix
+        self.argparse = argparse
+        self.matrix = matrix
+        self.run_dir = tempfile.mkdtemp()
+        self._orig = {"read": matrix.read, "redo_pending": matrix.redo_pending,
+                      "pending": matrix.pending, "mark_many": matrix.mark_many,
+                      "ensure": snapshot.ensure}
+        matrix.read = lambda sheet: {"U01x": {}}
+        matrix.pending = lambda m, task, **kw: ["U01x"]
+        matrix.mark_many = lambda sheet, task, d, matrix=None: len(d)
+        snapshot.ensure = lambda pids, **kw: ({pid: {
+            "상품명": "장대톱", "원문명": "高空锯", "기존카테고리": "공구",
+            "썸네일": ["https://img.alicdn.com/rep.jpg"],
+            "옵션": {"차원": [], "vid고유": True, "판매행": [
+                {"id": "1", "text": "기본형", "sale_price": 1000, "stock": 3,
+                 "exclude": False, "main_product": True, "urlRef": "https://a/m.jpg"}]},
+        } for pid in pids}, {})
+
+    def tearDown(self):
+        for k, v in self._orig.items():
+            setattr(self.matrix if k != "ensure" else snapshot, k, v)
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _batch_product(self, redo):
+        self.matrix.redo_pending = lambda m, task: redo
+        run_options.cmd_prep(self.argparse.Namespace(
+            run_dir=self.run_dir, sheet="SHEET", group_name=None, ids=None,
+            limit=0, batch_size=10, sleep=0, skip_thumbs=True,
+            max_option_images=12, max_px=512))
+        with open(os.path.join(self.run_dir, "batches", "batch_001.json"),
+                  encoding="utf-8") as f:
+            return json.load(f)["products"][0]
+
+    def test_이관_사유가_배치에_실린다(self):
+        p = self._batch_product({"U01x": self.REASON})
+        self.assertEqual(p["재작업사유"], self.REASON)
+
+    def test_재작업이_아니면_빈_문자열이다(self):
+        p = self._batch_product({})
+        self.assertEqual(p["재작업사유"], "")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """gws CLI(Google Workspace) 얇은 래퍼 — 시트 읽기/쓰기.
 
-계정은 chloe91727 (gws 인증 계정). 요청 바디는 --json, 쿼리는 --params.
+계정은 <gws 인증 계정>. 요청 바디는 --json, 쿼리는 --params.
 gws 출력의 첫 줄 'Using keyring backend: keyring' 같은 잡음은 걸러 JSON만 파싱.
 
 (구 bulsaja-category-fix/scripts/gws_util.py 를 eroomlib 로 승격. 동작 동일.)
@@ -119,6 +119,39 @@ def sheets_update(spreadsheet_id, rng, values_2d, value_input="RAW", max_retries
     raise RuntimeError(f"sheets_update 최대 재시도 초과({rng}): {last_err}")
 
 
+def sheets_batch_update(spreadsheet_id, data, value_input="USER_ENTERED",
+                        max_retries=4):
+    """**떨어져 있는 여러 range 를 한 호출로** 기록한다(values:batchUpdate).
+
+    `data` = [(range, values_2d), ...].
+
+    왜 필요한가: 재실행이면 대상 행이 이미 시트에 흩어져 있다. `sheets_update` 를
+    행마다 부르면 호출 수 = 행 수라 **분당 쓰기 쿼터(60)** 에 즉사한다
+    (용쌤1-3 기본형 재작업 92행에서 429 실측). 연속 구간 묶기로는 흩어진 행을 못 줄인다.
+    호출 1회 상한은 gws 의 명령줄 인자 길이라 분할은 호출자 책임이다.
+    """
+    if not data:
+        return None
+    args = ["sheets", "spreadsheets", "values", "batchUpdate",
+            "--params", json.dumps({"spreadsheetId": spreadsheet_id})]
+    body = {"valueInputOption": value_input,
+            "data": [{"range": r, "values": v} for r, v in data]}
+    last_err = None
+    for attempt in range(max_retries):
+        try:
+            return _run_gws(args, body=body)
+        except Exception as e:
+            msg, last_err = str(e), e
+            if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
+                wait = 2 ** (attempt + 1)
+                print(f"[gsheets] batchUpdate 429/쿼터 오류, {wait}초 대기 후 재시도 "
+                      f"({attempt + 1}/{max_retries}): {msg[:150]}", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            raise
+    raise RuntimeError(f"sheets_batch_update 최대 재시도 초과({len(data)}개 range): {last_err}")
+
+
 def chunk_by_size(rows, budget=12000):
     """행 목록을 **실제 JSON 길이** 기준으로 끊어 순서대로 내준다.
 
@@ -142,14 +175,10 @@ def chunk_by_size(rows, budget=12000):
 _RETRY_HINTS = ("429", "quota", "RESOURCE_EXHAUSTED", "rateLimitExceeded")
 
 
-def append_rows(spreadsheet_id, tab, rows, max_retries=8):
+def append_rows(spreadsheet_id, tab, rows, max_retries=4):
     """rows(2차원 리스트)를 탭 끝에 append (USER_ENTERED, INSERT_ROWS).
 
-    429/쿼터 초과 오류는 지수 백오프(2·4·8·16···초, 60초 상한) 후 최대 max_retries 회 재시도.
-    **재시도 4회(누적 14초)로는 부족하다** — 시트 쓰기 쿼터는 '분당 60회'라 한 번 소진되면
-    다음 창이 열릴 때까지 최대 1분을 기다려야 한다. 배치마다 append 를 부르는 호출자
-    (product-name append 는 배치 411개 × 2탭 ≈ 800회)는 그 창을 반드시 밟는다.
-    (2026-08-06 용쌤4-3 972건에서 실측: 4회 재시도로는 75행에서 죽었다.)
+    429/쿼터 초과 오류는 지수 백오프(2·4·8·16초) 후 최대 max_retries 회 재시도.
     그 외 오류(4xx 등)는 즉시 예외를 올린다.
     rows 가 크면 그대로 한 호출로 보낸다 — 청크 분할은 호출자 책임.
 
@@ -158,15 +187,6 @@ def append_rows(spreadsheet_id, tab, rows, max_retries=8):
     """
     if not rows:
         return 0
-
-    # gws 는 요청 본문을 명령행 인자로 받는다 — 윈도우 명령행 상한(약 32KB)을 넘으면
-    # CreateProcess 가 WinError 206 으로 죽는다(검수표처럼 긴 셀이 섞이면 20행도 넘긴다).
-    # 호출자의 청크 크기와 무관하게 여기서 직렬화 크기 기준으로 한 번 더 쪼갠다.
-    _MAX_BODY = 24000
-    if len(rows) > 1 and len(json.dumps({"values": rows}, ensure_ascii=False)) > _MAX_BODY:
-        mid = len(rows) // 2
-        return (append_rows(spreadsheet_id, tab, rows[:mid], max_retries)
-                + append_rows(spreadsheet_id, tab, rows[mid:], max_retries))
 
     args = [
         "sheets", "spreadsheets", "values", "append",
@@ -188,7 +208,7 @@ def append_rows(spreadsheet_id, tab, rows, max_retries=8):
             msg = str(e)
             last_err = e
             if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
-                wait = min(2 ** (attempt + 1), 60)   # 쿼터 창이 1분이라 그 이상 기다릴 이유가 없다
+                wait = 2 ** (attempt + 1)
                 print(f"[gsheets] append 429/쿼터 오류, {wait}초 대기 후 재시도 "
                       f"({attempt + 1}/{max_retries}): {msg[:150]}", file=sys.stderr)
                 time.sleep(wait)

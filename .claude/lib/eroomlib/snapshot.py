@@ -516,12 +516,46 @@ def fetch_image(url, refresh=False):
         return None, str(e)
 
 
-def materialize_image(url, out_dir, name_hint, idx, refresh=False):
+def shrink_image(path, max_px):
+    """이미지를 긴 변 `max_px` 로 축소한다(0 이하·None 이면 건너뜀). 제자리 저장.
+
+    **왜 있나**: 비전 토큰은 픽셀수에 비례한다(대략 W*H/750). 불사자 썸네일은 800~1024px
+    가 많아 1장에 850~1,400토큰인데, 워커 컨텍스트에 한 번 들어가면 그 뒤 모든 턴에서
+    다시 읽히므로 실질 비용이 수만 토큰이 된다(실측: 워커 비용의 97%가 캐시읽기).
+    512px 로 줄이면 ~350토큰이다.
+
+    **어디까지 줄여도 되는지는 용도마다 다르다.** 실물 정체 판별에는 512 로 충분하지만
+    이미지에 인쇄된 글자를 읽어야 하는 판정(스펙 표기 3000W↔8500W · 색상코드 `#FEFA50` ·
+    비제품 이미지의 중국어 안내문)은 더 큰 값이 필요하다. 그래서 값을 여기서 고정하지
+    않고 호출부가 정한다.
+
+    **호출부는 항상 복사본을 넘긴다** — 스냅샷 캐시 원본을 줄이면 다른 스킬이 더 큰
+    해상도를 원할 때 되돌릴 수 없다.
+    """
+    if not max_px or max_px <= 0:
+        return False
+    try:
+        from PIL import Image  # Pillow 없으면 원본 유지
+    except ImportError:
+        return False
+    try:
+        with Image.open(path) as im:
+            if max(im.size) <= max_px:
+                return False
+            im = im.convert("RGB")
+            im.thumbnail((max_px, max_px), Image.LANCZOS)
+            im.save(path, "JPEG", quality=85)
+        return True
+    except Exception:  # 한 장 실패가 prep 전체를 막지 않는다
+        return False
+
+
+def materialize_image(url, out_dir, name_hint, idx, refresh=False, max_px=None):
     """URL 을 캐시에서(없으면 받아서) `out_dir/<name_hint 24자>_<idx><확장자>` 로 복사.
 
     파일명 규칙은 기존 fetch_thumbs.py 와 **같다** — 소비 스킬의 산출물(names.json 의
     썸네일경로, 배치 뷰)이 바뀌지 않게 하려는 것. 스냅샷 원본은 절대 건드리지 않는다
-    (상품명 스킬이 512px 로 줄이는 대상은 이 복사본이다).
+    (줄이는 대상은 언제나 이 복사본이다 — `max_px` 참조).
     """
     src, err = fetch_image(url, refresh=refresh)
     if not src:
@@ -530,4 +564,5 @@ def materialize_image(url, out_dir, name_hint, idx, refresh=False):
     dst = os.path.join(out_dir, f"{safe}_{idx}{os.path.splitext(src)[1]}")
     os.makedirs(out_dir, exist_ok=True)
     shutil.copyfile(src, dst)
+    shrink_image(dst, max_px)
     return os.path.abspath(dst), None

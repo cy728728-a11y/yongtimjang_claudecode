@@ -98,14 +98,13 @@ def cmd_prep_kw(args):
         print("미처리 대상이 없습니다. 종료합니다.")
         return
 
-    # raw-dir 결정: 명시값 우선, 없으면 --source-date로 표준 경로 조립
+    # raw-dir 결정: 명시값 우선, 없으면 --source-date로 로컬 runs → 드라이브 캐시 순.
+    # (통다운 원본은 구글드라이브 51-셀러라이프-통다운으로 이관됨, 2026-08-01)
+    # --source-date 도 없으면 최신 통다운 + 7일 규칙(낡으면 새로 받기).
     raw_dir = args.raw_dir
     if not raw_dir:
-        if not args.source_date:
-            raise RuntimeError("--raw-dir 또는 --source-date 중 하나는 반드시 지정해야 합니다.")
-        raw_dir = os.path.join(
-            "D:\\python_work\\data\\sellerlife\\runs", args.source_date, "raw"
-        )
+        from eroomlib import gdrive
+        raw_dir = gdrive.resolve_raw_dir(args.source_date)
     if not os.path.isdir(raw_dir):
         raise RuntimeError(f"raw-dir가 존재하지 않습니다: {raw_dir}")
 
@@ -286,7 +285,9 @@ def main():
     p1.add_argument("--limit", type=int, default=None, help="미처리 상위 N개만 처리(파일럿용)")
     p1.add_argument("--raw-dir", default=None, help="통다운 raw xlsx 폴더 (미지정시 --source-date로 조립)")
     p1.add_argument("--zip", default=None, help="통다운 전체카테고리 zip 경로")
-    p1.add_argument("--source-date", default=None, help="YYMMDD, --raw-dir 미지정시 표준경로 조립에 사용")
+    p1.add_argument("--source-date", default=None,
+                    help="YYMMDD, --raw-dir 미지정시 표준경로 조립에 사용. 둘 다 없으면 "
+                         "드라이브 최신 통다운(7일 넘으면 새로 받음)")
     p1.set_defaults(func=cmd_prep_kw)
 
     p2 = sub.add_parser("append-kw", help="picked 결과 + 스킵마커를 02-키워드 탭에 append")

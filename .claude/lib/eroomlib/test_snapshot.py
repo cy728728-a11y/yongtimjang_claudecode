@@ -480,6 +480,70 @@ class PollAiTaskTest(unittest.TestCase):
             mcp.poll_ai_task("T1", interval=1, timeout=2, sleep_fn=lambda s: None)
 
 
+class ShrinkImageTest(unittest.TestCase):
+    """비전 토큰 절감의 단일 지점. 네 스킬이 전부 이 함수를 지난다.
+
+    계약: 줄이는 대상은 **복사본뿐**이고, 실패는 조용히 원본을 남긴다
+    (한 장 때문에 prep 전체가 멈추면 안 된다).
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        try:
+            from PIL import Image  # noqa: F401
+            self.pil = True
+        except ImportError:
+            self.pil = False
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _make(self, w, h, name="x.jpg"):
+        from PIL import Image
+        p = os.path.join(self.dir, name)
+        Image.new("RGB", (w, h), (200, 30, 30)).save(p, "JPEG")
+        return p
+
+    def _size(self, p):
+        from PIL import Image
+        with Image.open(p) as im:
+            return im.size
+
+    def test_긴변이_max_px_로_줄고_비율이_유지된다(self):
+        if not self.pil:
+            self.skipTest("Pillow 없음")
+        p = self._make(1000, 500)
+        self.assertTrue(snapshot.shrink_image(p, 512))
+        self.assertEqual(self._size(p), (512, 256))
+
+    def test_이미_작으면_건드리지_않는다(self):
+        if not self.pil:
+            self.skipTest("Pillow 없음")
+        p = self._make(400, 400)
+        before = os.path.getsize(p)
+        self.assertFalse(snapshot.shrink_image(p, 512))
+        self.assertEqual(self._size(p), (400, 400))
+        self.assertEqual(os.path.getsize(p), before)
+
+    def test_max_px_가_0_이거나_None_이면_no_op(self):
+        if not self.pil:
+            self.skipTest("Pillow 없음")
+        p = self._make(1000, 1000)
+        for v in (0, None, -1):
+            self.assertFalse(snapshot.shrink_image(p, v))
+        self.assertEqual(self._size(p), (1000, 1000))
+
+    def test_깨진_파일이어도_예외를_던지지_않는다(self):
+        p = os.path.join(self.dir, "broken.jpg")
+        with open(p, "wb") as f:
+            f.write(b"not an image")
+        self.assertFalse(snapshot.shrink_image(p, 512))  # 원본 그대로 남는다
+        self.assertTrue(os.path.exists(p))
+
+    def test_없는_경로도_예외를_던지지_않는다(self):
+        self.assertFalse(snapshot.shrink_image(os.path.join(self.dir, "없음.jpg"), 512))
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")

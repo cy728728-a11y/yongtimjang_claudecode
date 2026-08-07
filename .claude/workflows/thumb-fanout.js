@@ -1,29 +1,62 @@
 export const meta = {
   name: 'thumb-fanout',
-  description: '썸네일 run 팬아웃 — 비전 판단 배치를 이미지예산으로 묶어 Sonnet 워커에 분배 (생성·크레딧은 범위 밖)',
-  whenToUse: 'bulsaja-thumbnail SKILL.md run(Workflow 모드)이 지정한 경우에만',
+  description: '썸네일 팬아웃 — 기본은 기준이미지 선택(run) 배치, mode:prescreen 이면 기준적격(생성 전), mode:audit 이면 정합검사, mode:verdict 면 생성본 3축 판정 배치를 이미지예산으로 묶어 워커에 분배 (생성·크레딧은 범위 밖)',
+  whenToUse: 'bulsaja-thumbnail SKILL.md prescreen/run/audit/verdict(Workflow 모드)이 지정한 경우에만',
   phases: [
-    { title: '선택', detail: '워커당 누적 이미지 ≤24장 · 상품 ≤8건 빈패킹', model: 'sonnet' },
+    { title: '선택', detail: '워커당 누적 이미지 ≤24장 · 상품 ≤8건 빈패킹 (prescreen·verdict 는 haiku)' },
     { title: '오디트', detail: 'results 누락 배치 1회 재팬아웃' },
   ],
 }
-// args = { runDir: 절대경로, promptPath: 썸네일-워커-프롬프트.md 절대경로,
+// args = { runDir: 절대경로, promptPath: 지시서 절대경로(run=썸네일-워커-프롬프트 /
+//          prescreen=기준적격-판정기준 / audit=정합검사-판정기준 / verdict=검수-판정기준),
+//          mode?: 'prescreen'|'audit'|'verdict',
+//          model?: A/B 실측 전용 모델 오버라이드(기본은 모드별 — prescreen=haiku 그 외 sonnet),
 //          batches: [{ n: 3, path: "...batch_003.json", imgs: 22, count: 4 }...]  // pending만
 //          budgetImgs?: 24, maxCount?: 8, retried?: false }
 //
 // 스크립트는 파일시스템이 없다 — pending 산출은 호출자가 한다:
-//   run_thumbs.py pending --run-dir <R>   → 이 args 를 그대로 찍는다.
+//   run_thumbs.py pending --run-dir <R> [--audit|--verdict]   → 이 args 를 그대로 찍는다.
+//   (verdict 배치 자체는 run_thumbs.py verdict --run-dir <R> 가 만든다)
+// 세 모드는 결과 폴더가 전부 달라(results/ · audit_results/ · verdict/results/)
+// **같은 run-dir 에서 병렬 실행이 안전**하다 — 정합검사·검수 판정은 크레딧 0(판정뿐).
 // 대표옵션 확정건은 prep 이 result_000 에 선기록하고 배치에서 뺐다 — 여기 오는 건
-// 비전 판단건뿐이다. **이 워크플로는 results 생성까지다. apply --generate(크레딧 소모·
-// 자동반영 위험)는 절대 부르지 않는다 — 이룸님 승인 게이트 뒤 메인이 직접.**
+// 비전 판단건뿐이다. **이 워크플로는 results 생성까지다. apply --generate 는 절대
+// 부르지 않는다 — 자동반영 방어·복원이 걸린 구간이라 메인이 직접 바로 부른다
+// (승인 대기 없음, 2026-08-06 이룸님).**
 //
 // catfix-fanout 에서 검증된 하네스 특성 2개를 그대로 따른다:
 //  ① args 가 파싱 안 된 JSON 문자열로 도착할 수 있다 → 문자열이면 파싱.
 //  ② tool_use 스키마의 property key 는 ASCII 만 허용(API 400) → 스키마는 ASCII,
 //     사람이 읽는 최종 return 객체만 한글.
 const args_ = (typeof args === 'string') ? JSON.parse(args) : args
+const AUDIT = args_.mode === 'audit'
+const VERDICT = args_.mode === 'verdict'
+const PRESCREEN = args_.mode === 'prescreen'
+const OUT = AUDIT ? 'audit_results/audit_result_NNN.json'
+  : VERDICT ? 'verdict/results/vresult_NNN.json'
+    : PRESCREEN ? 'prescreen_results/presult_NNN.json'
+      : 'results/result_NNN.json'
+const KIND = AUDIT ? '정합' : VERDICT ? '검수' : PRESCREEN ? '기준적격' : '썸네일'
 const BUDGET = (args_.budgetImgs || 24)
-const MAXCOUNT = (args_.maxCount || 8)
+// prescreen 은 건당 이미지 1장이라 상품 상한이 예산을 먼저 때린다 — 배치(20건)를
+// 쪼갤 수 없게 상한을 배치 크기 이상으로 연다.
+const MAXCOUNT = (args_.maxCount || (PRESCREEN ? 40 : 8))
+
+// 모드별 모델 — **prescreen·verdict 는 haiku, run·audit 는 sonnet**(2026-08-07 실측).
+//
+// prescreen: 1장·1분류라 서술을 지어낼 표면이 없다. 57건 실측에서 수기 라벨과 12/12.
+// verdict  : 같은 72건·같은 지시서로 두 군 동시 실행 → **라벨 15건에서 둘 다 12 일치(동률)**
+//            인데 실비는 $3.35 → $1.41(**−58%**). 전환 근거는 "Haiku 가 낫다"가 아니라
+//            **"같은데 싸다"** 다. 오답의 성격은 오히려 Haiku 쪽이 낫다 — Sonnet 은 없는
+//            차이를 지어냈고(SMPS 환각이 지난 판정과 글자 그대로 재발), Haiku 는 실재하는
+//            차이의 경중을 다르게 봤다(서빙카트 캐스터 검정→은색).
+//            ⚠ **둘 다 진짜 결함 1건(장대톱 톱집 추가)을 놓쳤다** — 모델 문제가 아니다.
+// run      : A/B 에서 불일치 3건이 전부 Haiku 오답이었다(2건이 지시서 조항 흘림). 미전환.
+// audit    : 한 번도 안 쟀다. 미전환.
+//
+// `args.model` 로 덮어쓸 수 있다 — **모델 A/B 실측 전용**이다. 사본 워크플로를 두 개
+// 두면 지시서가 조용히 갈라지므로(상품명 A/B 교훈) 파일은 하나로 두고 인자로만 가른다.
+const MODEL = args_.model || ((PRESCREEN || VERDICT) ? 'haiku' : 'sonnet')
 
 // 빈패킹 — 큰 배치부터 first-fit. 상품당 이미지가 최대 6장(대표1+후보5)이라 기본
 // 배치(10건)면 배치 하나가 예산을 단독 초과한다 → SKILL.md 가 prep --batch-size 4 를
@@ -58,12 +91,35 @@ const SCHEMA = {
 }
 
 function prompt(bin) {
-  return `너는 불사자 썸네일 기준이미지 선택 워커다. 지시서 ${args_.promptPath} 를 Read 하고 그대로 따른다.\n` +
-    `절대 금지: apply --generate·스크립트·불사자 MCP 실행(크레딧·자동반영 위험).\n` +
-    `맡은 배치 파일 (각각 §1부터 §4까지 독립 수행, 순서대로):\n` +
+  const head = AUDIT
+    ? `너는 불사자 썸네일 정합검사 워커다. 판정기준 ${args_.promptPath} 를 Read 하고 그대로 따른다.\n` +
+      `상품마다 [대표옵션이미지경로 | 현재대표경로] 2장을 각 1회 Read 해 같은 물건인지 판정한다\n` +
+      `(일치/불일치/대조불가 — 불일치는 사유 필수). 크레딧 0 — 어떤 생성·MCP·스크립트도 부르지 않는다.\n`
+    : VERDICT
+      ? `너는 불사자 썸네일 검수 판정 워커다. 판정기준 ${args_.promptPath} 를 Read 하고 그대로 따른다.\n` +
+        `상품마다 [대표옵션경로 | 생성본경로 | 기존대표경로(있으면)] 을 각 1회 Read 해 3축으로 판정한다\n` +
+        `(사용가능/주의/제외/제외(대표옵션의심)/제외(글자변조)/제외(기준이미지없음) — 제외·주의는 사유 필수).\n` +
+        `제품 정확성 축은 절대 자동 통과 금지. 크레딧 0 — 어떤 생성·MCP·스크립트도 부르지 않는다.\n`
+      : PRESCREEN
+        ? `너는 불사자 썸네일 기준적격 판정 워커다. 판정기준 ${args_.promptPath} 를 Read 하고 그대로 따른다.\n` +
+          `상품마다 기준이미지경로 **1장만** 각 1회 Read 한다(다른 이미지는 열지 않는다).\n` +
+          `묻는 것은 "도면이냐"가 아니라 **이 한 장으로 만들 제품이 하나로 특정되나** 다\n` +
+          `(단일특정/다중혼재/실물없음 — 다중혼재·실물없음은 사유 필수, 이미지에서 읽은 글자를 인용).\n` +
+          `치수선·텍스트바가 얹혀 있어도 제품이 하나면 단일특정이다. 갈리면 다중혼재.\n` +
+          `크레딧 0 — 어떤 생성·MCP·스크립트도 부르지 않는다.\n`
+        : `너는 불사자 썸네일 기준이미지 선택 워커다. 지시서 ${args_.promptPath} 를 Read 하고 그대로 따른다.\n` +
+          `절대 금지: apply --generate·스크립트·불사자 MCP 실행(크레딧·자동반영 위험).\n`
+  const scope = (AUDIT || VERDICT || PRESCREEN)
+    ? '각각 독립 수행, 순서대로' : '각각 §0부터 §5까지 독립 수행, 순서대로'
+  return head +
+    `맡은 배치 파일 (${scope}):\n` +
     bin.items.map(b => `  - 배치 ${b.n}: ${b.path}  (상품 ${b.count}건 · 이미지 ${b.imgs}장)`).join('\n') +
-    `\n\n산출물은 ${args_.runDir}/results/result_NNN.json (NNN=배치번호 3자리 0채움).\n` +
-    `배치 하나당 Write 1회. 반환은 배치별 결과 배열(results)만.`
+    `\n\n산출물은 ${args_.runDir}/${OUT} (NNN=배치번호 3자리 0채움).\n` +
+    `배치 하나당 Write 1회. **배치의 모든 상품을 넣는다**(빠뜨리면 미판정이 '사용가능'으로 반영된다).\n` +
+    `반환은 배치별 결과 배열(results)만` +
+    (AUDIT ? ` — done=판정 건수, held=대조불가 상품id.`
+      : VERDICT ? ` — done=판정 건수, held=제외·주의 상품id.`
+        : PRESCREEN ? ` — done=판정 건수, held=다중혼재·실물없음 상품id.` : `.`)
 }
 
 phase('선택')
@@ -71,8 +127,8 @@ phase('선택')
 // 워커는 디스크에만 쓰고 상호 간섭이 없다. 상한은 이미지예산과 하네스 동시성 캡이 관리한다.
 const first = await parallel(bins.map((bin, i) => () =>
   agent(prompt(bin), {
-    label: `썸네일:${bin.items.map(b => b.n).join(',')}`,
-    phase: '선택', schema: SCHEMA, model: 'sonnet', effort: 'low',
+    label: `${KIND}:${bin.items.map(b => b.n).join(',')}`,
+    phase: '선택', schema: SCHEMA, model: MODEL, effort: 'low',
   })))
 
 const rows = first.filter(Boolean).flatMap(r => r.results || [])
@@ -87,8 +143,8 @@ if (missing.length && !args_.retried) {
   const rbins = missing.map(b => ({ imgs: b.imgs || 0, count: b.count || 0, items: [b] }))
   const again = await parallel(rbins.map(bin => () =>
     agent(prompt(bin), {
-      label: `재선택:${bin.items[0].n}`,
-      phase: '오디트', schema: SCHEMA, model: 'sonnet', effort: 'low',
+      label: `재${KIND}:${bin.items[0].n}`,
+      phase: '오디트', schema: SCHEMA, model: MODEL, effort: 'low',
     })))
   retryRows = again.filter(Boolean).flatMap(r => r.results || [])
 } else if (missing.length) {
@@ -109,7 +165,17 @@ return {
   오류: all.filter(r => r.error).map(r => ({ 배치: r.batch, 사유: r.error })),
   재팬아웃필요배치: stillMissing,
   다음: stillMissing.length
-    ? `배치 ${stillMissing.join(',')} 미완 — run_thumbs.py pending 으로 다시 확인 후 재호출`
-    : `run_thumbs.py apply --run-dir ${args_.runDir} 미리보기까지만. ` +
-      `--generate 는 크레딧 소모 — 이룸님 승인(게이트1) 후 메인이 직접 부른다.`,
+    ? `배치 ${stillMissing.join(',')} 미완 — run_thumbs.py pending${AUDIT ? ' --audit' : VERDICT ? ' --verdict' : PRESCREEN ? ' --prescreen' : ''} 으로 다시 확인 후 재호출`
+    : PRESCREEN
+      ? `run_thumbs.py prescreen --run-dir ${args_.runDir} --commit 으로 반영한다 ` +
+        `(다중혼재→batches/ 승격 · 실물없음→보류(기준이미지없음) · 단일특정→그대로 생성). ` +
+        `승격분이 있으면 pending → thumb-fanout(run) 을 한 번 더 돈다.`
+      : AUDIT
+      ? `run_thumbs.py audit --run-dir ${args_.runDir} --commit 으로 판정을 현황판에 반영한다 ` +
+        `(불일치→재작업 flag · 일치→완료(정합확인) · 대조불가→집계만).`
+      : VERDICT
+        ? `run_thumbs.py verdict --run-dir ${args_.runDir} --commit 으로 decisions.json 을 만든 뒤 ` +
+          `apply --commit 으로 반영한다(누락이 있으면 commit 이 차단한다).`
+        : `메인이 run_thumbs.py apply --run-dir ${args_.runDir} --generate 를 바로 부른다 ` +
+          `(승인 대기 없음, 2026-08-06 — 워크플로·워커는 부르지 않는다).`,
 }

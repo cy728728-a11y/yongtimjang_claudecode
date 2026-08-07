@@ -50,14 +50,17 @@ SHEET = _cfg("sheets.keyword_default")
 TAB = "시트1"
 
 
-# 셀하 조회는 sellha-category 스킬로 분리됨(Step4). 절대경로로 호출한다.
-SELLHA_SCRIPT = os.path.normpath(os.path.join(
-    SCRIPT_DIR, "..", "..", "sellha-category", "scripts", "sellha.py"))
+# 카테고리 조회 엔진은 별도 스킬로 분리돼 있다(Step4). 절대경로로 호출한다.
+#
+# 2026-08-04: 셀하 → Aside 전환. 셀하가 막혀 못 쓴다.
+# Aside 는 이룸님 브라우저 세션에 붙으므로 크롬 프로필·셀레늄·자격증명이 필요 없다.
+# 반환 스키마(카테고리경로·최종차수·확신도·상태)가 같아 아래 병합부는 그대로다.
+# 조회 전제: Aside 앱이 떠 있고 · 불사자 확장이 깔려 있고 · 네이버 로그인이 살아 있을 것.
+CAT_SCRIPT = os.path.normpath(os.path.join(
+    SCRIPT_DIR, "..", "..", "aside-category", "scripts", "aside_category.py"))
 
-# 셀하 확장이 설치된 크롬 프로필. 없으면 카테고리가 전건 빈값으로 온다.
-SELLHA_PROFILE = (os.environ.get("SELLHA_PROFILE")
-                  or _cfg("paths.sellha_profile")
-                  or "D:/python_work/data/sellha/profile")
+# 파일명(sellha.json)·시트열(sellha경로)·플래그(--skip-sellha)는 이름을 유지한다.
+# 기존 run-dir 의 --resume 과 시트 재개 로직이 그 이름에 물려 있어 바꾸면 깨진다.
 
 
 def sh(script, *args):
@@ -205,9 +208,9 @@ def cmd_finish(args):
     decisions = _p(args.run_dir, "decisions.json")
     keywords = args.keywords or _p(args.run_dir, "keywords.json")
 
-    # 4) 셀하 조회 (배치, 증분저장+재개). --force 면 처음부터 재조회
-    #    '보류(정체불명)' 건은 정체가 안 잡힌 것이라 셀하를 아예 태우지 않는다
-    #    (셀하 ~15초/건이 유일한 직렬 병목 — 어차피 2바퀴에서 재조회하므로 1회만 태운다).
+    # 4) 카테고리 조회 (배치, 증분저장+재개). --force 면 처음부터 재조회
+    #    '보류(정체불명)' 건은 정체가 안 잡힌 것이라 조회를 아예 태우지 않는다
+    #    (조회 ~10초/건이 유일한 직렬 병목 — 어차피 2바퀴에서 재조회하므로 1회만 태운다).
     with open(keywords, encoding="utf-8") as f:
         kw_list = json.load(f)
     kw_map = {k.get("productId"): k for k in kw_list}
@@ -219,19 +222,23 @@ def cmd_finish(args):
             json.dump([k for k in kw_list if k.get("productId") not in held],
                       f, ensure_ascii=False, indent=2)
         keywords_for_sellha = askable
-        print(f"[보류] 정체불명 {len(held)}건은 셀하 조회 제외 → 2바퀴 큐")
+        print(f"[보류] 정체불명 {len(held)}건은 카테고리 조회 제외 → 2바퀴 큐")
     else:
         keywords_for_sellha = keywords
 
     if args.force and os.path.exists(sellha):
         os.remove(sellha)
-    # ★ 셀하는 이제 **확장 프로필**이 있어야 카테고리를 준다(2026-07-31, 네이버 API 종료 여파).
-    # 헤드리스에서는 확장이 안 돌아 전건 파싱실패가 된다 → 창 모드 고정.
-    # 프로필 준비 → sellha-category/SKILL.md §확장 프로필 준비
-    sh(SELLHA_SCRIPT, "--input", keywords_for_sellha, "--output", sellha,
-       "--profile", SELLHA_PROFILE, "--resume",
-       "--sleep", args.sellha_sleep, "--sleep-max", args.sellha_sleep_max,
-       "--rest-every", args.sellha_rest_every)
+    # ★ 조회 전제(하나라도 빠지면 전건 파싱실패): Aside 앱 실행중 · 불사자 확장 설치 ·
+    # 네이버 로그인 유지. 준비 → aside-category/SKILL.md §준비
+    if getattr(args, "skip_sellha", False):
+        # 조회를 못 하는 환경에서 **이미 조회된 것만** 저장한다.
+        # 미조회 건은 아래 병합에서 제외한다 — merged 에 남기면 apply 가 빈 검색어를
+        # 'sellha조회실패'로 시트 G열에 찍고, 그러면 재개 로직이 그 행을 영영 건너뛴다.
+        print("[skip-sellha] 카테고리 조회 생략 — sellha.json 에 이미 있는 건만 저장한다")
+    else:
+        # --sleep/--sleep-max 는 이전엔 파싱만 하고 안 넘겨 죽은 옵션이었다. 이제 실제로 넘긴다.
+        sh(CAT_SCRIPT, "--input", keywords_for_sellha, "--output", sellha, "--resume",
+           "--sleep", args.sellha_sleep, "--sleep-max", args.sellha_sleep_max)
 
     # 5) 병합 (products + keywords + sellha, productId 기준)
     with open(products, encoding="utf-8") as f:
@@ -239,9 +246,13 @@ def cmd_finish(args):
     with open(sellha, encoding="utf-8") as f:
         sl = {r.get("productId"): r for r in json.load(f)}
     merged_list = []
+    skipped_unqueried = 0
     for pid, w in prods.items():
         s = sl.get(pid, {})
         k = kw_map.get(pid, {})
+        if getattr(args, "skip_sellha", False) and not s and pid not in held:
+            skipped_unqueried += 1
+            continue
         thumbs = w.get("썸네일") or []
         merged_list.append({
             "productId": pid, "상품명": w.get("상품명", ""), "row": w.get("row"),
@@ -256,6 +267,9 @@ def cmd_finish(args):
     with open(merged, "w", encoding="utf-8") as f:
         json.dump(merged_list, f, ensure_ascii=False, indent=2)
     print(f"\n병합 {len(merged_list)}건 → {merged}")
+    if skipped_unqueried:
+        print(f"[skip-sellha] 미조회 {skipped_unqueried}건은 병합 제외 "
+              f"(시트 G열을 비워 둬야 다음 실행이 이어받는다)")
 
     # 6) 적용 (미리보기→비교→커밋 + 시트 건건 기록)
     apply_args = ["apply", "-i", merged, "-o", decisions,
@@ -266,6 +280,10 @@ def cmd_finish(args):
         apply_args.append("--no-sheet")
     else:
         apply_args += ["--sheet", args.sheet]
+    # 기본은 시트에 이미 `저장완료`인 행을 건드리지 않는다(후처리 결과 보호).
+    # 전건 재조회·덮어쓰기가 필요할 때만 --overwrite-done.
+    if getattr(args, "overwrite_done", False):
+        apply_args.append("--force")
     sh("bulsaja_mcp.py", *apply_args)
     print("\n" + "=" * 56)
     print(f"[finish 완료] 결과 {decisions}"
@@ -273,7 +291,7 @@ def cmd_finish(args):
 
 
 # ── 팬아웃 3종(batch / merge / steer)의 계산부 ───────────────────────────────
-# 순수 함수로 떼어 둔다 — MCP·시트·셀하 없이 test_run_all.py 가 검증한다.
+# 순수 함수로 떼어 둔다 — MCP·시트·조회 없이 test_run_all.py 가 검증한다.
 
 def make_batches(names_list, size, rules):
     """names.json → 자기완결형 배치. 워커는 배치 파일 경로 하나로 완주할 수 있어야 한다."""
@@ -295,7 +313,7 @@ def merge_named(named_docs, expected):
 
     디스크가 정본이므로 같은 상품이 두 번 와도(재팬아웃) 마지막이 이긴다.
     모르는 상품id 는 버린다 — 워커 환각이 원장에 들어가면 되돌릴 경로가 없다.
-    name 도 상태도 없는 결과는 **보류로 강등**한다. 그대로 두면 셀하를 태워
+    name 도 상태도 없는 결과는 **보류로 강등**한다. 그대로 두면 조회를 태워
     빈 검색어로 조회하고 '조회실패'가 되어 원인이 지워진다.
     """
     want = list(dict.fromkeys(expected))
@@ -365,6 +383,230 @@ def _conf(v):
         return float(str(v).replace("%", "").strip())
     except (TypeError, ValueError):
         return None
+
+
+# ── consensus(2/3) — 저확신·매칭불가 잔여의 자동 승격 (2026-08-05 이룸님 확정) ──
+# 원검색어 1표 + Claude 가 만든 변형 2표. 전체 경로가 2표 이상 일치하면 저장을
+# 승격한다(통과분만 자동, 실패분은 건드리지 않고 종합보고). 규칙 원문은
+# SKILL.md §검색어 변형 consensus — 변형 도출 자체는 Claude 가 한다(분야 한정어 유지).
+
+def _norm_cat(p):
+    """경로 정규화 — '>' 둘레 공백 차이로 같은 경로가 다른 표가 되는 걸 막는다."""
+    return ">".join(s.strip() for s in str(p or "").split(">") if s.strip())
+
+
+def consensus_targets(decisions, merged, kw_map, steer_saved):
+    """consensus 대상 = 미저장 잔여.
+
+    - `변경대상`: 정확일치인데 확신도<임계라 apply 가 커밋하지 않은 건
+    - `매칭불가`·`부분일치확인요`: steer(유도)로도 저장 안 된 건
+    sellha조회실패·보류·이미정확은 제외 — 원경로(1표)가 없거나 저장이 필요 없다.
+    원경로가 빈 건도 제외한다(1표가 없으면 2/3 자체가 성립 불가 → 수동 큐).
+    """
+    mg = {m.get("productId"): m for m in merged}
+    out = []
+    for d in decisions:
+        st, pid = d.get("상태"), d.get("productId")
+        if st == "변경대상":
+            pass
+        elif st in ("매칭불가", "부분일치확인요"):
+            if pid in steer_saved:
+                continue
+        else:
+            continue
+        m = mg.get(pid) or {}
+        path = _norm_cat(m.get("sellha경로"))
+        if not path:
+            continue
+        out.append({
+            "productId": pid, "row": d.get("row"), "상품명": d.get("상품명", ""),
+            "기존카테고리": d.get("기존카테고리", ""),
+            "실물판정": (kw_map.get(pid) or {}).get("실물판정", ""),
+            "원검색어": m.get("검색어", ""), "원경로": path,
+            "원최종차수": m.get("최종차수", "") or path.split(">")[-1],
+            "원확신도": m.get("확신도", ""), "원상태": st,
+        })
+    return out
+
+
+def consensus_vote(votes_in):
+    """3표(원검색어+변형2)의 전체 경로 일치 판정 — 순수 함수(test_run_all.py 대상).
+
+    입력: [{"경로", "확신도", "최종차수", "검색어"}] (경로 빈 표는 무효표로 버린다)
+    - 같은 경로 2표 이상        → `채택` (확신도 = 일치 표 중 최고, keyword = 그 표의 최종차수)
+    - 유효 3표가 전부 다른 경로 → `실물판정의심` (검색어가 아니라 실물 판정이 흔들린다
+                                   — 기존 규칙의 '변형끼리 불일치 = recheck 신호')
+    - 그 외(유효표 부족·불일치)  → `합의없음`
+    """
+    from collections import Counter
+    votes = []
+    for r in votes_in:
+        p = _norm_cat(r.get("경로"))
+        if p:
+            votes.append({"경로": p, "확신도": _conf(r.get("확신도")) or 0.0,
+                          "최종차수": r.get("최종차수") or p.split(">")[-1],
+                          "검색어": r.get("검색어", "")})
+    cnt = Counter(v["경로"] for v in votes)
+    if cnt:
+        top, n = cnt.most_common(1)[0]
+        if n >= 2:
+            best = max((v for v in votes if v["경로"] == top),
+                       key=lambda v: v["확신도"])
+            return {"판정": "채택", "target": top, "확신도": best["확신도"],
+                    "keyword": best["최종차수"], "표": votes}
+    if len(votes) >= 3 and len(cnt) == len(votes):
+        return {"판정": "실물판정의심", "표": votes}
+    return {"판정": "합의없음", "표": votes}
+
+
+def _post_steer_matrix(sheet, result_path, label="유도"):
+    """steer 계열(유도·consensus) 저장 후 공통 후처리 — 현황판 카테고리 완료 표시
+    + 상품명 재작업 이관. (bulsaja_mcp.py apply 가 자동저장분에 하는 일과 같은 계약)
+
+    반환: 저장된 pid set (호출자가 집계·보고에 쓴다)
+    """
+    try:
+        with open(result_path, encoding="utf-8") as f:
+            res = json.load(f)
+    except OSError:
+        return set()
+    saved = {r["productId"] for r in res if r.get("saved")}
+    if not saved:
+        print(f"  {label} 저장 0건 — 현황판 변경 없음")
+        return saved
+    try:
+        from eroomlib import matrix
+        m = matrix.read(sheet)
+        n = matrix.mark_many(sheet, "카테고리",
+                             {p: "완료" for p in saved}, matrix=m)
+        k = matrix.flag_many(sheet, "상품명",
+                             {p: "카테고리 변경 — 키워드 재선정 필요" for p in saved},
+                             from_task="카테고리", matrix=m)
+        print(f"  현황판 카테고리 {n}칸 · 상품명 재작업 {k}건")
+    except Exception as e:  # noqa: BLE001
+        print(f"  [경고] 현황판 갱신 실패: {str(e)[:120]}", file=sys.stderr)
+    return saved
+
+
+def cmd_consensus(args):
+    """consensus 2단계 — prep(대상 추출) / run(변형 조회→2/3 판정→유도 저장).
+
+    Claude 판단(변형 도출)이 중간에 끼므로 catfix 본체(prep→finish)와 같은 2단계다.
+      prep: 미저장 잔여 → consensus_targets.json + 변형 작성 안내
+      (Claude 가 consensus_variants.json 작성: [{productId, 변형: ["v1","v2"]}])
+      run : 변형만 조회(원검색어 1표는 이미 있다) → 2/3 판정 → 통과분 category_steer
+            (위험 라벨 consensus(2/3)) → 현황판 후처리. 실패분은 consensus_fail.json.
+    """
+    tpath = _p(args.run_dir, "consensus_targets.json")
+
+    if args.stage == "prep":
+        with open(_p(args.run_dir, "decisions.json"), encoding="utf-8") as f:
+            decisions = json.load(f)
+        with open(_p(args.run_dir, "merged.json"), encoding="utf-8") as f:
+            merged = json.load(f)
+        kw_path = _p(args.run_dir, "keywords.json")
+        kw_map = {}
+        if os.path.exists(kw_path):
+            with open(kw_path, encoding="utf-8") as f:
+                kw_map = {k.get("productId"): k for k in json.load(f)}
+        steer_saved = set()
+        sr_path = _p(args.run_dir, "steer_result.json")
+        if os.path.exists(sr_path):
+            with open(sr_path, encoding="utf-8") as f:
+                steer_saved = {r["productId"] for r in json.load(f) if r.get("saved")}
+        targets = consensus_targets(decisions, merged, kw_map, steer_saved)
+        with open(tpath, "w", encoding="utf-8") as f:
+            json.dump(targets, f, ensure_ascii=False, indent=2)
+        by_st = {}
+        for t in targets:
+            by_st[t["원상태"]] = by_st.get(t["원상태"], 0) + 1
+        print(f"[consensus prep] 대상 {len(targets)}건 "
+              + json.dumps(by_st, ensure_ascii=False) + f" → {tpath}")
+        if targets:
+            print("다음: 각 건의 실물판정·원검색어로 **변형 2개**를 만들어 "
+                  f"{_p(args.run_dir, 'consensus_variants.json')} 작성")
+            print('  형식: [{"productId": "...", "변형": ["변형1", "변형2"]}]')
+            print("  규칙: SKILL.md §검색어 변형 consensus (분야 한정어 유지, 실물판정 불변)")
+            print(f"그 후: python run_all.py consensus run --run-dir {args.run_dir}")
+        return
+
+    # ── run ──
+    with open(tpath, encoding="utf-8") as f:
+        targets = json.load(f)
+    if not targets:
+        print("[consensus run] 대상 0건")
+        return
+    vpath = _p(args.run_dir, "consensus_variants.json")
+    with open(vpath, encoding="utf-8") as f:
+        variants = {v.get("productId"): [s for s in (v.get("변형") or []) if s]
+                    for v in json.load(f)}
+
+    # 변형만 조회한다 — 원검색어 1표는 sellha.json(=merged 원경로)에 이미 있다.
+    queries = [{"productId": t["productId"], "name": v}
+               for t in targets for v in variants.get(t["productId"], [])]
+    qpath = _p(args.run_dir, "consensus_queries.json")
+    rpath = _p(args.run_dir, "consensus_result.json")
+    if queries:
+        with open(qpath, "w", encoding="utf-8") as f:
+            json.dump(queries, f, ensure_ascii=False, indent=2)
+        # 캡챠·차단이면 aside 가 비정상 종료 → sh 가 예외로 멈춘다(수동 해제 후 재실행,
+        # --resume 이라 조회분은 보존된다).
+        sh(CAT_SCRIPT, "--input", qpath, "--output", rpath, "--resume",
+           "--sleep", args.sellha_sleep, "--sleep-max", args.sellha_sleep_max)
+    rows = []
+    if os.path.exists(rpath):
+        with open(rpath, encoding="utf-8") as f:
+            rows = json.load(f)
+    by_pid = {}
+    for r in rows:
+        by_pid.setdefault(r.get("productId"), []).append(r)
+
+    steer_in, fails = [], {"합의없음": [], "실물판정의심": [], "변형없음": []}
+    for t in targets:
+        pid = t["productId"]
+        if not variants.get(pid):
+            fails["변형없음"].append({"productId": pid, "원검색어": t["원검색어"]})
+            continue
+        votes = [{"경로": t["원경로"], "확신도": t["원확신도"],
+                  "최종차수": t["원최종차수"], "검색어": t["원검색어"]}]
+        votes += [{"경로": r.get("카테고리경로", ""), "확신도": r.get("확신도", ""),
+                   "최종차수": r.get("최종차수", ""), "검색어": r.get("검색어", "")}
+                  for r in by_pid.get(pid, [])]
+        v = consensus_vote(votes)
+        if v["판정"] == "채택":
+            steer_in.append({
+                "productId": pid, "row": t.get("row"), "target": v["target"],
+                "keyword": v["keyword"], "mode": "exact",
+                "상품명": t.get("상품명", ""), "기존카테고리": t.get("기존카테고리", ""),
+                "확신도": v["확신도"], "위험": "consensus(2/3)",
+            })
+        else:
+            fails[v["판정"]].append({"productId": pid, "원검색어": t["원검색어"],
+                                     "표": v["표"]})
+    fpath = _p(args.run_dir, "consensus_fail.json")
+    with open(fpath, "w", encoding="utf-8") as f:
+        json.dump(fails, f, ensure_ascii=False, indent=2)
+    print(f"[consensus run] 채택 {len(steer_in)} · 합의없음 {len(fails['합의없음'])} "
+          f"· 실물판정의심 {len(fails['실물판정의심'])} · 변형없음 {len(fails['변형없음'])}")
+
+    if not steer_in:
+        print("###CONSENSUS### 저장 0건 (전건 수동 큐 → 종합보고)")
+        return
+    sin = _p(args.run_dir, "consensus_steer.json")
+    sout = _p(args.run_dir, "consensus_steer_result.json")
+    with open(sin, "w", encoding="utf-8") as f:
+        json.dump(steer_in, f, ensure_ascii=False, indent=2)
+    steer_args = ["--input", sin, "--output", sout, "--sleep", args.sleep]
+    if args.dry_run:
+        steer_args.append("--dry-run")
+    if not args.no_sheet:
+        steer_args += ["--sheet", args.sheet]
+    sh("category_steer.py", *steer_args)
+    if args.dry_run or args.no_sheet:
+        return
+    saved = _post_steer_matrix(args.sheet, sout, label="consensus")
+    print(f"###CONSENSUS### 채택 {len(steer_in)} / 저장 {len(saved)} / "
+          f"수동잔여 {len(fails['합의없음']) + len(fails['실물판정의심']) + len(fails['변형없음'])}")
 
 
 RULES_DOC = os.path.normpath(os.path.join(
@@ -480,33 +722,13 @@ def cmd_steer(args):
     if args.dry_run or args.no_sheet:
         return
     # 저장된 건은 카테고리가 실제로 바뀐 것 → 현황판 갱신 + 상품명 재작업 이관.
-    # (bulsaja_mcp.py apply 가 자동저장분에 대해 하는 일과 같은 계약)
-    try:
-        with open(sout, encoding="utf-8") as f:
-            res = json.load(f)
-    except OSError:
-        return
-    saved = {r["productId"]: r for r in res if r.get("saved")}
-    if not saved:
-        print("  유도 저장 0건 — 현황판 변경 없음")
-        return
-    try:
-        from eroomlib import matrix
-        m = matrix.read(args.sheet)
-        n = matrix.mark_many(args.sheet, "카테고리",
-                             {p: "완료" for p in saved}, matrix=m)
-        k = matrix.flag_many(args.sheet, "상품명",
-                             {p: "카테고리 변경 — 키워드 재선정 필요" for p in saved},
-                             from_task="카테고리", matrix=m)
-        print(f"  현황판 카테고리 {n}칸 · 상품명 재작업 {k}건")
-    except Exception as e:  # noqa: BLE001
-        print(f"  [경고] 현황판 갱신 실패: {str(e)[:120]}", file=sys.stderr)
+    _post_steer_matrix(args.sheet, sout, label="유도")
 
 
 def cmd_auto(args):
     """merge → finish → steer 를 한 프로세스로. **백그라운드로 띄우는 진입점.**
 
-    셀하가 ~15초/건이라 수백 건이면 몇 시간이 걸린다. 대화 세션이 이걸 붙잡고 있으면
+    조회가 ~10초/건이라 수백 건이면 몇 시간이 걸린다. 대화 세션이 이걸 붙잡고 있으면
     턴이 쌓여 컨텍스트가 차고, 그래서 지금까지 세션이 쪼개졌다. 한 프로세스로 묶어
     백그라운드에 두면 메인은 시작·확인 두 턴이면 된다.
     """
@@ -522,6 +744,8 @@ def cmd_auto(args):
     a.sellha_sleep = args.sellha_sleep
     a.sellha_sleep_max = args.sellha_sleep_max
     a.sellha_rest_every = args.sellha_rest_every
+    a.skip_sellha = getattr(args, "skip_sellha", False)
+    a.overwrite_done = getattr(args, "overwrite_done", False)
     cmd_finish(a)
 
     a.sleep = "0.3"
@@ -623,13 +847,17 @@ def main():
     f.add_argument("--sleep", default="0.4")
     f.add_argument("--dry-run", action="store_true", help="미리보기만")
     f.add_argument("--no-sheet", action="store_true")
-    f.add_argument("--force", action="store_true", help="셀하 재조회")
-    f.add_argument("--sellha-sleep", default="5",
-                   help="셀하 조회 간 최소 대기(초) (2026-08-01 3→5 상향 — 실제 IP 차단 발생 이후)")
-    f.add_argument("--sellha-sleep-max", default="15",
-                   help="셀하 조회 간 최대 대기(초). 실제는 최소~최대 난수 (2026-08-01 10→15 상향)")
-    f.add_argument("--sellha-rest-every", default="10",
-                   help="평균 N건마다 긴 휴식. 0=끔 (2026-08-01 25→10 상향 — 더 잦은 휴식)")
+    f.add_argument("--force", action="store_true", help="카테고리 재조회")
+    f.add_argument("--overwrite-done", action="store_true",
+                   help="시트에 이미 `저장완료`인 행도 덮어쓴다(기본은 보호·건너뜀)")
+    f.add_argument("--skip-sellha", action="store_true",
+                   help="카테고리 조회 생략 — sellha.json 에 이미 있는 건만 저장(미조회분은 병합 제외)")
+    f.add_argument("--sellha-sleep", default="1",
+                   help="카테고리 조회 간 최소 대기(초). Aside 전환으로 3→1")
+    f.add_argument("--sellha-sleep-max", default="3",
+                   help="카테고리 조회 간 최대 대기(초). 실제는 최소~최대 난수")
+    f.add_argument("--sellha-rest-every", default="25",
+                   help="(현 엔진에선 미사용) 평균 N건마다 긴 휴식")
     f.set_defaults(func=cmd_finish)
 
     b = sub.add_parser("batch", help="names.json → batches/ (팬아웃 단위)")
@@ -664,13 +892,17 @@ def main():
     au.add_argument("--sleep", default="0.4")
     au.add_argument("--dry-run", action="store_true")
     au.add_argument("--no-sheet", action="store_true")
-    au.add_argument("--force", action="store_true", help="셀하 재조회")
-    au.add_argument("--sellha-sleep", default="5",
-                   help="셀하 조회 간 최소 대기(초) (2026-08-01 3→5 상향 — 실제 IP 차단 발생 이후)")
-    au.add_argument("--sellha-sleep-max", default="15",
-                   help="셀하 조회 간 최대 대기(초). 실제는 최소~최대 난수 (2026-08-01 10→15 상향)")
-    au.add_argument("--sellha-rest-every", default="10",
-                   help="평균 N건마다 긴 휴식. 0=끔 (2026-08-01 25→10 상향 — 더 잦은 휴식)")
+    au.add_argument("--force", action="store_true", help="카테고리 재조회")
+    au.add_argument("--overwrite-done", action="store_true",
+                    help="시트에 이미 `저장완료`인 행도 덮어쓴다(기본은 보호·건너뜀)")
+    au.add_argument("--skip-sellha", action="store_true",
+                    help="카테고리 조회 생략 — sellha.json 에 이미 있는 건만 저장")
+    au.add_argument("--sellha-sleep", default="1",
+                   help="카테고리 조회 간 최소 대기(초). Aside 전환으로 3→1")
+    au.add_argument("--sellha-sleep-max", default="3",
+                   help="카테고리 조회 간 최대 대기(초). 실제는 최소~최대 난수")
+    au.add_argument("--sellha-rest-every", default="25",
+                   help="(현 엔진에선 미사용) 평균 N건마다 긴 휴식")
     au.set_defaults(func=cmd_auto)
 
     r = sub.add_parser("recheck", help="2바퀴: 보류(정체불명) 건 증거 보강")
@@ -678,6 +910,17 @@ def main():
     r.add_argument("--keywords", help="keywords.json 경로(기본 run-dir/keywords.json)")
     r.add_argument("--ids", nargs="+", help="대상 productId 직접 지정(기본=보류 전건)")
     r.set_defaults(func=cmd_recheck)
+
+    cs = sub.add_parser("consensus",
+                        help="저확신·매칭불가 잔여의 검색어 변형 2/3 자동 승격 (prep→run)")
+    cs.add_argument("stage", choices=["prep", "run"])
+    cs.add_argument("--run-dir", required=True)
+    cs.add_argument("--sleep", default="0.3", help="steer 저장 간격(초)")
+    cs.add_argument("--sellha-sleep", default="1")
+    cs.add_argument("--sellha-sleep-max", default="3")
+    cs.add_argument("--dry-run", action="store_true")
+    cs.add_argument("--no-sheet", action="store_true")
+    cs.set_defaults(func=cmd_consensus)
 
     # prep/finish 는 상위 --sheet/--tab 을 물려받도록 보정
     args = ap.parse_args()

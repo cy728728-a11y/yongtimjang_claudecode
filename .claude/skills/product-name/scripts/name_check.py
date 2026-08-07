@@ -9,6 +9,7 @@ Claude가 만든 상품명(키워드 2개 조합 + term 분해)이 이룸님 규
   R2. 고유 **내용어** term 수 4~6 (목표 6 무조건) (4~5=경고 / 3 이하·7 이상=실패)
   R3. 중복 term 최대 1개, 각 2회까지           (3회 이상 / 중복 2종 이상 = 실패)
   R4. 사용 키워드 2~5개가 서로 다른가
+      (1개 = `키워드확장` 증빙 있을 때 / 0개 = `무키워드사유` 있을 때만 허용)
   R5. **적합도** — 키워드가 상품명에 연속 문자열 그대로 있는가 (하나도 없으면 실패)
   R8. **대표옵션 마커** — 상품명이 `기본형` 으로 끝나고, 그게 1번만 나오는가
   R9. **배치** — 원본 단어와 키워드를 `a 1 b 2 c` 로 번갈아 놓았는가 (앞자리부터 채운다)
@@ -200,6 +201,38 @@ def collect_keywords(product):
     return [v for v in vals if v]
 
 
+# 원본유지 경로에서 살려 두는 규칙 — 이름 품질이 아니라 **구조**를 보는 둘뿐이다.
+KEEP_KEPT_RULES = ("R1", "R8")
+
+
+def _apply_keep_gate(violations, warnings, keep_note):
+    """원본유지(`원본유지사유`) 경로면 R1·R8 외 위반을 경고로 내린다 (2026-08-07 이룸님).
+
+    **원본 상품명이 이미 실물을 맞게 지칭하는 건**은 새로 짓지 않고 그대로 두되 마커만
+    붙인다. 그 결정 자체가 "이 이름의 검색 품질은 따지지 않는다"는 뜻이라, 원본이
+    R2(term수)·R4(키워드수)·R9(배치) 따위를 어긴다고 실패시키면 경로가 성립하지 않는다.
+    **R1(term분해 정합)·R8(마커)만 남긴다** — 마커를 붙이는 게 이 경로의 유일한 변경이고,
+    그게 틀리면 썸네일=대표옵션=상품명 짝이 깨진다.
+
+    발단 = 라인테이핑기(3-2). 재교정으로 카테고리를 바꾸고 새 뷰를 다시 훑었는데 근접어
+    (`주차선도색기계`)가 **있었지만 기계 메커니즘이 달라**(도색 vs 테이프 부착) 쓰면
+    오지칭이었다. 워커 판단은 옳았고 원본 이름도 이미 맞았는데 갈 곳이 사람 큐뿐이라
+    쌓였다 — 이룸님: "원본 이름이 이미 맞는 경우는 그대로 두는 걸로 자동화. 일일이 다
+    체크할 수가 없어서."
+    """
+    if not keep_note:
+        return violations
+    kept, waived = [], []
+    for v in violations:
+        (kept if str(v).startswith(KEEP_KEPT_RULES) else waived).append(v)
+    warnings.append(
+        f"원본유지 — 원본 상품명이 이미 실물을 지칭해 마커만 붙였다. "
+        f"이름 품질 검사 면제"
+        + (f"({len(waived)}건: {'; '.join(x[:40] for x in waived[:3])})" if waived else "")
+        + f": {keep_note[:80]}")
+    return kept
+
+
 def check_one(product, max_terms=DEFAULT_MAX_TERMS, min_terms=DEFAULT_MIN_TERMS,
               strict=True):
     """상품 1건 검증. product를 변형하지 않고 검증 결과 dict를 반환한다.
@@ -259,9 +292,47 @@ def check_one(product, max_terms=DEFAULT_MAX_TERMS, min_terms=DEFAULT_MIN_TERMS,
     if over:
         violations.append(f"R3 중복 {MAX_DUP_COUNT}회 초과: {', '.join(over)}")
 
-    # R4. 키워드 2~3개, 서로 달라야
-    if len(kws) < MIN_KEYWORDS:
-        violations.append(f"R4 사용 키워드가 {MIN_KEYWORDS}개 미만 ({len(kws)}개)")
+    # R4. 키워드 2~5개, 서로 달라야
+    #     ★ 1개 예외 (2026-08-05 이룸님): 뷰에 직결어가 1개뿐이면 보류하지 않고
+    #       **원본 상품명 단어로 채워 내보낸다.** 단 `키워드확장` 소진 증빙이 있을 때만 —
+    #       증빙 없이 1개면 종전대로 실패다(게으른 1개짜리 제출은 계속 막는다.
+    #       재팬아웃 emphasis 가 R4 실패를 104→9로 줄인 그 장치를 잃지 않기 위해서다).
+    #       0개는 직결어 자체가 없다는 뜻이라 카테고리 문제다 → 예외 없음.
+    #     ★ 0개 예외 (2026-08-06 이룸님): 뷰에 직결어가 **하나도** 없는 건(통다운에 그
+    #       카테고리 키워드가 없거나 뷰 파일이 빔)도 보류로 두지 말고 **원본 상품명·원문·
+    #       옵션명 단어만으로** 짓는다. 카테고리 재교정을 이미 소진한 뒤의 마지막 경로다.
+    #       전용 필드 `무키워드사유` 가 있을 때만 열린다(1개 예외의 `키워드확장`과 별개 —
+    #       실수로 섞여 열리면 안 되는, 훨씬 넓은 면제라서 게이트를 따로 둔다).
+    #       ⚠ 이 경로의 상품명은 **검색 적합도 기대값이 낮다.** 목적은 상위노출이 아니라
+    #       "원본 오기재를 실물 지칭으로 바로잡는 것"이다(원본명 오기재가 실측 다수).
+    #     ★★ 원본유지 (2026-08-07 이룸님): 무키워드 라운드에서 **원본 상품명이 이미 실물을
+    #        맞게 지칭하고 있으면** 새로 짓지 않고 그대로 두되 마커만 붙인다.
+    #        발단 = 라인테이핑기(3-2) — 재교정으로 카테고리를 바꾼 뒤 새 뷰를 다시 훑었는데
+    #        근접어(`주차선도색기계`)가 **있었지만 기계 메커니즘이 달라**(도색 vs 테이프)
+    #        쓰면 오지칭이었다. 워커 판단은 옳았고 원본 이름도 이미 맞았는데, 갈 곳이
+    #        사람 큐뿐이라 쌓였다("일일이 다 체크할 수가 없어서").
+    #        **이름 품질 검사(R2·R3·R4·R5·R6·R7·R9)를 전부 면제한다** — 원본을 그대로 쓰기로
+    #        한 결정 자체가 "이 이름의 검색 품질은 따지지 않는다"는 뜻이라, 원본이 규칙을
+    #        어긴다고 실패시키면 경로가 성립하지 않는다.
+    #        **R1(term분해 정합)·R8(마커)은 그대로 건다** — 마커를 붙이는 게 이 경로의
+    #        유일한 변경이고, 그게 틀리면 썸네일=대표옵션=상품명 짝이 깨진다.
+    expand_note = str(product.get("키워드확장") or "").strip()
+    nokw_note = str(product.get("무키워드사유") or "").strip()
+    no_kw = (len(kws) == 0 and bool(nokw_note))
+    if no_kw:
+        warnings.append(
+            f"키워드 0개(무키워드 경로) — 적합도 검사(R5)·절차(R6/R7) 면제. "
+            f"상위노출 기대값 낮음: {nokw_note[:80]}")
+    elif len(kws) < MIN_KEYWORDS:
+        if len(kws) == 1 and expand_note:
+            warnings.append(
+                f"키워드 1개 — 확장 소진 증빙으로 통과. 나머지 자리는 원본·원문·옵션명 "
+                f"단어로 채운다: {expand_note[:80]}")
+        else:
+            violations.append(
+                f"R4 사용 키워드가 {MIN_KEYWORDS}개 미만 ({len(kws)}개)"
+                + (" — 1개로 내보내려면 `키워드확장`에 계단 확장 상한·상위뷰 확인 결과를 "
+                   "남길 것" if len(kws) == 1 else ""))
     elif len(kws) > MAX_KEYWORDS:
         violations.append(f"R4 사용 키워드가 {MAX_KEYWORDS}개 초과 ({len(kws)}개)")
     normed = [nows(k) for k in kws]
@@ -272,7 +343,9 @@ def check_one(product, max_terms=DEFAULT_MAX_TERMS, min_terms=DEFAULT_MIN_TERMS,
     #     쪼개서 재배열하면 그 검색어로는 상위노출이 안 된다. 최소 1개는 반드시 만점이어야 한다.
     exact = [kw for kw in kws if is_exact_in_name(kw, name)]
     partial = [kw for kw in kws if kw not in exact]
-    if name and not exact:
+    if no_kw:
+        pass                                    # 검사할 키워드가 없다 — 적합도 개념이 성립 안 함
+    elif name and not exact:
         violations.append(
             "R5 적합도 0 — 어느 키워드도 상품명에 그대로 없다. "
             "키워드를 쪼개 재배열하지 말고 원문 그대로 넣을 것")
@@ -319,15 +392,20 @@ def check_one(product, max_terms=DEFAULT_MAX_TERMS, min_terms=DEFAULT_MIN_TERMS,
 
     # R6. 절차 — 관련어 목록과 반증 답변이 남았는가
     related = product.get("관련어") or []
+    keep_note = str(product.get("원본유지사유") or "").strip()
     if not strict:
         dup_label = ", ".join(f"{t}({c}회)" for t, c in dups.items()) if dups else "없음"
+        violations = _apply_keep_gate(violations, warnings, keep_note)
         return {"통과": not violations, "term수": term_count, "중복어": dup_label,
                 "키워드수": len(kws), "관련어수": len(related),
                 "위반": violations, "경고": warnings}
-    if not related:
-        violations.append("R6 관련어 목록 없음 — 무엇을 보고 골랐는지 증거가 없다")
-    if not str(product.get("반증") or "").strip():
-        violations.append("R6 반증(B) 답변 없음 — challenge.py 목록에 답해야 한다")
+    # 무키워드 경로는 R6 면제 — 고른 키워드가 없으니 "무엇을 보고 골랐나"도, 채택을
+    # 되던지는 반증(challenge.py)도 성립하지 않는다. 대신 `무키워드사유`가 증거다.
+    if not no_kw:
+        if not related:
+            violations.append("R6 관련어 목록 없음 — 무엇을 보고 골랐는지 증거가 없다")
+        if not str(product.get("반증") or "").strip():
+            violations.append("R6 반증(B) 답변 없음 — challenge.py 목록에 답해야 한다")
 
     # R7. 관련어 중 채택보다 상품수가 낮은데 사유가 비었는가
     #     "더 싼 걸 놔두고 비싼 걸 골랐으면 이유를 대라". #8 서랍장 케이스를 잡는 규칙
@@ -352,6 +430,7 @@ def check_one(product, max_terms=DEFAULT_MAX_TERMS, min_terms=DEFAULT_MIN_TERMS,
                     + (" …" if len(unexplained) > 6 else ""))
 
     dup_label = ", ".join(f"{t}({c}회)" for t, c in dups.items()) if dups else "없음"
+    violations = _apply_keep_gate(violations, warnings, keep_note)
 
     return {
         "통과": not violations,
@@ -377,7 +456,13 @@ def main():
     ap.add_argument("--name", help=f"단건 검증: 상품명 (맨 끝이 '{BASE_SUFFIX}'이어야 한다)")
     ap.add_argument("--terms", help=f"단건 검증: term 분해 (쉼표 구분, 중복 포함, "
                                    f"마지막은 '{BASE_SUFFIX}')")
-    ap.add_argument("--keywords", help="단건 검증: 사용 키워드 2~3개 (쉼표 구분)")
+    ap.add_argument("--keywords", help="단건 검증: 사용 키워드 2~5개 (쉼표 구분)")
+    ap.add_argument("--expand-note", default="",
+                    help="단건 검증: 키워드가 1개일 때의 확장 소진 증빙(`키워드확장`). "
+                         "계단 확장 상한·상위뷰 확인 결과를 적으면 R4 1개 예외가 열린다")
+    ap.add_argument("--nokw-note", default="",
+                    help="단건 검증: 직결어가 0개일 때의 사유(`무키워드사유`). "
+                         "적으면 R4 0개 예외 + R5·R6 면제가 열린다(적합도 기대값 낮음)")
     args = ap.parse_args()
 
     # --- 단건 모드 ---
@@ -386,6 +471,8 @@ def main():
             "새상품명": args.name,
             "term분해": [t.strip() for t in (args.terms or "").split(",") if t.strip()],
             "키워드": [k.strip() for k in (args.keywords or "").split(",") if k.strip()],
+            "키워드확장": args.expand_note,
+            "무키워드사유": args.nokw_note,
         }
         r = check_one(product, args.max_terms, args.min_terms, strict=False)
         print(f"상품명: {args.name}")
@@ -412,7 +499,9 @@ def main():
     passed, failed, held, warned = 0, 0, 0, 0
 
     for p in products:
-        # 보류 건(키워드 2개 확보 실패 등)은 검증 대상이 아니다 — 상태만 유지
+        # 보류 건(실물불명·카테고리의심 등)은 검증 대상이 아니다 — 상태만 유지.
+        # ※ 키워드 2개 미달은 더 이상 보류 사유가 아니다(2026-08-05) — 1개 + 원본 단어로
+        #   생성해 R4 예외로 통과시킨다. 여기 걸리는 건 직결어 0개거나 재료 자체가 없는 건뿐.
         if p.get("상태", "").startswith("보류") or not p.get("새상품명"):
             p.setdefault("상태", "보류")
             p["검증"] = {"통과": None, "위반": ["보류 건 — 검증 생략"]}

@@ -55,7 +55,7 @@ const SCHEMA = {
 
 function prompt(bin) {
   return `너는 불사자 카테고리 판정 워커다. 지시서 ${args_.promptPath} 를 Read 하고 그대로 따른다.\n` +
-    `맡은 배치 파일 (각각 §1부터 §4까지 독립 수행, 순서대로):\n` +
+    `맡은 배치 파일 (각각 §0부터 §5까지 독립 수행, 순서대로):\n` +
     bin.items.map(b => `  - 배치 ${b.n}: ${b.path}  (상품 ${b.count}건 · 썸네일 ${b.imgs}장)`).join('\n') +
     `\n\n산출물은 ${args_.runDir}/named/named_NNN.json (NNN=배치번호 3자리 0채움).\n` +
     `배치 하나당 Write 1회. 반환은 배치별 결과 배열(results)만.`
@@ -106,5 +106,6 @@ return {
   재팬아웃필요배치: stillMissing,
   다음: stillMissing.length
     ? `배치 ${stillMissing.join(',')} 미완 — run_all.py pending 으로 다시 확인 후 재호출`
-    : `run_all.py auto --run-dir ${args_.runDir} 를 백그라운드로 실행 (merge→finish→steer)`,
+    : `run_all.py auto --run-dir ${args_.runDir} 를 백그라운드로 실행 (merge→finish→steer). ` +
+      `재교정 run-dir(_redo*)이면 --overwrite-done 필수 — 없으면 원장 보호가 전건 스킵.`,
 }

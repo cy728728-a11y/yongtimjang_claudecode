@@ -120,13 +120,20 @@ def main():
     i_prep_name = seq.index(("prep", "상품명"))
     ok(i_commit_cat < i_prep_name, "step: 카테고리 저장 → 그 뒤에 상품명 prep")
 
-    print("\n== 6. product 모드는 가공을 다 모은 뒤 저장한다 ==")
+    print("\n== 6. product 모드는 가공을 다 모은 뒤 저장한다 (썸네일만 옵션 저장 뒤) ==")
+    # 2026-08-06: 썸네일 deps 에 옵션이 들어갔다 — 대표옵션은 옵션 commit 이 스냅샷에
+    # 써야 생기므로, product 모드에서도 썸네일 preview 는 옵션 commit 뒤로 밀린다.
     seq = runs["product"][0]
-    last_preview = max(i for i, x in enumerate(seq) if x[0] == "preview")
+    non_thumb_prev = max(i for i, x in enumerate(seq)
+                         if x[0] == "preview" and x[1] != "썸네일")
     first_commit = min(i for i, x in enumerate(seq) if x[0] == "commit")
-    ok(last_preview < first_commit, "product: 모든 preview 뒤에 첫 commit")
-    ok(runs["product"][1][0][1] == tuple(s["name"] for s in STEPS),
-       f"product: 게이트가 {len(STEPS)}단계를 한꺼번에 올린다")
+    ok(non_thumb_prev < first_commit, "product: 썸네일 외 모든 preview 뒤에 첫 commit")
+    ok(seq.index(("commit", "옵션")) < seq.index(("preview", "썸네일")),
+       "product: 옵션 commit 뒤에 썸네일 preview (deps 강제, 2026-08-06)")
+    expected_gate = tuple(s["name"] for s in STEPS if s["name"] != "썸네일")
+    ok(runs["product"][1][0][1] == expected_gate,
+       f"product: 게이트가 썸네일 외 {len(expected_gate)}단계를 한꺼번에 올린다 "
+       f"(썸네일은 전체 승인에 편승해 뒤에 자동 커밋)")
 
     print("\n== 7. DAG: 상품명은 카테고리보다 먼저 시작하지 않는다 ==")
     for g in GATES:

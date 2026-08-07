@@ -49,6 +49,11 @@ while _d and _d != os.path.dirname(_d):
 
 from eroomlib import snapshot  # noqa: E402
 
+# 실물 정체 판별용 해상도. 2026-08-07 실측(표본 9건·17장, 512/768/원본 블라인드 판독):
+# 512 는 인쇄 글자 판독 85건으로 768(84건)과 동등하고 원본(93건)의 91% 를 유지하면서
+# 비전 토큰을 3.3배 줄인다. 카테고리 판정은 글자를 읽을 일이 없어 여유가 더 크다.
+DEFAULT_MAX_PX = 512
+
 
 def main():
     ap = argparse.ArgumentParser(description="불사자 썸네일 다운로더")
@@ -57,6 +62,9 @@ def main():
     ap.add_argument("--out-dir", "-o", required=True, help="저장 폴더")
     ap.add_argument("--refresh", action="store_true",
                     help="스냅샷 캐시 무시하고 원본 서버에서 다시 받는다")
+    ap.add_argument("--max-px", type=int, default=DEFAULT_MAX_PX,
+                    help=f"복사본을 긴 변 N px 로 축소(0=원본 유지). 기본 {DEFAULT_MAX_PX}. "
+                         "비전 토큰 ∝ 픽셀수")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -77,7 +85,7 @@ def main():
             continue
         # 같은 URL 을 이미 받아둔 스킬이 있으면 스냅샷 캐시에서 복사만 한다(네트워크 0).
         path, err = snapshot.materialize_image(url, args.out_dir, hint, idx,
-                                               refresh=args.refresh)
+                                               refresh=args.refresh, max_px=args.max_px)
         if path:
             print(path)
         else:

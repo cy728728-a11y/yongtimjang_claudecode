@@ -3,11 +3,13 @@ export const meta = {
   description: '옵션정리 run 팬아웃 — 배치를 이미지예산+상품수 상한으로 묶어 Sonnet 워커에 분배',
   whenToUse: 'bulsaja-option-cleanup SKILL.md run(Workflow 모드)이 지정한 경우에만',
   phases: [
-    { title: '판단', detail: '워커당 누적 이미지 ≤16장 · 상품 ≤10건 빈패킹', model: 'sonnet' },
+    { title: '판단', detail: '워커당 누적 이미지 ≤16장 · 상품 ≤10건 빈패킹 (기본 sonnet)' },
     { title: '오디트', detail: 'results 누락 배치 1회 재팬아웃' },
   ],
 }
 // args = { runDir: 절대경로, promptPath: 옵션-워커-프롬프트.md 절대경로,
+//          model?: A/B 실측 전용 모델 오버라이드(기본 sonnet),
+//          emphasis?: 워커 프롬프트 끝에 덧붙일 강조 문안(재팬아웃·A/B 용, 기본 없음),
 //          batches: [{ n: 7, path: "...batch_007.json", imgs: 23, count: 5 }...]  // pending만
 //          budgetImgs?: 16, maxCount?: 10, retried?: false }
 //
@@ -20,6 +22,10 @@ export const meta = {
 //  ② tool_use 스키마의 property key 는 ASCII 만 허용(API 400) → 스키마는 ASCII,
 //     사람이 읽는 최종 return 객체만 한글.
 const args_ = (typeof args === 'string') ? JSON.parse(args) : args
+
+// 워커 모델. 기본은 sonnet 이고 `args.model` 로만 가른다 — **사본 워크플로를 두 개 두면
+// 지시서가 조용히 갈라진다**(2026-08-07 상품명·썸네일 A/B 에서 두 번 확인한 교훈).
+const MODEL = args_.model || 'sonnet'
 const BUDGET = (args_.budgetImgs || 16)
 const MAXCOUNT = (args_.maxCount || 10)
 
@@ -57,12 +63,16 @@ const SCHEMA = {
   required: ['results'],
 }
 
+// 재팬아웃·A/B 강조 문안. 붙이는 위치·형식이 두 군에서 다르면 강조 효과가 그 차이에
+// 섞인다(pname-fanout-ab 와 같은 관례로 맞춘다). 없으면 프롬프트가 바이트 단위로 종전과 같다.
+const EMPHASIS = args_.emphasis ? `\n\n[강조]\n${args_.emphasis}` : ''
+
 function prompt(bin) {
   return `너는 불사자 옵션 정리 워커다. 지시서 ${args_.promptPath} 를 Read 하고 그대로 따른다.\n` +
-    `맡은 배치 파일 (각각 §1부터 §4까지 독립 수행, 순서대로):\n` +
+    `맡은 배치 파일 (각각 §0부터 §5까지 독립 수행, 순서대로):\n` +
     bin.items.map(b => `  - 배치 ${b.n}: ${b.path}  (상품 ${b.count}건 · 이미지 ${b.imgs}장)`).join('\n') +
     `\n\n산출물은 ${args_.runDir}/results/result_NNN.json (NNN=배치번호 3자리 0채움).\n` +
-    `배치 하나당 Write 1회. 반환은 배치별 결과 배열(results)만.`
+    `배치 하나당 Write 1회. 반환은 배치별 결과 배열(results)만.` + EMPHASIS
 }
 
 phase('판단')
@@ -71,7 +81,7 @@ phase('판단')
 const first = await parallel(bins.map((bin, i) => () =>
   agent(prompt(bin), {
     label: `옵션:${bin.items.map(b => b.n).join(',')}`,
-    phase: '판단', schema: SCHEMA, model: 'sonnet', effort: 'low',
+    phase: '판단', schema: SCHEMA, model: MODEL, effort: 'low',
   })))
 
 const rows = first.filter(Boolean).flatMap(r => r.results || [])
@@ -88,7 +98,7 @@ if (missing.length && !args_.retried) {
   const again = await parallel(rbins.map(bin => () =>
     agent(prompt(bin), {
       label: `재판단:${bin.items[0].n}`,
-      phase: '오디트', schema: SCHEMA, model: 'sonnet', effort: 'low',
+      phase: '오디트', schema: SCHEMA, model: MODEL, effort: 'low',
     })))
   retryRows = again.filter(Boolean).flatMap(r => r.results || [])
 } else if (missing.length) {
@@ -110,6 +120,6 @@ return {
   재팬아웃필요배치: stillMissing,
   다음: stillMissing.length
     ? `배치 ${stillMissing.join(',')} 미완 — run_options.py pending 으로 다시 확인 후 재호출`
-    : `run_options.py apply --run-dir ${args_.runDir} 로 미리보기(승인 게이트). ` +
-      `--commit 은 이룸님 승인 후에만.`,
+    : `run_options.py apply --run-dir ${args_.runDir} 로 미리보기 → Claude 표본검수 → ` +
+      `바로 --commit (승인 대기 없음, 2026-08-06 — 의심건은 보류로 빼고 종합보고).`,
 }

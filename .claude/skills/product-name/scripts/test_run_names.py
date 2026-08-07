@@ -12,6 +12,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -382,11 +383,16 @@ class ColLetterTest(unittest.TestCase):
 
 
 class AttrTagColumnTest(unittest.TestCase):
-    """2026-07-27 헤르메스 02 흡수 — 속성제안·태그제안 2열을 뒤에 붙였다."""
+    """뒤에 붙인 열들 — 속성제안·태그제안(2026-07-27) + 대표지정(2026-08-05).
 
-    def test_헤더는_29열이고_속성_태그가_맨_뒤다(self):
-        self.assertEqual(len(run_names.NAME_HEADER), 29)
-        self.assertEqual(run_names.NAME_HEADER[-2:], ["속성제안", "태그제안"])
+    새 열은 **항상 맨 뒤에만** 붙인다. 앞 열이 밀리면 rename 의 상태 write back 이
+    엉뚱한 열을 친다(상태 = Z 고정).
+    """
+
+    def test_헤더는_30열이고_새_열들이_맨_뒤다(self):
+        self.assertEqual(len(run_names.NAME_HEADER), 30)
+        self.assertEqual(run_names.NAME_HEADER[-3:],
+                         ["속성제안", "태그제안", "대표지정"])
 
     def test_뒤에_붙였으므로_기존_열_위치는_안_밀린다(self):
         """상태열이 Z에서 밀리면 rename 의 상태 write back 이 엉뚱한 열을 친다."""
@@ -394,9 +400,9 @@ class AttrTagColumnTest(unittest.TestCase):
         self.assertEqual(h.index("상품id"), 0)
         self.assertEqual(h.index("원본상품명"), 4)
         self.assertEqual(run_names._col_letter(h.index("상태") + 1), "Z")
-        self.assertEqual(run_names._col_letter(len(h)), "AC")
+        self.assertEqual(run_names._col_letter(len(h)), "AD")
 
-    def test_속성_태그가_없는_구버전_결과도_29열을_만든다(self):
+    def test_속성_태그가_없는_구버전_결과도_전체_열을_만든다(self):
         row = run_names._build_row({"productId": "P1", "새상품명": "x"}, "g")
         self.assertEqual(len(row), len(run_names.NAME_HEADER))
         self.assertEqual(row[-2:], ["", ""])
@@ -432,9 +438,9 @@ class ExtendHeaderTest(unittest.TestCase):
         self.assertEqual(len(wrote), 1)
         rng, values = wrote[0]
         self.assertEqual(rng, "'상품명'!AB1")
-        self.assertEqual(values, [["속성제안", "태그제안"]])
+        self.assertEqual(values, [["속성제안", "태그제안", "대표지정"]])
 
-    def test_이미_29열이면_아무것도_쓰지_않는다(self):
+    def test_이미_전체_열이면_아무것도_쓰지_않는다(self):
         wrote = []
         self._patch(run_names.NAME_HEADER, wrote)
         run_names._extend_header("SHEET", "상품명", run_names.NAME_HEADER)
@@ -528,6 +534,206 @@ class SamePriceOptionTest(unittest.TestCase):
         def boom(_pid):
             raise OSError("깨진 스냅샷")
         self.assertFalse(run_names._same_price_options("P1", load=boom))
+
+
+class FlipSuspectHandoffTest(unittest.TestCase):
+    """보류(옵션뒤집힘)을 옵션 열 재작업 flag 로 넘긴다 (2026-08-06 슬링랙/풋패드 사례)."""
+
+    def setUp(self):
+        self.calls = []
+        self.tmp = tempfile.mkdtemp()
+        self.checked = os.path.join(self.tmp, "checked")
+        os.makedirs(self.checked)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _flag(self, sheet, task, items, from_task=None):
+        self.calls.append((sheet, task, dict(items), from_task))
+        return len(items)
+
+    def _write(self, products):
+        with open(os.path.join(self.checked, "checked_001.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"products": products}, f, ensure_ascii=False)
+
+    def test_뒤집힘_보류만_옵션_열에_찍는다(self):
+        self._write([
+            {"productId": "P1", "상태": "보류(옵션뒤집힘)",
+             "메모": "본품(데드리프트랙) 전부 제외, 판매중은 풋패드뿐"},
+            {"productId": "P2", "상태": "생성완료", "새상품명": "정상 상품"},
+            {"productId": "P3", "상태": "보류(키워드부족)"},
+        ])
+        n = run_names._handoff_flip_suspect("SHEET", self.checked, flag=self._flag)
+        self.assertEqual(n, 1)
+        sheet, task, items, from_task = self.calls[0]
+        self.assertEqual((sheet, task, from_task), ("SHEET", "옵션", "상품명"))
+        self.assertEqual(list(items), ["P1"])
+        self.assertIn("풋패드", items["P1"])
+
+    def test_메모가_비면_기본_사유를_쓴다(self):
+        self._write([{"productId": "P1", "상태": "보류(옵션뒤집힘)", "메모": ""}])
+        run_names._handoff_flip_suspect("SHEET", self.checked, flag=self._flag)
+        self.assertEqual(self.calls[0][2]["P1"], "본품 전부 판매제외 의심")
+
+    def test_대상이_없으면_flag를_부르지_않는다(self):
+        self._write([{"productId": "P1", "상태": "생성완료", "새상품명": "정상"}])
+        self.assertEqual(
+            run_names._handoff_flip_suspect("SHEET", self.checked, flag=self._flag), 0)
+        self.assertEqual(self.calls, [])
+
+    def test_flag_실패는_append_결과를_뒤엎지_않는다(self):
+        self._write([{"productId": "P1", "상태": "보류(옵션뒤집힘)", "메모": "x"}])
+        def boom(*a, **k):
+            raise RuntimeError("gws 응답 없음")
+        self.assertEqual(
+            run_names._handoff_flip_suspect("SHEET", self.checked, flag=boom), 0)
+
+
+class CatfixAlreadyCorrectTest(unittest.TestCase):
+    """③b 무키워드 경로의 게이트 — 재교정이 `이미정확` 이라 답한 건만 (2026-08-07).
+
+    `이미정확` = 카테고리는 맞다. 그런데도 뷰에 직결어가 0이면 재교정을 또 돌려도 안 나온다
+    (통다운에 그 카테고리 키워드가 없는 것) → 무키워드로 짓는다. 경로가 바뀐 건은
+    아직 카테고리 쪽에 할 일이 남았으므로 여기 끼면 안 된다.
+    """
+
+    def _mk(self, rows):
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, "decisions.json"), "w", encoding="utf-8") as f:
+            json.dump(rows, f, ensure_ascii=False)
+        return d
+
+    def test_이미정확만_고른다(self):
+        d = self._mk([{"productId": "P1", "상태": "이미정확"},
+                      {"productId": "P2", "상태": "자동저장완료"},
+                      {"productId": "P3", "상태": "이미정확"},
+                      {"productId": "P4", "상태": "변경대상"}])
+        self.assertEqual(run_names._catfix_already_correct(d), {"P1", "P3"})
+
+    def test_decisions_가_없으면_빈_집합(self):
+        """분류를 못 해도 죽지 않는다 — 무키워드 대상이 0이 되어 전부 수동큐로 간다."""
+        self.assertEqual(run_names._catfix_already_correct(tempfile.mkdtemp()), set())
+
+    def test_productId_없는_행은_버린다(self):
+        d = self._mk([{"상태": "이미정확"}, {"productId": "P9", "상태": "이미정확"}])
+        self.assertEqual(run_names._catfix_already_correct(d), {"P9"})
+
+
+class RedoExemptTest(unittest.TestCase):
+    """`redo.json` 면제 목록 — prep → append 로 넘어가는 A열 중복 면제 (2026-08-07).
+
+    발단: 이 목록을 `auto_redo` 가 있을 때만 썼더니, 현황판 flag 없는 `--ids --redo`
+    회차가 append 에서 전건 `스킵(이미처리)` 로 버려졌다(3-2 재교정 11건 — 워커 비용을
+    다 쓰고 시트 0행). 두 출처는 독립이라 **한쪽만 있어도 파일이 나와야 한다.**
+    """
+
+    def test_현황판_편입이_없어도_redo_ids_는_남는다(self):
+        self.assertEqual(run_names._redo_exempt({"P1", "P2"}, {}), ["P1", "P2"])
+
+    def test_ids_가_없어도_현황판_편입은_남는다(self):
+        self.assertEqual(run_names._redo_exempt(set(), {"P3": "사유"}), ["P3"])
+
+    def test_두_출처를_합치고_중복을_없앤다(self):
+        self.assertEqual(run_names._redo_exempt({"P1", "P3"}, {"P3": "사유", "P2": "사유"}),
+                         ["P1", "P2", "P3"])
+
+    def test_둘_다_비면_빈_목록(self):
+        self.assertEqual(run_names._redo_exempt(set(), {}), [])
+        self.assertEqual(run_names._redo_exempt(None, None), [])
+
+
+class MatrixRedoTest(unittest.TestCase):
+    """현황판 `상품명` 재작업 자동 편입 (2026-08-06 — 옵션이 되돌려 보낸 건)."""
+
+    M = {
+        "P1": {"row": 2, "상품명": "재작업(옵션: 상품명 10인치인데 원문은 8인치)"},
+        "P2": {"row": 3, "상품명": "완료"},
+        "P3": {"row": 4, "상품명": ""},
+        "P4": {"row": 5, "상품명": "재작업(옵션: 대표충돌)"},
+    }
+
+    def test_재작업이면서_이미_시트에_있는_것만_집는다(self):
+        # 빈칸(P3)은 어차피 대상이라 편입할 게 없고, 완료(P2)는 다시 할 이유가 없다.
+        got = run_names._matrix_redo("SHEET", {"P1", "P2", "P4"},
+                                     read=lambda s: self.M)
+        self.assertEqual(sorted(got), ["P1", "P4"])
+        self.assertIn("8인치", got["P1"])
+
+    def test_후보가_비면_시트를_읽지도_않는다(self):
+        def boom(_sheet):
+            raise AssertionError("읽으면 안 된다")
+        self.assertEqual(run_names._matrix_redo("SHEET", set(), read=boom), {})
+
+    def test_현황판을_못_읽어도_prep을_멈추지_않는다(self):
+        def boom(_sheet):
+            raise RuntimeError("gws 응답 없음")
+        self.assertEqual(run_names._matrix_redo("SHEET", {"P1"}, read=boom), {})
+
+
+class RetireStaleRowsTest(unittest.TestCase):
+    """재진입 시 옛 `생성완료` 행 내리기 — rename 이 옛 이름까지 반영하는 걸 막는다."""
+
+    def setUp(self):
+        self.updates = []
+        i_id = run_names.NAME_HEADER.index("상품id")
+        i_st = run_names.NAME_HEADER.index("상태")
+        self.rows = []
+        for pid, st in [("P1", "생성완료"), ("P2", "반영완료"), ("P1", "반영완료"),
+                        ("P3", "생성완료"), ("P1", "생성완료")]:
+            r = [""] * len(run_names.NAME_HEADER)
+            r[i_id], r[i_st] = pid, st
+            self.rows.append(r)
+        self.mod = sys.modules["eroomlib.gsheets"]
+        self._orig = (self.mod.sheets_get, self.mod.sheets_update)
+        self.mod.sheets_get = lambda sheet, rng: self.rows
+        self.mod.sheets_update = lambda sheet, rng, vals: self.updates.append((rng, vals))
+
+    def tearDown(self):
+        self.mod.sheets_get, self.mod.sheets_update = self._orig
+
+    def test_해당_pid의_생성완료_행만_내린다(self):
+        n = run_names._retire_stale_rows("SHEET", "탭", {"P1"}, {"P1": "대표충돌"})
+        self.assertEqual(n, 2)                       # P1 의 생성완료 2행
+        _rng, col = self.updates[0]
+        self.assertEqual([c[0] for c in col],
+                         ["재작업(대표충돌)", "반영완료", "반영완료",
+                          "생성완료", "재작업(대표충돌)"])   # P2·P3 과 반영완료는 그대로
+
+    def test_내릴_행이_없으면_쓰지_않는다(self):
+        self.assertEqual(run_names._retire_stale_rows("SHEET", "탭", {"P2"}, {}), 0)
+        self.assertEqual(self.updates, [])
+
+    def test_dry_run은_쓰지_않는다(self):
+        n = run_names._retire_stale_rows("SHEET", "탭", {"P1"}, {}, dry_run=True)
+        self.assertEqual((n, self.updates), (2, []))
+
+
+class HoldsFlipBucketTest(unittest.TestCase):
+    """holds 가 보류(옵션뒤집힘)을 별도 버킷으로 집계한다."""
+
+    def test_옵션뒤집힘_버킷(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(tmp, "checked"))
+            with open(os.path.join(tmp, "checked", "checked_001.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"products": [
+                    {"productId": "P1", "상태": "보류(옵션뒤집힘)"},
+                    {"productId": "P2", "상태": "보류(카테고리의심)"},
+                ]}, f, ensure_ascii=False)
+            import io
+            from contextlib import redirect_stdout
+            buf = io.StringIO()
+            class A:  # noqa: D401
+                run_dir = tmp
+            with redirect_stdout(buf):
+                run_names.cmd_holds(A())
+            out = json.loads(buf.getvalue().strip().splitlines()[-1])
+            self.assertEqual(out["옵션뒤집힘"], ["P1"])
+            self.assertEqual(out["카테고리의심"], ["P2"])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class BaseSuffixHandoffTest(unittest.TestCase):
@@ -667,6 +873,467 @@ class PlacementR9Test(unittest.TestCase):
                          name_check.BASE_SUFFIX],
                         ["이발의자", "전동미용의자"])
         self.assertEqual(self._r9(r), [])
+
+
+class NamedFilesTest(unittest.TestCase):
+    """지시서1 — chal/draft 중간산출물이 집계 glob 에 섞이면 안 된다(두 번째 재발)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.named = os.path.join(self.tmp, "named")
+        self.checked = os.path.join(self.tmp, "checked")
+        os.makedirs(self.named)
+        os.makedirs(self.checked)
+
+    def _touch(self, d, name):
+        with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+            f.write("{}")
+
+    def test_named는_숫자3자리_최종본만_잡는다(self):
+        for n in ("named_000.json", "named_001.json",
+                  "named_000.chal.json", "draft_000.json", "named_extra.json"):
+            self._touch(self.named, n)
+        got = [os.path.basename(p) for p in run_names._named_files(self.tmp)]
+        self.assertEqual(got, ["named_000.json", "named_001.json"])
+
+    def test_checked도_같은_규칙으로_chal을_배제한다(self):
+        for n in ("checked_000.json", "checked_000.chal.json", "checked_abc.json"):
+            self._touch(self.checked, n)
+        got = [os.path.basename(p) for p in run_names._checked_files(self.checked)]
+        self.assertEqual(got, ["checked_000.json"])
+
+
+class CheckProductCountTest(unittest.TestCase):
+    """지시서2 — ###CHECK### 는 배치 수만이 아니라 **상품 수**를 같이 찍어야 한다."""
+
+    def test_상품단위_통과_실패_보류를_같이_찍는다(self):
+        tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(tmp, "named"))
+        with open(os.path.join(tmp, "named", "named_000.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"products": [
+                {"productId": "P001", "상태": "보류(실물불명)"},
+                {"productId": "P002", "새상품명": "규칙 다 어긴 이름",  # 마커 없음 → 실패
+                 "term분해": ["규칙"], "키워드1": "규칙"},
+            ]}, f, ensure_ascii=False)
+        # chal 이 named/ 에 남아 있어도 집계에 안 섞인다
+        with open(os.path.join(tmp, "named", "named_000.chal.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"products": [{"productId": "P003", "상태": "검증실패"}]}, f)
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_names.cmd_check(argparse.Namespace(run_dir=tmp))
+        out = buf.getvalue()
+        self.assertIn("###CHECK### 상품 통과 0 / 실패 1 / 보류 1", out)
+        self.assertIn("배치 실패 1 / 1", out)
+
+
+class FixR9Test(unittest.TestCase):
+    """지시서3 — R9 단독 실패의 기계 재배열(1-1 회차 124건 실전 검증 알고리즘)."""
+
+    def setUp(self):
+        import fix_r9
+        self.fix_r9 = fix_r9
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "named"))
+        os.makedirs(os.path.join(self.tmp, "checked"))
+
+    def _write(self, sub, name, products):
+        with open(os.path.join(self.tmp, sub, name), "w", encoding="utf-8") as f:
+            json.dump({"products": products}, f, ensure_ascii=False)
+
+    def _r9_product(self, pid="P001"):
+        # 키워드 2개가 앞에 몰림 → R9 단독 실패 형태
+        return {"productId": pid,
+                "새상품명": "스파게티냄비 면삶는냄비 업소용 뜰채 깊은 기본형",
+                "term분해": ["스파게티냄비", "면삶는냄비", "업소용", "뜰채", "깊은",
+                             name_check.BASE_SUFFIX],
+                "키워드1": "스파게티냄비", "키워드2": "면삶는냄비",
+                "상태": "검증실패"}
+
+    def test_재배열_후_R1과_R9를_동시에_통과한다(self):
+        p = self._r9_product()
+        self._write("named", "named_000.json", [p])
+        self._write("checked", "checked_000.json",
+                    [dict(p, 검증={"위반": ["R9 배치 어긋남 — ..."]})])
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            fixed, skipped = self.fix_r9.run(self.tmp, commit=True)
+        self.assertEqual((fixed, skipped), (1, 0))
+
+        with open(os.path.join(self.tmp, "named", "named_000.json"),
+                  encoding="utf-8") as f:
+            it = json.load(f)["products"][0]
+        self.assertIn("R9 기계 재배열", it["메모"])
+        r = name_check.check_one(it, strict=False)
+        self.assertFalse([v for v in r["위반"] if v.startswith(("R1", "R9"))],
+                         f"재배열 후에도 위반: {r['위반']}")
+        # a 1 b 2 c — 원본 단어가 앞자리부터 키워드 사이에 끼었다
+        self.assertEqual(it["새상품명"],
+                         "업소용 스파게티냄비 뜰채 면삶는냄비 깊은 기본형")
+
+    def test_R9외_위반이_섞인_건은_손대지_않는다(self):
+        p = self._r9_product()
+        self._write("named", "named_000.json", [p])
+        self._write("checked", "checked_000.json",
+                    [dict(p, 검증={"위반": ["R9 배치 어긋남", "R4 키워드 1개"]})])
+        with contextlib.redirect_stdout(io.StringIO()):
+            fixed, _ = self.fix_r9.run(self.tmp, commit=True)
+        self.assertEqual(fixed, 0)
+        with open(os.path.join(self.tmp, "named", "named_000.json"),
+                  encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["products"][0]["새상품명"],
+                             p["새상품명"])  # 원형 그대로
+
+    def test_dry_run은_디스크를_바꾸지_않는다(self):
+        p = self._r9_product()
+        self._write("named", "named_000.json", [p])
+        self._write("checked", "checked_000.json",
+                    [dict(p, 검증={"위반": ["R9 배치 어긋남"]})])
+        with contextlib.redirect_stdout(io.StringIO()):
+            fixed, _ = self.fix_r9.run(self.tmp, commit=False)
+        self.assertEqual(fixed, 1)
+        with open(os.path.join(self.tmp, "named", "named_000.json"),
+                  encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["products"][0]["새상품명"],
+                             p["새상품명"])  # dry-run = 무변경
+
+
+class HoldsTest(unittest.TestCase):
+    """holds — 보류 3종 + 카테고리미설정 집계(자동 재교정 서브플로의 입력)."""
+
+    def _mkrun(self, name="r1"):
+        tmp = os.path.join(tempfile.mkdtemp(), name)
+        os.makedirs(os.path.join(tmp, "checked"))
+        with open(os.path.join(tmp, "checked", "checked_000.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"products": [
+                {"productId": "P001", "상태": "보류(카테고리의심)"},
+                {"productId": "P002", "상태": "보류(실물불명)"},
+                {"productId": "P003", "상태": "생성완료"},
+                {"productId": "P001", "상태": "보류(카테고리의심)"},  # 중복 → 1건
+            ]}, f, ensure_ascii=False)
+        with open(os.path.join(tmp, "skipped.json"), "w", encoding="utf-8") as f:
+            json.dump([{"productId": "P009", "사유": "카테고리미설정"},
+                       {"productId": "P010", "사유": "그룹부재"}], f, ensure_ascii=False)
+        return tmp
+
+    def _run(self, run_dir):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_names.cmd_holds(argparse.Namespace(run_dir=run_dir))
+        return buf.getvalue()
+
+    def test_보류와_미설정을_중복없이_집계한다(self):
+        out = self._run(self._mkrun())
+        got = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(got["카테고리의심"], ["P001"])
+        self.assertEqual(got["실물불명"], ["P002"])
+        self.assertEqual(got["카테고리미설정"], ["P009"])  # 그룹부재는 제외
+        self.assertEqual(got["키워드부족"], [])
+
+    def test_redo_런디렉토리면_재진입금지_경고를_찍는다(self):
+        out = self._run(self._mkrun(name="yong1-1_redo1"))
+        self.assertIn("[재진입금지]", out)
+        json.loads(out.strip().splitlines()[-1])  # 경고가 있어도 JSON 은 마지막 줄
+
+    def test_일반_런디렉토리면_경고가_없다(self):
+        self.assertNotIn("[재진입금지]", self._run(self._mkrun()))
+
+
+class MarkTest(unittest.TestCase):
+    """mark — 기존 행 상태 변경. 같은 pid 여러 행이면 **마지막 행**(최신)만."""
+
+    def setUp(self):
+        self.updates = []
+        import eroomlib.gsheets as g
+        self._g = g
+        self._orig_get, self._orig_upd = g.sheets_get, g.sheets_update
+        g.sheets_update = lambda s, r, v: self.updates.append((s, r, v)) or {}
+        self.addCleanup(lambda: (setattr(g, "sheets_get", self._orig_get),
+                                 setattr(g, "sheets_update", self._orig_upd)))
+
+    def _rows(self):
+        h = run_names.NAME_HEADER
+        i_id, i_status, i_memo = h.index("상품id"), h.index("상태"), h.index("메모")
+
+        def row(pid, status, memo=""):
+            r = [""] * len(h)
+            r[i_id], r[i_status], r[i_memo] = pid, status, memo
+            return r
+        # P001 이 2행(옛 행 + redo 새 행) — 마지막 행만 바뀌어야 한다
+        return [row("P001", "반영완료"), row("P002", "생성완료", "기존메모"),
+                row("P001", "생성완료"), row("P003", "생성완료")]
+
+    def _run(self, ids, status, note=""):
+        self._g.sheets_get = lambda s, r: self._rows()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_names.cmd_mark(argparse.Namespace(
+                sheet="SHEET", tab=run_names.NAME_TAB,
+                ids=ids, status=status, note=note))
+        return buf.getvalue()
+
+    def test_마지막_행만_바꾸고_다른_행은_보존한다(self):
+        out = self._run(["P001"], "재작업(카테고리변경)")
+        self.assertIn("###MARK### 1건", out)
+        self.assertEqual(len(self.updates), 1)  # 상태열 1회(메모 없음)
+        _, rng, values = self.updates[0]
+        i_status = run_names.NAME_HEADER.index("상태")
+        letter = run_names._col_letter(i_status + 1)
+        self.assertEqual(rng, f"'상품명'!{letter}2:{letter}5")
+        self.assertEqual([v[0] for v in values],
+                         ["반영완료", "생성완료", "재작업(카테고리변경)", "생성완료"])
+
+    def test_노트를_주면_메모열_끝에_덧붙인다(self):
+        self._run(["P002"], "보류(표본의심)", note="표본검수 — 실물 불일치 의심")
+        self.assertEqual(len(self.updates), 2)  # 상태열 + 메모열
+        _, _, memo_values = self.updates[1]
+        self.assertEqual(memo_values[1], ["기존메모 | 표본검수 — 실물 불일치 의심"])
+        self.assertEqual(memo_values[0], [""])  # 대상 아닌 행 메모는 그대로
+
+    def test_시트에_없는_pid는_경고만_찍고_있는_것만_처리한다(self):
+        out = self._run(["P003", "P999"], "보류(표본의심)")
+        self.assertIn("[경고] 시트에 없는 상품id 1건", out)
+        self.assertIn("###MARK### 1건", out)
+
+    def test_전부_없으면_시트를_건드리지_않는다(self):
+        out = self._run(["P998", "P999"], "보류(표본의심)")
+        self.assertIn("###MARK### 0건", out)
+        self.assertEqual(self.updates, [])
+
+
+class SingleKeywordExemptionTest(unittest.TestCase):
+    """R4 1개 예외 (2026-08-05 이룸님) — 직결어가 1개뿐이면 원본 단어로 채워 내보낸다.
+
+    근거: 1-2 회차 `보류(키워드부족)` 64건이 전부 "뷰에 직결어 1개뿐"인 니치 상품이었다
+    (연못방수포·키보드흡음재·스티로폼알갱이·의자머리받침). 버리면 노출이 0이 된다.
+    단 증빙 없는 1개는 계속 막는다 — 재팬아웃 emphasis 가 R4 실패를 104→9로 줄인 장치다.
+    """
+
+    BASE = {
+        "새상품명": "양어장 연못방수포 저수지 물막이 시트 기본형",
+        "term분해": ["양어장", "연못", "방수포", "저수지", "물막이", "시트",
+                   name_check.BASE_SUFFIX],
+        "키워드1": "연못방수포",
+        "관련어": [{"키워드": "연못방수포", "상품수": 1820, "검색량": 260}],
+        "반증": "없음 — 나머지는 방수페인트로 시트가 아니다",
+    }
+
+    def _check(self, **over):
+        p = dict(self.BASE)
+        p.update(over)
+        return name_check.check_one(p)
+
+    def test_증빙이_있으면_키워드_1개도_통과한다(self):
+        r = self._check(키워드확장="상품수 5만까지 확장 + 상위뷰 확인 — 직결어 1개뿐")
+        self.assertTrue(r["통과"], r["위반"])
+        self.assertTrue(any("키워드 1개" in w for w in r["경고"]),
+                        "1개 경로는 경고로 남아야 추적된다")
+
+    def test_증빙이_없으면_종전대로_R4_실패다(self):
+        r = self._check()
+        self.assertFalse(r["통과"])
+        self.assertTrue(any(v.startswith("R4") for v in r["위반"]))
+
+    def test_증빙이_공백뿐이면_증빙으로_안_쳐준다(self):
+        r = self._check(키워드확장="   ")
+        self.assertFalse(r["통과"])
+        self.assertTrue(any(v.startswith("R4") for v in r["위반"]))
+
+    def test_실패_사유가_증빙_남기는_법을_알려준다(self):
+        r = self._check()
+        self.assertTrue(any("키워드확장" in v for v in r["위반"]))
+
+    def test_키워드_0개는_증빙이_있어도_실패다(self):
+        # 직결어 0 = 카테고리 문제다. 예외를 열어주면 억지 상품명이 나온다
+        r = self._check(키워드1="", 키워드확장="다 뒤졌는데 없음")
+        self.assertFalse(r["통과"])
+        self.assertTrue(any(v.startswith("R4") for v in r["위반"]))
+
+    def test_1개_예외여도_다른_규칙은_그대로_적용된다(self):
+        # term 3개(R2 미달)까지 봐주지는 않는다
+        r = self._check(새상품명="연못방수포 시트 기본형",
+                        term분해=["연못", "방수포", "시트", name_check.BASE_SUFFIX],
+                        키워드확장="확장 소진")
+        self.assertFalse(r["통과"])
+        self.assertTrue(any(v.startswith("R2") for v in r["위반"]))
+
+    def test_1개여도_R9_배치는_지켜야_한다(self):
+        # 키워드를 맨 앞에 몰고 원본 단어를 뒤로 밀면 실패 (a 1 b c)
+        r = self._check(새상품명="연못방수포 양어장 저수지 물막이 시트 기본형",
+                        term분해=["연못", "방수포", "양어장", "저수지", "물막이", "시트",
+                               name_check.BASE_SUFFIX],
+                        키워드확장="확장 소진")
+        self.assertFalse(r["통과"])
+        self.assertTrue(any(v.startswith("R9") for v in r["위반"]))
+
+    def test_시트_메모에_키워드1개_증빙이_박힌다(self):
+        p = dict(self.BASE, productId="P1", 키워드확장="상품수 5만까지 확장",
+                 메모="썸네일=검정 PVC 롤")
+        memo = run_names._build_row(p, "g")[run_names.NAME_HEADER.index("메모")]
+        self.assertTrue(memo.startswith("[키워드1개] 상품수 5만까지 확장"))
+        self.assertIn("썸네일=검정 PVC 롤", memo)
+
+    def test_키워드가_2개면_메모를_건드리지_않는다(self):
+        p = dict(self.BASE, productId="P1", 키워드2="방수시트",
+                 키워드확장="남아있는 값", 메모="원래메모")
+        memo = run_names._build_row(p, "g")[run_names.NAME_HEADER.index("메모")]
+        self.assertEqual(memo, "원래메모")
+
+    def test_증빙이_없으면_메모는_그대로다(self):
+        p = dict(self.BASE, productId="P1", 메모="원래메모")
+        memo = run_names._build_row(p, "g")[run_names.NAME_HEADER.index("메모")]
+        self.assertEqual(memo, "원래메모")
+
+    def test_2개_이상이면_증빙이_없어도_통과한다(self):
+        # 예외를 넣느라 정상 경로를 깨뜨리지 않았는지 (내용어 6 = 양어장·연못·방수포·저수지·방수·시트)
+        r = self._check(새상품명="양어장 연못방수포 저수지 방수시트 기본형",
+                        term분해=["양어장", "연못", "방수포", "저수지", "방수", "시트",
+                               name_check.BASE_SUFFIX],
+                        키워드2="방수시트",
+                        관련어=[{"키워드": "연못방수포", "상품수": 1820, "검색량": 260},
+                             {"키워드": "방수시트", "상품수": 9100, "검색량": 700}])
+        self.assertTrue(r["통과"], r["위반"])
+
+
+class KeepOriginalPathTest(unittest.TestCase):
+    """원본유지 경로 (2026-08-07 이룸님) — 원본이 이미 실물을 지칭하면 마커만 붙인다.
+
+    발단 = 라인테이핑기(3-2). 재교정으로 카테고리를 바꾼 뒤 새 뷰를 다시 훑었는데
+    근접어(`주차선도색기계`)가 **있었지만** 도색 방식이라 테이프 부착식 실물과
+    메커니즘이 달라 쓰면 오지칭이었다. 판단은 옳았고 원본 이름도 맞았는데 갈 곳이
+    사람 큐뿐이라 쌓였다 — "일일이 다 체크할 수가 없어서".
+
+    **면제는 이름 품질(R2~R7·R9)까지고 구조(R1·R8)는 그대로다.**
+    """
+
+    ORIG = "라인 테이핑기 바닥 주차 경기장 라인테이프"
+    BASE = {
+        "새상품명": ORIG + " " + name_check.BASE_SUFFIX,
+        "term분해": ["라인", "테이핑기", "바닥", "주차", "경기장", "라인테이프",
+                   name_check.BASE_SUFFIX],
+    }
+    SAYU = "재교정 후 새 뷰를 다시 훑었으나 근접어는 메커니즘 불일치. 원본이 이미 실물 지칭"
+
+    def _check(self, **over):
+        p = dict(self.BASE)
+        p.update(over)
+        return name_check.check_one(p)
+
+    def test_사유가_있으면_키워드_0개_term_6개여도_통과한다(self):
+        r = self._check(원본유지사유=self.SAYU)
+        self.assertTrue(r["통과"], r["위반"])
+        self.assertTrue(any("원본유지" in w for w in r["경고"]))
+
+    def test_사유가_없으면_실패한다(self):
+        self.assertFalse(self._check()["통과"])
+
+    def test_면제해도_R8_마커는_못_뚫는다(self):
+        """마커를 붙이는 게 이 경로의 유일한 변경이라, 그것만은 반드시 건다."""
+        r = self._check(원본유지사유=self.SAYU, 새상품명=self.ORIG,
+                        term분해=["라인", "테이핑기", "바닥", "주차", "경기장", "라인테이프"])
+        self.assertFalse(r["통과"])
+        self.assertTrue(all(v.startswith("R8") for v in r["위반"]), r["위반"])
+
+    def test_면제해도_R1_term분해_정합은_못_뚫는다(self):
+        r = self._check(원본유지사유=self.SAYU,
+                        term분해=["라인", "테이핑기", name_check.BASE_SUFFIX])
+        self.assertFalse(r["통과"])
+        self.assertTrue(any(v.startswith("R1") for v in r["위반"]), r["위반"])
+
+    def test_면제한_위반을_경고에_남긴다(self):
+        """무엇을 봐주고 통과시켰는지가 안 보이면 사후에 못 되짚는다."""
+        r = self._check(원본유지사유=self.SAYU)
+        self.assertTrue(any("면제" in w and "R4" in w for w in r["경고"]), r["경고"])
+
+
+class NoKeywordPathTest(unittest.TestCase):
+    """무키워드 경로 (2026-08-06 이룸님) — 직결어 0개도 원본 단어만으로 짓는다.
+
+    카테고리 재교정까지 소진한 잔여분 전용. 게이트를 `키워드확장` 과 **따로** 둔 이유:
+    R4·R5·R6 을 한꺼번에 여는 훨씬 넓은 면제라, 1개 예외와 실수로 섞이면 안 된다.
+    """
+
+    BASE = {
+        "새상품명": "그릴판 오프너 병따개 지렛대 스테인리스 기본형",
+        "term분해": ["그릴판", "오프너", "병따개", "지렛대", "스테인리스",
+                   name_check.BASE_SUFFIX],
+    }
+
+    def _check(self, **over):
+        p = dict(self.BASE)
+        p.update(over)
+        return name_check.check_one(p)
+
+    def test_사유가_있으면_키워드_0개도_통과한다(self):
+        r = self._check(무키워드사유="leaf·상위뷰 모두 오프너/병따개 직결어 0건")
+        self.assertTrue(r["통과"], r["위반"])
+        self.assertTrue(any("무키워드" in w for w in r["경고"]))
+
+    def test_사유가_없으면_R4로_실패한다(self):
+        r = self._check()
+        self.assertFalse(r["통과"])
+        self.assertTrue(any(v.startswith("R4") for v in r["위반"]))
+
+    def test_관련어_반증이_비어도_R6로_실패하지_않는다(self):
+        # 고른 키워드가 없으면 되던질 것도 없다
+        r = self._check(무키워드사유="뷰 0KB")
+        self.assertFalse(any(v.startswith("R6") for v in r["위반"]))
+
+    def test_적합도_R5는_면제된다(self):
+        r = self._check(무키워드사유="뷰 0KB")
+        self.assertFalse(any(v.startswith("R5") for v in r["위반"]))
+
+    def test_키워드확장으로는_0개가_안_열린다(self):
+        # 게이트가 분리돼 있어야 1개 예외가 0개까지 번지지 않는다
+        r = self._check(키워드확장="상품수 5만까지 확장")
+        self.assertFalse(r["통과"])
+        self.assertTrue(any(v.startswith("R4") for v in r["위반"]))
+
+    def test_무키워드여도_term수_마커_규칙은_그대로다(self):
+        r = self._check(새상품명="오프너 병따개 기본형",
+                        term분해=["오프너", "병따개", name_check.BASE_SUFFIX],
+                        무키워드사유="뷰 0KB")
+        self.assertFalse(r["통과"])
+        self.assertTrue(any(v.startswith("R2") for v in r["위반"]))
+
+    def test_키워드가_있으면_무키워드사유가_있어도_평소대로_검사한다(self):
+        # 사유를 남겨둔 채 키워드를 채웠으면 면제가 열리면 안 된다
+        r = self._check(키워드1="오프너", 무키워드사유="남아있는 값")
+        self.assertFalse(r["통과"])
+        self.assertTrue(any(v.startswith("R4") or v.startswith("R6")
+                            for v in r["위반"]))
+
+    def test_시트_메모에_무키워드_태그가_박힌다(self):
+        p = dict(self.BASE, productId="P1", 무키워드사유="뷰 0KB", 메모="썸네일=지렛대형")
+        memo = run_names._build_row(p, "g")[run_names.NAME_HEADER.index("메모")]
+        self.assertTrue(memo.startswith("[무키워드] 뷰 0KB"))
+        self.assertIn("썸네일=지렛대형", memo)
+
+
+class HoldsReentryGuardTest(unittest.TestCase):
+    """재진입 run-dir(`_redo`·`_kw1`)은 서브플로를 다시 태우지 않는다."""
+
+    def _run(self, dirname):
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = os.path.join(td, dirname)
+            os.makedirs(os.path.join(run_dir, "checked"))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                run_names.cmd_holds(argparse.Namespace(run_dir=run_dir))
+            return buf.getvalue()
+
+    def test_kw1_런디렉토리는_재진입금지를_찍는다(self):
+        self.assertIn("[재진입금지]", self._run("yong1-2_kw1"))
+
+    def test_redo_런디렉토리도_그대로_찍는다(self):
+        self.assertIn("[재진입금지]", self._run("yong1-2_redo1"))
+
+    def test_본_라운드는_경고를_안_찍는다(self):
+        self.assertNotIn("[재진입금지]", self._run("yong1-2"))
 
 
 if __name__ == "__main__":

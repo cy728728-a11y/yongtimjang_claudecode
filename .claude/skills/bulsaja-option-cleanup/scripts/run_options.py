@@ -16,6 +16,7 @@
 """
 import argparse
 import glob
+import hashlib
 import json
 import os
 import sys
@@ -42,7 +43,9 @@ while _d and _d != os.path.dirname(_d):
 import option_rules as R  # noqa: E402
 from eroomlib import matrix, snapshot  # noqa: E402
 from eroomlib.config import cfg  # noqa: E402
-from eroomlib.gsheets import (append_rows, ensure_tab,  # noqa: E402
+from eroomlib.gsheets import (append_rows, chunk_by_size,  # noqa: E402
+                              sheets_batch_update,
+                              ensure_tab,
                               sheets_get, sheets_update)
 from eroomlib.matrix import _col_letter  # noqa: E402
 
@@ -52,9 +55,38 @@ TAB = "옵션"           # 상세 로그 탭
 HEADER = ["상품id", "작업일", "상품명", "메인상품", "옵션수", "유지", "제외",
           "대표옵션", "기준가", "상한", "순서", "상태", "메모", "옵션명변경"]
 
+# 옵션 축(선택 항목) 이름 원장 — 규칙 18(2026-08-04 이룸님).
+# **축 이름은 MCP 로 못 바꾼다**(renameValues 는 값 전용). 불사자 앱 UI 에서 수동으로만
+# 가능하고, MCP 추가는 요청해둔 상태다. 그래서 여기 '반영 대기'로 쌓아두고 나중에 태운다.
+# `상태` 를 이룸님이 `반영`·`무시` 로 바꾸면 재실행이 그 행을 **덮지 않는다**.
+AXIS_TAB = "옵션축"
+AXIS_HEADER = ["상품id", "기록일", "상품명", "차원", "원문축명", "현재축명",
+               "제안축명", "사유", "값예시", "신호", "상태"]
+AXIS_PENDING = "대기"
+
+# **부분저장** — 이름 규칙만 어긴 상태는 ②(판매·대표·순서)를 저장한다 (2026-08-06 이룸님).
+#
+# 저장이 상품 단위로 전부-아니면-전무였다. 그래서 표기 규칙 하나(`기본형` 마커)가
+# **무엇을 파느냐**까지 같이 막았다 — 3-1 워터건은 워커가 뒤집힘(본품 19행 제외·부속
+# 예비배터리 1행만 판매·대표)을 정확히 복구해 놨는데 마커가 없다는 이유로 통째로
+# 미저장돼, 스마트스토어에 배터리만 팔리는 채로 남아 있었다(69건 중 12건이 이렇게 빠졌다).
+# 마커는 ①(이름)에 붙는 표시라 ②와 무관하다 → ①만 건너뛰고 ②는 저장한다.
+#
+# 대신 **완료로 끝내지 않는다**: 현황판 `옵션` 열에 `재작업(...)` 으로 남겨
+# `pending(..., include_redo=True)` 이 다음 회차에 자동으로 다시 집어가게 한다.
+# 빈칸으로 두면 사유가 사라지고, `보류(...)` 로 두면 영영 안 잡힌다.
+PARTIAL_SAVE = ("보류(기본형)",)
+PARTIAL_REASON = "기본형 마커 누락/오부착 — 판매·대표·순서만 저장, 옵션명은 미저장"
+
 # 배치당 상품 수. 상품 1건에 옵션이 4~28개라 5건이면 워커 한 턴에 들어간다
 # (카테고리교정 10건/배치보다 작다 — 옵션은 건당 정보량이 훨씬 크다).
 BATCH_SIZE = 5
+
+# 워커에게 주는 이미지의 긴 변 px. 2026-08-07 실측(표본 9건·17장, 512/768/원본 블라인드
+# 판독): 512 판독 85건 · 768 84건 · 원본 93건 — 512 가 원본의 91% 를 유지하면서 비전
+# 토큰을 3.3배 줄인다. 옵션 축이 읽어야 하는 치수 숫자(`45*39`·`19cm`)는 512 에서 원본과
+# 동일하게 읽혔다. 768 은 512 보다 나은 게 없어 중간값을 두지 않는다.
+MAX_PX = 512
 
 # 팬아웃용 고정 경로 — 규칙 정본과 워커 지시서(run_all.py 의 RULES_DOC 패턴).
 RULES_DOC = os.path.normpath(os.path.join(
@@ -102,7 +134,10 @@ class OptionMCP(snapshot.ProductMCP):
         if not token:
             if pv.get("success"):
                 return pv  # 확인이 필요 없는 응답(변경 없음 등)
-            raise RuntimeError(f"확인키 미발급: {str(pv.get('message'))[:200]}")
+            # MCP 스키마 위반(예: 배열 200개 상한)은 `message` 가 아니라 `_text` 로 온다.
+            # 그걸 안 보면 '확인키 미발급: None' 이 되어 원인이 안 보인다(용쌤1-2 4건).
+            why = pv.get("message") or pv.get("_text") or pv
+            raise RuntimeError(f"확인키 미발급: {str(why)[:200]}")
         r = self.call_tool("bulsaja_option_update",
                            {**payload, "confirm": True, "confirmationToken": token})
         if not r.get("success"):
@@ -145,6 +180,8 @@ def cmd_prep(args):
     else:
         pids = matrix.pending(m, TASK)
         print(f"[1/4] 현황판 '{TASK}' 미착수 {len(pids)}건")
+    # 이관 사유 — 배치에 실어 워커에게 넘긴다(§2-10 이미지 판정 조항이 이걸 본다).
+    redo = matrix.redo_pending(m, TASK)
     if args.limit:
         pids = pids[:args.limit]
         print(f"  --limit {args.limit} 적용 → {len(pids)}건")
@@ -156,7 +193,21 @@ def cmd_prep(args):
     print(f"[2/4] 스냅샷 확보 {len(pids)}건")
     recs, errors = snapshot.ensure(pids, sleep=args.sleep, require=("옵션",))
     if errors:
-        print(f"  조회 실패 {len(errors)}건: {list(errors)[:3]}")
+        # **조용히 버리지 않는다** — 예전엔 아래 배치 조립에서 `recs.get(pid)` 가 None 인
+        # 상품을 `continue` 로 흘려보내, "대상 973건 중 681건만 처리됨"이 보고 어디에도
+        # 남지 않았다(2026-08-05 실측: 1-2 그룹 292건이 이렇게 통째로 누락됐고, 나중에
+        # 재조회하니 전부 정상이었다 — 당시 통신 실패였다).
+        # 현황판에 남겨야 다음 run 이 집어가고, 사람이 "왜 빠졌나"를 물을 수 있다.
+        print(f"  조회 실패 {len(errors)}건 — 현황판에 '보류(조회실패)' 로 남긴다")
+        _dump(os.path.join(run_dir, "fetch_errors.json"),
+              {pid: str(e)[:300] for pid, e in errors.items()})
+        try:
+            matrix.mark_many(sheet, TASK,
+                             {pid: "보류(조회실패)" for pid in errors}, matrix=m)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 조회실패 현황판 기재 실패: {str(e)[:120]}", file=sys.stderr)
+        for pid in list(errors)[:5]:
+            print(f"    {pid}: {str(errors[pid])[:80]}")
 
     # 3) 이미지 — 대표 썸네일 1장 + 옵션값 이미지(차원별). 실물·구성 판별의 근거다.
     thumbs_dir = os.path.join(run_dir, "thumbs")
@@ -167,15 +218,18 @@ def cmd_prep(args):
             paths = {}
             rep = (rec.get("썸네일") or [""])[0]
             if rep:
-                p, _ = snapshot.materialize_image(rep, thumbs_dir, pid + "_rep", 0)
+                p, _ = snapshot.materialize_image(rep, thumbs_dir, pid + "_rep", 0,
+                                                  max_px=args.max_px)
                 if p:
                     paths["대표"] = p
             for gi, d in enumerate(rec.get("옵션", {}).get("차원") or []):
                 for vi, v in enumerate((d.get("values") or [])[:args.max_option_images]):
                     if not v.get("imageUrl"):
                         continue
+                    # 옵션값 이미지는 사이즈표·치수 도면 판별에 쓰이지만, 실측상 512 에서
+                    # 치수 숫자(`45*39`·`19cm`)가 원본과 동일하게 읽혔다.
                     p, _ = snapshot.materialize_image(
-                        v["imageUrl"], thumbs_dir, f"{pid}_{gi}", vi)
+                        v["imageUrl"], thumbs_dir, f"{pid}_{gi}", vi, max_px=args.max_px)
                     if p:
                         paths[f"{gi}:{v.get('vid')}"] = p
             img[pid] = paths
@@ -185,9 +239,13 @@ def cmd_prep(args):
 
     # 4) 배치 — 워커가 파일 하나로 완주할 수 있게 자기완결형으로 담는다
     products = []
+    dropped = []
     for pid in pids:
         rec = recs.get(pid)
         if not rec:
+            # 조회 실패는 위에서 이미 현황판에 남겼다. 그 밖의 이유로 빠지는 건이
+            # 있으면 여기서 잡아 §대상 대조에 드러낸다 — 침묵 누락 재발 방지.
+            dropped.append(pid)
             continue
         o = rec.get("옵션") or {}
         products.append({
@@ -195,6 +253,10 @@ def cmd_prep(args):
             "상품명": rec.get("상품명", ""),
             "원문명": rec.get("원문명", ""),
             "카테고리": rec.get("기존카테고리", ""),
+            # 다른 단계가 넘긴 이관 사유. **워커의 판단을 바꾼다** — 썸네일이
+            # `기준이미지없음`·`대표옵션의심` 으로 되돌린 건은 대표를 세울 때 옵션 이미지가
+            # 실물인지까지 봐야 한다(§2-10). 안 실어 보내면 워커가 그 사실을 모른다.
+            "재작업사유": redo.get(pid, ""),
             "대표썸네일": img.get(pid, {}).get("대표", ""),
             "vid고유": o.get("vid고유"),
             "차원": [{
@@ -226,6 +288,13 @@ def cmd_prep(args):
     print(f"\n###PREP### 배치 {len(batches)}개 / 상품 {len(products)}건 / "
           f"옵션 {sum(len(p['판매행']) for p in products)}개 / "
           f"이미지 {sum(x['imgs'] for x in index)}장")
+    # 대상 대조 — 대상과 배치가 어긋나면 반드시 눈에 띄게 찍는다. 이 한 줄이 없어서
+    # 973건 중 681건만 돈 사실이 드러나지 않았다(2026-08-05).
+    print(f"  §대상 대조: 대상 {len(pids)}건 = 배치 {len(products)}건 "
+          f"+ 조회실패 {len(errors)}건" + (f" + 기타누락 {len(dropped) - len(errors)}건"
+                                      if len(dropped) > len(errors) else ""))
+    if len(products) + len(dropped) != len(pids):
+        print(f"  [경고] 대상 수가 맞지 않는다 — 확인 필요", file=sys.stderr)
     print(f"  배치: {os.path.join(run_dir, 'batches')}")
     print(f"  다음(Workflow 모드): python {os.path.basename(__file__)} pending "
           f"--run-dir <R> → optclean-fanout 호출 → apply")
@@ -284,70 +353,58 @@ def _expected_by_batch(run_dir):
     return exp
 
 
-def _repair_truncated_ids(run_dir, exp):
-    """결과 JSON 의 잘린 productId 를 배치 정본과 접두사 대조로 복구한다.
-
-    유일하게 맞는 후보가 있을 때만 고친다(둘 이상이면 손대지 않고 감사 경고로 넘긴다).
-    반환: 고친 건수.
-    """
-    valid_by_batch = {n: list(pids) for n, pids in exp.items()}
-    fixed = 0
-    for rf in sorted(glob.glob(os.path.join(run_dir, "results", "result_*.json"))):
-        n = int(os.path.basename(rf)[7:10])
-        valid = valid_by_batch.get(n) or []
-        if not valid:
-            continue
-        try:
-            doc = _load(rf)
-        except Exception:      # noqa: BLE001 — 깨진 JSON 은 감사가 따로 알린다
-            continue
-        changed = False
-        for p in doc.get("products", []):
-            pid = p.get("productId") or ""
-            if not pid or pid in valid:
-                continue
-            cand = [v for v in valid if v.startswith(pid[:20])]
-            if len(cand) == 1:
-                p["productId"] = cand[0]
-                changed = True
-                fixed += 1
-        if changed:
-            _dump(rf, doc)
-    if fixed:
-        print(f"  [감사] 잘린 상품id {fixed}건 복구(배치 정본과 접두사 대조)")
-    return fixed
-
-
-def _fill_prefix_names(rec_options, names):
-    """워커가 이름을 안 준 옵션값 중 **정렬용 접두사가 붙은 것**을 자동 정리한다.
-
-    워커는 '유지'한 옵션만 이름을 짓는데, 저장 후 검증(`check_names`)은 **모든 옵션값**을
-    본다 — 제외된 값에 남은 `A. `·`1) ` 때문에 '정렬용 접두사 잔존'으로 저장이 통째로
-    실패했다(2026-08-04 용쌤2-1: 145개 상품 2,304개 값). 접두사 제거는 판단이 아니라
-    기계 작업이라 여기서 채운다. 이미 워커가 준 이름은 건드리지 않는다.
-    """
-    out = dict(names)
-    used = {str(v).strip() for v in out.values()}
-    for gi, grp in enumerate(rec_options.get("차원") or rec_options.get("groups") or []):
-        for v in (grp.get("values") or []):
-            vid = v.get("vid")
-            cur = str(v.get("현재이름") or v.get("name") or "")
-            stripped = R.strip_prefix(cur)
-            if vid is None or stripped == cur.strip():
-                continue
-            if f"@{gi}:{vid}" in out or str(vid) in out:
-                continue
-            new = stripped[:R.NAME_MAX].strip()
-            if not new:
-                continue
-            base, i = new, 2
-            while new in used:
-                suf = f" {i}"
-                new = base[:R.NAME_MAX - len(suf)] + suf
-                i += 1
-            used.add(new)
-            out[f"@{gi}:{vid}"] = new
+def _batch_products(run_dir):
+    """batches/batch_NNN.json → {productId: 배치상품}. **로컬 이미지 경로가 여기 있다.**"""
+    out = {}
+    for bf in sorted(glob.glob(os.path.join(run_dir, "batches", "batch_*.json"))):
+        for p in _load(bf).get("products", []):
+            if p.get("productId"):
+                out[p["productId"]] = p
     return out
+
+
+def _md5(path):
+    try:
+        with open(path, "rb") as f:
+            return hashlib.md5(f.read()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _thumb_prefer_id(bp, option, keep_ids):
+    """대표썸네일과 **바이트가 같은** 옵션 이미지를 쓰는 최저가 판매행 id (2026-08-06 이룸님).
+
+    최저가 동률에서 "어느 게 대표썸네일과 같은 물건이냐"는 시각 판단이라 워커가 자주
+    비워 두고, 그러면 상태가 `확인요` 가 되어 저장이 통째로 멈춘다(3-1 w1 5건).
+    그런데 **파일이 아예 같으면 판단이 아니라 사실이다** — 불사자가 그 옵션 이미지를
+    대표썸네일로 쓴 것이다. prep 이 대표썸네일·옵션 이미지를 이미 받아 두므로 비용 0이고,
+    남는 것만 사람이 눈으로 본다(옵션 이미지 1장 ≈ 800~1,300 토큰).
+
+    **동률군 밖이면 빈 문자열을 돌려준다** — 더 비싼 걸 지목하면 `plan` 이 무시하면서
+    경고를 하나 더 달아 오히려 `확인요` 를 만든다(대표는 최저가라는 규칙이 우선).
+    """
+    rep = _md5(bp.get("대표썸네일") or "")
+    if not rep:
+        return ""
+    hit = {}                                     # 차원 index → vid(문자열)
+    for d in (bp.get("차원") or []):
+        for v in (d.get("values") or []):
+            if v.get("이미지") and _md5(v["이미지"]) == rep:
+                hit.setdefault(int(d.get("index") or 0), str(v.get("vid")))
+    if not hit:
+        return ""
+    keep = set(keep_ids or ())
+    cands = [r for r in (option.get("판매행") or [])
+             if r.get("id") in keep and R.sellable(r)]
+    if not cands:
+        return ""
+    lowest = min((r.get("sale_price") or 0) for r in cands)
+    matched = [r for r in cands
+               if all(gi < len(str(r.get("id", "")).split(":"))
+                      and str(r["id"]).split(":")[gi] == vid
+                      for gi, vid in hit.items())]
+    best = next((r for r in matched if (r.get("sale_price") or 0) == lowest), None)
+    return best["id"] if best else ""
 
 
 def _audit_results(run_dir):
@@ -360,11 +417,6 @@ def _audit_results(run_dir):
     exp = _expected_by_batch(run_dir)
     if not exp:
         return [], False          # 구형 run-dir — 대조할 정본이 없다
-    # 잘린 상품id 자동 복구 — 워커가 productId 뒷자리를 빼먹고 적는 일이 흔하다
-    # (2026-08-04 용쌤2-1: 두 번의 재팬아웃에도 재발 → 배치 정본과 접두사로 대조해
-    # 유일하게 맞는 id 가 있으면 확정 복구한다. 재팬아웃보다 싸고 확실하다).
-    _repair_truncated_ids(run_dir, exp)
-
     got, files = set(), {}
     for rf in sorted(glob.glob(os.path.join(run_dir, "results", "result_*.json"))):
         doc = _load(rf)
@@ -391,12 +443,61 @@ def _audit_results(run_dir):
     return warns, bool(missing)
 
 
-def _plans(run_dir):
+SPEC_TAB = "상품명"        # 상품명 스킬의 원장 탭
+SPEC_COL = "대표지정"      # 그 탭의 규격어 대표 지정 열 — `<판매행id> | <근거키워드>`
+
+
+def read_spec_main(sheet):
+    """상품명 탭의 `대표지정` 열 → {상품id: (판매행id, 근거키워드)}.
+
+    상품명 스킬이 규격어 키워드(`3단서빙카트`)를 쓸 때, 그 규격에 해당하는 옵션을
+    지정해 넘긴다(2026-08-05 이룸님). 옵션정리는 그걸 대표로 세운다 — 최저가가 아니어도.
+    카테고리 시트 J·K 열을 상품명 prep 이 읽는 것과 같은 방식이다.
+
+    탭이나 열이 없으면 빈 dict — 옛 그룹 시트에서도 그냥 돌아야 한다.
+    같은 pid 가 여러 행이면(재작업) **마지막 행이 이긴다** — 상품명 탭은 append 원장이다.
+    """
+    try:
+        # `sheets_get` 은 2차원 배열을 **그대로** 돌려준다(`{"values": ...}` 가 아니다).
+        # 여기서 `.get("values")` 를 부르는 바람에 AttributeError 가 나고, 그걸 아래
+        # except 가 삼켜 **대표지정을 한 번도 못 읽은 채** 조용히 빈 dict 로 돌았다
+        # (2026-08-05 실측: 1-2 그룹 292건 run 에서 최저가 동률 23건의 대표가
+        #  상품명 지정 대신 원본 순서로 정해졌다).
+        rows = sheets_get(sheet, SPEC_TAB) or []
+    except Exception as e:  # noqa: BLE001  원장이 없다고 옵션 정리를 멈추지 않는다
+        print(f"  [경고] '{SPEC_TAB}' 탭을 못 읽었다 — 대표지정 없이 진행: {str(e)[:100]}",
+              file=sys.stderr)
+        return {}
+    if not rows:
+        return {}
+    hdr = rows[0]
+    if "상품id" not in hdr or SPEC_COL not in hdr:
+        return {}
+    ci, cs = hdr.index("상품id"), hdr.index(SPEC_COL)
+    out = {}
+    for r in rows[1:]:
+        pid = (r[ci] if ci < len(r) else "").strip()
+        cell = (r[cs] if cs < len(r) else "").strip()
+        if not pid:
+            continue
+        if not cell:
+            out.pop(pid, None)     # 재작업이 지정을 지웠다 → 지정 없음으로 되돌린다
+            continue
+        rid, _, kw = cell.partition("|")
+        out[pid] = (rid.strip(), kw.strip())
+    return out
+
+
+def _plans(run_dir, spec_main=None):
     """results/*.json + 스냅샷 → [(상품, 계획, 결과)]. 불사자를 부르지 않는다.
 
     같은 pid 가 여러 파일에 있으면(재팬아웃 잔재) **마지막 파일이 이긴다.**
     배치 정본이 있으면 거기 없는 pid(워커 환각)는 버린다 — 원장 오염 방지.
+
+    spec_main = {상품id: (판매행id, 근거키워드)} — 상품명이 규격어로 지정한 대표.
     """
+    spec_main = spec_main or {}
+    bprod = _batch_products(run_dir)
     exp = _expected_by_batch(run_dir)
     allow = {pid for pids in exp.values() for pid in pids} if exp else None
     by_pid, order = {}, []
@@ -421,26 +522,42 @@ def _plans(run_dir):
         # 검수표 머리글이 통째로 빈칸이 된다(어느 상품을 승인하는지 알 수 없다).
         if not p.get("상품명"):
             p["상품명"] = rec.get("상품명", "")
-        names = {str(k): v for k, v in (p.get("이름") or {}).items()}
-        # 워커가 손대지 않은 값에 남은 정렬용 접두사를 기계적으로 정리한다 —
-        # 저장 후 검증은 모든 값을 보므로, 이게 없으면 저장이 통째로 실패한다.
-        names = _fill_prefix_names(rec["옵션"], names)
+        # 규칙 11(정렬용 접두사 제거)은 기계적이라 검사 전에 강제한다. 워커 결과에
+        # 되써서 저장 경로(`_commit`)도 같은 이름을 쓰게 한다 — 두 벌이면 어긋난다.
+        names = R.normalize_names(p.get("이름"))
+        p["이름"] = names
+        sm, sk = spec_main.get(pid, ("", ""))
+        # 워커가 대표를 못 정했으면 **대표썸네일과 바이트가 같은 옵션**을 찾아 쓴다.
+        # 판단이 아니라 사실이고 이미 받아둔 파일이라 비용이 0이다(2026-08-06 이룸님).
+        prefer = p.get("대표후보")
+        if not prefer and not sm:
+            prefer = _thumb_prefer_id(bprod.get(pid) or {}, rec["옵션"],
+                                      p.get("유지") or ())
+            if prefer:
+                p["대표썸네일일치"] = prefer      # 검수표·시트 메모에 근거를 남긴다
         plan = R.plan(rec["옵션"],
                       keep_ids=set(p.get("유지") or ()),
                       names=names,
-                      prefer_id=p.get("대표후보"))
+                      prefer_id=prefer,
+                      spec_main=sm or None, spec_keyword=sk)
+        # 규격어 지정으로 대표가 옮겨지면 `기본형` 마커도 따라 옮겨진다. 저장 경로
+        # (`_commit` 은 `w["이름"]` 을 쓴다)가 같은 이름을 보게 워커 결과에 되쓴다 —
+        # 두 벌이면 검사는 통과하고 저장은 옛 이름으로 나간다.
+        if plan.get("마커이동"):
+            names = R.apply_base_suffix(rec["옵션"], names, plan["마커이동"])
+            p["이름"] = names
         # 계산은 id 로 하고, 승인은 이름으로 본다. 라벨을 여기서 한 번 만들어
         # 시트·--emit·미리보기 표가 같은 문자열을 쓰게 한다(어긋나면 두 벌이 된다).
         plan["라벨"] = R.row_labels(rec["옵션"], names)
         plan["이름변경"] = R.name_changes(rec["옵션"], names)
         plan["가격"] = {str(r["id"]): r.get("sale_price")
                       for r in (rec["옵션"].get("판매행") or [])}
-        # 복합옵션인데 마지막 차원 값이 1개뿐이면 — 전 조합이 그 값을 공유해서 규칙 17
-        # (마지막 항목에 마커)대로 저장하면 모든 조합에 '기본형'이 보인다(전면 오염).
-        # 기준 재정 전까지 자동 저장하지 않고 수동 판단(2026-08-01 이룸님, 사례 수집 중).
-        dims = rec["옵션"].get("차원") or []
-        if len(dims) >= 2 and len(dims[-1].get("values") or []) == 1:
-            plan["마커수동"] = True
+        # 축 이름 감사(규칙 18) — **저장 대상이 아니다.** MCP 에 축 이름 변경이 없어서
+        # 시트 원장에만 남기고, 상태에도 영향을 주지 않는다(축 때문에 옵션 저장을 막지 않는다).
+        plan["축감사"] = R.axis_audit(rec["옵션"], p.get("축교정"))
+        # (2026-08-05 이룸님) 마지막 차원 값이 1개인 경우를 '수동 판단'으로 멈추던 자리다.
+        # 기준이 정해져서 `main_value_key` 가 **값 2개 이상인 마지막 차원**을 고르게 됐고,
+        # 그러면 오염이 없어 멈출 이유가 사라졌다(용쌤1-3 49건이 이 모양이었다).
         out.append((pid, plan, p))
     return out
 
@@ -454,24 +571,44 @@ def _price(plan, rid):
     return ((plan or {}).get("가격") or {}).get(str(rid))
 
 
+# 저장을 막지 **않는** 경고 (2026-08-07 이룸님). 나머지 경고는 종전대로 `확인요`.
+#
+# `경고가 하나라도 있으면 확인요` 는 너무 뭉툭했다 — **최저가 동률**은 규칙이 이미 답을
+# 내는 상황(원본 순서)인데도 저장을 통째로 막아 사람 큐로 갔다. 3-2 에서 4건이 그렇게
+# 쌓였고, 이룸님 판정: "대표를 원본 순서로 해도 상관 없고, 썸네일 단계에서 썸네일만
+# 대표옵션과 동일하면 된다." → 저장하고 **썸네일 열에 재작업을 찍어** 넘긴다(_handoff_tie).
+NONBLOCKING_WARNINGS = ("최저가 동률",)
+
+
 def _status_of(plan, worker):
+    # **상품명이 가리키는 물건과 옵션 실물이 아예 다른 품목** = 삭제 건이다
+    # (2026-08-06 이룸님). 이름을 다시 짓는 게 아니라 상품을 지운다 — 옵션을 정리해 봐야
+    # 팔 수 없는 물건이므로 저장 대상에서 뺀다. 실제 삭제는 메인이 `bulsaja_market_delete`
+    # 로 수행하고, 여기서는 `deletion_candidates.json` + 현황판 표시까지만 한다.
+    if str(worker.get("삭제후보") or "").strip():
+        return "보류(삭제대상)"
     if plan is None:
         return worker.get("상태") or "보류(스냅샷 없음)"
+    # 상품명이 규격어로 지정한 대표를 워커가 '메인상품 아님'으로 뺐다 — 판단이 갈린다.
+    # 규칙으로 정할 수 없어(제외 8분류는 '다른모델이 맞다'와 '잘못 뺐다'가 사유 문자열만
+    # 으론 구분 안 된다) 사람에게 올린다. 용쌤1-3 실측 2건 = 1,000건당 2~3건 규모.
+    if plan.get("대표충돌"):
+        return "보류(대표충돌)"
     if not plan.get("대표"):
         return "보류(남길 옵션 없음)"
     chk = plan.get("이름검사") or {}
     if chk.get("위반") or chk.get("중복"):
         return "보류(이름규칙)"
-    # 마지막 차원 값 1개짜리 복합옵션 — 마커를 어디 붙여도 문제라 수동 판단으로 넘긴다.
-    # 규칙대로(@마지막차원) 붙인 결과가 검증을 '통과'해 전면 오염이 자동 저장되는 걸 막는다.
-    if plan.get("마커수동"):
-        return "보류(기본형 수동판단)"
+    # `마커수동` 은 폐지됐다(2026-08-05) — 값 1개짜리 차원을 건너뛰게 되어 오염이 없다.
+    # 옛 run-dir 의 계획에 남아 있을 수 있어 키는 읽지 않는다.
     # 대표옵션 마커('기본형')는 상품명 끝의 같은 단어와 짝을 이루는 유일한 표식이다 —
     # 없거나 대표 아닌 옵션에 붙어 있으면 저장 전에 멈춘다(2026-07-30 이룸님).
     mark = chk.get("마커") or {}
     if mark.get("누락") or mark.get("오부착"):
         return "보류(기본형)"
-    if plan.get("경고"):
+    blocking = [w for w in (plan.get("경고") or [])
+                if not str(w).startswith(NONBLOCKING_WARNINGS)]
+    if blocking:
         return "확인요"
     return "정리대상"
 
@@ -503,6 +640,9 @@ def _print_review(rows):
             print(f"   메인상품: {w['메인상품']}")
         print(f"   대표 {_lab(plan, plan['대표'])} · 기준가 {(plan['기준가'] or 0):,} "
               f"→ 상한 {(plan['상한'] or 0):,}")
+        if w.get("대표썸네일일치"):
+            print(f"   [대표근거] 대표썸네일과 파일이 동일한 옵션 "
+                  f"{_lab(plan, w['대표썸네일일치'])}({w['대표썸네일일치']}) — 동률 자동 해소")
 
         chg = [c for c in (plan.get("이름변경") or []) if c["변경"]]
         same = len(plan.get("이름변경") or []) - len(chg)
@@ -513,6 +653,15 @@ def _print_review(rows):
                 print(f"     {pre}{c['키']:>4} {c['기존']}  →  {c['교정']}")
         elif plan.get("이름변경"):
             print(f"   [옵션명 교정 0건 — {same}건 그대로]")
+
+        # 축 이름은 이번 저장에서 안 바뀐다(MCP 미지원) — 시트 원장으로만 넘어간다.
+        if plan.get("축감사"):
+            print(f"   [옵션 축 {len(plan['축감사'])}건 — 저장 안 함, '{AXIS_TAB}' 탭 기록]")
+            for a in plan["축감사"]:
+                tail = f"  → 제안 '{a['제안']}'" if a["제안"] else ""
+                print(f"     차원{a['차원']} '{a['현재']}'(원문 {a['원문'] or '-'})"
+                      f"{tail}  [{'; '.join(a['신호']) or '워커 제안'}]")
+                print(f"       값: {' / '.join(v for v in a['값예시'] if v)[:70]}")
 
         print(f"   [판매 {len(plan['유지'])}건 · 업로드 순서(판매가 오름차순)]")
         for i, rid in enumerate(plan.get("순서") or [], 1):
@@ -536,16 +685,34 @@ def cmd_apply(args):
               "pending 재계산 → 재팬아웃으로 채우거나, 의도된 것이면 --allow-missing.",
               file=sys.stderr)
         sys.exit(3)
-    items = _plans(run_dir)
+    # 상품명이 규격어로 지정한 대표(2026-08-05) — 없으면 종전대로 최저가가 대표다
+    spec_main = read_spec_main(sheet)
+    if spec_main:
+        print(f"  대표지정(상품명 규격어) {len(spec_main)}건 반영")
+    items = _plans(run_dir, spec_main=spec_main)
     if not items:
         print(f"results 가 없다: {os.path.join(run_dir, 'results')}")
         return
     rows = [(pid, plan, w, _status_of(plan, w)) for pid, plan, w in items]
+    # --ids: 재저장(부분 재시도) 전용. 대량 run 에서 일부만 실패했을 때 전건을 다시
+    # 돌리지 않고 그 상품만 다시 태운다(용쌤1-2: 540건 중 57건 실패).
+    if getattr(args, "ids", None):
+        want = {i.strip() for i in args.ids if i.strip()}
+        unknown = want - {r[0] for r in rows}
+        if unknown:
+            print(f"  [경고] results 에 없는 상품 {len(unknown)}건: {sorted(unknown)[:3]}")
+        rows = [r for r in rows if r[0] in want]
+        print(f"  --ids 적용 → {len(rows)}건")
+        if not rows:
+            return
     _print_table(rows)
     if not args.no_review:
         _print_review(rows)
 
     for pid, plan, w, st in rows:
+        # 판매행 상한으로 자른 건 — 경고가 아니라 정책 적용 기록이라 상태를 낮추지 않는다.
+        if plan and plan.get("행제한"):
+            print(f"  [행제한] {pid}: {plan['행제한']}")
         if plan and plan.get("경고"):
             for x in plan["경고"]:
                 print(f"  [경고] {pid}: {x}")
@@ -558,8 +725,25 @@ def cmd_apply(args):
         if mark.get("오부착"):
             print(f"  [기본형] {pid}: 대표가 아닌 옵션에 붙었다 {mark['오부착'][:3]}")
 
+    # 삭제 건 — 상품명이 가리키는 물건과 옵션 실물이 아예 다른 품목(2026-08-06 이룸님).
+    # 파일로 남기지 않으면 표에 한 줄 찍히고 끝나 아무도 안 지운다. 실제 삭제는 메인이
+    # `bulsaja_market_delete` 로 한다(썸네일 §404 자동삭제와 같은 경로).
+    dels = {pid: {"상품명": (w or {}).get("상품명", ""),
+                  "사유": str((w or {}).get("삭제후보") or "").strip()[:200]}
+            for pid, _plan, w, st in rows if st == "보류(삭제대상)"}
+    if dels:
+        _dump(os.path.join(os.path.abspath(args.run_dir), "deletion_candidates.json"), dels)
+        print(f"\n  [삭제대상] {len(dels)}건 — deletion_candidates.json "
+              f"(저장하지 않는다. 메인이 bulsaja_market_delete 로 처리)")
+        for pid, d in list(dels.items())[:5]:
+            print(f"    {pid} {d['상품명'][:28]} — {d['사유'][:60]}")
+
     ok = [r for r in rows if r[3] == "정리대상"]
     print(f"\n정리대상 {len(ok)}건 / 확인요·보류 {len(rows) - len(ok)}건")
+    part = [r for r in rows if r[3] in PARTIAL_SAVE]
+    if part:
+        print(f"  그중 부분저장 {len(part)}건 — 옵션명만 건너뛰고 판매·대표·순서는 저장한다"
+              f"(현황판 {TASK} 열에 재작업으로 남아 다음 회차가 다시 집는다)")
 
     # --emit: 계획 요약을 JSON 으로 남긴다. 세로 러너(onestep)의 이상 신호 판정이 읽는다.
     # 표는 사람용이라 파싱 대상이 아니고, plan 객체는 내부 구조라 그대로 노출하지 않는다.
@@ -591,17 +775,68 @@ def cmd_apply(args):
                            or {}).get("누락")),
             "기본형오부착": list((((plan or {}).get("이름검사") or {}).get("마커")
                              or {}).get("오부착") or []),
+            # 축 이름(규칙 18) — 이번 저장 대상이 아니고 시트 원장으로만 간다.
+            # 세로 러너 게이트가 "이 상품은 축도 손봐야 한다"를 사람에게 보여주는 재료.
+            "축감사": list((plan or {}).get("축감사") or []),
         } for pid, plan, w, st in rows])
         print(f"  계획 요약: {args.emit}")
 
     if not args.no_sheet:
         _log_sheet(sheet, rows)
+        _log_axis_sheet(sheet, rows)
+        if dels and args.commit:
+            # 아직 안 지웠어도 다음 회차가 헛돌지 않게 표시해 둔다(삭제되면 `해당없음`).
+            try:
+                n = matrix.mark_many(sheet, TASK,
+                                     {pid: "보류(삭제대상)" for pid in dels})
+                print(f"  현황판({matrix.TAB}) {TASK}: 삭제대상 {n}칸")
+            except Exception as e:  # noqa: BLE001
+                print(f"  [경고] 삭제대상 표시 실패: {str(e)[:120]}", file=sys.stderr)
 
     if not args.commit:
         print("\n미리보기다. 실제 반영하려면 이룸님 승인 후 --commit 을 붙여라.")
         return
 
     _commit(sheet, rows, args)
+
+
+def _commit_targets(rows):
+    """저장 대상 = `정리대상` + **부분저장 대상**(이름 규칙만 어긴 건).
+
+    `보류(대표충돌)`·`보류(남길 옵션 없음)`·`확인요` 는 그대로 저장하지 않는다 —
+    그건 **무엇을 팔지**가 아직 안 정해진 상태라, 저장하면 틀린 구성을 밀어 넣는다.
+    `보류(기본형)` 만 다르다: 어긴 건 이름 표기 하나뿐이고 판매 구성은 확정돼 있다.
+    """
+    return [r for r in rows if r[3] == "정리대상" or r[3] in PARTIAL_SAVE]
+
+
+def _names_to_save(w, before, partial):
+    """저장할 옵션명. 부분저장이면 **빈 dict** — ①(이름) 단계를 통째로 건너뛴다.
+
+    `기본형` 마커는 이름에 붙는 표시라 위반한 이름을 그대로 밀어 넣으면 틀린 마커가
+    남는다. 저장 후 검증(`R.verify`)도 `names` 가 비면 이름·마커 항목을 건너뛴다.
+    """
+    if partial:
+        return {}
+    names = {str(k): v for k, v in (w.get("이름") or {}).items()}
+    # 워커가 안 준 값에 남은 정렬용 접두사를 기계적으로 메운다 — 그 한 값 때문에
+    # 이름 저장 후 검사가 상품을 통째로 떨어뜨린다(용쌤1-3: 실패 36건 중 32건).
+    return R.with_prefix_cleanup(before, names)
+
+
+def _memo(plan, w):
+    """시트 `메모` — 대표충돌이면 사람이 판단할 재료를 먼저 적는다.
+
+    `보류(대표충돌)` 은 상품명이 지정한 대표를 워커가 뺀 상태다. 규칙으로 못 정하므로
+    (제외 8분류는 '다른모델이 맞다'와 '잘못 뺐다'가 사유 문자열만으론 구분 안 된다)
+    지정 옵션·근거 키워드·제외 사유 셋을 남겨 이룸님이 보고 정한다.
+    """
+    c = (plan or {}).get("대표충돌")
+    if c:
+        return (f"대표충돌 — 상품명이 '{c.get('근거키워드', '')}' 근거로 "
+                f"{_lab(plan, c.get('지정'))}({c.get('지정')})를 대표로 지정했으나 "
+                f"옵션정리가 제외함: {c.get('사유', '')}")[:400]
+    return "; ".join((plan or {}).get("경고") or [])[:400] or w.get("메모", "")
 
 
 def _row_values(pid, plan, w, st):
@@ -616,9 +851,32 @@ def _row_values(pid, plan, w, st):
         f"{_lab(plan, plan['대표'])} ({plan['대표']})" if plan and plan.get("대표") else "",
         (plan or {}).get("기준가") or "", (plan or {}).get("상한") or "",
         " > ".join(_lab(plan, i) for i in ((plan or {}).get("순서") or []))[:900],
-        st, "; ".join((plan or {}).get("경고") or [])[:400] or w.get("메모", ""),
+        st, _memo(plan, w),
         "; ".join(f"{c['기존']}→{c['교정']}" for c in chg)[:900],
     ]
+
+
+# gws 는 요청 바디를 명령줄 인자로 넘긴다 → 한 호출의 상한은 OS 의 인자 길이다.
+# 윈도우 CreateProcess 는 32,767자, macOS/리눅스는 ARG_MAX(맥 1MB)라 자릿수가 다르다.
+# 윈도우 기준(12k)을 맥에 그대로 쓰면 호출이 수십 번으로 쪼개져 **쓰기 쿼터**에 걸린다.
+_ARG_BUDGET = 12000 if os.name == "nt" else 200000
+
+
+def _row_runs(sorted_upd, budget=None):
+    """(행번호, 값) 오름차순 목록 → 연속 구간 [(시작행, [값...]), ...].
+
+    행 번호가 끊기거나 길이 예산을 넘으면 구간을 끊는다.
+    """
+    budget = budget or _ARG_BUDGET
+    runs = []
+    for r, vals in sorted_upd:
+        n = len(json.dumps(vals, ensure_ascii=False)) + 1
+        if runs and r == runs[-1][0] + len(runs[-1][1]) and runs[-1][2] + n <= budget:
+            runs[-1][1].append(vals)
+            runs[-1][2] += n
+        else:
+            runs.append([r, [vals], n])
+    return [(r, block) for r, block, _ in runs]
 
 
 def _log_sheet(sheet, rows):
@@ -633,26 +891,88 @@ def _log_sheet(sheet, rows):
     at = {pid: i + 2 for i, pid in enumerate(col_a) if pid}   # 상품id → 시트 행번호
     last = _col_letter(len(HEADER))
 
-    add = []
+    add, upd = [], []
     for pid, plan, w, st in rows:
         vals = _row_values(pid, plan, w, st)
         r = at.get(pid)
         if r:
-            sheets_update(sheet, f"'{TAB}'!A{r}:{last}{r}", [vals],
-                          value_input="USER_ENTERED")
-            print(f"  시트 갱신: {pid} → '{TAB}'!{r}행")
-            # 구글시트 쓰기 쿼터(분당 60회) — 재실행으로 기존 행을 대량 갱신할 때
-            # 연속호출이 걸린다(2026-08-02 118행에서 실측). 여유 있게 1.1초 간격.
-            time.sleep(1.1)
+            upd.append((r, vals))
         else:
             add.append(vals)
+
+    # 갱신 — **연속 구간으로 묶고, 그 구간들을 다시 batchUpdate 한 호출에 싣는다.**
+    # 건건 update 하면 쓰기 호출이 행수만큼 나가 분당 쿼터(60)에 즉사한다
+    # (용쌤1-2 676행에서 실측). 연속 묶기만으로는 **재작업처럼 대상이 흩어진 경우**를
+    # 못 줄인다 — 92행이 92호출이 되어 또 429 가 났다(용쌤1-3 기본형 재작업).
+    ranges = [(f"'{TAB}'!A{start}:{last}{start + len(block) - 1}", block)
+              for start, block in _row_runs(sorted(upd))]
+    for _, part in chunk_by_size(ranges, budget=_ARG_BUDGET):
+        sheets_batch_update(sheet, part, value_input="USER_ENTERED")
+    if upd:
+        print(f"  시트 갱신: {len(upd)}행 / 구간 {len(ranges)}개 → '{TAB}'")
+
     if add:
-        # 청크 분할(호출자 책임, gsheets.append_rows 계약) — 한 번에 다 보내면
-        # Windows 명령줄 길이 제한(WinError 206)에 걸린다(2026-08-02 118행에서 실측).
-        CHUNK = 20
-        for i in range(0, len(add), CHUNK):
-            append_rows(sheet, TAB, add[i:i + CHUNK])
+        # gws 는 요청 바디를 명령줄 인자로 넘긴다 → 행이 많으면 ARG_MAX 를 넘겨
+        # `[Errno 7] Argument list too long` 으로 죽는다(용쌤1-2 678행에서 실측).
+        # 길이 기준 청크는 라이브러리가 갖고 있고, 분할은 호출자 책임이다.
+        for _, part in chunk_by_size(add, budget=_ARG_BUDGET):
+            append_rows(sheet, TAB, part)
         print(f"  시트 기록: {len(add)}행 → '{TAB}'")
+
+
+def _log_axis_sheet(sheet, rows):
+    """옵션 축 이름 원장(`옵션축` 탭) — 규칙 18. **저장하지 않고 기록만 한다.**
+
+    축 이름(`prop_name`)은 불사자 MCP 로 못 바꾼다(`renameValues` 는 값 전용). 앱 UI 에서
+    수동으로만 되고 MCP 추가는 요청해둔 상태라, 여기 '대기'로 쌓아 나중에 한꺼번에 태운다.
+
+    키는 (상품id, 차원 index) — 상품 하나에 축이 여럿이라 상품id 만으로는 못 찍는다.
+    **상태가 `대기` 가 아닌 행은 건드리지 않는다** — 이룸님이 `반영`·`무시` 로 바꿔둔 판단을
+    재실행이 되돌리면 원장이 거짓이 된다(카테고리 finish 가 밟았던 덮어쓰기 결함과 같은 함정).
+    """
+    entries = [(pid, w, a) for pid, plan, w, _st in rows
+               for a in ((plan or {}).get("축감사") or [])]
+    if not entries:
+        return
+    if ensure_tab(sheet, AXIS_TAB, AXIS_HEADER):
+        print(f"  탭 신설: {AXIS_TAB}")
+    last = _col_letter(len(AXIS_HEADER))
+    try:
+        cur = sheets_get(sheet, f"'{AXIS_TAB}'!A2:{last}")
+    except Exception:
+        cur = []
+    at, state = {}, {}
+    for i, r in enumerate(cur):
+        pid = str(r[0]).strip() if r else ""
+        if not pid:
+            continue
+        key = (pid, str(r[3]).strip() if len(r) > 3 else "")
+        at[key] = i + 2
+        state[key] = str(r[10]).strip() if len(r) > 10 else ""
+
+    add, upd, kept = [], [], 0
+    for pid, w, a in entries:
+        key = (pid, str(a["차원"]))
+        vals = [pid, _today(), w.get("상품명", ""), str(a["차원"]),
+                a["원문"], a["현재"], a["제안"], a["사유"][:400],
+                " / ".join(v for v in a["값예시"] if v)[:300],
+                "; ".join(a["신호"])[:200], AXIS_PENDING]
+        r = at.get(key)
+        if r is None:
+            add.append(vals)
+        elif state.get(key, AXIS_PENDING) not in ("", AXIS_PENDING):
+            kept += 1                      # 사람이 판단한 행 — 그대로 둔다
+        else:
+            upd.append((r, vals))
+
+    for start, block in _row_runs(sorted(upd)):
+        sheets_update(sheet, f"'{AXIS_TAB}'!A{start}:{last}{start + len(block) - 1}",
+                      block, value_input="USER_ENTERED")
+    if add:
+        for _, part in chunk_by_size(add, budget=_ARG_BUDGET):
+            append_rows(sheet, AXIS_TAB, part)
+    print(f"  옵션 축: 신규 {len(add)} / 갱신 {len(upd)} / 판단완료 유지 {kept} "
+          f"→ '{AXIS_TAB}' (저장 안 함 — 앱에서 수동 반영)")
 
 
 def _commit(sheet, rows, args):
@@ -660,9 +980,17 @@ def _commit(sheet, rows, args):
 
     이름과 순서를 **한 호출에 넣지 않는다**(쿠팡 옵션 연결 보호). 그래서 2단계다.
     """
-    targets = [r for r in rows if r[3] == "정리대상"]
+    targets = _commit_targets(rows)
     if not targets:
         print("정리대상이 없다.")
+        # 저장할 게 없어도 **이관은 넘긴다** — 상품명 이관은 옵션 저장과 무관한데
+        # 여기서 return 하면 전건 보류인 회차(대표충돌이 몰린 회차)의 신호가 통째로
+        # 사라진다. 그 회차가 곧 상품명 이상이 가장 많은 회차다(2026-08-06 이룸님).
+        if not args.no_sheet:
+            try:
+                _handoff(sheet, rows, {}, matrix.read(sheet))
+            except Exception as e:  # noqa: BLE001
+                print(f"  [경고] 이관 실패: {str(e)[:120]}", file=sys.stderr)
         return
     # 저장 직전 상태를 run-dir 에 남긴다(헤르메스 12 단계6 "저장 직전 스냅샷 기록").
     # 스냅샷은 저장 성공 시 새 값으로 덮어쓰므로, 되돌리려면 이 백업이 유일한 원본이다.
@@ -673,31 +1001,51 @@ def _commit(sheet, rows, args):
     print(f"  저장 전 상태 백업: {backup_path} ({len(backup)}건)")
     print(f"  되돌리기: python {os.path.basename(__file__)} restore --run-dir {args.run_dir}")
 
-    # 재개 — 저장은 상품당 수 초~수십 초라 대량 그룹은 한 번에 못 끝낸다(중단·타임아웃).
-    # 성공한 상품을 run-dir 에 남겨 다음 실행이 건너뛴다. 정본은 이 파일이 아니라 불사자지만,
-    # 재저장은 같은 값을 다시 쓰는 것이라 건너뛰어도 안전하다.
-    committed_path = os.path.join(args.run_dir, "committed.json")
-    committed = set(_load(committed_path)) if os.path.exists(committed_path) else set()
-    if committed:
-        print(f"  재개: 이미 저장 완료 {len(committed)}건 건너뜀")
-
     mcp = OptionMCP()
     mcp.open()
-    done, failed = {}, {}
+    done, failed, partial_ids = {}, {}, []
     try:
-        for pid, plan, w, _ in targets:
-            if pid in committed:
-                done[pid] = "완료"
-                continue
+        for pid, plan, w, st in targets:
             before = backup.get(pid) or {}
-            names = {str(k): v for k, v in (w.get("이름") or {}).items()}
+            partial = st in PARTIAL_SAVE
+            names = _names_to_save(w, before, partial)
+            keep = list(plan["유지"])
+            drop = [e["id"] for e in plan["제외"]]
+            # `excludeSkuIds` 는 MCP 스키마 상한이 200이라, 조합이 많은 상품은 제외 목록만으로
+            # 저장이 통째로 막힌다(용쌤1-1 실측: 제외가 200을 넘는 상품 12건).
+            # **include/exclude 는 화이트리스트가 아니라 '적용' 이다** — 안 보낸 행은 현재 상태를
+            # 유지한다. 그래서 제외를 생략하면 '이미 제외된 행' 만 우연히 맞고, 지금 판매중인
+            # 행은 그대로 팔린다(검증이 '판매 포함 초과' 로 잡았다).
+            # → 생략하지 말고 **200개씩 나눠 먼저 보낸다.** 마지막 호출에 대표·순서를 싣는다.
+            drop_chunks = []
+            if len(drop) > 200:
+                drop_chunks = [drop[i:i + 200] for i in range(0, len(drop), 200)]
+                drop = drop_chunks.pop()      # 마지막 덩어리는 본 호출에 실어 보낸다
             try:
                 # ① 이름 먼저 (정렬과 같은 호출 금지)
                 if names:
                     items, missing = R.rename_targets(before, names)
                     if missing:
                         raise RuntimeError(f"옵션값을 못 찾았다: {missing[:5]}")
-                    mcp.option_update(pid, renameValues=items)
+                    try:
+                        mcp.option_update(pid, renameValues=items)
+                    except RuntimeError as e:
+                        # 기존 대표 상태가 무효면(대표행이 2개거나 대표가 판매제외) 불사자는
+                        # **이름 변경조차** 거부한다 — "판매중인 새 대표 옵션 ID를 함께
+                        # 지정해 주세요". 이름만으로는 못 빠져나오므로 대표·포함/제외를
+                        # 같은 호출에 실어 상태를 함께 바로잡는다. 금지 조합은 이름+**순서**뿐이라
+                        # 순서만 빼면 된다(용쌤1-2 10건에서 실측·검증).
+                        if "대표" not in str(e):
+                            raise
+                        # 제외가 200을 넘어 나눠 보내야 하는 상품이면 여기서도 앞 덩어리를
+                        # 먼저 흘려보내야 한다 — 마지막 덩어리만 실으면 대표 상태가 그대로라
+                        # 같은 이유로 또 거부당한다(용쌤1-1 1,000행 상품에서 실측).
+                        for chunk in drop_chunks:
+                            mcp.option_update(pid, excludeSkuIds=chunk)
+                            time.sleep(args.sleep)
+                        drop_chunks = []
+                        mcp.option_update(pid, renameValues=items, mainSkuId=plan["대표"],
+                                          includeSkuIds=keep, excludeSkuIds=drop)
                     time.sleep(args.sleep)
                     mid = mcp.workdata(pid).get("옵션") or {}
                     # 위치 지정 키로 본다 — vid 로 dict 를 만들면 복합옵션에서 차원끼리
@@ -707,9 +1055,13 @@ def _commit(sheet, rows, args):
                     if bad["위반"] or bad["중복"]:
                         raise RuntimeError(f"이름 저장 후 검증 실패: {bad}")
 
+                # ②-0 제외가 200을 넘으면 앞 덩어리들을 먼저 흘려보낸다(대표·순서 없이).
+                #     대표·순서를 여기 실으면 아직 빼지 않은 행이 순서에 남아 거부당한다.
+                for chunk in drop_chunks:
+                    mcp.option_update(pid, excludeSkuIds=chunk)
+                    time.sleep(args.sleep)
+
                 # ② 포함/제외 · 대표 · 순서
-                keep = list(plan["유지"])
-                drop = [e["id"] for e in plan["제외"]]
                 mcp.option_update(pid, includeSkuIds=keep, excludeSkuIds=drop,
                                   mainSkuId=plan["대표"], skuOrder=plan["순서"])
                 time.sleep(args.sleep)
@@ -719,17 +1071,26 @@ def _commit(sheet, rows, args):
                 if fails:
                     raise RuntimeError("; ".join(fails)[:300])
                 snapshot.update(pid, 옵션=after)
-                done[pid] = "완료"
-                committed.add(pid)
-                _dump(committed_path, sorted(committed))   # 건별로 남긴다 — 중단돼도 진도가 산다
-                print(f"  [완료] {pid} 유지 {len(keep)} / 제외 {len(drop)} / 대표 {plan['대표']}")
+                if partial:
+                    # 완료가 아니다 — 이름이 남았다. 재작업으로 남겨 다음 회차가 집어간다.
+                    done[pid] = matrix.redo_value(PARTIAL_REASON, from_task=TASK)
+                    partial_ids.append(pid)
+                    print(f"  [부분저장] {pid} 유지 {len(keep)} / 제외 {len(drop)} / "
+                          f"대표 {plan['대표']} — 옵션명 미저장(기본형 마커)")
+                else:
+                    done[pid] = "완료"
+                    print(f"  [완료] {pid} 유지 {len(keep)} / 제외 {len(drop)} / 대표 {plan['대표']}")
             except Exception as e:  # noqa: BLE001
                 failed[pid] = f"{type(e).__name__}: {e}"[:200]
                 print(f"  [실패] {pid}: {failed[pid]}", file=sys.stderr)
     finally:
         mcp.close()
 
-    print(f"\n###OPTIONS### 반영 {len(done)}건 / 실패 {len(failed)}건")
+    print(f"\n###OPTIONS### 반영 {len(done)}건 / 부분저장 {len(partial_ids)}건 "
+          f"/ 실패 {len(failed)}건")
+    if partial_ids:
+        print(f"  부분저장(옵션명 미저장, 현황판 {TASK} 열 재작업): "
+              f"{', '.join(partial_ids[:5])}{' 외 %d건' % (len(partial_ids) - 5) if len(partial_ids) > 5 else ''}")
     if not args.no_sheet:
         vals = dict(done)
         vals.update({pid: f"보류(저장실패)" for pid in failed})
@@ -742,6 +1103,15 @@ def _commit(sheet, rows, args):
             print(f"  [경고] 현황판 갱신 실패: {str(e)[:120]}", file=sys.stderr)
 
 
+# 저장 성공 여부와 **무관하게** 넘기는 단계 (2026-08-06 이룸님).
+#
+# 종전엔 `done`(저장 성공)만 넘겼다. 썸네일 이관은 그게 맞다 — 대표가 확정돼야 대조할
+# 대상이 생긴다. 그런데 **상품명 이관은 옵션 저장과 무관**하고, 하필 상품명 이상이 가장
+# 잘 보이는 자리가 `보류(대표충돌)`(상품명이 규격어로 지정한 대표를 워커가 본품이 아니라고
+# 뺀 상태)이다. 저장이 안 된다는 이유로 그 신호를 통째로 버리고 있었다.
+HANDOFF_ALWAYS = ("상품명",)
+
+
 def _handoff(sheet, rows, done, m):
     """워커가 남긴 `이관` 을 다른 단계의 현황판 칸으로 넘긴다.
 
@@ -749,14 +1119,26 @@ def _handoff(sheet, rows, done, m):
     전에는 이걸 자유 텍스트 메모로만 남겨서 받는 쪽이 읽을 경로가 없었다
     (파일럿 5건 중 3건이 그렇게 유실됐다). 이제 현황판 칸으로 넘겨
     받는 단계가 `pending(..., include_redo=True)` 로 한꺼번에 집어간다.
+    상품명은 원장이 `상품명` 탭이라 prep 이 현황판 재작업을 따로 편입한다(`_matrix_redo`).
 
     결과 JSON 형식:  "이관": [{"단계": "썸네일", "사유": "대표색 불일치"}]
     """
     by_task = {}
-    for pid, _plan, w, _st in rows:
-        if pid not in done:          # 저장 성공한 건만 넘긴다
+    # 최저가 동률로 원본 순서 대표를 세운 건은 **썸네일 쪽에 알린다** (2026-08-07 이룸님).
+    # 대표를 무엇으로 정하든 상관없되 "썸네일이 그 대표옵션과 같은 물건"이면 되므로,
+    # 판단을 사람에게 올리지 않고 썸네일 단계가 대표옵션 이미지를 기준으로 맞추게 넘긴다.
+    for pid, plan, _w, _st in rows:
+        if pid not in done or not plan:
             continue
+        tie = next((str(x) for x in (plan.get("경고") or [])
+                    if str(x).startswith("최저가 동률")), None)
+        if tie:
+            by_task.setdefault("썸네일", {}).setdefault(
+                pid, f"대표 동률로 원본 순서 지정 — 썸네일을 대표옵션과 맞출 것({tie[:40]})")
+    for pid, _plan, w, _st in rows:
         for h in (w.get("이관") or []):
+            if pid not in done and (h.get("단계") or "").strip() not in HANDOFF_ALWAYS:
+                continue          # 저장 못 한 건의 옵션-의존 이관은 넘기지 않는다
             task, reason = (h.get("단계") or "").strip(), (h.get("사유") or "").strip()
             if task not in matrix.TASKS or not reason:
                 print(f"  [경고] 이관 무시({pid}): 단계 '{task}'")
@@ -836,6 +1218,9 @@ def main():
     p.add_argument("--skip-thumbs", action="store_true")
     p.add_argument("--max-option-images", type=int, default=12,
                    help="차원당 내려받을 옵션 이미지 수(전 옵션이 필요하면 늘려라)")
+    p.add_argument("--max-px", type=int, default=MAX_PX,
+                   help=f"이미지를 긴 변 N px 로 축소(0=원본 유지). 기본 {MAX_PX}. "
+                        "비전 토큰 ∝ 픽셀수")
     p.set_defaults(func=cmd_prep)
 
     q = sub.add_parser("pending", help="results 없는 배치를 Workflow args JSON 으로 출력")
@@ -845,6 +1230,8 @@ def main():
     a = sub.add_parser("apply", help="계산·검증 → 시트 → (승인 후) 저장")
     _common(a)
     a.add_argument("--run-dir", required=True)
+    a.add_argument("--ids", nargs="+", default=None,
+                   help="이 상품들만 처리(부분 재시도). 없으면 results 전체")
     a.add_argument("--commit", action="store_true", help="실제 저장(없으면 미리보기)")
     a.add_argument("--allow-missing", action="store_true",
                    help="감사에서 누락 상품이 있어도 --commit 강행(의도된 부분 처리)")
