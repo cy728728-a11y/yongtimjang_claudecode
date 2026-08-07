@@ -142,10 +142,14 @@ def chunk_by_size(rows, budget=12000):
 _RETRY_HINTS = ("429", "quota", "RESOURCE_EXHAUSTED", "rateLimitExceeded")
 
 
-def append_rows(spreadsheet_id, tab, rows, max_retries=4):
+def append_rows(spreadsheet_id, tab, rows, max_retries=8):
     """rows(2차원 리스트)를 탭 끝에 append (USER_ENTERED, INSERT_ROWS).
 
-    429/쿼터 초과 오류는 지수 백오프(2·4·8·16초) 후 최대 max_retries 회 재시도.
+    429/쿼터 초과 오류는 지수 백오프(2·4·8·16···초, 60초 상한) 후 최대 max_retries 회 재시도.
+    **재시도 4회(누적 14초)로는 부족하다** — 시트 쓰기 쿼터는 '분당 60회'라 한 번 소진되면
+    다음 창이 열릴 때까지 최대 1분을 기다려야 한다. 배치마다 append 를 부르는 호출자
+    (product-name append 는 배치 411개 × 2탭 ≈ 800회)는 그 창을 반드시 밟는다.
+    (2026-08-06 용쌤4-3 972건에서 실측: 4회 재시도로는 75행에서 죽었다.)
     그 외 오류(4xx 등)는 즉시 예외를 올린다.
     rows 가 크면 그대로 한 호출로 보낸다 — 청크 분할은 호출자 책임.
 
@@ -184,7 +188,7 @@ def append_rows(spreadsheet_id, tab, rows, max_retries=4):
             msg = str(e)
             last_err = e
             if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
-                wait = 2 ** (attempt + 1)
+                wait = min(2 ** (attempt + 1), 60)   # 쿼터 창이 1분이라 그 이상 기다릴 이유가 없다
                 print(f"[gsheets] append 429/쿼터 오류, {wait}초 대기 후 재시도 "
                       f"({attempt + 1}/{max_retries}): {msg[:150]}", file=sys.stderr)
                 time.sleep(wait)

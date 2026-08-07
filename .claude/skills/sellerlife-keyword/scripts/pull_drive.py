@@ -35,8 +35,12 @@ def _gws(params, cwd=None, output=None):
     if output:
         cmd += ["-o", output]
     try:
+        # shell 은 윈도우에서만 켠다. gws 는 npm 전역 셔임(gws.CMD)이라 윈도우에선
+        # shell 이 필요하지만, POSIX 에서 shell=True + 리스트는 cmd[0] 만 실행하고
+        # 나머지를 $0/$1 로 흘려버려 `gws` 가 인자 없이 돈다(= "No service specified").
         r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", shell=True)
+                           encoding="utf-8", errors="replace",
+                           shell=(os.name == "nt"))
     except OSError as e:
         raise SystemExit(f"gws 실행 실패: {e}")
     if r.returncode != 0:
