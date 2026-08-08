@@ -29,6 +29,36 @@ const MODEL = args_.model || 'sonnet'
 const BUDGET = (args_.budgetImgs || 16)
 const MAXCOUNT = (args_.maxCount || 10)
 
+// pendingPath 가 오면 워커 하나가 그 파일을 읽어 목록을 물어온다 — 호출자가 200건짜리
+// 배열을 args 로 실어보내지 않아도 된다(메인 컨텍스트 토큰 절감). pname-fanout 과 같은 관례.
+// 파일 형식 = run_options.py pending 출력({runDir, promptPath, batches:[{n,path,imgs,count}]}).
+if (!args_.batches && args_.pendingPath) {
+  phase('대상수집')
+  const got = await agent(
+    `Read 로 ${args_.pendingPath} 를 열고, 그 JSON 의 batches 배열을 그대로 반환 스키마의 ` +
+    `batches 에 담아라. 가공·요약·생략 금지. path 는 생략해도 된다(n·imgs·count 는 필수).`,
+    { label: 'pending', phase: '대상수집', model: 'sonnet', effort: 'low',
+      schema: { type: 'object', additionalProperties: false,
+                properties: { batches: { type: 'array', items: {
+                  type: 'object', additionalProperties: false,
+                  properties: { n: { type: 'integer' }, imgs: { type: 'number' },
+                                count: { type: 'integer' } },
+                  required: ['n', 'imgs', 'count'] } } },
+                required: ['batches'] } })
+  if (!got || !got.batches || !got.batches.length) {
+    return { 오류: 'pendingPath 를 읽지 못했습니다', pendingPath: args_.pendingPath }
+  }
+  args_.batches = got.batches
+  log(`pending ${args_.batches.length}건 수집 (${args_.pendingPath})`)
+}
+
+// batchDir 이 오면 path 를 생략할 수 있다 — n → batch_NNN.json 규칙.
+if (args_.batchDir) {
+  args_.batches = args_.batches.map(b => b.path ? b : ({
+    ...b, path: `${args_.batchDir}/batch_${String(b.n).padStart(3, '0')}.json`,
+  }))
+}
+
 // 빈패킹 — 큰 배치부터 first-fit. 예산 축은 catfix 처럼 이미지 장수인데(대표+옵션값),
 // 옵션은 **텍스트도 크다**(상품당 판매행 4~28개) → 상품수 상한을 2차 제약으로 건다.
 // 배치의 imgs 는 상한이지 실열람이 아니다(지시서 §0 열람 규율이 실비용을 억제한다).
