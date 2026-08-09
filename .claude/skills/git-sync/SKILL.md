@@ -38,10 +38,20 @@ allowed-tools:
 
 ## 충돌났을 때만 예외
 
-스크립트가 `[충돌]`을 내면 그때만 개입한다:
-1. `git status`로 충돌 파일 확인
-2. 양쪽 내용 병합 (주로 `40-personal/46-todos/active-todos.md` — 두 PC의 todo를 **합집합**으로 남긴다)
-3. `git add .` → `git rebase --continue` → `./sync.ps1 push`
+스크립트가 `[충돌]`을 내면 그때만 개입한다.
+
+> **원칙 (2026-08-09 용팀장님 지시): 충돌하면 지금 받아온 원격(origin/main) 내용을 우선 적용한다.**
+> 물어보지 말고 원격 쪽으로 해소한다. rebase 중에는 원격이 `--ours` 다(로컬 커밋이 `--theirs`).
+
+```powershell
+git checkout --ours .        # 충돌 파일 전부 원격 내용으로 확정
+git add -A; git rebase --continue
+./sync.ps1 push
+```
+
+- 예외 1: `40-personal/46-todos/active-todos.md` — 두 PC의 todo는 **합집합**으로 남긴다.
+- 예외 2: 로컬에만 있는 **새 섹션·새 문단**(원격이 지운 게 아니라 추가된 것)은 살려서 붙인다.
+  그 외 같은 줄이 서로 다르게 바뀐 경우는 무조건 원격 승.
 
 ## 참고
 

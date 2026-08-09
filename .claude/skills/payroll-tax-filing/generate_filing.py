@@ -28,7 +28,14 @@ except Exception:
     pass
 
 # 노션 문서 기준 근거자료 루트 (원천세신고관련 폴더)
-DEFAULT_BASE = r"C:\Users\woori\OneDrive\바탕 화면\최용's 폴더\구매대행\근로사업소득원천세신고\원천세신고관련"
+DEFAULT_BASE = os.path.join(
+    os.path.expanduser("~"),
+    "OneDrive", "바탕 화면", "최용's 폴더", "구매대행",
+    "소영님미미님근로사업소득원천세신고", "원천세신고관련",
+)
+
+# 급여 엑셀 기본 위치 (경로 미지정 시 여기서 최신 파일 자동 선택)
+DEFAULT_EXCEL_DIR = os.path.join(DEFAULT_BASE, "소득신고자료엑셀")
 
 # 엑셀 헤더 → 표준 키 매핑 (헤더 표기가 조금 달라도 잡히도록 부분일치 사용)
 HEADER_ALIASES = {
@@ -79,6 +86,16 @@ def parse_excel(path):
 
     try:
         wb = openpyxl.load_workbook(path, data_only=True)
+    except PermissionError:
+        # 엑셀에서 파일을 열어둔 채면 잠겨서 못 읽는다 → 임시 복사본으로 우회
+        import shutil
+        import tempfile
+        try:
+            tmp = os.path.join(tempfile.mkdtemp(prefix="payroll_"), "payroll.xlsx")
+            shutil.copy2(path, tmp)
+            wb = openpyxl.load_workbook(tmp, data_only=True)
+        except Exception as e:
+            raise SystemExit(f"엑셀이 잠겨 있고 복사도 실패했습니다(엑셀 창을 닫고 재시도): {e}")
     except Exception as e:
         raise SystemExit(f"엑셀을 열 수 없습니다: {e}")
 
@@ -269,9 +286,22 @@ tfoot td{{font-weight:bold;background:#fafafa}}
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("excel")
+    ap.add_argument("excel", nargs="?", default=None,
+                    help="급여 엑셀 경로. 생략하면 기본 폴더의 최신 파일을 자동 선택")
     ap.add_argument("--base", default=DEFAULT_BASE)
     args = ap.parse_args()
+
+    # 경로 미지정 → 기본 폴더에서 가장 최근 수정된 .xlsx 자동 선택
+    if not args.excel:
+        try:
+            cands = [os.path.join(DEFAULT_EXCEL_DIR, f)
+                     for f in os.listdir(DEFAULT_EXCEL_DIR)
+                     if f.lower().endswith(".xlsx") and not f.startswith("~$")]
+        except Exception as e:
+            raise SystemExit(f"기본 엑셀 폴더를 열 수 없습니다: {DEFAULT_EXCEL_DIR} ({e})")
+        if not cands:
+            raise SystemExit(f"기본 폴더에 .xlsx 가 없습니다: {DEFAULT_EXCEL_DIR}")
+        args.excel = max(cands, key=os.path.getmtime)
 
     if not os.path.exists(args.excel):
         raise SystemExit(f"파일을 찾을 수 없습니다: {args.excel}")
@@ -295,6 +325,7 @@ def main():
             out_dir = None
 
     s["out_dir"] = out_dir
+    s["excel"] = args.excel  # 어떤 파일을 읽었는지 보고용(자동선택 오선택 방지)
     print(json.dumps(s, ensure_ascii=False, indent=1))
 
 

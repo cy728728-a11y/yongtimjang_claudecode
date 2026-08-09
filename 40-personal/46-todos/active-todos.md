@@ -277,6 +277,13 @@
   - due: 2026-08-05
   - priority: normal
 
+- [ ] 원천세 3.3% 신고 (최소영·조미미) — 급여엑셀 작성 후 "원천세 신고" 라고 말하면 payroll-tax-filing 스킬 실행
+  - added: 2026-08-09 11:37
+  - due: 2026-09-01
+  - priority: high
+  - project: 원천세신고
+  - 반복: 매월 1일 (신고기한 = 지급 다음달 10일)
+
 ## This Week
 
 - [ ]
