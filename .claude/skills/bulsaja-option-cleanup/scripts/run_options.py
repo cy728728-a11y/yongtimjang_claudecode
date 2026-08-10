@@ -19,6 +19,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 
@@ -333,10 +334,21 @@ def _pending_batches(run_dir):
 
 
 def cmd_pending(args):
-    """남은 배치를 JSON 한 줄로 찍는다 — Workflow(optclean-fanout) args 에 그대로 넣는다."""
+    """남은 배치를 JSON 한 줄로 찍는다 — Workflow(optclean-fanout) args 에 그대로 넣는다.
+
+    기본은 압축형 `compact: [[배치번호, 이미지수, 상품수], …]`. 경로는 runDir 과 배치번호로
+    정해지므로 args 에 실을 필요가 없다 — 152배치에서 인라인 args 가 25KB 까지 부풀던 것을
+    없앤다(2026-08-09 용쌤2-1). 경로가 템플릿과 다른 옛 run-dir 만 완전형으로 떨어뜨린다.
+    """
     run_dir = os.path.abspath(args.run_dir)
-    print(json.dumps({"runDir": run_dir, "promptPath": WORKER_PROMPT,
-                      "batches": _pending_batches(run_dir)}, ensure_ascii=False))
+    pending = _pending_batches(run_dir)
+    out = {"runDir": run_dir, "promptPath": WORKER_PROMPT}
+    if all(b.get("path") == os.path.join(run_dir, "batches", f"batch_{b['n']:03d}.json")
+           for b in pending):
+        out["compact"] = [[b["n"], b.get("imgs", 0), b.get("count", 0)] for b in pending]
+    else:
+        out["batches"] = pending
+    print(json.dumps(out, ensure_ascii=False))
 
 
 # ---------------------------------------------------------------------------
@@ -407,6 +419,22 @@ def _thumb_prefer_id(bp, option, keep_ids):
     return best["id"] if best else ""
 
 
+def _repair_pid(pid, allow):
+    """워커가 잘라 쓴 상품id를 배치 정본으로 되살린다. 못 살리면 원본 그대로 돌려준다.
+
+    상품id는 27자다. 워커가 앞부분만 복사해 오는 사고가 실제로 났고(2026-08-09 용쌤2-1
+    옵션정리 6건), 감사가 그걸 `미지의 상품id`(환각)로 보고 버려 **상품이 통째로 유실**됐다.
+    환각과 절단은 다르다 — 절단은 정본의 접두사라 되살릴 근거가 있다.
+
+    **접두사로 정확히 하나만 걸릴 때만** 되살린다. 둘 이상이면 추정이 되므로 버린다.
+    12자 미만은 접두사가 너무 짧아(앞자리가 공통인 id가 많다) 손대지 않는다.
+    """
+    if not allow or not pid or pid in allow or len(pid) < 12:
+        return pid
+    cands = [x for x in allow if x.startswith(pid)]
+    return cands[0] if len(cands) == 1 else pid
+
+
 def _audit_results(run_dir):
     """워커 산출물을 배치 대비 대조 — 누락·환각·번호 불일치를 apply 전에 잡는다.
 
@@ -417,7 +445,8 @@ def _audit_results(run_dir):
     exp = _expected_by_batch(run_dir)
     if not exp:
         return [], False          # 구형 run-dir — 대조할 정본이 없다
-    got, files = set(), {}
+    want = {pid for pids in exp.values() for pid in pids}
+    got, files, repaired = set(), {}, []
     for rf in sorted(glob.glob(os.path.join(run_dir, "results", "result_*.json"))):
         doc = _load(rf)
         n_file = int(os.path.basename(rf)[7:10])
@@ -425,8 +454,14 @@ def _audit_results(run_dir):
         if n_doc is not None and n_doc != n_file and n_file != 0:
             files.setdefault("번호불일치", []).append(
                 f"{os.path.basename(rf)} 내부 배치={n_doc}")
-        got |= {p.get("productId") for p in doc.get("products", []) if p.get("productId")}
-    want = {pid for pids in exp.values() for pid in pids}
+        for p in doc.get("products", []):
+            pid = p.get("productId")
+            if not pid:
+                continue
+            fixed = _repair_pid(pid, want)
+            if fixed != pid:
+                repaired.append(f"{pid}→{fixed}")
+            got.add(fixed)
     missing = sorted(want - got)
     unknown = sorted(got - want)
     warns = []
@@ -436,6 +471,9 @@ def _audit_results(run_dir):
         warns.append(f"미완 배치 {len(miss_batches)}개: {miss_batches[:10]}")
     if missing:
         warns.append(f"누락 상품 {len(missing)}건: {missing[:5]}")
+    if repaired:
+        warns.append(f"잘린 상품id {len(repaired)}건(접두사로 복원 — 워커 프롬프트 점검): "
+                     f"{repaired[:5]}")
     if unknown:
         warns.append(f"미지의 상품id {len(unknown)}건(워커 환각 — 버린다): {unknown[:5]}")
     for msg in files.get("번호불일치", []):
@@ -488,6 +526,45 @@ def read_spec_main(sheet):
     return out
 
 
+# 품목대조에서 무시할 낱말 — 어느 상품명에나 붙는 수식어라 겹쳐도 근거가 못 된다.
+_ITEM_STOPWORDS = frozenset((
+    "기본형", "업소용", "가정용", "가정", "휴대용", "다용도", "고급", "고급형", "대형",
+    "소형", "중형", "미니", "이동식", "접이식", "무선", "유선", "세트", "정품", "신상",
+    "인기", "추천", "특가", "국내", "수입", "전용", "겸용", "자동", "수동", "전동",
+))
+
+
+def _item_words(text):
+    """품목대조용 낱말 집합 — 2자 이상 조각만, 흔한 수식어는 뺀다."""
+    out = set()
+    for w in re.split(r"[^0-9A-Za-z가-힣]+", text or ""):
+        if len(w) >= 2 and w.lower() not in _ITEM_STOPWORDS:
+            out.add(w.lower())
+    return out
+
+
+def _item_mismatch(상품명, 메인상품):
+    """상품명과 워커의 `메인상품` 이 **한 낱말도 안 겹치면** 품목 불일치 의심.
+
+    워커의 `삭제후보`/`이관` 판정만으로는 놓치는 게 있다 — 2026-08-09 용쌤2-1 에서
+    워커가 27건을 잡았는데 사람이 검수표를 기계적으로 대조하니 13건이 더 나왔다
+    (평판프레스 인쇄기→퀵클램프 지그 · 회전간판→LED 라이트박스 · 갯벌삽→낙양삽 …).
+    한 건씩 보는 워커는 "이 정도면 비슷한가" 로 흐르는데, 전수 대조는 안 흐른다.
+
+    판단이 아니라 **신호**다 — 저장을 막지 않고 상품명 재작업으로 넘긴다(위양성이
+    섞이는 게 정상이다. 개집↔도그하우스처럼 같은 물건을 달리 부른 건도 걸린다).
+    상품명은 키워드 나열이라 붙여쓴 낱말이 많다 → 2자 연속 조각까지 본다
+    (`베란다인조잔디` ↔ `인조잔디`). 실측 725건에 24건(3.3%)이 걸렸다.
+    """
+    words = _item_words(상품명)
+    main = (메인상품 or "").lower()
+    if not words or not main:
+        return False
+    if words & _item_words(메인상품):
+        return False
+    return not any(w[i:i + 2] in main for w in words for i in range(len(w) - 1))
+
+
 def _plans(run_dir, spec_main=None):
     """results/*.json + 스냅샷 → [(상품, 계획, 결과)]. 불사자를 부르지 않는다.
 
@@ -503,11 +580,12 @@ def _plans(run_dir, spec_main=None):
     by_pid, order = {}, []
     for rf in sorted(glob.glob(os.path.join(run_dir, "results", "result_*.json"))):
         for p in _load(rf).get("products", []):
-            pid = p.get("productId")
+            pid = _repair_pid(p.get("productId"), allow)
             if not pid:
                 continue
             if allow is not None and pid not in allow:
                 continue          # 환각 — _audit_results 가 경고로 집계한다
+            p = {**p, "productId": pid}   # 되살린 id를 계획·저장 경로까지 끌고 간다
             if pid not in by_pid:
                 order.append(pid)
             by_pid[pid] = p       # 마지막 파일 승리
@@ -515,13 +593,26 @@ def _plans(run_dir, spec_main=None):
     for pid in order:
         p = by_pid[pid]
         rec = snapshot.load(pid) if pid else None
+        # 워커 결과에 상품명이 없으면 스냅샷에서 채운다 — 없으면 시트 C열과
+        # 검수표 머리글이 통째로 빈칸이 된다(어느 상품을 승인하는지 알 수 없다).
+        if not p.get("상품명") and rec:
+            p["상품명"] = rec.get("상품명", "")
+        # 품목대조(2026-08-10) — 워커가 놓친 품목 불일치를 전수 기계대조로 줍는다.
+        # 이미 삭제후보로 잡힌 건은 더 볼 것이 없고, 워커가 상품명 이관을 이미 넣었으면
+        # 같은 말을 두 번 하지 않는다. **스냅샷이 없어 보류로 빠지는 건도 통과시킨다** —
+        # 상품명 이관은 옵션 저장과 무관하고, 하필 이런 건이 이상할 확률이 높다.
+        if (not str(p.get("삭제후보") or "").strip()
+                and not any((h or {}).get("단계") == "상품명" for h in (p.get("이관") or []))
+                and _item_mismatch(p.get("상품명"), p.get("메인상품"))):
+            p["품목대조"] = True
+            p["이관"] = list(p.get("이관") or []) + [{
+                "단계": "상품명",
+                "사유": f"품목대조: 상품명과 메인상품이 한 낱말도 겹치지 않는다 "
+                        f"(메인상품 '{str(p.get('메인상품'))[:60]}')",
+            }]
         if not rec or not rec.get("옵션"):
             out.append((pid, None, {**p, "상태": "보류(스냅샷 없음)"}))
             continue
-        # 워커 결과에 상품명이 없으면 스냅샷에서 채운다 — 없으면 시트 C열과
-        # 검수표 머리글이 통째로 빈칸이 된다(어느 상품을 승인하는지 알 수 없다).
-        if not p.get("상품명"):
-            p["상품명"] = rec.get("상품명", "")
         # 규칙 11(정렬용 접두사 제거)은 기계적이라 검사 전에 강제한다. 워커 결과에
         # 되써서 저장 경로(`_commit`)도 같은 이름을 쓰게 한다 — 두 벌이면 어긋난다.
         names = R.normalize_names(p.get("이름"))
@@ -638,6 +729,9 @@ def _print_review(rows):
         print(f"\n── 검수표 {pid} · {w.get('상품명', '')[:40]}")
         if w.get("메인상품"):
             print(f"   메인상품: {w['메인상품']}")
+        if w.get("품목대조"):
+            print("   ⚠ 품목대조: 상품명과 메인상품이 한 낱말도 겹치지 않는다 "
+                  "— 상품명 재작업으로 넘겼다(저장은 막지 않음)")
         print(f"   대표 {_lab(plan, plan['대표'])} · 기준가 {(plan['기준가'] or 0):,} "
               f"→ 상한 {(plan['상한'] or 0):,}")
         if w.get("대표썸네일일치"):
@@ -737,6 +831,17 @@ def cmd_apply(args):
               f"(저장하지 않는다. 메인이 bulsaja_market_delete 로 처리)")
         for pid, d in list(dels.items())[:5]:
             print(f"    {pid} {d['상품명'][:28]} — {d['사유'][:60]}")
+
+    # 품목대조 — 워커가 못 잡은 품목 불일치. 저장은 막지 않고 상품명 재작업으로 넘겼지만,
+    # **몇 건인지는 반드시 눈에 띄어야 한다**(2026-08-09 에는 사람이 손으로 찾아냈다).
+    mism = [(pid, w) for pid, _plan, w, _st in rows if (w or {}).get("품목대조")]
+    if mism:
+        print(f"\n  [품목대조] {len(mism)}건 — 상품명과 메인상품이 한 낱말도 안 겹친다. "
+              f"상품명 재작업으로 넘겼다(저장은 그대로 진행)")
+        for pid, w in mism[:8]:
+            print(f"    {pid} {str(w.get('상품명', ''))[:26]} ↔ {str(w.get('메인상품', ''))[:40]}")
+        if len(mism) > 8:
+            print(f"    ... 외 {len(mism) - 8}건")
 
     ok = [r for r in rows if r[3] == "정리대상"]
     print(f"\n정리대상 {len(ok)}건 / 확인요·보류 {len(rows) - len(ok)}건")

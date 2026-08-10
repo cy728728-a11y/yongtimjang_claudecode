@@ -23,10 +23,20 @@
 쇼핑성키워드는 **제외하지 않고 표시만 한다** — X를 자르면 이번에 찾은 정답 12개 중 6개가 죽는다
 (미용전동의자·바버샵의자·엔틱3단서랍장 등).
 
+블랙리스트 `제외키워드`(정확일치)도 제외한다 (2026-08-09 추가).
+**값은 비용이 아니라 상표 리스크다** — 그 시트는 상표 위험으로 판정돼 이룸님이 승인한 키워드고,
+이 뷰는 그 키워드로 **상품명을 만든다.** 안 거르면 위험 키워드가 상품명에 박히고 되돌리려면
+상품명 재작업이다. 행이 줄어드는 건 부산물(워커 비용 ~1%).
+여기서 AI 판정을 하지 않는다 — 판정은 `sellerlife-keyword/detect.py` 가 통다운 가공 때 하고,
+이 파일은 그 결과 명단을 **조회만** 한다.
+※ `제외카테고리`·`제외브랜드`는 넣지 않는다. 전자는 카테고리 뷰가 통째로 비어 `키워드부족`
+   → 보류 → 재교정이라는 제일 비싼 경로로 가고, 후자는 부분일치인데 손실 검증이 없다.
+
 Usage:
-  python cat_view.py --input <카테고리>.xlsx [--out view.txt] [--keep-brand]
+  python cat_view.py --input <카테고리>.xlsx [--out view.txt] [--keep-brand] [--keep-excluded]
 """
 import argparse
+import os
 import sys
 from collections import Counter
 
@@ -40,6 +50,17 @@ try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
     pass
+
+# 블랙리스트 판정은 eroomlib 1벌을 쓴다(catfix 게이트·재고 스캔과 같은 규칙).
+# `.claude` 앵커(= lib/eroomlib)를 찾아 lib 를 1회 insert — standalone CLI 로도 돌기 때문.
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d and _d != os.path.dirname(_d):
+    _lib = os.path.join(_d, "lib")
+    if os.path.isdir(os.path.join(_lib, "eroomlib")):
+        if _lib not in sys.path:
+            sys.path.insert(0, _lib)
+        break
+    _d = os.path.dirname(_d)
 
 # 셀러라이프 rawdata 열 위치 (0-based)
 COL_KW, COL_CAT, COL_BRAND, COL_SHOP, COL_SV, COL_PC = 1, 2, 3, 4, 6, 17
@@ -62,21 +83,40 @@ def _num(v, default=10 ** 9):
         return default
 
 
-def load_rows(path, drop_brand=True):
-    """카테고리 xlsx → 행 리스트(상품수 오름차순). 반환: (rows, dropped, total, category)"""
+def load_rows(path, drop_brand=True, drop_excluded=True):
+    """카테고리 xlsx → 행 리스트(상품수 오름차순).
+
+    반환: `(rows, dropped_brand, dropped_excluded, total, category)`
+
+    **컷이 `render()` 가 아니라 여기 사는 이유**: 소비자가 셋이다 — `render()`(뷰) ·
+    `audit_sample.py`(감사) · `challenge.py`(반증). 여기 넣으면 셋이 한 번에 일치한다.
+    `render()` 에만 넣으면 반증(challenge)이 방금 거른 위험 키워드를 되살릴 수 있다.
+
+    `drop_excluded` 실패는 삼키지 않는다 — 블랙리스트를 못 읽으면 예외가 그대로 올라가
+    prep 이 실패한다. prep 은 워커 비용이 나가기 전 단계라 실패해도 공짜이고 재실행되지만,
+    조용히 통과시키면 상표 위험 키워드가 상품명에 박혀 사후에야 드러난다.
+    """
+    excluded = set()
+    if drop_excluded:
+        from eroomlib.exclusion import excluded_keywords
+        excluded = excluded_keywords()   # 프로세스 캐시 — 카테고리마다 불러도 로드는 1회
+
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     raw = list(wb.active.iter_rows(values_only=True))
     wb.close()
     if not raw:
-        return [], 0, 0, ""
+        return [], 0, 0, 0, ""
 
-    rows, dropped = [], 0
+    rows, dropped, dropped_ex = [], 0, 0
     cats = Counter()
     for r in raw[1:]:
         if not r or len(r) <= COL_PC or not r[COL_KW]:
             continue
         if drop_brand and r[COL_BRAND] == "O":
             dropped += 1
+            continue
+        if excluded and str(r[COL_KW]).strip() in excluded:
+            dropped_ex += 1
             continue
         if r[COL_CAT]:
             cats[str(r[COL_CAT]).strip()] += 1
@@ -88,7 +128,7 @@ def load_rows(path, drop_brand=True):
         })
     rows.sort(key=lambda x: x["pc"])
     rep = cats.most_common(1)[0][0] if cats else ""
-    return rows, dropped, len(raw) - 1, rep
+    return rows, dropped, dropped_ex, len(raw) - 1, rep
 
 
 def _has_digit_only(s):
@@ -164,8 +204,8 @@ def build_index(rows, feats, max_members=12):
     return [(s, m[:max_members], len(m)) for s, m in out]
 
 
-def render(path, drop_brand=True, index_max=60, index_members=12):
-    rows, dropped, total, rep = load_rows(path, drop_brand)
+def render(path, drop_brand=True, index_max=60, index_members=12, drop_excluded=True):
+    rows, dropped, dropped_ex, total, rep = load_rows(path, drop_brand, drop_excluded)
     if not rows:
         return f"# (빈 파일) {path}"
 
@@ -175,7 +215,9 @@ def render(path, drop_brand=True, index_max=60, index_members=12):
 
     L = []
     L.append(f"# 카테고리: {rep}")
-    L.append(f"# 원본 {total}행 · 브랜드키워드 제외 {dropped} → 검토대상 {len(rows)}행")
+    # 감사 흔적 — 워커가 읽는다. 무엇이 몇 개 빠졌는지가 뷰 안에 남아야 사후 대조가 된다.
+    L.append(f"# 원본 {total}행 · 브랜드키워드 제외 {dropped}"
+             f" · 상표위험(블랙리스트) 제외 {dropped_ex} → 검토대상 {len(rows)}행")
     L.append("# 범주어(변별력 없음·필수): " +
              (" · ".join(f"{s}({c})" for s, c in sorted(cats.items(), key=lambda x: -x[1])) or "없음"))
     L.append("")
@@ -208,11 +250,14 @@ def main():
     ap.add_argument("--input", required=True, help="카테고리별 키워드 xlsx")
     ap.add_argument("--out", help="출력 경로 (미지정시 stdout)")
     ap.add_argument("--keep-brand", action="store_true", help="브랜드키워드 O도 포함")
+    ap.add_argument("--keep-excluded", action="store_true",
+                    help="블랙리스트 제외키워드도 포함(상표 리스크 컷 끄기)")
     ap.add_argument("--index-max", type=int, default=60, help="특징어 인덱스 최대 줄 수")
     args = ap.parse_args()
 
     try:
-        text = render(args.input, drop_brand=not args.keep_brand, index_max=args.index_max)
+        text = render(args.input, drop_brand=not args.keep_brand, index_max=args.index_max,
+                      drop_excluded=not args.keep_excluded)
     except OSError as e:
         print(f"ERROR: 파일 읽기 실패({args.input}): {e}", file=sys.stderr)
         sys.exit(1)

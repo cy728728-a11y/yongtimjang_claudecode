@@ -212,6 +212,42 @@ def cmd_workdata(args):
     print(f"###WORKDATA### {ok}/{len(out)} OK -> {args.output}")
 
 
+def _run_gate(args, decisions, m):
+    """제외카테고리 붙박이 게이트 — 확정분만 태우고 걸린 상품id 집합을 돌려준다.
+
+    **태우는 건 `CATFIX_DONE` 3종뿐이다**(여기서는 `자동저장완료`·`이미정확`).
+    `변경대상`·`매칭불가`·`부분일치확인요`·`보류(정체불명)` 같은 의심 건은 삭제하지
+    않는다(2026-08-08 이룸님) — 어차피 재교정을 돌게 되어 있고 거기서 확정되면 그때
+    걸린다. 스스로 풀린다.
+
+    **실패해도 저장을 되돌리지 않는다.** 여기 도달한 시점에 불사자 저장·시트 원장은
+    이미 끝났다. 블랙리스트를 못 읽었다고 죽이면 잃는 게 더 크고, 못 잡은 재고는
+    `category_gate.py scan` 이 나중에 통째로 훑는다(그 스캔이 존재하는 이유 그대로).
+    다만 조용히 넘어가지는 않는다 — 경고를 남긴다.
+    """
+    recs = [{"productId": d.get("productId"), "상품명": d.get("상품명", ""),
+             "카테고리": d.get("변경카테고리") or "", "상태": d.get("상태", "")}
+            for d in decisions
+            if d.get("productId") and d.get("상태") in CATFIX_DONE]
+    if not recs:
+        return set()
+    try:
+        sys.path.insert(0, SCRIPT_DIR)
+        import category_gate  # noqa: E402  (같은 스킬 폴더)
+        # 게이트 산출물은 catfix run-dir 아래 `gate/` 로 간다. run-dir = decisions.json 의
+        # 자리다(run_all 이 그렇게 넘긴다). --output 이 딴 데면 큐 없이 시트 표시만 하고,
+        # 그건 `retry` 가 잡는다.
+        run_dir = os.path.dirname(os.path.abspath(args.output)) or None
+        targets, _stats = category_gate.gate_records(
+            args.sheet, recs, run_dir=run_dir, m=m)
+        return {t["productId"] for t in targets}
+    except Exception as e:  # noqa: BLE001
+        print(f"  [경고] 제외카테고리 게이트 실패: {type(e).__name__}: {str(e)[:140]}\n"
+              "    저장은 정상이다. 놓친 건은 `category_gate.py scan` 으로 훑는다.",
+              file=sys.stderr)
+        return set()
+
+
 def cmd_apply(args):
     """match + save 를 상품별 1패스로 처리(토큰 신선도 유지 + 건건 체크포인트).
 
@@ -355,13 +391,27 @@ def cmd_apply(args):
                 matrix=m)
             print(f"  현황판({matrix.TAB}) 카테고리: {n}칸 갱신")
 
+            # ── 제외카테고리 게이트 (2026-08-09) ────────────────────────────
+            # **이 자리가 "저장 직후"가 아니라 decisions 루프의 출구인 이유**:
+            # `이미정확` 은 저장을 하지 않는다(위 :285). 그런데 카테고리는 확정이고
+            # 현황판엔 `완료` 가 찍힌다. 저장 자리에 달면 그 건이 통째로 빠진다.
+            # 여기(현황판 쓰는 자리)에 달아야 `자동저장완료` + `이미정확` 이 함께 잡힌다.
+            gated = set()
+            if not getattr(args, "no_gate", False):
+                gated = _run_gate(args, decisions, m)
+            # 카테고리 열은 건드리지 않는다 — 카테고리는 실제로 확정된 사실이다.
+
             # 카테고리가 실제로 바뀌면 그 상품의 상품명은 폐기 대상이다
             # (SKILL 계약: "카테고리 재교정 = 그 상품 상품명 전부 폐기, 부분회수 금지").
             # 이미 `완료`인 건은 이걸로 다시 대상이 되고, 미착수는 사유만 붙는다.
+            #
+            # **게이트가 재작업 플래그 앞에 선다**(원안 2026-08-08): 제외 대상이면
+            # 재작업이 아니라 삭제다. 재작업을 찍으면 `pending` 이 다시 집어가 막으려던
+            # 상품명 비용이 그대로 나간다.
             redo = {}
             for d in decisions:
                 pid = d.get("productId")
-                if not pid or d.get("상태") != "자동저장완료":
+                if not pid or d.get("상태") != "자동저장완료" or pid in gated:
                     continue
                 prev, new = (d.get("기존카테고리") or ""), (d.get("변경카테고리") or "")
                 if not new or _norm_path(prev) == _norm_path(new):
@@ -415,6 +465,8 @@ def main():
                    help="시트 G열 채워진 행(이미 처리)은 전부 건너뜀(중단 후 이어달리기)")
     a.add_argument("--force", action="store_true",
                    help="시트에 이미 완료로 기록된 행도 재조회·재저장하고 덮어쓴다(기본 off)")
+    a.add_argument("--no-gate", action="store_true",
+                   help="제외카테고리 게이트를 끈다(검증·재현용). 기본은 켬")
     a.add_argument("--limit", type=int, default=0, help="이번 실행 N건만(청크). 0=전체")
     a.add_argument("--sleep", type=float, default=0.4, help="상품 간 대기(초)")
     a.set_defaults(func=cmd_apply)

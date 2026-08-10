@@ -35,6 +35,35 @@ allowed-tools:
 - `aside repl` 은 호출당 ~120초에서 끊긴다. 그래서 대기는 repl 안이 아니라
   **파이썬 쪽에서** 한다.
 
+### Aside 쪽 감시 루틴 — 이게 죽으면 전부 무응답 (2026-08-10 실측)
+
+Aside 앱의 **루틴(cron, 5분 주기)** 이 `requests/` 를 훑는다. 이 워크스페이스를 새 맥에
+옮기면 루틴이 따라오지 않거나, 따라와도 **남의 홈 경로가 박힌 채로** 온다. `ping` 이
+`alive: false` 면 아래 셋을 순서대로 본다 — 셋 다 실제로 걸렸던 항목이다.
+
+| # | 확인 | 증상 | 조치 |
+|---|---|---|---|
+| 1 | 루틴 프롬프트의 폴더 경로 | 루틴이 매번 "새 캡챠 요청 없음."만 남기고 끝난다 | `/Users/<이 맥의 계정>/.aside/u/0/captcha-relay/` 로 고친다 |
+| 2 | 그 폴더에 `README.md` · `processed/` 존재 | 루틴 절차 1·4-f 가 못 돌아간다 | 없으면 만든다(README 는 이 스킬의 규약 정본을 복사) |
+| 3 | **승인 대기로 얼어붙은 루틴 세션** | `next_run_at` 은 계속 갱신되는데 실제 run 이 0건 | Aside 에서 그 세션의 승인 요청을 거부하거나 세션을 종료 |
+
+3번이 제일 안 보인다. 루틴 세션 하나가 `suspended`(권한 승인 대기) 로 멈추면 **그 뒤
+모든 스케줄이 안 돈다.** UI 는 `active` · 다음 실행 시각까지 정상으로 보이므로 루틴이
+도는 줄 알게 된다. 실측으로 34시간 동안 run 0건이었다.
+
+> 얼었던 세션을 풀어주면 **그 세션이 이어서 끝나는데, 옛 대화 맥락(=옛 경로)을 그대로 쓴다.**
+> 즉 재개 직후 첫 run 은 여전히 옛 경로로 실패한다 — 이걸 보고 "안 고쳐졌다"고 판단하면 안 된다.
+> 그 다음 회차부터 새 세션이 뜨면서 고친 프롬프트가 먹는다. **한 주기(5분) 더 기다려라.**
+
+상태는 파일이 아니라 Aside 의 `~/.aside/u/0/state.db`(sqlite) 에 있다. 읽기 전용으로 연다
+(`file:state.db?mode=ro`) — 앱이 떠 있는 동안 쓰면 깨진다.
+
+```sql
+select state, next_run_at, prompt from routines;                    -- 경로 확인
+select id, status, suspension from sessions where status='suspended';  -- 얼어붙은 세션
+select id, started_at, abort_reason from session_runs order by id desc limit 10;  -- 실제 실행 여부
+```
+
 ## 사용
 
 ```bash
@@ -78,9 +107,15 @@ $PY $S solve --match "search.shopping.naver.com" --submit
 그때 이 순서로 잇는다.
 
 1. 결과 JSON 에서 `상태 == "캡챠감지"` 인 건의 `url` 을 꺼낸다.
-2. `solve --url "<그 url>" --match "search.shopping.naver.com" --submit`
+2. `solve --url "<그 url>" --match "<그 url 의 query= 부분>" --submit`
 3. 종료코드 `0` 이고 `submit.ok == true` → 원래 명령을 `--resume` 으로 이어서 돌린다.
 4. 그 외 → **재조회하지 않고** 이룸님에게 보고한다.
+
+> ★ **`--match` 를 `search.shopping.naver.com` 으로 주지 마라 (2026-08-10 실측).**
+> 작업을 돌리다 보면 네이버 쇼핑 탭이 여러 개 열려 있게 된다. `--match` 는 **처음 걸리는
+> 탭**을 잡으므로, 캡챠 탭이 아니라 옛날 검색결과 탭을 찍어 보낸다. 그러면 Aside 는
+> 캡챠가 없는 화면을 받고 정직하게 `needs_human` 을 돌려준다 — 루프는 멀쩡한데 원인을
+> 엉뚱한 데서 찾게 된다. **검색어 인코딩(`query=%EC%BA%A0%ED%95%91`)까지 넣어 좁힌다.**
 
 캡챠를 푼 뒤 재개할 때는 `--rest-every 5 --rest-secs 120` 처럼 휴식을 같이 준다.
 캡챠는 조회 **간격**이 아니라 누적 **총량**에 반응한다 — 간격만 늘리면 또 만난다.
@@ -107,7 +142,7 @@ $PY $S solve --match "search.shopping.naver.com" --submit
 - 입력창 후보가 여럿이면 `submit` 은 **아무 데도 넣지 않고** 스냅샷을 돌려준다.
   엉뚱한 칸에 넣으면 캡챠를 한 번 더 태운다. 그때는 스냅샷을 보고 직접 넣는다.
 
-## 검증 상태 (2026-08-06)
+## 검증 상태 (2026-08-10)
 
 | 구간 | 상태 |
 |---|---|
@@ -115,10 +150,16 @@ $PY $S solve --match "search.shopping.naver.com" --submit
 | 앱 탭 열기 → 캡처 → PNG 저장 | ✅ 실측 |
 | 요청 → Aside 응답 왕복 (영수증형 질문, 실제 Aside 루프) | ✅ 3.5분, 정답 반환 |
 | 답 입력 → 제출 → `정상` 검증 | ✅ 모의 캡챠 페이지 |
-| **네이버 실물 캡챠** | ❌ 미검증 — 실물을 만나야 확인된다 |
+| **네이버 실물 캡챠** | ✅ **2026-08-10 실측 통과** (아래) |
 
-실물 첫 조우 때 확인할 것: 입력창 셀렉터가 잡히는지, Enter 로 제출되는지,
-제출 후 원래 검색 결과로 돌아오는지. 안 맞으면 `SUBMIT_JS` 를 고친다.
+**실물 1건 전 구간 통과** — 영수증형(`가게 전화번호 N번째 숫자` · `주소`),
+`answer: "175"` → `filled: true · submitted: true · clicked: "확인" · pageState: "정상"`.
+입력창 셀렉터·확인 버튼 클릭·제출 후 검증 모두 그대로 맞았다. `SUBMIT_JS` 수정 불필요.
+직후 `aside_category.py` 배치 3건 **3/3 성공**(확신도 전부 100%)으로 재개 확인.
+
+곁들여 확인된 것: 캡챠는 `openTab()` 뿐 아니라 **앱 탭에 `attachBrowserTab` 후
+`page.goto` 로 옮겨도 똑같이 뜬다.** 탭 종류의 문제가 아니라 그 세션에 걸린
+누적 차단이다 — 탭을 바꿔 우회하려 들지 말고 풀고 쉬어야 한다.
 
 ## 관련
 

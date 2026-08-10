@@ -164,6 +164,25 @@ def cmd_prep(args):
             print("[중단] 대상 0건.")
             sys.exit(2)   # 조용한 성공 금지 — 러너가 다음 단계로 넘어가면 안 된다
 
+    # 1c) 제외카테고리 게이트 — 런 시작 청소. 지난 게이트가 잡았지만 삭제가 잠금 등으로
+    #     밀린 상품을 ① 삭제 큐에 다시 올리고 ② **이번 대상에서 뺀다.**
+    #     빼는 이유: 지울 상품에 workdata·썸네일·판정 비용을 쓰지 않는다. G열이 찬
+    #     상품은 collect 가 이미 거르지만 `--include-done`·`--ids` 경로는 뚫고 들어온다.
+    if not getattr(args, "no_gate", False):
+        pend = _gate_cleanup(args.sheet, args.run_dir)
+        if pend:
+            with open(targets, encoding="utf-8") as f:
+                allt = json.load(f)
+            kept = [t for t in allt if t.get("productId") not in pend]
+            if len(kept) != len(allt):
+                with open(targets, "w", encoding="utf-8") as f:
+                    json.dump(kept, f, ensure_ascii=False, indent=2)
+                print(f"[1c] 삭제대기 {len(allt) - len(kept)}건을 이번 대상에서 제외 "
+                      f"→ {len(kept)}건")
+            if not kept:
+                print("[중단] 남은 대상 0건(전부 삭제대기).")
+                sys.exit(2)
+
     # 2) workdata (현재 카테고리 + 정체증거 4종) — 대화 밖 직접 MCP.
     #    공용 스냅샷을 먼저 본다(상품명 스킬이 이미 받아둔 상품이면 MCP 0회).
     wd_args = ["workdata", "-i", targets, "-o", products, "--sleep", args.sleep]
@@ -284,6 +303,8 @@ def cmd_finish(args):
     # 전건 재조회·덮어쓰기가 필요할 때만 --overwrite-done.
     if getattr(args, "overwrite_done", False):
         apply_args.append("--force")
+    if getattr(args, "no_gate", False):
+        apply_args.append("--no-gate")
     sh("bulsaja_mcp.py", *apply_args)
     print("\n" + "=" * 56)
     print(f"[finish 완료] 결과 {decisions}"
@@ -459,11 +480,15 @@ def consensus_vote(votes_in):
     return {"판정": "합의없음", "표": votes}
 
 
-def _post_steer_matrix(sheet, result_path, label="유도"):
-    """steer 계열(유도·consensus) 저장 후 공통 후처리 — 현황판 카테고리 완료 표시
-    + 상품명 재작업 이관. (bulsaja_mcp.py apply 가 자동저장분에 하는 일과 같은 계약)
+def _steer_saved(result_path, label="유도"):
+    """steer 계열(유도·consensus) 결과에서 **저장된 pid 집합만** 읽는다(집계·보고용).
 
-    반환: 저장된 pid set (호출자가 집계·보고에 쓴다)
+    ★2026-08-09: 여기 있던 현황판 후처리(카테고리 완료 + 상품명 재작업)는
+    `category_steer.post_matrix` 로 내렸다. 이 함수에 두면 **3단계 근접 저장이
+    빠진다** — 그건 Claude 가 `category_steer.py --input` 을 직접 부르는 경로라
+    run_all 을 통과하지 않는다(`steer_items` 는 mode:"exact" 만 만든다).
+    현황판 카테고리 열이 안 써지던 기존 버그의 원인이자 게이트 구멍이었다.
+    저장하는 자리에 붙여야 호출자와 무관하게 같은 일이 일어난다.
     """
     try:
         with open(result_path, encoding="utf-8") as f:
@@ -471,21 +496,28 @@ def _post_steer_matrix(sheet, result_path, label="유도"):
     except OSError:
         return set()
     saved = {r["productId"] for r in res if r.get("saved")}
-    if not saved:
-        print(f"  {label} 저장 0건 — 현황판 변경 없음")
-        return saved
-    try:
-        from eroomlib import matrix
-        m = matrix.read(sheet)
-        n = matrix.mark_many(sheet, "카테고리",
-                             {p: "완료" for p in saved}, matrix=m)
-        k = matrix.flag_many(sheet, "상품명",
-                             {p: "카테고리 변경 — 키워드 재선정 필요" for p in saved},
-                             from_task="카테고리", matrix=m)
-        print(f"  현황판 카테고리 {n}칸 · 상품명 재작업 {k}건")
-    except Exception as e:  # noqa: BLE001
-        print(f"  [경고] 현황판 갱신 실패: {str(e)[:120]}", file=sys.stderr)
+    print(f"  {label} 저장 {len(saved)}건")
     return saved
+
+
+def _gate_cleanup(sheet, run_dir):
+    """런 시작 청소 — 지난 게이트가 잡았지만 아직 안 지워진 상품을 삭제 큐에 다시 올린다.
+
+    삭제는 *"다른 작업이 처리 중인 상품은 삭제 불가"* 로 되돌아오는 일이 흔하다. 잠금은
+    일시적이라 나중에 다시 치면 대개 성공한다 → 그 그룹을 다시 돌릴 때 앞단에서 친다
+    (2026-08-08 이룸님: 자동 훅 + 단독 명령 `category_gate.py retry` 둘 다).
+
+    반환: 삭제 대기 중인 pid set — 이번 런의 대상에서 뺀다(지울 상품에 돈을 쓰지 않는다).
+    """
+    try:
+        sys.path.insert(0, SCRIPT_DIR)
+        import category_gate  # noqa: E402
+        targets = category_gate.queue_pending_deletes(sheet, run_dir=run_dir)
+        return {t["productId"] for t in targets}
+    except Exception as e:  # noqa: BLE001 — 청소 실패가 교정을 막을 이유는 없다
+        print(f"  [경고] 미삭제분 재수집 실패: {type(e).__name__}: {str(e)[:120]}",
+              file=sys.stderr)
+        return set()
 
 
 def cmd_consensus(args):
@@ -596,7 +628,10 @@ def cmd_consensus(args):
     sout = _p(args.run_dir, "consensus_steer_result.json")
     with open(sin, "w", encoding="utf-8") as f:
         json.dump(steer_in, f, ensure_ascii=False, indent=2)
-    steer_args = ["--input", sin, "--output", sout, "--sleep", args.sleep]
+    steer_args = ["--input", sin, "--output", sout, "--sleep", args.sleep,
+                  "--run-dir", args.run_dir]
+    if getattr(args, "no_gate", False):
+        steer_args.append("--no-gate")
     if args.dry_run:
         steer_args.append("--dry-run")
     if not args.no_sheet:
@@ -604,7 +639,7 @@ def cmd_consensus(args):
     sh("category_steer.py", *steer_args)
     if args.dry_run or args.no_sheet:
         return
-    saved = _post_steer_matrix(args.sheet, sout, label="consensus")
+    saved = _steer_saved(sout, label="consensus")
     print(f"###CONSENSUS### 채택 {len(steer_in)} / 저장 {len(saved)} / "
           f"수동잔여 {len(fails['합의없음']) + len(fails['실물판정의심']) + len(fails['변형없음'])}")
 
@@ -713,7 +748,10 @@ def cmd_steer(args):
     sout = _p(args.run_dir, "steer_result.json")
     with open(sin, "w", encoding="utf-8") as f:
         json.dump(items, f, ensure_ascii=False, indent=2)
-    steer_args = ["--input", sin, "--output", sout, "--sleep", args.sleep]
+    steer_args = ["--input", sin, "--output", sout, "--sleep", args.sleep,
+                  "--run-dir", args.run_dir]
+    if getattr(args, "no_gate", False):
+        steer_args.append("--no-gate")
     if args.dry_run:
         steer_args.append("--dry-run")
     if not args.no_sheet:
@@ -721,8 +759,8 @@ def cmd_steer(args):
     sh("category_steer.py", *steer_args)
     if args.dry_run or args.no_sheet:
         return
-    # 저장된 건은 카테고리가 실제로 바뀐 것 → 현황판 갱신 + 상품명 재작업 이관.
-    _post_steer_matrix(args.sheet, sout, label="유도")
+    # 현황판 갱신·상품명 재작업 이관·게이트는 category_steer.py 가 저장 직후에 한다.
+    _steer_saved(sout, label="유도")
 
 
 def cmd_auto(args):
@@ -746,6 +784,7 @@ def cmd_auto(args):
     a.sellha_rest_every = args.sellha_rest_every
     a.skip_sellha = getattr(args, "skip_sellha", False)
     a.overwrite_done = getattr(args, "overwrite_done", False)
+    a.no_gate = getattr(args, "no_gate", False)
     cmd_finish(a)
 
     a.sleep = "0.3"
@@ -838,6 +877,8 @@ def main():
                    help="썸네일 다운로드 생략(텍스트 증거만으로 판정할 때)")
     p.add_argument("--refresh", action="store_true",
                    help="공용 스냅샷 무시하고 불사자에서 다시 받는다")
+    p.add_argument("--no-gate", action="store_true",
+                   help="제외카테고리 게이트를 끈다 — 런 시작 청소·대상 제외를 하지 않는다")
     p.set_defaults(func=cmd_prep)
 
     f = sub.add_parser("finish", help="sellha→merge→apply(실저장)")
@@ -858,6 +899,7 @@ def main():
                    help="카테고리 조회 간 최대 대기(초). 실제는 최소~최대 난수")
     f.add_argument("--sellha-rest-every", default="25",
                    help="(현 엔진에선 미사용) 평균 N건마다 긴 휴식")
+    f.add_argument("--no-gate", action="store_true", help="제외카테고리 게이트를 끈다(검증·재현용). 기본은 켬")
     f.set_defaults(func=cmd_finish)
 
     b = sub.add_parser("batch", help="names.json → batches/ (팬아웃 단위)")
@@ -882,6 +924,7 @@ def main():
     st.add_argument("--sleep", default="0.3")
     st.add_argument("--dry-run", action="store_true")
     st.add_argument("--no-sheet", action="store_true")
+    st.add_argument("--no-gate", action="store_true", help="제외카테고리 게이트를 끈다(검증·재현용). 기본은 켬")
     st.set_defaults(func=cmd_steer)
 
     au = sub.add_parser("auto", help="merge→finish→steer (백그라운드 진입점)")
@@ -903,6 +946,7 @@ def main():
                    help="카테고리 조회 간 최대 대기(초). 실제는 최소~최대 난수")
     au.add_argument("--sellha-rest-every", default="25",
                    help="(현 엔진에선 미사용) 평균 N건마다 긴 휴식")
+    au.add_argument("--no-gate", action="store_true", help="제외카테고리 게이트를 끈다(검증·재현용). 기본은 켬")
     au.set_defaults(func=cmd_auto)
 
     r = sub.add_parser("recheck", help="2바퀴: 보류(정체불명) 건 증거 보강")
@@ -920,6 +964,7 @@ def main():
     cs.add_argument("--sellha-sleep-max", default="3")
     cs.add_argument("--dry-run", action="store_true")
     cs.add_argument("--no-sheet", action="store_true")
+    cs.add_argument("--no-gate", action="store_true", help="제외카테고리 게이트를 끈다(검증·재현용). 기본은 켬")
     cs.set_defaults(func=cmd_consensus)
 
     # prep/finish 는 상위 --sheet/--tab 을 물려받도록 보정

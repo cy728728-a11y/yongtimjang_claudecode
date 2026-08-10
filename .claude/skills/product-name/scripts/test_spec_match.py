@@ -53,6 +53,16 @@ class ExtractTest(unittest.TestCase):
     def test_한_키워드에_여럿이면_모두(self):
         self.assertEqual(spec_match.extract("3단스텐카트"), ["3단", "스텐"])
 
+    def test_미터도_단위다(self):
+        """`m` 이 단위 목록에 없어서 `인조잔디2m` 의 규격어가 통째로 빠졌다 (2026-08-10)."""
+        self.assertEqual(spec_match.extract("인조잔디2m"), ["2m"])
+        self.assertEqual(spec_match.extract("인조잔디25m"), ["25m"])
+        # `mm`·`ml` 이 `m` 으로 먼저 잘리면 안 된다 — 단위 대안 순서가 지켜지는지
+        self.assertEqual(spec_match.extract("3mm아크릴"), ["3mm"])
+        self.assertEqual(spec_match.extract("500ml물병"), ["500ml"])
+        # 영문에 얹힌 숫자는 규격이 아니다
+        self.assertEqual(spec_match.extract("xmax300등받이"), [])
+
 
 class VariantTest(unittest.TestCase):
     """한중 정규화 — 규칙 6이 한국어 이름에서 공통 정보를 지우므로 원문을 함께 본다."""
@@ -127,6 +137,21 @@ class MatchTest(unittest.TestCase):
     def test_소재어는_부분일치(self):
         self.assertTrue(spec_match.hit("스텐", "", "【不锈钢特厚】小号收碗车"))
         self.assertTrue(spec_match.hit("스텐", "스테인리스 소형 카트", ""))
+
+    def test_뒤에_다른_치수가_붙어도_매칭한다(self):
+        """공백을 지우고 비교하므로 `500kg 7.6m` 은 `500kg7.6m` 이 된다.
+
+        뒤 경계로 숫자까지 막으면 이게 통째로 죽어 500kg 윈치가 (나)로 떨어졌다
+        (2026-08-10 용쌤2-1). 글자만 막는다.
+        """
+        self.assertTrue(spec_match.hit("500kg", "무선 500kg 7.6m", ""))
+        self.assertTrue(spec_match.hit("2m", "폭 2m 10장", ""))
+        self.assertFalse(spec_match.hit("2m", "2mode 자동", ""))
+        self.assertFalse(spec_match.hit("500kg", "무선 1500kg 7.6m", ""))
+
+    def test_미터는_한자_米로도_본다(self):
+        self.assertTrue(spec_match.hit("25m", "", "60米遥控100公斤25米"))
+        self.assertTrue(spec_match.hit("2m", "", "长度二米"))
 
 
 def _dim(name, values):

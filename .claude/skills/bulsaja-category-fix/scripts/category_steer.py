@@ -12,6 +12,13 @@
   exact 모드: gen_candidates(목표경로) 를 순서대로 preview → 정확일치 시 commit
   near  모드: 주어진 keyword 로 preview → (정확일치 무시) commit, I열에 '근접저장' 플래그
 
+**현황판(00_진행) 후처리도 여기서 한다** (2026-08-09 이 자리로 내림).
+전에는 `run_all.py _post_steer_matrix` 가 했는데, 그건 `cmd_steer`·`cmd_consensus` 에서만
+불린다. **3단계 근접 저장은 Claude 가 입력 JSON 을 손으로 만들어 이 스크립트를 직접
+호출**하므로(`steer_items` 는 mode:"exact" 만 만든다) 그 경로가 후처리를 통째로 건너뛰었다
+— 현황판 카테고리 열이 안 써지던 기존 버그이자, 제외카테고리 게이트의 구멍이었다.
+저장하는 자리에 후처리를 붙이면 어느 호출자로 들어와도 같은 일이 일어난다.
+
 입력 JSON: [{"productId","row","target","keyword"(선택),"mode"(선택)}]
   target  = 목표 셀하경로(필수, exact 비교 기준)
   keyword = candidate 시드(재검색어). near 모드에선 이 keyword(들)로 바로 저장
@@ -87,6 +94,51 @@ def gen_candidates(path, keyword=""):
     return out
 
 
+def post_matrix(sheet, results, meta, run_dir=None, no_gate=False, log=print):
+    """저장분 현황판 후처리 — ① 카테고리 완료 ② 제외카테고리 게이트 ③ 상품명 재작업 이관.
+
+    `bulsaja_mcp.py apply` 가 자동저장분에 하는 일과 **같은 계약**이다. 순서가 뜻이 있다:
+    게이트가 재작업 플래그 **앞**에 선다(원안 2026-08-08). 제외 대상이면 재작업이 아니라
+    삭제이고, 재작업을 찍으면 `matrix.pending` 이 다시 집어가 막으려던 상품명 비용이
+    그대로 나간다.
+
+    results = 이 스크립트의 out 레코드, meta = {productId: 입력항목}(상품명 등).
+    반환: 저장된 pid set.
+    """
+    saved = [r for r in results if r.get("saved")]
+    if not saved:
+        log("  저장 0건 — 현황판 변경 없음")
+        return set()
+    from eroomlib import matrix
+    m = matrix.read(sheet)
+    n = matrix.mark_many(sheet, "카테고리",
+                         {r["productId"]: matrix.DONE for r in saved}, matrix=m)
+    for r in saved:                       # 캐시 동기화(아래 게이트·이관이 같은 m 을 쓴다)
+        if r["productId"] in m:
+            m[r["productId"]]["카테고리"] = matrix.DONE
+
+    gated = set()
+    if not no_gate:
+        try:
+            import category_gate  # noqa: E402  (같은 스킬 폴더 — SCRIPT_DIR 이 sys.path 에 있다)
+            recs = [{"productId": r["productId"],
+                     "상품명": (meta.get(r["productId"]) or {}).get("상품명", ""),
+                     "카테고리": r.get("ss", ""),
+                     "근접저장": r.get("mode") == "near"} for r in saved]
+            targets, _s = category_gate.gate_records(sheet, recs, run_dir=run_dir, m=m)
+            gated = {t["productId"] for t in targets}
+        except Exception as e:  # noqa: BLE001 — 저장은 이미 끝났다. 죽이면 잃는 게 더 크다.
+            log(f"  [경고] 제외카테고리 게이트 실패: {type(e).__name__}: {str(e)[:140]}")
+            log("    저장은 정상이다. 놓친 건은 `category_gate.py scan` 이 훑는다.")
+
+    redo = {r["productId"]: "카테고리 변경 — 키워드 재선정 필요"
+            for r in saved if r["productId"] not in gated}
+    k = matrix.flag_many(sheet, "상품명", redo, from_task="카테고리", matrix=m) if redo else 0
+    log(f"  현황판 카테고리 {n}칸 · 상품명 재작업 {k}건"
+        + (f" · 제외카테고리 게이트 {len(gated)}건" if gated else ""))
+    return {r["productId"] for r in saved}
+
+
 def main():
     ap = argparse.ArgumentParser(description="불사자 카테고리 유도 저장")
     ap.add_argument("--input", "-i", required=True, help="steer.json [{productId,row,target,keyword?,mode?}]")
@@ -94,6 +146,10 @@ def main():
     ap.add_argument("--sheet", help="구글시트 spreadsheetId(건건 기록)")
     ap.add_argument("--dry-run", action="store_true", help="preview만, 저장 안 함")
     ap.add_argument("--sleep", type=float, default=0.3)
+    ap.add_argument("--no-gate", action="store_true",
+                    help="제외카테고리 게이트를 끈다(검증·재현용). 기본은 켬")
+    ap.add_argument("--run-dir", default=None,
+                    help="게이트 삭제 큐 자리(기본: --output 의 폴더)")
     args = ap.parse_args()
 
     items = json.load(open(args.input, encoding="utf-8"))
@@ -163,6 +219,18 @@ def main():
     mcp.close()
     if args.output:
         json.dump(out, open(args.output, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+
+    # 현황판 후처리 — 어느 호출자로 들어와도(run_all steer/consensus, Claude 의 근접 저장
+    # 직접 호출) 같은 일이 일어나야 한다. 파생본이라 실패해도 저장 결과엔 영향이 없다.
+    if args.sheet and not args.dry_run:
+        run_dir = args.run_dir or (os.path.dirname(os.path.abspath(args.output))
+                                   if args.output else None)
+        try:
+            post_matrix(args.sheet, out, {it["productId"]: it for it in items},
+                        run_dir=run_dir, no_gate=args.no_gate)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 현황판 갱신 실패: {str(e)[:140]}", file=sys.stderr)
+
     found = sum(1 for r in out if r["hit"])
     print(f"###STEER### 일치 {found}/{len(items)}  저장 {saved}  (dry_run={args.dry_run})")
 

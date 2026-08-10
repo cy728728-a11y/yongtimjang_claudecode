@@ -74,6 +74,35 @@ class PendingTest(unittest.TestCase):
     def test_index가_없으면_빈_배열(self):
         self.assertEqual(run_options._pending_batches(self.run_dir), [])
 
+    def _pending_json(self):
+        import argparse
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_options.cmd_pending(argparse.Namespace(run_dir=self.run_dir))
+        return json.loads(buf.getvalue())
+
+    def test_경로가_템플릿이면_compact_로_찍는다(self):
+        """152배치에서 인라인 args 가 25KB 까지 부풀던 것을 없앤다 (2026-08-09)."""
+        for n in (1, 2):
+            self._w("batches", f"batch_{n:03d}.json",
+                    {"배치": n, "products": [_prod("A")]})
+        self._w("batches_index.json", [
+            {"n": n,
+             "path": os.path.join(self.run_dir, "batches", f"batch_{n:03d}.json"),
+             "imgs": n + 2, "count": 5} for n in (1, 2)])
+        out = self._pending_json()
+        self.assertEqual(out["compact"], [[1, 3, 5], [2, 4, 5]])
+        self.assertNotIn("batches", out)
+
+    def test_경로가_템플릿과_다르면_완전형으로_떨어진다(self):
+        self._w("batches_index.json", [{"n": 1, "path": "/어딘가/딴데.json",
+                                        "imgs": 3, "count": 5}])
+        out = self._pending_json()
+        self.assertNotIn("compact", out)
+        self.assertEqual(out["batches"][0]["path"], "/어딘가/딴데.json")
+
 
 class AuditAndPlansTest(unittest.TestCase):
 
@@ -141,6 +170,122 @@ class AuditAndPlansTest(unittest.TestCase):
         self.assertEqual((warns, missing), ([], False))
         pids = [pid for pid, _, _ in run_options._plans(self.run_dir)]
         self.assertEqual(pids, ["U01legacy"])
+
+
+class ItemMismatchTest(unittest.TestCase):
+    """품목대조 — 상품명과 메인상품이 한 낱말도 안 겹치면 신호 (2026-08-10).
+
+    실사례는 전부 용쌤2-1(2026-08-09)에서 워커가 놓치고 사람이 손으로 찾아낸 건들이다.
+    """
+
+    def test_딴_품목이면_잡는다(self):
+        for 상품명, 메인 in [
+            ("평판프레스 인쇄기 핸드 소형 기계 티셔츠프린팅기계", "304E/304H 퀵클램프 지그"),
+            ("매장용 회전간판 큐브모형 식당 간판 입간판", "LED 크리스탈 메뉴 라이트박스"),
+            ("구멍파기 갯벌삽 파이프 농기구 관통삽 말뚝", "절연 뤄양삽(탐침삽)"),
+            ("원예 조경 전기톱 자르기 나뭇가지 조경톱", "전동 헤지트리머"),
+            ("음식물 수거대 짬 잔반처리대 업소용 주방", "스테인리스 개수대 캐비닛"),
+        ]:
+            self.assertTrue(run_options._item_mismatch(상품명, 메인), 상품명)
+
+    def test_같은_품목이면_안_잡는다(self):
+        for 상품명, 메인 in [
+            ("3단 스텐 서빙카트 업소용 퇴식카트", "스테인리스 퇴식카트(3층)"),
+            ("정원 인조잔디2m 테라스 베란다인조잔디", "인조잔디 롤(폭·길이별)"),
+            ("접이식 플라스틱2단서랍장 수납 다용도", "플라스틱 접이식 수납 서랍장"),
+        ]:
+            self.assertFalse(run_options._item_mismatch(상품명, 메인), 상품명)
+
+    def test_수식어만_겹치는_건_근거가_아니다(self):
+        """`업소용`·`이동식` 같은 말은 어느 상품명에나 붙어 겹쳐도 뜻이 없다."""
+        self.assertTrue(run_options._item_mismatch(
+            "업소용 이동식 하이볼기계 칵테일", "업소용 이동식 와인 디스펜서 랙"))
+
+    def test_한쪽이_비면_신호를_내지_않는다(self):
+        self.assertFalse(run_options._item_mismatch("", "무엇이든"))
+        self.assertFalse(run_options._item_mismatch("무엇이든", ""))
+
+    def test_신호가_상품명_이관으로_나간다(self):
+        run_dir = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(run_dir, "batches"))
+            os.makedirs(os.path.join(run_dir, "results"))
+            for name, obj in (
+                ("batches/batch_001.json",
+                 {"배치": 1, "products": [{"productId": "U01x"}]}),
+                ("results/result_001.json",
+                 {"배치": 1, "products": [{"productId": "U01x",
+                                         "상품명": "매장용 회전간판 큐브모형 입간판",
+                                         "메인상품": "LED 크리스탈 메뉴 라이트박스"}]}),
+            ):
+                with open(os.path.join(run_dir, *name.split("/")), "w",
+                          encoding="utf-8") as f:
+                    json.dump(obj, f, ensure_ascii=False)
+            orig = snapshot.load
+            snapshot.load = lambda pid: None      # 스냅샷 없음 → 보류로 흐른다
+            try:
+                (_pid, _plan, w), = run_options._plans(run_dir)
+            finally:
+                snapshot.load = orig
+            self.assertTrue(w["품목대조"])
+            self.assertEqual([h["단계"] for h in w["이관"]], ["상품명"])
+        finally:
+            shutil.rmtree(run_dir, ignore_errors=True)
+
+
+class TruncatedPidTest(unittest.TestCase):
+    """워커가 27자 상품id를 잘라 반환한 건을 접두사로 되살린다 (2026-08-09 용쌤2-1 6건).
+
+    환각과 절단은 다르다 — 절단은 정본의 접두사라 되살릴 근거가 있다. 그때는 감사가
+    둘을 구분하지 못하고 `미지의 상품id` 로 버려 상품이 통째로 유실됐다.
+    """
+
+    A = "U01KREA81YHN1V3SD217VVMTSHV"
+    B = "U01KREA821ZC89N4MXM18WKTWYQ"
+
+    def setUp(self):
+        self.run_dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.run_dir, "batches"))
+        os.makedirs(os.path.join(self.run_dir, "results"))
+        self._w("batches", "batch_001.json", {"배치": 1, "products": [
+            {"productId": self.A}, {"productId": self.B}]})
+        self._orig_load = snapshot.load
+        snapshot.load = lambda pid: None
+
+    def tearDown(self):
+        snapshot.load = self._orig_load
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _w(self, *parts_and_obj):
+        *parts, obj = parts_and_obj
+        with open(os.path.join(self.run_dir, *parts), "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False)
+
+    def test_잘린_id를_되살리고_경고한다(self):
+        self._w("results", "result_001.json", {"배치": 1, "products": [
+            {"productId": self.A[:18], "메모": "잘림"}, {"productId": self.B}]})
+        warns, missing = run_options._audit_results(self.run_dir)
+        self.assertFalse(missing, "되살렸으면 누락이 아니다")
+        self.assertTrue(any("잘린 상품id" in w for w in warns))
+        pids = [pid for pid, _, _ in run_options._plans(self.run_dir)]
+        self.assertEqual(sorted(pids), sorted([self.A, self.B]))
+
+    def test_되살린_id가_계획에도_실린다(self):
+        self._w("results", "result_001.json", {"배치": 1, "products": [
+            {"productId": self.A[:18], "메모": "잘림"}]})
+        rows = {pid: w for pid, _, w in run_options._plans(self.run_dir)}
+        self.assertEqual(rows[self.A]["productId"], self.A,
+                         "계획 안의 productId 도 온전해야 저장 경로가 옳은 상품을 친다")
+
+    def test_접두사가_여럿이면_손대지_않는다(self):
+        """추정으로 엉뚱한 상품을 고치느니 환각으로 버리는 게 낫다."""
+        twin = self.A[:20] + "XXXXXXX"
+        self.assertEqual(len(twin), len(self.A))
+        self.assertEqual(run_options._repair_pid(self.A[:18], {self.A, twin}),
+                         self.A[:18])
+
+    def test_짧은_id는_접두사_복원을_시도하지_않는다(self):
+        self.assertEqual(run_options._repair_pid("U01K", {self.A, self.B}), "U01K")
 
 
 class ThumbPreferTest(unittest.TestCase):

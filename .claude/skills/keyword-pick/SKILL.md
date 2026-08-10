@@ -35,9 +35,9 @@ allowed-tools:
 
 **마스터 시트 (추천 키워드 누적 대상)**
 - **이름**: `추천키워드-누적`
-- **위치**: Google Drive `20-불사자-상품관리 / 22-키워드-상품명` 폴더 (`18bNAV50ABez2fAmn0RV6IuwZCtFf5tds`). (2026-07-13 `00 키워드`에서 이전)
-- **spreadsheetId**: `1H5h9uotZy6NwJZ5064-gJZmZsy-VZ5XCzYpLXD6lgp8`
-- **URL**: https://docs.google.com/spreadsheets/d/1H5h9uotZy6NwJZ5064-gJZmZsy-VZ5XCzYpLXD6lgp8/edit
+- **위치**: Google Drive `20-불사자-상품관리 / 22-키워드-상품명` 폴더 (`<22-키워드-상품명 폴더ID>`). (2026-07-13 `00 키워드`에서 이전)
+- **spreadsheetId**: `<추천키워드-누적 시트ID>`
+- **URL**: https://docs.google.com/spreadsheets/d/<추천키워드-누적 시트ID>/edit
 - **탭**: `[01 추천키워드]` (대괄호 포함이 정식 탭명)
 - **헤더(13열)**: `작업일 / 상품명 / 대표키워드 / 카테고리 / 키워드 / 총검색수 / 상품수 / 원본파일링크 / 선정근거 / 기준 / 네이버해외배송비율 / 쿠팡해외배송비율 / 신규진입키워드`
   - 뒤 3열(`네이버해외배송비율 / 쿠팡해외배송비율 / 신규진입키워드`)은 **셀러라이프 소스에만 값이 있다.** 아이템스카우트 익스포트는 이 열을 제공하지 않으므로 **빈칸**으로 둔다(스크립트가 자동 빈칸 출력).
@@ -46,7 +46,7 @@ allowed-tools:
 
 ① **아이템스카우트 개별 리네임 파일** (상품 1개 = 카테고리 1개 파일)
 - **폴더명**: `01 raw-원본데이터` (`01_효자상품_가공 / 00 키워드` 하위 — 이전 안 함)
-- **folderId**: `1kD0w-BwFgEIbRH7LhhaIMabRamb3LQLL`
+- **folderId**: `<raw-원본데이터 폴더ID>`
 - 원본 xlsx는 여기에 **`날짜6자리_1차_2차_3차_4차카테고리.xlsx`** 이름으로 업로드하고, 그 Drive 링크를 시트의 `원본파일링크`로 쓴다.
 
 ② **셀러라이프 통다운 원본 풀** (전체 카테고리, 재사용 소스)
@@ -91,7 +91,7 @@ python .claude/skills/keyword-pick/scripts/keyword-filter.py "<xlsx경로>" --to
 `+upload --name`이 업로드하며 이름을 바꿔주므로 로컬 파일을 먼저 rename 하지 않아도 된다.
 ```bash
 gws drive +upload "<원본xlsx경로>" \
-  --parent 1kD0w-BwFgEIbRH7LhhaIMabRamb3LQLL \
+  --parent <raw-원본데이터 폴더ID> \
   --name "260705_생활건강_청소용품_휴지통_다용도휴지통.xlsx" \
   --format json 2>/dev/null
 ```
@@ -114,11 +114,11 @@ gws drive +upload "<원본xlsx경로>" \
 
 ```bash
 # 셀러라이프 소스 (뒤 3열 값 있음)
-gws sheets +append --spreadsheet 1H5h9uotZy6NwJZ5064-gJZmZsy-VZ5XCzYpLXD6lgp8 \
+gws sheets +append --spreadsheet <추천키워드-누적 시트ID> \
   --json-values '[["2026-07-05","","휴지통","생활/건강 > 청소용품 > 휴지통 > 다용도휴지통","매직캔히포227l","990","1","https://drive.google.com/file/d/<id>/view","검색 990에 상품 1개, 사실상 무경쟁","상품수 1만 이하","0.5","0.35","X"]]'
 
 # 아이템스카우트 소스 (뒤 3열 빈칸)
-gws sheets +append --spreadsheet 1H5h9uotZy6NwJZ5064-gJZmZsy-VZ5XCzYpLXD6lgp8 \
+gws sheets +append --spreadsheet <추천키워드-누적 시트ID> \
   --json-values '[["2026-07-05","","휴지통","생활/건강 > 청소용품 > 휴지통 > 다용도휴지통","매직캔히포227l","990","1","https://drive.google.com/file/d/<id>/view","검색 990에 상품 1개, 사실상 무경쟁","상품수 1만 이하","","",""]]'
 ```
 - 여러 행이면 `--json-values`에 여러 배열을 한 번에 전달.

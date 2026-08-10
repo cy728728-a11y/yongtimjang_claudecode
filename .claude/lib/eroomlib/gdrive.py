@@ -365,12 +365,27 @@ def blacklist_cache_path():
 
 
 def _blacklist_remote():
+    """블랙리스트 정본 파일 메타. 정본은 `52-키워드-블랙리스트/` 한 곳뿐이다(2026-08-08).
+
+    구 위치(`51-셀러라이프-통다운/keyword_blacklist/`)를 폴백으로 남긴 이유는 이관 시점에
+    구버전 config 를 쓰는 PC(용팀장 등)가 조용히 죽지 않게 하기 위해서다. 구 위치에는
+    백업본(`*.bak_*.xlsx`)만 남겨뒀고 정본은 옮겼으므로, 폴백이 실제로 파일을 찾으면
+    그건 **누군가 옛 자리에 다시 올린 것** = 두 벌이 생긴 상태라 경고를 띄운다.
+    """
+    root = cfg("drive.blacklist_folder", required=False)
+    if root:
+        f = find_child(root, BLACKLIST_FILENAME)
+        if f is not None:
+            return f
+
     d = find_child(_root_folder(), BLACKLIST_DIRNAME)
-    if d is None:
-        raise RuntimeError("드라이브에 keyword_blacklist 폴더가 없습니다.")
-    f = find_child(d["id"], BLACKLIST_FILENAME)
+    f = find_child(d["id"], BLACKLIST_FILENAME) if d else None
     if f is None:
-        raise RuntimeError("드라이브에 keyword_blacklist.xlsx 가 없습니다.")
+        raise RuntimeError(
+            "드라이브에 keyword_blacklist.xlsx 가 없습니다 "
+            "(정본 위치: 50-소스자료 > 52-키워드-블랙리스트).")
+    print("[gdrive] 경고: 정본(52-키워드-블랙리스트)이 아니라 구 위치에서 블랙리스트를 "
+          "찾았습니다. 두 벌이 돌고 있을 수 있습니다.", flush=True)
     return f
 
 

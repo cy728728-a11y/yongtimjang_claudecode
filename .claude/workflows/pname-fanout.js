@@ -77,7 +77,7 @@ const results = await parallel(bins.map((bin, i) => () =>
     `배치 하나당 Write 1회. 반환 스키마의 results 배열에 **배치마다 항목 하나씩** 담아 반환한다.` +
     EMPHASIS,
     { label: `pname:${bin.items.map(b => b.n).join(',')}`, phase: '팬아웃',
-      model: 'sonnet', effort: 'low', schema: SCHEMA })
+      model: 'sonnet', effort: 'low', schema: SCHEMA, agentType: 'fanout-worker' })
 ))
 
 phase('검증')
@@ -88,7 +88,7 @@ const check = await agent(
   `Bash로 다음을 실행하고 출력의 ###CHECK### 줄을 요약해 반환하라(다른 출력 금지).\n` +
   `그 줄의 "상품 통과/실패/보류"는 products_* 필드에, "배치 실패"는 passed/failed에 담는다:\n` +
   `python .claude/skills/product-name/scripts/run_names.py check --run-dir "${args_.runDir}"`,
-  { label: 'name_check', phase: '검증', model: 'sonnet', effort: 'low',
+  { label: 'name_check', phase: '검증', model: 'sonnet', effort: 'low', agentType: 'fanout-worker',
     schema: { type: 'object', additionalProperties: false,
               properties: { passed: { type: 'integer' }, failed: { type: 'integer' },
                             products_passed: { type: 'integer' },

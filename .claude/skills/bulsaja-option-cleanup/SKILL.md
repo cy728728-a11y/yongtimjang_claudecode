@@ -53,7 +53,9 @@ python ... run_options.py apply --run-dir <R> --commit   # 저장 (표본검수 
 [`_shared/스킬-계약.md`](../_shared/스킬-계약.md) §팬아웃 공통 규약 — 여기 다시 적지 않는다.
 이 축의 예산: **이미지 워커당 ≤16장 · 상품 ≤10건**.
 
-1. `python … run_options.py pending --run-dir <R>` — 남은 배치를 Workflow args JSON 으로 출력
+1. `python … run_options.py pending --run-dir <R>` — 남은 배치를 Workflow args JSON 으로 출력.
+   배치당 `[번호, 이미지수, 상품수]` 압축형(`compact`)이다 — 경로는 워크플로가 합성한다.
+   **손으로 줄이거나 배치를 골라 담지 마라.** 출력을 통째로 넘긴다
 2. `Workflow` 도구를 `{name: "optclean-fanout", args: <출력 그대로>}` 로 호출.
    워커는 `agent(model: sonnet, effort: low)` — 지시서는
    [`references/옵션-워커-프롬프트.md`](references/옵션-워커-프롬프트.md), 판단 정본은
@@ -157,6 +159,11 @@ until [ "$(python -c "import json;print(len(json.load(open('<R>/committed.json')
 
 - **상품명 이관만 저장 성공 여부와 무관하게 넘어간다**(`HANDOFF_ALWAYS`). 나머지 이관은
   종전대로 저장된 건만 — 썸네일 이관은 대표가 확정돼야 대조 대상이 생기기 때문이다.
+- **품목대조(2026-08-10)**: `apply` 가 상품명과 워커의 `메인상품` 을 **전수 기계대조**해
+  한 낱말도 안 겹치면 `상품명` 이관을 자동으로 하나 더 붙이고 검수표·요약에 찍는다.
+  워커 판정만으로는 샌다 — 2026-08-09 용쌤2-1 에서 워커 27건 뒤에 13건이 더 나왔다.
+  **저장은 막지 않는다**(위양성이 섞인다: 개집↔도그하우스 같은 동의어도 걸린다).
+  실측 725건에 25건(3.4%) 발화.
   상품명 이상이 가장 잘 보이는 자리가 하필 `보류(대표충돌)`(= 저장 안 되는 상태)이라,
   저장을 조건으로 걸면 그 신호가 통째로 사라졌다. **전건이 보류인 회차도 이관은 넘긴다**
 - 상품명 쪽 재진입은 자동이다 — `append` 가 옛 `생성완료` 행을 `재작업` 으로 내려

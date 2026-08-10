@@ -257,8 +257,13 @@ def cheaper_candidates(entry, view_cache, limit=10):
         return []
     if cat_file not in view_cache:
         try:
-            rows, _, _, _ = cat_view.load_rows(cat_file)
-        except Exception:  # noqa: BLE001
+            # 뷰와 같은 규칙으로 읽는다(브랜드 O열 + 블랙리스트 제외키워드 컷 둘 다 켬) —
+            # 규칙이 다르면 감사가 "뷰에 없던 후보"를 누락으로 보고한다.
+            rows, _, _, _, _ = cat_view.load_rows(cat_file)
+        except Exception as e:  # noqa: BLE001
+            # 조용한 빈 결과는 "누락 없음"으로 읽힌다 — 사유를 남긴다.
+            print(f"  [경고] 감사 후보 읽기 실패({os.path.basename(cat_file)}): "
+                  f"{type(e).__name__}: {e}"[:160], file=sys.stderr)
             rows = []
         view_cache[cat_file] = rows
     terms = [re.sub(r"\s+", "", str(t)) for t in entry.get("term분해") or []]

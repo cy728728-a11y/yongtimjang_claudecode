@@ -97,7 +97,7 @@ phase('선택')
 const first = await parallel(bins.map((bin, i) => () =>
   agent(prompt(bin), {
     label: `${KIND}:${bin.items.map(b => b.n).join(',')}`,
-    phase: '선택', schema: SCHEMA, model: 'haiku', effort: 'low',
+    phase: '선택', schema: SCHEMA, model: 'haiku', effort: 'low', agentType: 'fanout-worker',
   })))
 
 const rows = first.filter(Boolean).flatMap(r => r.results || [])
@@ -113,7 +113,7 @@ if (missing.length && !args_.retried) {
   const again = await parallel(rbins.map(bin => () =>
     agent(prompt(bin), {
       label: `재${KIND}:${bin.items[0].n}`,
-      phase: '오디트', schema: SCHEMA, model: 'haiku', effort: 'low',
+      phase: '오디트', schema: SCHEMA, model: 'haiku', effort: 'low', agentType: 'fanout-worker',
     })))
   retryRows = again.filter(Boolean).flatMap(r => r.results || [])
 } else if (missing.length) {

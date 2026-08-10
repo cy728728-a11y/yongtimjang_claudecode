@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """워크스페이스 설정 1벌 — 경로·드라이브 폴더·시트·계정을 코드/문서 밖으로 뺀다.
 
-**왜 필요한가**: run-dir 경로·드라이브 folderId·시트 id·계정 주소를 코드/문서에 박지 않고
-여기 한 곳에 모은다. 환경이 바뀌면 **이 파일(또는 workspace.toml) 하나만 갈아끼우면** 된다.
+**왜 필요한가**: 지금 run-dir 경로(`D:\\python_work\\...`)·드라이브 folderId·마스터 시트 id·
+계정 주소가 SKILL.md 본문과 스크립트에 흩어져 박혀 있다. 배포판(개인정보 제거본)을 뽑으려면
+그 전부를 손으로 찾아 지워야 한다. 여기로 모으면 **이 파일 하나만 갈아끼우면** 된다.
 
-**이 사본은 배포본이다** — DEFAULTS 가 전부 비어 있으므로 `workspace.toml` 을 만들어야
-동작한다. 동봉된 `workspace.example.toml` 을 워크스페이스 루트에 복사해 값을 채워라.
+**호환 원칙**: `workspace.toml` 이 없어도 **현행 동작 그대로**다. 아래 DEFAULTS 가 지금
+하드코딩돼 있는 값과 같으므로, 설정 파일을 안 만들면 아무것도 바뀌지 않는다.
+(배포본은 DEFAULTS 를 빈 값으로 둔 `workspace.example.toml` 을 동봉한다.)
 
 찾는 순서:
   1. 환경변수 `EROOM_WORKSPACE_TOML`
@@ -14,8 +16,8 @@
 
 사용:
     from eroomlib.config import cfg
-    cfg("paths.category_fix_runs")               # -> workspace.toml 의 값
-    cfg("drive.category_folder")                 # -> workspace.toml 의 값
+    cfg("paths.category_fix_runs")               # -> "<data_root>/category-fix/runs"
+    cfg("drive.category_folder")                 # -> "<드라이브 폴더ID>"
     cfg("sheets.master_index", required=True)    # 없으면 KeyError
 """
 import os
@@ -25,9 +27,8 @@ try:
 except ImportError:  # pragma: no cover - 구버전 파이썬
     tomllib = None
 
-# 배포본 — 값은 전부 비어 있다. 워크스페이스 루트의 `workspace.toml` 에 채워 넣어라
-# (동봉된 `workspace.example.toml` 을 복사해서 쓴다). required=True 인 항목은 비어 있으면
-# KeyError 를 내므로, "조용히 남의 시트에 쓰는" 사고는 나지 않는다.
+# 현행 하드코딩 값 — workspace.toml 이 없을 때 쓰인다(= 지금 동작 유지).
+# 배포본에서는 workspace.example.toml 로 덮어써 빈 값이 되게 한다.
 DEFAULTS = {
     "paths": {
         "data_root": "",
@@ -40,21 +41,26 @@ DEFAULTS = {
         "onestep_runs": "",
         # 대량 다듬기(Step 0 인벤토리·중복 맵·전파 장부)의 산출물 루트
         "dedup_root": "",
-        # 셀러라이프 드라이브 캐시 — 통다운·블랙리스트 원본을 내려받는 로컬 경로
-        "sellerlife_cache": "~/.eroom/sellerlife-cache",
+        # 셀러라이프 드라이브 캐시 — 통다운·블랙리스트 원본이 드라이브로 이관돼(2026-08-01)
+        # 로컬에 없으면 여기로 내려받는다. D: 가 아니라 C: 인 이유: D: 6GB 용량 압박.
+        "sellerlife_cache": "",
     },
     "drive": {
-        # 불사자 상품관리 루트 폴더 ID
+        # 20-불사자-상품관리
         "bulsaja_root_folder": "",
-        # 카테고리교정 폴더 ID (그룹별 로그 시트가 여기 생성된다)
+        # 20-불사자-상품관리 > 카테고리교정  (그룹별 로그 시트가 여기 생성된다)
         "category_folder": "",
-        # 셀러라이프 통다운 폴더 ID
+        # 50-소스자료 > 51-셀러라이프-통다운  (통다운 <YYMMDD>/ 원본)
         "sellerlife_folder": "",
+        # 50-소스자료 > 52-키워드-블랙리스트  (keyword_blacklist.xlsx 정본, 2026-08-08 분리)
+        # 통다운 폴더에서 뺀 이유: 블랙리스트는 통다운 산출물이 아니라 **여럿이 같이 고치는
+        # 설정**이다. 공유 대상이 다르므로 폴더를 나눠야 통다운 원본까지 열어주지 않는다.
+        "blacklist_folder": "",
     },
     "sheets": {
         # 카테고리교정 그룹 시트들의 인덱스
         "master_index": "",
-        # keyword-pick 기본 시트(그룹 지정이 없을 때의 폴백)
+        # keyword-pick / 초기 파일럿에서 쓰던 기본 시트(그룹 지정이 없을 때의 폴백)
         "keyword_default": "",
     },
     "accounts": {

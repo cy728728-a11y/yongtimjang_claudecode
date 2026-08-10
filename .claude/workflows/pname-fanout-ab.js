@@ -63,7 +63,7 @@ const results = await parallel(bins.map((bin, i) => () =>
     `배치 하나당 Write 1회. 반환 스키마의 results 배열에 **배치마다 항목 하나씩** 담아 반환한다.` +
     EMPHASIS,
     { label: `pname:${bin.items.map(b => b.n).join(',')}`, phase: '팬아웃',
-      model: MODEL, effort: 'low', schema: SCHEMA })
+      model: MODEL, effort: 'low', schema: SCHEMA, agentType: 'fanout-worker' })
 ))
 
 const done = results.filter(Boolean)

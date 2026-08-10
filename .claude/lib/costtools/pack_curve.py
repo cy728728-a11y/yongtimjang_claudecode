@@ -33,7 +33,7 @@ COLS = ("agent_id", "axis", "run", "items", "turns",
         "cache_read", "cache_write", "output", "weighted", "first_ctx", "collected_at")
 
 PID = re.compile(r"\bU01[A-Z0-9]{15,30}\b")
-# <data_root>/<축>/runs/<런>/...
+# /Users/eunji/eroom-data/<축>/runs/<런>/...
 AXIS = re.compile(r"/eroom-data/([a-z][a-z-]*)/runs/([^/\"'\s]+)")
 
 

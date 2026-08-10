@@ -69,7 +69,8 @@ def build_challenge(path, adopted, drop_brand=True, max_items=DEFAULT_MAX):
 
     반환: {"목록": [키워드...], "총": int, "잘림": int, "기준상품수": int, "어근": [...]}
     """
-    rows, _dropped, _total, _rep = load_rows(path, drop_brand)
+    # 제외키워드 컷은 기본 켬 — 반증이 뷰에서 방금 거른 상표위험 키워드를 되살리면 안 된다.
+    rows, _dropped, _dropped_ex, _total, _rep = load_rows(path, drop_brand)
     if not rows:
         return {"목록": [], "총": 0, "잘림": 0, "기준상품수": None, "어근": []}
 

@@ -36,7 +36,7 @@ KEYWORD_HEADER = [
     "네이버해외배송비율", "쿠팡해외배송비율", "신규진입키워드",
 ]
 # 통다운 날짜폴더(원본파일링크 fallback) — picked에 원본파일링크가 없을 때만 사용
-DEFAULT_DRIVE_LINK = "https://drive.google.com/drive/folders/1EgIOFqgcabiSZwEactXFo4X3uWN9A_c8"
+DEFAULT_DRIVE_LINK = ""   # 배포본에서는 비움. 쓰려면 통다운 날짜폴더 URL 을 넣는다
 
 # 워크스페이스 표준 venv (scripts -> keyword-pick -> skills -> .claude -> 프로젝트 루트)
 _PROJECT_ROOT = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "..", "..", ".."))

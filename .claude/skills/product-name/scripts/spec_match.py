@@ -41,13 +41,15 @@ OPT_LIST_MAX = 60
 # 수량+단위 · 소재어 · 치수. **크기어(대형·중형·소형·미니)는 제외** — 상대 표현이라
 # 같은 `大号` 가 상품마다 다른 크기를 가리켜 옵션 매칭이 불안정하다.
 _UNIT_KO = r"인용|인치|개입|세트|리터|단|층|겹|구|칸|매|인|호"
-_UNIT_EN = r"(?:cm|mm|ml|kg|l)(?![a-z0-9])"
+# `m`(미터)은 **맨 뒤**에 둔다 — 앞에 두면 `mm`·`ml` 이 `m` 으로 먼저 잘린다.
+# 없어서 `인조잔디2m`·`인조잔디25m` 의 규격어가 통째로 안 잡혔다 (2026-08-10 용쌤2-1)
+_UNIT_EN = r"(?:cm|mm|ml|kg|l|m)(?![a-z0-9])"
 _MATERIALS = ("스테인리스", "스테인레스", "알루미늄", "플라스틱", "실리콘",
               "스텐", "원목", "우드", "가죽", "라탄", "철제")
 
 _SPEC = re.compile(
     rf"(?:\d+\s*(?:{_UNIT_KO}|{_UNIT_EN}))|(?:{'|'.join(_MATERIALS)})", re.I)
-_NUM_UNIT = re.compile(rf"^(\d+)\s*({_UNIT_KO}|cm|mm|ml|kg|l)$", re.I)
+_NUM_UNIT = re.compile(rf"^(\d+)\s*({_UNIT_KO}|cm|mm|ml|kg|l|m)$", re.I)
 
 # 숫자 경계 — `3단` 이 `13단` 에, `三层` 이 `十三层` 에 걸리면 안 된다
 _LEAD = r"(?<![0-9一二三四五六七八九十百千零〇])"
@@ -60,7 +62,7 @@ _UNIT_KO_ALIAS = {"단": ("단", "층", "겹"), "층": ("단", "층", "겹"),
 _UNIT_CN = {"단": ("层", "段"), "층": ("层", "段"), "겹": ("层", "段"),
             "인": ("人",), "인용": ("人",),
             "구": ("口", "孔"), "칸": ("格",), "매": ("张",), "세트": ("套",),
-            "리터": ("升",), "호": ("号",), "인치": ("寸",)}
+            "리터": ("升",), "호": ("号",), "인치": ("寸",), "m": ("米",)}
 _MAT_KO = {"스텐": ("스텐", "스테인리스", "스테인레스"),
            "스테인리스": ("스텐", "스테인리스", "스테인레스"),
            "스테인레스": ("스텐", "스테인리스", "스테인레스"),
@@ -119,8 +121,9 @@ def variants(token):
             ko.add("이중")
             for cu in _UNIT_CN.get(unit, ()):
                 cn.add("双" + cu)
-        if not _UNIT_CN.get(unit):                       # cm·mm 등은 표기가 같다
-            cn.add(tok)
+        # 원문에 라틴 단위가 그대로 박힌 경우가 흔하다(`长度2m`) — 한자 대응이 있어도
+        # 원표기를 같이 넣는다. 한글 단위(`3단`)를 중국어 쪽에 넣어봐야 걸릴 일이 없어 무해.
+        cn.add(tok)
     else:
         ko |= set(_MAT_KO.get(tok, ()))
         cn |= set(_MAT_CN.get(tok, ()))
@@ -133,8 +136,13 @@ def _search(needle, haystack):
         return False
     pat = _LEAD + re.escape(needle) if needle[0].isdigit() or needle[0] in _CN_DIGIT + "十" \
         else re.escape(needle)
-    if re.match(r"^\d", needle) and re.search(r"(cm|mm|ml|kg|l)$", needle, re.I):
-        pat += r"(?![a-z0-9])"
+    # 뒤 경계는 **글자만** 막는다(`2m` ≠ `2mode`). 숫자를 같이 막으면 안 된다 —
+    # 호출부가 공백을 지우고 넘기므로 `500kg 7.6m` 이 `500kg7.6m` 으로 붙어,
+    # 다음 치수의 첫 숫자가 경계로 오인돼 **멀쩡한 매칭이 통째로 죽는다**.
+    # 그래서 500kg 윈치가 (가)가 아니라 (나)로 떨어졌다 (2026-08-10 용쌤2-1).
+    # 앞자리 오인(`5kg` ⊂ `25kg`)은 위 `_LEAD` 가 이미 막는다.
+    if re.match(r"^\d", needle) and re.search(r"(cm|mm|ml|kg|l|m)$", needle, re.I):
+        pat += r"(?![a-z])"
     return re.search(pat, haystack, re.I) is not None
 
 

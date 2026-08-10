@@ -10,8 +10,14 @@ export const meta = {
 // args = { runDir: 절대경로, promptPath: 옵션-워커-프롬프트.md 절대경로,
 //          model?: A/B 실측 전용 모델 오버라이드(기본 sonnet),
 //          emphasis?: 워커 프롬프트 끝에 덧붙일 강조 문안(재팬아웃·A/B 용, 기본 없음),
-//          batches: [{ n: 7, path: "...batch_007.json", imgs: 23, count: 5 }...]  // pending만
+//          compact: [[7, 23, 5], ...]  // [배치번호, 이미지수, 상품수] — 기본. 경로는 합성한다
+//          batches?: [{ n: 7, path: "...batch_007.json", imgs: 23, count: 5 }...]  // 손으로 쓸 때
 //          budgetImgs?: 16, maxCount?: 10, retried?: false }
+//
+// **compact 가 기본인 이유**: 배치가 152개면 `batches` 인라인 args 가 25KB 가 된다
+// (경로가 배치마다 거의 같은 문자열인데 통째로 반복된다). 경로는 runDir + 배치번호로
+// 결정되니 args 에 실을 이유가 없다 (2026-08-09 용쌤2-1). 두 형식 다 받는다 —
+// `batches` 를 직접 주면 그게 이긴다(옛 run-dir·수동 호출 호환).
 //
 // 스크립트는 파일시스템이 없다 — pending 산출은 호출자가 한다:
 //   run_options.py pending --run-dir <R>   → 이 args 를 그대로 찍는다.
@@ -22,6 +28,13 @@ export const meta = {
 //  ② tool_use 스키마의 property key 는 ASCII 만 허용(API 400) → 스키마는 ASCII,
 //     사람이 읽는 최종 return 객체만 한글.
 const args_ = (typeof args === 'string') ? JSON.parse(args) : args
+// 압축형 → 완전형. 경로 템플릿은 `run_options.py prep` 이 배치를 쓰는 규약과 같아야 한다.
+if (!args_.batches && args_.compact) {
+  args_.batches = args_.compact.map(([n, imgs, count]) => ({
+    n, imgs, count,
+    path: `${args_.runDir}/batches/batch_${String(n).padStart(3, '0')}.json`,
+  }))
+}
 
 // 워커 모델. 기본은 sonnet 이고 `args.model` 로만 가른다 — **사본 워크플로를 두 개 두면
 // 지시서가 조용히 갈라진다**(2026-08-07 상품명·썸네일 A/B 에서 두 번 확인한 교훈).
@@ -111,7 +124,7 @@ phase('판단')
 const first = await parallel(bins.map((bin, i) => () =>
   agent(prompt(bin), {
     label: `옵션:${bin.items.map(b => b.n).join(',')}`,
-    phase: '판단', schema: SCHEMA, model: MODEL, effort: 'low',
+    phase: '판단', schema: SCHEMA, model: MODEL, effort: 'low', agentType: 'fanout-worker',
   })))
 
 const rows = first.filter(Boolean).flatMap(r => r.results || [])
@@ -128,7 +141,7 @@ if (missing.length && !args_.retried) {
   const again = await parallel(rbins.map(bin => () =>
     agent(prompt(bin), {
       label: `재판단:${bin.items[0].n}`,
-      phase: '오디트', schema: SCHEMA, model: MODEL, effort: 'low',
+      phase: '오디트', schema: SCHEMA, model: MODEL, effort: 'low', agentType: 'fanout-worker',
     })))
   retryRows = again.filter(Boolean).flatMap(r => r.results || [])
 } else if (missing.length) {

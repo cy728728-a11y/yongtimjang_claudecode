@@ -12,7 +12,9 @@ export PATH="$(dirname "$0"):$PATH"
 input=$(cat)
 
 # 이 시스템에는 jq가 없어 python으로 JSON 파싱 (한 번에 필요한 값 모두 추출 → shell 변수로 eval)
-eval "$(printf '%s' "$input" | python -c '
+# 맥은 python3만 있고 윈도우는 python 인 경우가 있어 둘 다 탐색 (없으면 파싱 실패 → 빈 상태줄)
+PYBIN=$(command -v python3 || command -v python)
+eval "$(printf '%s' "$input" | "${PYBIN:-python3}" -c '
 import sys, json, shlex
 try:
     d = json.load(sys.stdin)
