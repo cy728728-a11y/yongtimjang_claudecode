@@ -29,6 +29,10 @@
   - 재업로드 가능: 2026-07-27 09:41
   - priority: high
 
+- [ ] 줌 오픈: 용감한용팀장 실전반2기 (19:30 접속 → start_url로 열기)
+  - added: 2026-08-12
+  - priority: normal
+
 
 ## Scheduled
 
@@ -283,6 +287,11 @@
   - priority: high
   - project: 원천세신고
   - 반복: 매월 1일 (신고기한 = 지급 다음달 10일)
+
+- [ ] 줌 오픈: 용감한용팀장 실전반2기 줌미팅보강 4주차 (19:30 접속 → start_url로 열기)
+  - added: 2026-08-12
+  - due: 2026-08-20
+  - priority: normal
 
 ## This Week
 

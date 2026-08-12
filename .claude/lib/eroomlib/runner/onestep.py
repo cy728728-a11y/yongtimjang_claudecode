@@ -99,6 +99,11 @@ def _detail(c, sub, *rest):
             "--run-dir", c["rd"], "--sheet", c["sheet"], *rest]
 
 
+def _ship(c, sub, *rest):
+    return [_script("bulsaja-shipping-cost/scripts/run_shipping.py"), sub,
+            "--run-dir", c["rd"], "--sheet", c["sheet"], *rest]
+
+
 STEPS = [
     {
         "name": "카테고리", "dir": "01-카테고리", "deps": [],
@@ -173,6 +178,23 @@ STEPS = [
         "prep_out": "batches/batch_001.json",
         "preview": lambda c: _detail(c, "apply", "--generate", "--sample-size", "1"),
         "commit":  lambda c: _detail(c, "apply", "--commit"),
+    },
+    {
+        # 상세 다음(00_진행 매트릭스 TASKS 예약 순서 그대로 — 2026-08-12).
+        # preview 와 commit 이 둘 다 실질적으로 같은 동작(미리보기 계산 → 토큰 재사용
+        # 없이 그 자리에서 바로 커밋 여부만 다름)이라, apply 스크립트가 매번
+        # price_update 를 confirm=False 로 새로 불러 토큰 만료를 원천 차단한다
+        # (SKILL.md §흔한실패 11). 그래서 preview 호출도 매 MCP 조회다 — 공짜가 아니다.
+        "name": "배송비", "dir": "06-배송비", "deps": ["카테고리"],
+        "prep":    lambda c: _ship(c, "prep", "--ids", c["pid"]),
+        "run":     "shipping_evidence.json 의 AI추천·판매중옵션·이미지로 청구무게를 "
+                   "정하고(불사자 추천 우선, 없으면 상세·옵션 이미지에서 스펙 표기를 "
+                   "읽는다) 추천 포장이 실제 옵션 최소 규격과 맞는지 판정해 "
+                   "shipping_decision.json 을 만든다",
+        "output":  "shipping_decision.json",
+        "prep_out": "shipping_evidence.json",
+        "preview": lambda c: _ship(c, "apply"),
+        "commit":  lambda c: _ship(c, "apply", "--commit"),
     },
 ]
 STEP_BY_NAME = {s["name"]: s for s in STEPS}
@@ -252,20 +274,15 @@ def _ctx(st, step):
 
 
 def _resolve_sheet(group_name, sheet=""):
-    """그룹명 → 그룹 시트 id. 옵션정리 스킬의 해석 규칙과 같다."""
+    """그룹명으로 시트를 자동조회하지 않는다 — --sheet 를 직접 받는다.
+
+    구글시트 마스터 인덱스(matrix.index_groups)에 의존하던 자동조회를 뺐다(2026-08-12).
+    master_index 설정이 없는 환경(예: 이 PC)에서는 그룹명 매칭 자체가 불가능했고,
+    매트릭스에 등록되지 않은 그룹(예: 데모 계정)도 애초에 찾을 수 없었다.
+    """
     if sheet:
         return sheet
-    name = (group_name or "").strip()
-    if not name:
-        raise SystemExit("--sheet 또는 --group-name 중 하나는 필요하다")
-    groups = list(matrix.index_groups())
-    for g, sid in groups:
-        if g == name:
-            return sid
-    hits = [(g, sid) for g, sid in groups if name in g]
-    if len(hits) != 1:
-        raise SystemExit(f"'{name}' 으로 그룹 시트를 특정하지 못했다(후보 {len(hits)}개)")
-    return hits[0][1]
+    raise SystemExit("--sheet 를 지정해야 한다 (구글시트 인덱스 자동조회는 제거됨)")
 
 
 # ---------------------------------------------------------------------------

@@ -206,7 +206,7 @@ class DetailStepTest(unittest.TestCase):
 
     def test_상세단계가_등록됐다(self):
         self.assertIn("상세", onestep.STEP_BY_NAME)
-        self.assertEqual(len(onestep.STEPS), 5)
+        self.assertEqual(len(onestep.STEPS), 6)  # 2026-08-12: 배송비 추가로 5→6
 
     def test_상세는_카테고리에만_의존한다(self):
         # 옵션·썸네일과 마찬가지로 카테고리 이후 아무때나 (마스터 계획서 §부품4 DAG)
@@ -214,7 +214,8 @@ class DetailStepTest(unittest.TestCase):
 
     def test_상세는_썸네일_다음_순서다(self):
         names = [s["name"] for s in onestep.STEPS]
-        self.assertEqual(names[-2:], ["썸네일", "상세"])
+        i = names.index("썸네일")
+        self.assertEqual(names[i + 1], "상세")
 
     def test_preview가_generate고_commit이_commit이다(self):
         # 썸네일과 같은 예외 — 승인 대상(생성 이미지) 자체가 생성을 돌려야 나온다
@@ -228,6 +229,39 @@ class DetailStepTest(unittest.TestCase):
         self.assertIn("--ids", argv)
         self.assertIn("P1", argv)
         self.assertIn("run_detail.py", " ".join(argv))
+
+
+class ShippingStepTest(unittest.TestCase):
+    """2026-08-12 — 배송비가 00_진행 매트릭스 예약 순서(상세 다음)로 6번째 단계로 붙었는가."""
+
+    def test_배송비단계가_등록됐다(self):
+        self.assertIn("배송비", onestep.STEP_BY_NAME)
+
+    def test_배송비는_카테고리에만_의존한다(self):
+        self.assertEqual(onestep.STEP_BY_NAME["배송비"]["deps"], ["카테고리"])
+
+    def test_배송비는_상세_다음_마지막_순서다(self):
+        names = [s["name"] for s in onestep.STEPS]
+        self.assertEqual(names[-2:], ["상세", "배송비"])
+
+    def test_배송비는_run이_있다(self):
+        # 카테고리처럼 Claude 판단(청구무게·포장정합)이 필요하다 — 상세·썸네일과 다르다.
+        self.assertTrue(onestep.STEP_BY_NAME["배송비"].get("run"))
+
+    def test_preview와_commit이_apply를_부른다(self):
+        c = {"rd": "/tmp/rd", "sheet": "S", "pid": "P1", "그룹": "G"}
+        prev = onestep.STEP_BY_NAME["배송비"]["preview"](c)
+        commit = onestep.STEP_BY_NAME["배송비"]["commit"](c)
+        self.assertIn("run_shipping.py", " ".join(prev))
+        self.assertIn("apply", prev)
+        self.assertNotIn("--commit", prev)
+        self.assertIn("--commit", commit)
+
+    def test_prep이_ids로_1건만_돈다(self):
+        c = {"rd": "/tmp/rd", "sheet": "S", "pid": "P1", "그룹": "G"}
+        argv = onestep.STEP_BY_NAME["배송비"]["prep"](c)
+        self.assertIn("--ids", argv)
+        self.assertIn("P1", argv)
 
 
 class NoRunStepTest(unittest.TestCase):

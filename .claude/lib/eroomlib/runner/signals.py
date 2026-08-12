@@ -287,9 +287,50 @@ def detail_page(run_dir, pid):
 
 
 # ---------------------------------------------------------------------------
+# 배송비 — run_shipping.py apply 산출물(shipping_result.json)
+# ---------------------------------------------------------------------------
+
+def shipping(run_dir, pid):
+    """`shipping_result.json` 에서 이 상품의 판정 1건을 읽어 신호를 낸다."""
+    path = os.path.join(run_dir, "shipping_result.json")
+    rows = _load(path)
+    if not isinstance(rows, list):
+        return [_sig("sig.unreadable", "배송비",
+                     f"shipping_result.json 을 읽지 못했다({path})")]
+    d = next((r for r in rows if str(r.get("productId")) == str(pid)), None)
+    if d is None:
+        return [_sig("sig.unreadable", "배송비", "shipping_result.json 에 이 상품이 없다")]
+
+    out = []
+    status = (d.get("상태") or "").strip()
+    if status == "측정불가":
+        out.append(_sig("ship.unmeasurable", "배송비",
+                        f"무게 근거 없음 — {d.get('사유', '')}", status))
+    if status == "반영보류(포장불일치)":
+        out.append(_sig("ship.pack_mismatch", "배송비",
+                        f"추천 포장이 실제 옵션과 안 맞는다 — {d.get('사유', '')}", status))
+    if status in ("MCP오류", "미리보기실패", "계산오류"):
+        out.append(_sig("ship.error", "배송비",
+                        f"처리 실패 — {status}: {d.get('사유', '')}", status))
+    if d.get("100kg초과"):
+        out.append(_sig("ship.over_100kg", "배송비",
+                        f"청구무게 {d.get('청구구간')}kg — 100kg 초과 중량 상품",
+                        d.get("청구구간")))
+    if d.get("판정근거") == "실무게(부피무게 미반영)":
+        out.append(_sig("ship.no_volumetric", "배송비",
+                        "부피무게 미반영 — 실제 청구액은 더 높을 수 있음", status))
+    diff = d.get("차액")
+    if isinstance(diff, (int, float)) and d.get("기존배송비") not in (None, 0) \
+            and abs(diff) >= max(3000, int(d.get("기존배송비") or 0) * 0.5):
+        out.append(_sig("ship.big_jump", "배송비",
+                        f"기존 대비 배송비 변동폭이 크다 — 차액 {diff:+,}원", diff))
+    return out
+
+
+# ---------------------------------------------------------------------------
 
 _BY_STEP = {"카테고리": category, "상품명": product_name, "옵션": options,
-           "썸네일": thumbnail, "상세": detail_page}
+           "썸네일": thumbnail, "상세": detail_page, "배송비": shipping}
 
 
 def for_step(step, run_dir, pid, **kw):
@@ -438,9 +479,33 @@ def _detail_detailpage(run_dir, pid):
     return out
 
 
+def _detail_shipping(run_dir, pid):
+    rows = _load(os.path.join(run_dir, "shipping_result.json"))
+    d = next((r for r in rows if str(r.get("productId")) == str(pid)), None) \
+        if isinstance(rows, list) else None
+    if not d:
+        return ["(shipping_result.json 을 읽지 못했다 — 검수표 없음)"]
+    fee, cur, diff = d.get("예상배송비"), d.get("기존배송비"), d.get("차액")
+    out = [f"판정무게: {d.get('판정무게', '')}kg ({d.get('판정근거', '')})",
+           f"청구구간: {d.get('청구구간', '')}kg"]
+    if isinstance(fee, (int, float)):
+        line = f"예상 배송비: {fee:,}원"
+        if isinstance(cur, (int, float)) and isinstance(diff, (int, float)):
+            line += f" (기존 {cur:,}원, 차액 {diff:+,}원)"
+        out.append(line)
+    if d.get("포장정합"):
+        out.append(f"포장정합: {d['포장정합']}")
+    if d.get("100kg초과"):
+        out.append("⚠ 100kg 초과 중량 상품 — 용팀장님 선호 소싱 범위 밖")
+    out.append(f"상태: {d.get('상태', '')}")
+    if d.get("사유"):
+        out.append(f"사유: {d['사유']}")
+    return out
+
+
 _DETAIL_BY_STEP = {"카테고리": _detail_category, "상품명": _detail_product_name,
                    "옵션": _detail_options, "썸네일": _detail_thumbnail,
-                   "상세": _detail_detailpage}
+                   "상세": _detail_detailpage, "배송비": _detail_shipping}
 
 
 def detail(step, run_dir, pid):
