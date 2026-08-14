@@ -648,6 +648,49 @@ class VerdictCommitTest(unittest.TestCase):
         run_thumbs._verdict_commit(self.run_dir, {})
         self.assertNotIn("U01ghost", self._dec())
 
+    def test_잘린_productId는_자기_배치_안에서_복구된다(self):
+        """워커가 이미지 파일명(24자)에서 베껴 id 가 잘리면 판정이 통째로 버려지고
+        같은 건이 누락으로도 잡혀 commit 이 막힌다(2026-08-14 3-2 2건·2-2 15건).
+        판정 내용은 멀쩡하므로 접두 매칭으로 되살린다."""
+        self._result([{"productId": "U01a", "판정": "사용가능"},
+                      {"productId": "U01", "판정": "제외", "사유": "3구인데 2구"}])
+        # 'U01' 은 U01a·U01b 둘 다에 걸려 모호 → 복구 안 되고 누락으로 막혀야 한다
+        with self.assertRaises(SystemExit):
+            run_thumbs._verdict_commit(self.run_dir, {})
+
+        # 후보가 하나뿐이면 복구된다
+        self._result([{"productId": "U01a", "판정": "사용가능"},
+                      {"productId": "U01", "판정": "제외", "사유": "3구인데 2구"}])
+        bpath = os.path.join(self.run_dir, "verdict", "batches", "vbatch_001.json")
+        self._w(bpath, {"배치": 1, "products": [{"productId": "U01a"},
+                                              {"productId": "U01zzz"}]})
+        self._result([{"productId": "U01a", "판정": "사용가능"},
+                      {"productId": "U01zz", "판정": "제외", "사유": "3구인데 2구"}])
+        run_thumbs._verdict_commit(self.run_dir, {})
+        dec = self._dec()
+        self.assertIn("U01zzz", dec, "잘린 id 가 복구되지 않았다")
+        self.assertNotIn("U01zz", dec, "잘린 id 가 그대로 남았다")
+        self.assertEqual(dec["U01zzz"]["사유"], "3구인데 2구")
+
+    def test_다른_배치의_id로는_복구되지_않는다(self):
+        """배치를 넘어 매칭하면 남의 판정을 엉뚱한 상품에 붙이게 된다."""
+        b2 = os.path.join(self.run_dir, "verdict", "batches", "vbatch_002.json")
+        self._w(b2, {"배치": 2, "products": [{"productId": "U01ccc"}]})
+        b1 = os.path.join(self.run_dir, "verdict", "batches", "vbatch_001.json")
+        self._w(os.path.join(self.run_dir, "verdict_batches_index.json"),
+                [{"n": 1, "path": b1, "count": 2, "imgs": 6},
+                 {"n": 2, "path": b2, "count": 1, "imgs": 3}])
+        # 배치1 결과에 배치2 상품의 잘린 id 를 넣는다 → 복구되면 안 된다
+        self._result([{"productId": "U01a", "판정": "사용가능"},
+                      {"productId": "U01b", "판정": "사용가능"},
+                      {"productId": "U01cc", "판정": "제외", "사유": "남의 배치"}])
+        self._w(os.path.join(self.run_dir, "verdict", "results", "vresult_002.json"),
+                {"배치": 2, "products": [{"productId": "U01ccc", "판정": "사용가능"}]})
+        run_thumbs._verdict_commit(self.run_dir, {})
+        dec = self._dec()
+        self.assertEqual(dec["U01ccc"]["판정"], "사용가능",
+                         "배치를 넘어 복구돼 남의 판정이 덮였다")
+
     def test_남은_배치는_pending에_잡힌다(self):
         self.assertEqual([b["n"] for b in
                           run_thumbs._pending_verdict_batches(self.run_dir)], [1])
@@ -727,6 +770,78 @@ class NoRealBaseMarkerTest(unittest.TestCase):
     def test_그_밖의_사유는_아니다(self):
         for s in ("", None, "옵션: 대표색 불일치", "기준이미지없음"):
             self.assertFalse(run_thumbs.R.no_real_base(s), s)
+
+
+class HealTruncatedPidTest(unittest.TestCase):
+    """워커가 이미지 파일명(24자)에서 베낀 productId 복구 — 2026-08-14.
+
+    `materialize_image` 가 파일명을 24자로 자르는데 productId 는 27자다. 지시서에 경고를
+    넣은 당일 2-2 에서 15건이 또 났다 = 지시문으로 안 막힌다. 수합부가 되살린다.
+    """
+
+    FULL = "U01KSD7D7Y3338WQQKZWT0XTH5C"      # 27자 정본
+    CUT = "U01KSD7D7Y3338WQQKZWT0XT"          # 파일명에서 베낀 24자
+
+    def _capture(self, products, valid, axis="테스트"):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            healed = run_thumbs._heal_pids(products, valid, axis)
+        return healed, err.getvalue()
+
+    def test_후보가_1개면_정본으로_되살린다(self):
+        prods = [{"productId": self.CUT, "판정": "사용가능"}]
+        healed, log = self._capture(prods, {self.FULL, "U01OTHER0000000000000000AAA"})
+        self.assertEqual(prods[0]["productId"], self.FULL)
+        self.assertEqual(healed, [f"{self.CUT}→{self.FULL}"])
+        self.assertIn("잘린 productId 1건", log)
+
+    def test_후보가_2개_이상이면_손대지_않는다(self):
+        """접두가 두 상품을 가리키면 어느 쪽인지 알 수 없다 — 환각으로 남긴다."""
+        twin = self.CUT + "ZZZ"
+        prods = [{"productId": self.CUT}]
+        healed, _ = self._capture(prods, {self.FULL, twin})
+        self.assertEqual(prods[0]["productId"], self.CUT)
+        self.assertEqual(healed, [])
+
+    def test_후보가_없으면_손대지_않는다(self):
+        prods = [{"productId": "U01ENTIRELY_MADE_UP_XXXXXXX"}]
+        healed, _ = self._capture(prods, {self.FULL})
+        self.assertEqual(healed, [])
+
+    def test_이미_정본이면_건드리지_않는다(self):
+        prods = [{"productId": self.FULL}]
+        healed, log = self._capture(prods, {self.FULL})
+        self.assertEqual(healed, [])
+        self.assertEqual(log, "")
+
+    def test_정본_집합이_비면_아무것도_하지_않는다(self):
+        """구형 run-dir·그 축을 안 돌린 run-dir — 복구 기준이 없다."""
+        prods = [{"productId": self.CUT}]
+        self.assertEqual(self._capture(prods, set())[0], [])
+        self.assertEqual(prods[0]["productId"], self.CUT)
+
+    def test_index_pids_는_없는_파일에_죽지_않는다(self):
+        d = tempfile.mkdtemp()
+        try:
+            self.assertEqual(run_thumbs._index_pids(d, "audit_batches_index.json"), set())
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_index_pids_가_배치의_정본_id_를_모은다(self):
+        d = tempfile.mkdtemp()
+        try:
+            bp = os.path.join(d, "audit_batch_001.json")
+            with open(bp, "w", encoding="utf-8") as f:
+                json.dump({"products": [{"productId": self.FULL},
+                                        {"productId": "U01SECOND000000000000000BBB"}]}, f)
+            with open(os.path.join(d, "audit_batches_index.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump([{"n": 1, "path": bp},
+                           {"n": 2, "path": os.path.join(d, "없는파일.json")}], f)
+            got = run_thumbs._index_pids(d, "audit_batches_index.json")
+            self.assertEqual(got, {self.FULL, "U01SECOND000000000000000BBB"})
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 if __name__ == "__main__":

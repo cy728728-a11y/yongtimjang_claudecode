@@ -1165,7 +1165,16 @@ def _commit(sheet, rows, args):
                     items, missing = R.rename_targets(before, names)
                     if missing:
                         raise RuntimeError(f"옵션값을 못 찾았다: {missing[:5]}")
+                    # `renameValues` 도 `excludeSkuIds` 와 같은 200개 상한이 걸린다
+                    # (2026-08-14 3-2 차광막 297개에서 실측: "한 번에 보낼 수 있는 옵션
+                    # 이름 변경은 200개까지입니다"). 상한은 스키마라 나눠 보내는 것 말고는
+                    # 방법이 없다 — 옵션이 200을 넘는 상품이 통째로 미저장되던 자리다.
+                    name_chunks = [items[i:i + 200] for i in range(0, len(items), 200)]
+                    items = name_chunks.pop()   # 마지막 덩어리는 아래 본 호출이 보낸다
                     try:
+                        for chunk in name_chunks:
+                            mcp.option_update(pid, renameValues=chunk)
+                            time.sleep(args.sleep)
                         mcp.option_update(pid, renameValues=items)
                     except RuntimeError as e:
                         # 기존 대표 상태가 무효면(대표행이 2개거나 대표가 판매제외) 불사자는
@@ -1182,6 +1191,13 @@ def _commit(sheet, rows, args):
                             mcp.option_update(pid, excludeSkuIds=chunk)
                             time.sleep(args.sleep)
                         drop_chunks = []
+                        # 이름이 200을 넘어 나눠야 하는 상품이면 여기서도 앞 덩어리를 먼저
+                        # 보낸다 — 대표를 실어야 통과하므로 덩어리마다 같이 싣는다(멱등).
+                        for chunk in name_chunks:
+                            mcp.option_update(pid, renameValues=chunk,
+                                              mainSkuId=plan["대표"],
+                                              includeSkuIds=keep, excludeSkuIds=drop)
+                            time.sleep(args.sleep)
                         mcp.option_update(pid, renameValues=items, mainSkuId=plan["대표"],
                                           includeSkuIds=keep, excludeSkuIds=drop)
                     time.sleep(args.sleep)

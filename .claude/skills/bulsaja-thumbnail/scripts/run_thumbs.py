@@ -685,6 +685,9 @@ def _prescreen_commit(sheet, run_dir):
     if not judged:
         print(f"prescreen_results 가 없다: {os.path.join(run_dir, 'prescreen_results')}")
         return
+    # 잘린 id 는 선기록(by_pid)에 없어서 승격·보류 어디에도 안 걸리고 `미판정` 으로
+    # 흘러간다 = 기준적격 검사를 건너뛴 채 생성된다. 되살린 뒤 분류한다.
+    _heal_pids(judged, _index_pids(run_dir, "prescreen_batches_index.json"), "기준적격")
     mixed, noproduct, single = R.prescreen_partition(judged)
 
     by_pid = {p["productId"]: p for p in products if p.get("productId")}
@@ -928,6 +931,8 @@ def _audit_commit(sheet, run_dir):
     if not products:
         print(f"audit_results 가 없다: {os.path.join(run_dir, 'audit_results')}")
         return
+    # 잘린 id 는 현황판에 없어서 조용히 스킵된다 = 불일치 재작업 flag 가 안 찍힌다.
+    _heal_pids(products, _index_pids(run_dir, "audit_batches_index.json"), "정합검사")
     mismatch, match, uncomparable, main_suspect = R.audit_partition(products)
 
     m = matrix.read(sheet)
@@ -983,17 +988,66 @@ def _batch_products(run_dir):
 _JUDGE_FIELDS = ("기준이미지", "기준이미지경로", "모드", "프롬프트", "상태")
 
 
+def _index_pids(run_dir, index_name):
+    """<index>.json 이 가리키는 배치 파일들의 정본 productId 집합."""
+    path = os.path.join(run_dir, index_name)
+    if not os.path.exists(path):
+        return set()                     # 그 축을 안 돌린 run-dir — 복구할 정본이 없다
+    pids = set()
+    for b in _load(path) or []:
+        if isinstance(b, dict) and b.get("path") and os.path.exists(b["path"]):
+            pids |= {p["productId"] for p in (_load(b["path"]) or {}).get("products", [])
+                     if p.get("productId")}
+    return pids
+
+
+def _heal_pids(products, valid, axis):
+    """워커가 **이미지 파일명에서 베낀 잘린 productId** 를 정본으로 되돌린다.
+
+    `materialize_image` 가 파일명을 24자로 자르는데 productId 는 27자다. 워커가 눈앞의
+    파일명(`U01KSD7D7Y3338WQQKZWT0XT_2.jpg`)에서 상품코드를 옮겨 적으면 정본과 어긋나
+    **판정이 통째로 버려진다** — verdict 는 commit 이 막히고(눈에 띈다), prescreen·audit·
+    run 은 조용히 미판정으로 흘러간다(안 띈다. 기준적격 검사를 건너뛴 채 생성되거나
+    불일치 재작업 flag 가 안 찍힌다).
+
+    2026-08-14 실측: 3-2 verdict 2건 · 2-2 verdict 15건 — **지시서에 경고를 넣은 당일
+    재발**했다. 지시문으로는 안 막히므로 수합부에서 되살린다.
+
+    복구 조건은 **접두 후보가 그 축 전체에서 정확히 1개**일 때뿐이다. 잘린 id 는 정본의
+    접두사이고 27자 ULID 라, 24자 접두가 한 상품만 가리키면 그게 정답이다. 0개·2개 이상은
+    손대지 않고 기존대로 환각 처리한다(fail-closed).
+    """
+    if not valid:
+        return []
+    healed = []
+    for p in products:
+        pid = p.get("productId")
+        if not pid or pid in valid:
+            continue
+        cand = [x for x in valid if x.startswith(pid)]
+        if len(cand) == 1:
+            p["productId"] = cand[0]
+            healed.append(f"{pid}→{cand[0]}")
+    if healed:
+        print(f"  [복구] {axis}: 잘린 productId {len(healed)}건 — 접두 매칭으로 되살림: "
+              f"{healed[:3]}", file=sys.stderr)
+    return healed
+
+
 def _results(run_dir):
     """results/*.json → 상품 리스트. 배치 정본과 조인하고, 마지막 파일이 이긴다.
 
     result_000(`선기록`)은 prep 이 직접 쓴 것이라 그대로 신뢰한다.
     배치에 없는 pid(워커 환각)는 버린다 — 크레딧·자동반영이 걸린 경로라 fail-closed.
+    단 **잘린 id 는 버리기 전에 되살린다**(`_heal_pids`).
     """
     batch_pids = _batch_products(run_dir)
     by_pid, order = {}, []
     for rf in sorted(glob.glob(os.path.join(run_dir, "results", "result_*.json"))):
         doc = _load(rf)
         trusted = bool(doc.get("선기록"))
+        if not trusted:
+            _heal_pids(doc.get("products", []), set(batch_pids), "run")
         for p in doc.get("products", []):
             pid = p.get("productId")
             if not pid:
@@ -1023,6 +1077,8 @@ def _audit(run_dir):
         doc = _load(rf)
         if doc.get("선기록"):
             continue
+        # `_results` 와 같은 복구를 여기서도 해야 누락 집계가 어긋나지 않는다.
+        _heal_pids(doc.get("products", []), batch_pids, "run(감사)")
         got |= {p.get("productId") for p in doc.get("products", []) if p.get("productId")}
     missing = sorted(batch_pids - got)
     unknown = sorted(got - batch_pids)
@@ -1508,19 +1564,46 @@ def _verdict_commit(run_dir, ok):
     `apply --commit` 에서 **전부 '사용가능'으로 반영**된다 — 검수를 건너뛴 것이
     검수 통과로 둔갑한다. 그래서 누락이 있으면 파일을 쓰지 않고 멈춘다.
     """
+    def _seq(path):
+        """vresult_013.json / vbatch_013.json → '013'. 못 읽으면 None."""
+        try:
+            return os.path.basename(path).split("_")[1].split(".")[0]
+        except IndexError:
+            return None
+
     want = set()
+    batch_ids = {}                       # 배치번호 → 그 배치의 정본 id 집합
     for b in _load(os.path.join(run_dir, "verdict_batches_index.json")) or []:
-        want |= {p["productId"] for p in _load(b["path"]).get("products", [])}
-    got, rows = {}, 0
+        ids = {p["productId"] for p in _load(b["path"]).get("products", [])}
+        want |= ids
+        if _seq(b["path"]):
+            batch_ids[_seq(b["path"])] = ids
+    got, rows, healed = {}, 0, []
     for rf in sorted(glob.glob(os.path.join(run_dir, "verdict", "results",
                                             "vresult_*.json"))):
+        mine = batch_ids.get(_seq(rf))
         for p in _load(rf).get("products", []):
             pid = p.get("productId")
             if not pid:
                 continue
+            # **잘린 productId 자가복구** — 워커가 상품코드를 이미지 파일명(24자로 잘린
+            # 형태)에서 베끼면 27자 정본과 어긋나 판정이 통째로 버려지고, 같은 건이
+            # 누락으로도 잡혀 commit 이 막힌다(2026-08-14 실측: 3-2 2건·2-2 15건 —
+            # 지시서에 경고를 넣은 당일 재발했다. 지시문으로는 안 막힌다).
+            # 판정 내용은 멀쩡하므로 되살린다. 단 **자기 배치 안에서만** 접두 매칭한다
+            # (배치를 넘으면 남의 판정을 엉뚱한 상품에 붙이게 된다). 후보가 정확히
+            # 1개일 때만 고치고, 0개·2개 이상이면 손대지 않고 기존대로 환각 처리한다.
+            if mine and pid not in mine:
+                cand = [x for x in mine if x.startswith(pid)]
+                if len(cand) == 1:
+                    healed.append(f"{pid}→{cand[0]}")
+                    pid = cand[0]
             rows += 1
             got[pid] = {"판정": str(p.get("판정") or "사용가능").strip(),
                         "사유": str(p.get("사유") or "").strip()}
+    if healed:
+        print(f"  [복구] 잘린 productId {len(healed)}건 — 자기 배치 안 접두 매칭: "
+              f"{healed[:3]}", file=sys.stderr)
     unknown = sorted(set(got) - want) if want else []
     missing = sorted(want - set(got))
     if unknown:

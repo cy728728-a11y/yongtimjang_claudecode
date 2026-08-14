@@ -349,19 +349,14 @@ python … run_thumbs.py apply --run-dir <R> --commit       # 반영
   `decisions.json` 을 **쓰지 않고 exit 3**. 누락을 넘기면 판정 안 한 상품이 `decisions.json`
   에 없다는 이유로 `apply --commit` 에서 전부 `사용가능` 으로 반영된다. 배치에 없는
   상품id(워커 환각)는 경고 후 버린다
-- **⚠ "환각 N건 + 누락 N건" 이 같은 수로 뜨면 진짜 환각이 아니라 `productId` 잘림이다**
-  (2026-08-14 2-2 실측). 워커 3명이 27자 상품코드를 **정확히 24자로 잘라** 적어
-  15건이 환각으로 버려지고 같은 15건이 누락으로 잡혀 `verdict --commit` 이 막혔다.
-  **판정 내용은 멀쩡하다 — 키만 깨진 것이라 재팬아웃은 순수 낭비다.**
-  복구는 **같은 배치 안에서만** 접두 매칭한다(다른 배치로 새면 남의 판정을 붙이게 된다):
-
-  ```python
-  # vresult_NNN.json 의 미매칭 id 를 vbatch_NNN.json 안에서만 startswith 로 찾는다.
-  # 후보가 정확히 1개일 때만 고치고, 0개·2개 이상이면 손대지 말고 그 배치만 재팬아웃.
-  ```
-
-  고친 뒤 `verdict --commit` 을 다시 치면 통과한다. 원본은 `.bak` 로 남겨라.
-  **누락 목록과 환각 목록의 길이가 다르면** 이 경로가 아니다 — 진짜 누락이니 재팬아웃한다.
+- **잘린 `productId` 는 `verdict --commit` 이 스스로 복구한다**(2026-08-14 코드화).
+  워커가 상품코드를 이미지 파일명(24자로 잘린 형태)에서 베끼면 27자 정본과 어긋나
+  판정이 환각으로 버려지고 같은 건이 누락으로도 잡혀 commit 이 막혔다
+  (3-2 2건 → 지시서에 경고 추가 → **같은 날 2-2 에서 15건 재발.** 지시문으로는 안 막힌다).
+  이제 **자기 배치 안에서만** 접두 매칭해 후보가 정확히 1개일 때 되살리고
+  `[복구] 잘린 productId N건` 을 찍는다. 0개·2개 이상이면 손대지 않고 기존대로 환각 처리 —
+  배치를 넘어 매칭하면 남의 판정을 엉뚱한 상품에 붙이게 되므로 그 경계는 절대 넘지 않는다.
+  **`[복구]` 가 찍히면 워커 품질 문제이지 정상이 아니다** — 자주 뜨면 팬아웃 지시서를 손봐라.
 - 정합검사(audit)와 **결과 폴더가 다르다**(`verdict/results/` vs `audit_results/`) —
   같은 run-dir 에서 병렬로 돌려도 안전하다. 둘 다 크레딧 0
 - 이미지 확보 실패(생성본 다운로드 불가)는 조용히 빠지지 않는다 — 경고를 찍고 대상에서
@@ -514,7 +509,7 @@ review.html 경로(이룸님 사후 검토용).
 ## 검증
 
 ```bash
-python .claude/skills/bulsaja-thumbnail/scripts/test_thumb_rules.py    # 59건 (recover 포함)
-python .claude/skills/bulsaja-thumbnail/scripts/test_thumb_prep.py     # 33건 (verdict 배치·수합 포함)
+python .claude/skills/bulsaja-thumbnail/scripts/test_thumb_rules.py    # 62건 (recover 포함)
+python .claude/skills/bulsaja-thumbnail/scripts/test_thumb_prep.py     # 47건 (verdict 배치·수합·id복구 포함)
 python .claude/skills/bulsaja-thumbnail/scripts/test_review_html.py    # 11건
 ```
