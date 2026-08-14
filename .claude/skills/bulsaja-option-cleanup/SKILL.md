@@ -397,8 +397,8 @@ python ... run_options.py restore --run-dir <R> [--ids U01a U01b]
 ## 검증
 
 ```bash
-python .claude/skills/bulsaja-option-cleanup/scripts/test_option_rules.py   # 88건
-python .claude/skills/bulsaja-option-cleanup/scripts/test_option_prep.py    # 51건
+python .claude/skills/bulsaja-option-cleanup/scripts/test_option_rules.py   # 91건
+python .claude/skills/bulsaja-option-cleanup/scripts/test_option_prep.py    # 53건
 ```
 
 `run_options.py` 의 저장부(`_commit`)를 손대면 `test_option_prep.py` 를 먼저 돌린다 —

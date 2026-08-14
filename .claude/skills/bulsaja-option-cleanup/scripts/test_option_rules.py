@@ -80,6 +80,35 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(next(e["사유"] for e in p["제외"] if e["id"] == "99"),
                          "비상품/메인상품 아님")
 
+    def test_워커가_미리_뺀_상한초과분에_가격_근거를_되살린다(self):
+        """`유지` 에 넣었어야 할 큰 규격을 워커가 손으로 빼 오면 사유가 뭉개진다.
+
+        2026-08-14 3-2 실측: 150cm 공원벤치·3x3m 갠트리크레인이 전부
+        `비상품/메인상품 아님` 으로만 찍혀 왜 안 파는지가 사라졌다.
+        저장 결과는 같으므로 막지 않고 사유에 가격 사실만 덧붙인다.
+        """
+        rows = [row(1, 10000), row(2, 14000), row(3, 30000)]
+        p = R.plan(opt(rows), keep_ids={"1", "2"})   # 워커가 3(상한 초과)을 먼저 뺐다
+        why = next(e["사유"] for e in p["제외"] if e["id"] == "3")
+        self.assertIn("비상품/메인상품 아님", why)
+        self.assertIn("1.5배 상한 초과", why)
+        self.assertIn("30,000원 > 15,000원", why)
+
+    def test_싼_부속품에는_가격_근거를_붙이지_않는다(self):
+        """부속품은 원래 하한 아래다 — 붙이면 정상 제외가 워커 실수로 읽힌다."""
+        rows = [row(99, 500), row(1, 10000), row(2, 14000)]
+        p = R.plan(opt(rows), keep_ids={"1", "2"})
+        self.assertEqual(next(e["사유"] for e in p["제외"] if e["id"] == "99"),
+                         "비상품/메인상품 아님")
+
+    def test_스크립트가_직접_뺀_건은_사유가_한_번만_붙는다(self):
+        """`유지` 에 정상적으로 들어온 상한 초과분 — 종전 사유 그대로다."""
+        rows = [row(1, 10000), row(2, 30000)]
+        p = R.plan(opt(rows), keep_ids={"1", "2"})
+        why = next(e["사유"] for e in p["제외"] if e["id"] == "2")
+        self.assertNotIn("비상품", why)
+        self.assertEqual(why.count("1.5배 상한 초과"), 1)
+
     def test_판매가_오름차순이고_동가는_원본_순서다(self):
         rows = [row(1, 14000), row(2, 10000), row(3, 10000)]
         p = R.plan(opt(rows), keep_ids={"1", "2", "3"})

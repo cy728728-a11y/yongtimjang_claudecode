@@ -595,6 +595,26 @@ def plan(option, keep_ids, names=None, prefer_id=None, require_stock=True,
     cap = base * multiple
     floor = base * PRICE_MULTIPLE_LOW
 
+    # ③-b 워커가 미리 뺀 행에 **가격 근거를 되살린다** (2026-08-14 3-2 실측).
+    #     `유지` 에는 메인상품 판매행 전부를 넣고 상한 걸러내기는 여기서 하는 게 규칙인데
+    #     (워커 프롬프트 §2), 워커가 상한 초과분을 손으로 먼저 빼 오는 일이 잦다. 그러면
+    #     사유가 전부 `비상품/메인상품 아님` 으로 뭉개져 **왜 안 파는지가 사라진다**
+    #     (실측: 150cm 공원벤치·3x3m 갠트리크레인·270mm 감압지가 전부 '비상품'으로 찍혔다).
+    #     무엇을 파느냐는 안 바뀌므로 저장을 막지 않고, 사유에 가격 사실만 덧붙인다.
+    #
+    #     **상한 초과만 붙인다.** 하한 미만은 붙이지 않는다 — 부속품·사은품은 원래 싸서
+    #     하한 아래인 게 정상이고(그래서 ±50% 를 메인상품 확정 뒤에만 적용한다), 거기에
+    #     가격 사유를 붙이면 정상 제외를 '워커가 잘못 뺐다'로 읽히게 만든다.
+    #     상한 초과는 반대다 — 본품보다 비싼 행은 대개 **같은 제품의 큰 규격**이라,
+    #     그게 '비상품' 으로만 적히면 왜 안 파는지가 실제로 사라진다.
+    for e in result["제외"]:
+        if e["사유"] != "비상품/메인상품 아님":
+            continue
+        r = next((x for x in rows if x["id"] == e["id"]), None)
+        if r is None or _price(r) is None or _price(r) <= cap:
+            continue
+        e["사유"] += f" · 가격도 1.5배 상한 초과({_price(r):,}원 > {int(cap):,}원)"
+
     # ④ 범위 안만 유지. 하한은 대표가 최저가가 아닐 때만 실제로 발동한다
     kept = [r for r in cands if floor <= _price(r) <= cap]
     for r in cands:
