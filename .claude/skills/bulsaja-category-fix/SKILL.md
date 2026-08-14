@@ -498,17 +498,28 @@ run_all.py consensus run  --run-dir <R>       # 변형 조회 → 2/3 판정 →
   (찍으면 `pending` 이 다시 집어가 막으려던 상품명 비용이 그대로 나간다).
 - 걸린 건은 현황판 뒤 7열이 `삭제대기(제외카테고리)` 가 되고 **삭제 큐가 run-dir 아래
   `gate/` 에 쌓인다**(`gate/delete_queue.json`). **여기서 비용 차단은 끝난다.**
-- 실제 삭제는 자동이 아니다 — **런이 끝나면 메인이** 큐를 보고 MCP 로 지운다(아래 명령).
-  종합보고에 삭제 목록(상품id·상품명·카테고리·걸린 조각)과 **근접저장 구분 표기**를 싣는다.
+- **실제 삭제도 자동이다 (2026-08-11 이룸님: "삭제대기건은 나에게 묻지 말고 삭제한다").**
+  `run_all.py auto` 의 출구가 `category_gate.auto_delete()` 를 부른다 — 메인이 큐를 보고
+  판단하던 자리가 없어졌다. 승인을 묻지 않는다. 종합보고에 삭제 목록(상품id·상품명·
+  카테고리·걸린 조각)과 **근접저장 구분 표기**를 싣는다.
+  끄려면 `--no-autodelete`(그러면 예전처럼 `삭제대기` 로만 남는다).
 - 블랙리스트를 못 읽는 등 게이트가 실패해도 **저장·교정은 그대로 간다**(경고만). 이미 저장이
   끝난 뒤라 죽이면 잃는 게 더 크고, 놓친 건은 `scan` 이 나중에 훑는다.
 - 끄려면 각 명령에 `--no-gate`(검증·재현용).
 
 ```bash
-# 게이트가 잡은 것 — catfix 런이 끝난 뒤 삭제 (run-dir 아래 gate/ 를 그대로 넘긴다)
-python .claude/skills/bulsaja-category-fix/scripts/category_gate.py finalize \
-  --run-dir <R>/gate      # 메인이 delete_queue.json 배치를 MCP 로 지운 뒤
+# `auto` 가 끝에 이걸 자동으로 부른다. 손으로 다시 돌릴 때만 쓰는 명령:
+python .claude/skills/bulsaja-category-fix/scripts/category_gate.py autodelete \
+  --run-dir <R>/gate [--rounds 3] [--wait 180]
+#   = delete(--yes --resume) → finalize → 잔여 재큐 를 라운드로 반복
 ```
+
+**왜 라운드인가**: 서버 대기열이 병목이라 한 번에 다 안 넘어간다(§아래). `미접수`·`미확정`
+은 상품 문제가 아니라 대기열이 그때까지 안 돈 것이라, 기다렸다 다시 내면 넘어간다.
+라운드 2부터는 `<gate>/retryN/` 에 새 큐를 깔고 돈다 — 같은 자리에서 다시 돌리면
+`delete_progress.jsonl` 배치키가 겹쳐 `--resume` 이 전부 건너뛴다.
+`잠금` 사유는 스킬이 못 푸는 것이라 재큐에서 뺀다. 끝까지 남은 건 `삭제대기` 그대로
+두고(비용 0) 다음 런의 `prep` 이 다시 잡는다.
 
 > **`category_steer.py` 가 현황판을 안 쓰던 버그도 이때 고쳤다**(2026-08-09). 현황판 쓰기가
 > `run_all.py _post_steer_matrix` 에 있어서, 근접 저장분은 시트1 I열에만 남고 `00_진행`
@@ -520,7 +531,8 @@ python .claude/skills/bulsaja-category-fix/scripts/category_gate.py finalize \
 ```bash
 python .claude/skills/bulsaja-category-fix/scripts/category_gate.py scan   # 읽기만
 python ... apply --run-dir <R> --yes      # 현황판 7열 `삭제대기(제외카테고리)` + 삭제 큐
-python ... delete --run-dir <R> --yes --resume   # 실제 삭제(스크립트가 MCP 직접 호출)
+python ... autodelete --run-dir <R>       # delete→finalize→재큐 라운드 (권장·묻지 않음)
+python ... delete --run-dir <R> --yes --resume   # 1회 삭제만(스크립트가 MCP 직접 호출)
 python ... finalize --run-dir <R>         # 성공분만 `상품삭제(제외카테고리·자동)` 로 승격
 python ... retry                          # 현황판의 `삭제대기` 잔여분으로 큐 재생성
 python scripts/gate_request_sheet.py --run-dir <R>   # 불사자 일괄 처리 요청 시트 1장

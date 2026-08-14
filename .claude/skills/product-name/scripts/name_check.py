@@ -13,6 +13,8 @@ Claude가 만든 상품명(키워드 2개 조합 + term 분해)이 이룸님 규
   R5. **적합도** — 키워드가 상품명에 연속 문자열 그대로 있는가 (하나도 없으면 실패)
   R8. **대표옵션 마커** — 상품명이 `기본형` 으로 끝나고, 그게 1번만 나오는가
   R9. **배치** — 원본 단어와 키워드를 `a 1 b 2 c` 로 번갈아 놓았는가 (앞자리부터 채운다)
+  R11. **유통 브랜드** — 남의 유통사 브랜드를 상품명에 넣었는가
+       (원본에 있던 것=경고 / 새로 붙인 것=실패)
 
 적합도가 왜 핵심인가 (2026-07-24 이룸님):
   네이버는 검색어가 상품명에 **그대로** 있을 때 적합도 점수를 높게 준다.
@@ -113,6 +115,19 @@ MAX_KEYWORDS = 5
 MAX_DUP_TERMS = 1
 MAX_DUP_COUNT = 2
 
+# 유통·리테일 브랜드 (2026-08-14 이룸님 표본검수 발) — R11.
+#   발단: `전동 계단 리프트`(중국산)에 채택 키워드 `코스트코접이식카트` 가 붙었다.
+#   셀러라이프 O열 브랜드키워드 컷도, 블랙리스트 `제외브랜드`(33개, 소비재 위주)도
+#   유통사명은 안 걸러서 뷰에 남아 있었다. 남의 유통사·가구 브랜드를 상품명에 넣는 건
+#   상표 리스크이고, 구매대행 상품은 그 브랜드 제품이 아니다.
+#   **원본 상품명에 이미 있으면 경고**(판매자가 단 것 — 판단은 사람 몫),
+#   **원본에 없는데 붙었으면 위반**(워커가 새로 끌어온 것).
+RETAIL_BRANDS = (
+    "코스트코", "이케아", "다이소", "무인양품", "이마트", "트레이더스", "홈플러스",
+    "롯데마트", "쿠팡", "마켓컬리", "올리브영", "무신사", "오늘의집", "한샘", "리바트",
+    "스타벅스", "알리익스프레스", "테무", "쉬인", "아마존",
+)
+
 
 def nows(s):
     """공백·줄바꿈 전부 제거 (상품명 ↔ term 결합 비교용)."""
@@ -199,6 +214,36 @@ def collect_keywords(product):
     else:
         vals = [str(product.get(f"키워드{i}") or "").strip() for i in (1, 2, 3, 4, 5)]
     return [v for v in vals if v]
+
+
+def evidence_text(product):
+    """근거 뭉치 — 이 상품에 대해 확인된 문자열 전부를 공백 없이 합친다.
+
+    ⚠️ **이걸로 "근거 없는 term" 검사를 만들지 마라 (2026-08-14 실측으로 폐기).**
+    한 번 만들었다가(R10) 2-1 표본 35건 중 23건이 오탐이라 그날 되돌렸다. 이유는
+    구조적이다 — 증거의 절반이 **중국어 원문**이고 상품명은 한국어라, 문자열 대조로는
+    `고속`↔`高速` · `북유럽`↔`北欧` · `3단`↔`三层` 이 전부 "근거 없음"으로 잡힌다.
+    대역 사전 없이는 못 넘는다. 발단이 된 사례('발광글자')조차 원문 `广告发光字` 에
+    근거가 있었다 — **규칙이 잡으려던 그 건 자체가 오탐이었다.**
+    지어낸 속성은 여전히 기계가 못 잡는다. 표본검수(사람)가 그 방어선이다.
+
+    재료: 원본상품명 · 실물판정 · 중국어 원문명 · 옵션명(요약) · 옵션구성(전량 원문 포함) ·
+    채택 키워드. 앞의 넷은 `prep` 이 배치에 실어 보낸 가공 전 증거이고, 워커가 이름을
+    지을 때 실제로 본 것과 같다. `run_names` 가 배치에서 `증거` 로 주입한다(없으면 이
+    함수가 product 안에 있는 것만으로 만든다 — 단건 모드·구버전 named 호환).
+    """
+    parts = [product.get("원본상품명"), product.get("실물판정"),
+             product.get("원문명"), product.get("증거")]
+    opts = product.get("옵션명") or []
+    if isinstance(opts, (list, tuple)):
+        parts += [str(o) for o in opts]
+    spec = product.get("옵션구성")
+    if isinstance(spec, dict):
+        for o in (spec.get("옵션전량") or []):
+            if isinstance(o, dict):
+                parts += [o.get("원문"), o.get("text"), o.get("옵션명")]
+    parts += collect_keywords(product)
+    return nows(" ".join(str(p) for p in parts if p))
 
 
 # 원본유지 경로에서 살려 두는 규칙 — 이름 품질이 아니라 **구조**를 보는 둘뿐이다.
@@ -375,6 +420,25 @@ def check_one(product, max_terms=DEFAULT_MAX_TERMS, min_terms=DEFAULT_MIN_TERMS,
                         f"R9 배치 어긋남 — 원본 단어 {', '.join(misplaced)}를 키워드 사이에 "
                         f"끼워야 한다(a 1 b 2 c). 키워드를 앞에 몰지 말 것")
 
+    # R11. 유통 브랜드 — 남의 유통사·가구 브랜드를 상품명에 넣었는가 (2026-08-14 이룸님)
+    #      발단: 중국산 계단카트에 채택 키워드 `코스트코접이식카트`. 구매대행 상품은 그
+    #      브랜드 제품이 아니라 상표 리스크다. 원본에 이미 있으면(판매자가 단 것) 경고,
+    #      원본에 없는데 워커가 새로 끌어왔으면 위반.
+    if name:
+        origin = nows(product.get("원본상품명"))
+        nname = nows(name)
+        for b in RETAIL_BRANDS:
+            if b not in nname:
+                continue
+            if b in origin:
+                warnings.append(
+                    f"R11 상품명에 유통 브랜드 '{b}' — 원본 상품명에 이미 있던 말이다. "
+                    f"이 상품이 실제 그 브랜드 제품이 아니면 빼는 게 안전하다")
+            else:
+                violations.append(
+                    f"R11 상품명에 유통 브랜드 '{b}' — 원본에 없는데 새로 붙였다. "
+                    f"구매대행 상품은 그 브랜드 제품이 아니다(상표 리스크). 다른 키워드로 교체")
+
     # R8. 대표옵션 마커 — 상품명은 `기본형` 으로 끝나고, 그게 딱 1번 나와야 한다.
     #     네이버는 '대표상품'(추가금 0원 옵션)을 상품명으로 쓰라고 요구한다. 대표옵션명 끝에도
     #     같은 단어가 붙어(bulsaja-option-cleanup 규칙 17) **같은 단어가 짝을 지목한다.**
@@ -447,6 +511,9 @@ def main():
     ap = argparse.ArgumentParser(description="상품명 규칙 산술 검증 (파이프라인 ⑤)")
     ap.add_argument("--input", help="named_*.json (products 배열 포함)")
     ap.add_argument("--output", help="검증 결과를 병합해 저장할 경로 (미지정시 stdout 요약만)")
+    ap.add_argument("--batch", help="같은 번호의 batch_*.json — R10 근거 검사에 원문명·"
+                                    "옵션명·옵션구성을 실어 준다(없으면 원본상품명·"
+                                    "실물판정·키워드만으로 판정해 오탐이 는다)")
     ap.add_argument("--max-terms", type=int, default=DEFAULT_MAX_TERMS,
                     help=f"고유 내용어 term 상한 ('{BASE_SUFFIX}' 제외, "
                          f"default: {DEFAULT_MAX_TERMS})")
@@ -497,6 +564,24 @@ def main():
 
     products = data.get("products", data if isinstance(data, list) else [])
     passed, failed, held, warned = 0, 0, 0, 0
+
+    # R10 근거 보강 — 배치의 가공 전 증거(원문명·옵션명·옵션구성)를 named 레코드에 얹는다.
+    # named 는 워커 산출이라 이 셋이 없다. 없으면 R10 이 원본상품명·실물판정·키워드만
+    # 보게 되어 정당한 말까지 "근거 없음"으로 잡는다(경고라 막지는 않지만 소음이 는다).
+    if args.batch:
+        try:
+            with open(args.batch, encoding="utf-8") as f:
+                bp = {x["productId"]: x for x in json.load(f).get("products", [])}
+            for p in products:
+                b = bp.get(p.get("productId"))
+                if not b:
+                    continue
+                for k in ("원문명", "옵션명", "옵션구성"):
+                    p.setdefault(k, b.get(k))
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
+            # 근거 보강 실패가 검증을 죽이면 안 된다 — R10 은 경고일 뿐이다.
+            print(f"  [경고] 배치 근거 읽기 실패 — R10 정확도만 낮아진다: "
+                  f"{str(e)[:100]}", file=sys.stderr)
 
     for p in products:
         # 보류 건(실물불명·카테고리의심 등)은 검증 대상이 아니다 — 상태만 유지.

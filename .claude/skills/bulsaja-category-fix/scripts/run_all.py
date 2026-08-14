@@ -789,6 +789,20 @@ def cmd_auto(args):
 
     a.sleep = "0.3"
     cmd_steer(a)
+
+    # --- 제외카테고리 삭제 (2026-08-11 이룸님: "삭제대기건은 묻지 말고 삭제한다") ---
+    # 그전까지는 여기서 멈추고 메인이 큐를 보고 판단했다. 이제 런 출구가 직접 지운다.
+    # 삭제가 실패해도 교정 결과는 그대로다 — 잔여는 `삭제대기` 로 남고 다음 런이 잡는다.
+    if not getattr(args, "no_gate", False) and not getattr(args, "no_autodelete", False):
+        try:
+            import category_gate
+            category_gate.auto_delete(category_gate.gate_dir(args.run_dir),
+                                      rounds=int(getattr(args, "delete_rounds", 3) or 3))
+        except Exception as e:  # noqa: BLE001 — 삭제 실패가 auto 를 죽이면 안 된다
+            print(f"[게이트 자동삭제 실패] {type(e).__name__}: {e}"[:200], file=sys.stderr)
+            print("  교정 결과는 그대로다. 잔여는 `삭제대기` — "
+                  "`category_gate.py retry` 가 다시 잡는다", file=sys.stderr)
+
     print("\n" + "=" * 56)
     print("[auto 완료] 남은 것 = 확신도 미달·유도 실패 건의 수동 판정")
 
@@ -947,6 +961,10 @@ def main():
     au.add_argument("--sellha-rest-every", default="25",
                    help="(현 엔진에선 미사용) 평균 N건마다 긴 휴식")
     au.add_argument("--no-gate", action="store_true", help="제외카테고리 게이트를 끈다(검증·재현용). 기본은 켬")
+    au.add_argument("--no-autodelete", action="store_true",
+                    help="게이트가 잡은 것을 실제로 지우지 않는다(`삭제대기` 로만 남김). 기본은 지움")
+    au.add_argument("--delete-rounds", type=int, default=3,
+                    help="자동삭제 재시도 라운드(서버 대기열 포화 대비)")
     au.set_defaults(func=cmd_auto)
 
     r = sub.add_parser("recheck", help="2바퀴: 보류(정체불명) 건 증거 보강")

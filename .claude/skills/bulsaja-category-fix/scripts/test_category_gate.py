@@ -15,7 +15,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # category_gate 를 먼저 든다 — 그게 `.claude/lib` 를 sys.path 에 올린다(eroomlib 앵커).
 from category_gate import (  # noqa: E402
-    GATED_TASKS, V_PENDING, _make_queue, _merge_targets, already_gone,
+    GATED_TASKS, V_PENDING, _is_gone, _make_queue, _merge_targets, already_gone,
     final_category, gate_select, is_near_save, pending_delete_ids,
 )
 from eroomlib import matrix  # noqa: E402
@@ -110,6 +110,26 @@ def test_already_gone():
     check("상품삭제 접두", already_gone(MROW(썸네일="상품삭제(실물불명·자동)")))
     check("삭제대기 접두", already_gone(MROW(업로드=V_PENDING)))
     check("게이트 밖 열은 안 본다", not already_gone(MROW(수집=matrix.NA)))
+
+
+# ── _is_gone (삭제 응답 판독) ────────────────────────────────────────────────
+def test_is_gone():
+    """③ "휴지통에 있다" 계열 응답을 성공으로 읽는가 (2026-08-14).
+
+    발단: 마커가 `이미 휴지통` 하나뿐이라 형제 문구인
+    `업로드된 마켓이 없어 소싱 상품을 휴지통으로 이동함` 이 실패로 집계됐다.
+    실제로는 지워진 건데 `삭제대기` 로 남아 잔여 건수가 계속 부풀었다.
+    """
+    print("\n[_is_gone]")
+    g = _is_gone
+    check("③ 이미 휴지통", g("업로드된 마켓이 없고 이미 휴지통인 상품을 확인함"))
+    check("③ 방금 휴지통으로 이동", g("업로드된 마켓이 없어 소싱 상품을 휴지통으로 이동함"))
+    check("실패 접두가 붙어도 잡는다", g("실패: 업로드된 마켓이 없어 소싱 상품을 휴지통으로 이동함"))
+    check("부정형은 성공이 아니다", not g("소싱 상품 휴지통으로 이동 실패"))
+    check("접수는 아니다", not g("삭제 대기열 접수됨"))
+    check("잠금은 아니다", not g("잠금된 상품은 삭제 불가"))
+    check("미접수는 아니다", not g("삭제 작업 원자적 생성 실패로 전체 그룹 미접수"))
+    check("빈 응답", not g("") and not g(None))
 
 
 # ── _make_queue ─────────────────────────────────────────────────────────────
@@ -261,6 +281,7 @@ def test_gate_records():
 if __name__ == "__main__":
     test_select()
     test_already_gone()
+    test_is_gone()
     test_queue()
     test_merge_targets()
     test_pending_ids()

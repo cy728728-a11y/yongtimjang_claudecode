@@ -785,6 +785,10 @@ def cmd_apply(args):
 #      미접수. 상품 자체의 문제가 아니므로 **더 작은 배치로 재제출**하면 대부분 통과한다
 #   ③ `업로드된 마켓이 없고 이미 휴지통인 상품을 확인함` (24) — **이미 지워져 있다.**
 #      실패가 아니라 목적 달성이다. 성공으로 센다(안 그러면 영영 `삭제대기` 로 남는다)
+#      ③의 형제 문구가 하나 더 있다(2026-08-14 실측):
+#      `업로드된 마켓이 없어 소싱 상품을 휴지통으로 이동함` — "이미 있었다"가 아니라
+#      "지금 옮겼다"라 `이미 휴지통` 에 안 걸려 **성공을 실패로 셌다.** 둘 다 결과는
+#      "휴지통에 있다"로 같으므로 함께 잡는다
 #   ④ `잠금된 상품은 삭제 불가` (4) — 이룸님이 앱에서 건 삭제 잠금. 재시도 무의미
 #   ⑤ 그 밖 — 사유 그대로 실패
 # 결과는 **상품 단위**로 온다 — 배치 통째 실패로 뭉뚱그리지 않는다.
@@ -793,7 +797,8 @@ DELETE_TOOL = "bulsaja_market_delete"
 TASKS_TOOL = "bulsaja_upload_tasks"
 LOCK_MARK = "잠금"
 QUEUED_MARK = "접수"
-GONE_MARK = "이미 휴지통"      # ③ 이미 지워진 상품
+GONE_MARKS = ("이미 휴지통", "휴지통으로 이동")  # ③ 휴지통에 있다(이미 있었든, 방금 갔든)
+NOT_GONE_MARKS = ("이동 실패", "이동하지", "이동 불가")  # 위 문구의 부정형 — 성공이 아니다
 UNQUEUED_MARK = "미접수"       # ② 배치 원자성 실패 — 재제출 대상
 TASK_QUERY_MAX = 50            # upload_tasks 의 taskIds 상한
 TASK_FINAL = ("성공", "실패")  # 그 밖(대기·진행중)은 아직 안 끝난 것
@@ -803,6 +808,18 @@ DELETE_ARGS = {"scope": "ALL", "deleteAction": "MARKET_AND_SOURCE"}
 def _rows(resp, key="결과"):
     v = (resp or {}).get(key)
     return v if isinstance(v, list) else []
+
+
+def _is_gone(res):
+    """응답 문구가 "그 상품은 휴지통에 있다"를 뜻하는가 (③ 및 그 형제 문구).
+
+    부정형("휴지통으로 이동 실패")을 먼저 걸러야 한다 — 부분일치라 그냥 두면
+    실패를 성공으로 뒤집는다.
+    """
+    s = str(res or "")
+    if any(n in s for n in NOT_GONE_MARKS):
+        return False
+    return any(g in s for g in GONE_MARKS)
 
 
 def delete_batch(mcp, product_ids, log=print):
@@ -830,8 +847,8 @@ def delete_batch(mcp, product_ids, log=print):
         tid = str(r.get("taskId") or "")
         if LOCK_MARK in res:
             j = "잠금"
-        elif GONE_MARK in res:
-            j = "이미없음"          # 실패가 아니다 — 이미 지워져 있다
+        elif _is_gone(res):
+            j = "이미없음"          # 실패가 아니다 — 휴지통에 있다
         elif UNQUEUED_MARK in res:
             j = "미접수"            # 배치 원자성 실패 — 더 작게 재제출하면 통과한다
         elif tid and QUEUED_MARK in res:
@@ -1083,6 +1100,92 @@ def cmd_finalize(args):
 
 
 # ---------------------------------------------------------------------------
+# auto_delete — 묻지 않고 끝까지 지운다 (런 출구에서 자동)
+# ---------------------------------------------------------------------------
+#
+# **2026-08-11 이룸님: "삭제대기건은 나에게 묻지 말고 삭제한다."**
+# 그전까지는 `apply` 까지만 자동이고(비용 차단), 실제 삭제는 메인이 큐를 보고 판단했다.
+# 이제 catfix 런의 출구(`run_all.py auto`)가 이걸 부른다 — 물어보는 자리가 없어졌다.
+#
+# **라운드를 도는 이유는 서버 대기열이 병목이라서다**(§삭제는 서버 대기열이 병목이다).
+# 한 번에 다 안 넘어가고 `미접수`·`미확정` 으로 남는데, 그건 상품 문제가 아니라 대기열이
+# 그때까지 안 돈 것이다. 시간을 두고 다시 내면 넘어간다. 그래도 남으면 `삭제대기` 그대로
+# 둔다 — 비용은 이미 0이고(현황판 7열이 차 있다) 다음 런의 `prep` 이 다시 잡는다.
+
+# 재시도해도 소용없는 사유 — 다시 큐에 넣지 않는다.
+NO_RETRY_MARKS = ("잠금",)
+
+
+class _Args:
+    """서브커맨드가 argparse 네임스페이스를 받게 되어 있어 쓰는 얇은 어댑터."""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+def _retryable(rec):
+    why = str(rec.get("실패사유") or "")
+    return not any(mark in why for mark in NO_RETRY_MARKS)
+
+
+def auto_delete(gate_run_dir, rounds=3, wait=180, batch_size=50, log=print,
+                settle=60, poll=8, poll_interval=45):
+    """`delete → finalize → 잔여 재큐` 를 최대 `rounds` 번. 사람에게 묻지 않는다.
+
+    라운드 2부터는 `<gate>/retryN/` 에 새 큐를 깔고 거기서 돈다 — 같은 자리에서 다시
+    돌리면 `delete_progress.jsonl` 의 배치키가 겹쳐 `--resume` 이 전부 건너뛴다.
+    반환: {"삭제": n, "잔여": n, "라운드": n}
+    """
+    q_path = os.path.join(gate_run_dir, "delete_queue.json")
+    if not os.path.exists(q_path) or not _load(q_path):
+        log("  [게이트] 삭제할 것이 없다 — 큐가 비었다")
+        return {"삭제": 0, "잔여": 0, "라운드": 0}
+
+    cur, deleted_all, rnd = gate_run_dir, 0, 0
+    for rnd in range(1, rounds + 1):
+        log(f"\n{'=' * 56}\n[게이트 자동삭제 {rnd}/{rounds}] {cur}", )
+        try:
+            cmd_delete(_Args(run_dir=cur, yes=True, only=None, resume=True,
+                             sleep=0.5, settle=settle, poll=poll,
+                             poll_interval=poll_interval, retry_size=10))
+            cmd_finalize(_Args(run_dir=cur, results=None, sleep=0.3, col_sleep=0.6))
+        except Exception as e:  # noqa: BLE001 — 삭제 실패가 교정 결과를 날리면 안 된다
+            log(f"  [게이트] {rnd}라운드 실패 — {type(e).__name__}: {e}"[:200])
+            break
+
+        deleted_all += len(_load(os.path.join(cur, "deleted.json")))
+        rest = [r for r in _load(os.path.join(cur, "still_pending.json"))
+                if _retryable(r)]
+        if not rest:
+            log(f"  [게이트] 잔여 없음 — {rnd}라운드에서 끝")
+            break
+        if rnd >= rounds:
+            log(f"  [게이트] 잔여 {len(rest)}건 — 라운드 소진. `삭제대기` 로 남긴다")
+            break
+
+        nxt = os.path.join(gate_run_dir, f"retry{rnd + 1}")
+        os.makedirs(nxt, exist_ok=True)
+        _dump(os.path.join(nxt, "targets.json"), rest)
+        _dump(os.path.join(nxt, "delete_queue.json"), _make_queue(rest, batch_size))
+        log(f"  [게이트] 잔여 {len(rest)}건 — {wait}초 뒤 재시도 ({nxt})")
+        time.sleep(wait)
+        cur = nxt
+
+    still = _load(os.path.join(cur, "still_pending.json")) \
+        if os.path.exists(os.path.join(cur, "still_pending.json")) else []
+    log(f"\n[게이트 자동삭제 종료] 삭제 {deleted_all}건 · 잔여 삭제대기 {len(still)}건")
+    print("###GATEAUTO### " + json.dumps(
+        {"삭제": deleted_all, "잔여": len(still), "라운드": rnd}, ensure_ascii=False))
+    return {"삭제": deleted_all, "잔여": len(still), "라운드": rnd}
+
+
+def cmd_autodelete(args):
+    auto_delete(args.run_dir, rounds=args.rounds, wait=args.wait,
+                settle=args.settle, poll=args.poll, poll_interval=args.poll_interval)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # retry — 삭제대기 잔여분 재수집
 # ---------------------------------------------------------------------------
 
@@ -1183,6 +1286,15 @@ def main():
     f.add_argument("--sleep", type=float, default=0.3, help="그룹 간 대기")
     f.add_argument("--col-sleep", type=float, default=0.6, help="작업 열 간 대기(쓰기 쿼터)")
 
+    ad = sub.add_parser("autodelete",
+                        help="delete→finalize→잔여 재큐 를 라운드로 (묻지 않는다)")
+    ad.add_argument("--run-dir", required=True, help="게이트 run-dir (<catfix run-dir>/gate)")
+    ad.add_argument("--rounds", type=int, default=3, help="최대 재시도 라운드")
+    ad.add_argument("--wait", type=float, default=180, help="라운드 간 대기(초) — 대기열 소진")
+    ad.add_argument("--settle", type=float, default=60)
+    ad.add_argument("--poll", type=int, default=8)
+    ad.add_argument("--poll-interval", type=float, default=45)
+
     r = sub.add_parser("retry", help="현황판의 `삭제대기` 잔여분으로 삭제 큐 재생성")
     r.add_argument("--only", help="그룹명에 이 문자열이 든 것만")
     r.add_argument("--master-sheet", default=None)
@@ -1192,7 +1304,8 @@ def main():
 
     args = ap.parse_args()
     sys.exit({"scan": cmd_scan, "apply": cmd_apply, "delete": cmd_delete,
-              "finalize": cmd_finalize, "retry": cmd_retry}[args.cmd](args))
+              "finalize": cmd_finalize, "autodelete": cmd_autodelete,
+              "retry": cmd_retry}[args.cmd](args))
 
 
 if __name__ == "__main__":

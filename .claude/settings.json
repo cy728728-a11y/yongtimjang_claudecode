@@ -26,7 +26,14 @@
       "PowerShell(git rev-list:*)",
       "PowerShell(git config:*)",
       "PowerShell(./sync.ps1:*)",
-      "PowerShell(.\\sync.ps1:*)"
+      "PowerShell(.\\sync.ps1:*)",
+      "Bash(.venv/bin/python3 .claude/skills/bulsaja-option-cleanup/scripts/run_options.py:*)",
+      "Bash(.venv/bin/python3 .claude/skills/bulsaja-category-fix/scripts/category_gate.py:*)",
+      "Bash(.venv/bin/python3 .claude/skills/bulsaja-category-fix/scripts/run_all.py:*)",
+      "Bash(.venv/bin/python3 .claude/skills/product-name/scripts/run_names.py:*)",
+      "Bash(.venv/bin/python3 .claude/skills/bulsaja-thumbnail/scripts/run_thumbs.py:*)",
+      "mcp__bulsaja__bulsaja_market_delete",
+      "Bash(PYTHONPATH=.claude/lib .venv/bin/python3 .claude/skills/bulsaja-category-fix/scripts/category_gate.py:*)"
     ]
   }
 }

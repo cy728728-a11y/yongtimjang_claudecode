@@ -88,7 +88,14 @@ apply 가 마지막 파일을 채택한다. **폴백**(소량·워크플로 불�
 | **저장 루프가 죽은 걸 9시간 몰랐다** (분리 프로세스 + 알림 없음) | 아래 두 줄을 반드시 같이 건다 |
 
 **① 재개는 기본이다.** `apply --commit` 은 성공한 상품을 `run-dir/committed.json` 에
-건별로 남기고 다음 실행이 건너뛴다. 중단돼도 진도는 산다 — 겁내지 말고 다시 돌린다.
+**건별로 즉시** 남기고 다음 실행이 건너뛴다. 중단돼도 진도는 산다 — 겁내지 말고 다시 돌린다.
+재개 회차는 MCP 를 0회 치고 **현황판·이관만 채운다**(그게 재실행의 주 용도다).
+전건 다시 저장하려면 `--ignore-committed`.
+
+> 이 재개는 **2026-08-14에야 코드에 들어왔다.** 그전까지 이 문단은 문서에만 있었고
+> `run_options.py` 에는 `committed` 라는 낱말조차 없었다(2-2 에서 발견 — 현황판을
+> 채우려고 다시 친 회차가 700건을 처음부터 다시 저장해 1시간을 썼다).
+> **문서가 코드를 앞서가면 그 문서를 믿고 짠 운영이 조용히 배로 든다.**
 
 **② 오래 걸리는 저장은 "띄우고 잊기" 금지.** 분리 프로세스로 돌릴 거면 **진도 감시를
 같이 건다.** 감시 없이 띄우면 죽은 걸 알 방법이 없다(그날의 최대 손실 = 9시간 공회전).
@@ -104,8 +111,20 @@ until [ "$(python -c "import json;print(len(json.load(open('<R>/committed.json')
 **`--sheet <시트id>` 로 넘긴다**(ASCII 라 안전하다).
 
 **④ 시트 기록과 저장을 분리한다.** 미리보기에서 시트·검수표를 이미 썼으면
-저장 회차는 `--no-sheet --no-review` 로 돌린다 — 시트 쓰기가 쿼터(429)에 걸려
+저장 회차는 `--no-sheet --no-review` 로 돌린다 — 원장 탭 쓰기가 쿼터(429)에 걸려
 저장 시작까지 몇 분을 잡아먹는다.
+
+> **`--no-sheet` 는 이제 원장 탭(`옵션`·`옵션축`)만 막는다** (2026-08-14 수정).
+> **현황판(`00_진행`)과 이관 flag 는 `--no-sheet` 와 무관하게 항상 나간다.**
+>
+> 전에는 셋이 한 플래그에 묶여 있었다. 그래서 25-2(254건)·2-2(664건) 두 번 다
+> **저장은 전건 됐는데 현황판 `옵션` 열은 `재작업(…)` 그대로**였고 썸네일·상품명으로 갈
+> `이관` 도 안 나갔다 — 다음 회차가 같은 상품을 통째로 다시 집는 상태다.
+> 두 번 밟았으니 운영 수칙이 아니라 코드로 막는다.
+>
+> 현황판까지 끄는 건 `--no-matrix` 다(검증·재현 전용 — 썸네일 스킬과 같은 이름·같은 뜻).
+> **평상시 쓰지 마라.** 이걸 쓴 회차는 `--commit` 을 한 번 더 쳐서 복구한다
+> (`committed.json` 덕에 MCP 0회 · 현황판만 채운다).
 
 ## 결과 파일 형식 (워커가 만드는 것)
 
@@ -365,6 +384,10 @@ python ... run_options.py restore --run-dir <R> [--ids U01a U01b]
 ## 검증
 
 ```bash
-python .claude/skills/bulsaja-option-cleanup/scripts/test_option_rules.py   # 62건
-python .claude/skills/bulsaja-option-cleanup/scripts/test_option_prep.py    # 10건
+python .claude/skills/bulsaja-option-cleanup/scripts/test_option_rules.py   # 88건
+python .claude/skills/bulsaja-option-cleanup/scripts/test_option_prep.py    # 51건
 ```
+
+`run_options.py` 의 저장부(`_commit`)를 손대면 `test_option_prep.py` 를 먼저 돌린다 —
+`CommitResumeAndMatrixTest` 가 **`--no-sheet` 로도 현황판이 나가는지**와
+**재개가 MCP 를 다시 안 치는지**를 지킨다(2026-08-14. 두 번 밟은 함정이다).

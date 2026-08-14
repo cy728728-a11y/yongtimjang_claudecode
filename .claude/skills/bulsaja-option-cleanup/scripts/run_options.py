@@ -889,6 +889,12 @@ def cmd_apply(args):
     if not args.no_sheet:
         _log_sheet(sheet, rows)
         _log_axis_sheet(sheet, rows)
+
+    # 현황판은 **`--no-sheet` 와 무관하게** 쓴다 (2026-08-14, 2-2 에서 밟았다).
+    # 원장 탭 쓰기(느리다·쿼터를 먹는다)를 끄려고 `--no-sheet` 를 붙이면 현황판까지
+    # 같이 막혀서, 저장은 664건 다 됐는데 `00_진행` 은 `재작업` 그대로였다.
+    # 그 상태로 두면 다음 회차가 같은 상품을 통째로 다시 집는다.
+    if not args.no_matrix:
         if dels and args.commit:
             # 아직 안 지웠어도 다음 회차가 헛돌지 않게 표시해 둔다(삭제되면 `해당없음`).
             try:
@@ -1086,22 +1092,49 @@ def _commit(sheet, rows, args):
     이름과 순서를 **한 호출에 넣지 않는다**(쿠팡 옵션 연결 보호). 그래서 2단계다.
     """
     targets = _commit_targets(rows)
+    # 재개 — 이미 저장된 상품은 MCP 를 다시 치지 않는다 (2026-08-14 구현).
+    # SKILL.md 에는 예전부터 적혀 있었는데 코드에 없었다. 그래서 현황판을 채우려고
+    # `--no-sheet` 없이 한 번 더 치면 700건을 처음부터 다시 저장했다(2-2 실측 1시간).
+    # `done` 에 실어 두므로 **재실행이 MCP 0회로 현황판만 채운다.**
+    committed_path = os.path.join(args.run_dir, "committed.json")
+    committed = {} if getattr(args, "ignore_committed", False) else (
+        _load(committed_path) if os.path.exists(committed_path) else {})
+    if committed:
+        targets = [t for t in targets if t[0] not in committed]
+        print(f"  재개: 이미 저장 {len(committed)}건 건너뜀 → 남은 {len(targets)}건 "
+              f"({os.path.basename(committed_path)})")
     if not targets:
-        print("정리대상이 없다.")
-        # 저장할 게 없어도 **이관은 넘긴다** — 상품명 이관은 옵션 저장과 무관한데
-        # 여기서 return 하면 전건 보류인 회차(대표충돌이 몰린 회차)의 신호가 통째로
-        # 사라진다. 그 회차가 곧 상품명 이상이 가장 많은 회차다(2026-08-06 이룸님).
-        if not args.no_sheet:
+        print("정리대상이 없다." if not committed else "새로 저장할 것이 없다(전건 재개 대상).")
+        # 저장할 게 없어도 **현황판·이관은 넘긴다.**
+        # - 이관: 상품명 이관은 옵션 저장과 무관한데 여기서 return 하면 전건 보류인
+        #   회차(대표충돌이 몰린 회차)의 신호가 통째로 사라진다. 그 회차가 곧 상품명
+        #   이상이 가장 많은 회차다(2026-08-06 이룸님).
+        # - 현황판: 재개로 전건이 걸러진 회차가 바로 "저장은 끝났는데 현황판이 빈"
+        #   상태를 고치러 온 회차다. 여기서 안 쓰면 고치러 온 실행이 아무것도 안 한다.
+        if not args.no_matrix:
             try:
-                _handoff(sheet, rows, {}, matrix.read(sheet))
+                m = matrix.read(sheet)
+                if committed:
+                    n = matrix.mark_many(sheet, TASK, dict(committed), matrix=m)
+                    print(f"  현황판({matrix.TAB}) {TASK}: {n}칸 갱신(재개분)")
+                _handoff(sheet, rows, dict(committed), m)
             except Exception as e:  # noqa: BLE001
-                print(f"  [경고] 이관 실패: {str(e)[:120]}", file=sys.stderr)
+                print(f"  [경고] 현황판·이관 실패: {str(e)[:120]}", file=sys.stderr)
         return
     # 저장 직전 상태를 run-dir 에 남긴다(헤르메스 12 단계6 "저장 직전 스냅샷 기록").
     # 스냅샷은 저장 성공 시 새 값으로 덮어쓰므로, 되돌리려면 이 백업이 유일한 원본이다.
     backup_path = os.path.join(args.run_dir, "before_commit.json")
     backup = {pid: (snapshot.load(pid) or {}).get("옵션") or {}
               for pid, _, _, _ in targets}
+    # 재개 회차는 **남은 건만** 백업 대상이다. 통째로 덮어쓰면 앞 회차에서 이미 저장된
+    # 상품의 원본이 날아가 `restore` 가 그 건들을 못 되돌린다 → 기존 파일에 합친다.
+    # (합칠 때 기존 값이 이긴다 — 스냅샷은 저장 성공 시 새 값으로 덮이므로, 지금 읽은
+    #  값은 이미 '저장 후' 상태다. 그걸로 덮으면 백업이 원본이 아니게 된다.)
+    if os.path.exists(backup_path):
+        prev = _load(backup_path) or {}
+        merged = dict(backup)
+        merged.update(prev)
+        backup = merged
     _dump(backup_path, backup)
     print(f"  저장 전 상태 백업: {backup_path} ({len(backup)}건)")
     print(f"  되돌리기: python {os.path.basename(__file__)} restore --run-dir {args.run_dir}")
@@ -1185,25 +1218,51 @@ def _commit(sheet, rows, args):
                 else:
                     done[pid] = "완료"
                     print(f"  [완료] {pid} 유지 {len(keep)} / 제외 {len(drop)} / 대표 {plan['대표']}")
+                # **건별 즉시 기록.** 저장은 되돌리기 어려운 방향이라 "어디까지 했나"를
+                # 메모리에만 두지 않는다(catfix `delete_progress.jsonl` 과 같은 이유).
+                # 중단돼도 다음 실행이 여기서부터 이어간다.
+                committed[pid] = done[pid]
+                _dump(committed_path, committed)
             except Exception as e:  # noqa: BLE001
                 failed[pid] = f"{type(e).__name__}: {e}"[:200]
                 print(f"  [실패] {pid}: {failed[pid]}", file=sys.stderr)
+                # **실패해도 스냅샷은 실제 상태로 되맞춘다** (2026-08-14).
+                # 저장은 2단계다. ①(이름)이 넘어간 뒤 ②나 검증에서 죽으면 불사자에는
+                # 새 이름이 남는데 스냅샷은 옛 이름 그대로다 — 그러면 **다음 회차 prep 이
+                # 낡은 상태로 계획을 세워** 이미 옮긴 `기본형` 을 또 옮기려 들고, 살아 있는
+                # 옛 마커와 겹쳐 같은 상품이 매 회차 같은 사유로 실패한다.
+                # 2-2 실측: 1회차 실패 18건 중 9건이 마커 사유였고 2회차에 4건이 같은
+                # 사유로 또 실패했다. 실패분에만 도는 조회 1회라 비용은 무시할 만하다.
+                try:
+                    live = mcp.workdata(pid).get("옵션") or {}
+                    if live:
+                        snapshot.update(pid, 옵션=live)
+                except Exception as e2:  # noqa: BLE001
+                    print(f"    (스냅샷 되맞추기 실패 — 다음 회차가 낡은 값을 본다: "
+                          f"{str(e2)[:80]})", file=sys.stderr)
     finally:
         mcp.close()
 
+    # 이번 회차에 새로 저장한 것과 앞 회차 재개분을 합친 게 "지금 저장돼 있는 것"이다.
+    # 현황판·이관은 그 전체를 기준으로 찍어야 한다(재개분을 빼면 앞 회차 저장분의
+    # 현황판이 영영 안 채워진다 — 이 재개 기능을 만든 이유 그 자체다).
+    saved = dict(committed)
+    saved.update(done)
     print(f"\n###OPTIONS### 반영 {len(done)}건 / 부분저장 {len(partial_ids)}건 "
-          f"/ 실패 {len(failed)}건")
+          f"/ 실패 {len(failed)}건"
+          + (f" (재개분 포함 누적 {len(saved)}건)" if len(saved) != len(done) else ""))
     if partial_ids:
         print(f"  부분저장(옵션명 미저장, 현황판 {TASK} 열 재작업): "
               f"{', '.join(partial_ids[:5])}{' 외 %d건' % (len(partial_ids) - 5) if len(partial_ids) > 5 else ''}")
-    if not args.no_sheet:
-        vals = dict(done)
+    # 현황판·이관은 `--no-sheet` 로 막히지 않는다 (2026-08-14 — 위 §현황판 주석 참조).
+    if not args.no_matrix:
+        vals = dict(saved)
         vals.update({pid: f"보류(저장실패)" for pid in failed})
         try:
             m = matrix.read(sheet)
             n = matrix.mark_many(sheet, TASK, vals, matrix=m)
             print(f"  현황판({matrix.TAB}) {TASK}: {n}칸 갱신")
-            _handoff(sheet, rows, done, m)
+            _handoff(sheet, rows, saved, m)
         except Exception as e:  # noqa: BLE001
             print(f"  [경고] 현황판 갱신 실패: {str(e)[:120]}", file=sys.stderr)
 
@@ -1341,7 +1400,14 @@ def main():
     a.add_argument("--allow-missing", action="store_true",
                    help="감사에서 누락 상품이 있어도 --commit 강행(의도된 부분 처리)")
     a.add_argument("--emit", default="", help="계획 요약 JSON 저장 경로(세로 러너 신호 판정용)")
-    a.add_argument("--no-sheet", action="store_true")
+    a.add_argument("--no-sheet", action="store_true",
+                   help="**원장 탭(`옵션`·`옵션축`)만** 안 쓴다. 현황판·이관은 그대로 나간다 "
+                        "— 그 둘까지 막으려면 --no-matrix (2026-08-14)")
+    a.add_argument("--no-matrix", action="store_true",
+                   help="현황판(00_진행)·이관 flag 를 쓰지 않는다(검증·재현용). "
+                        "평상시 쓰지 마라 — 저장은 됐는데 다음 회차가 같은 상품을 또 집는다")
+    a.add_argument("--ignore-committed", action="store_true",
+                   help="committed.json 을 무시하고 전건 다시 저장한다(멱등이라 안전)")
     a.add_argument("--no-review", action="store_true",
                    help="검수표(옵션명 대조·순서·제외)를 찍지 않는다")
     a.add_argument("--sleep", type=float, default=0.5)

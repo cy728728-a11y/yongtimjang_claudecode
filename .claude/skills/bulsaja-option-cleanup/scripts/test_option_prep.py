@@ -532,5 +532,147 @@ class PrepCarriesRedoReasonTest(unittest.TestCase):
         self.assertEqual(p["재작업사유"], "")
 
 
+class CommitResumeAndMatrixTest(unittest.TestCase):
+    """`--no-sheet` 가 현황판을 막던 것 + `committed.json` 재개 (2026-08-14).
+
+    발단(2-2): 저장 회차를 `--no-sheet` 로 돌렸더니 옵션 664건이 다 저장됐는데
+    `00_진행` 은 `재작업` 그대로였고 이관도 안 나갔다 — 다음 회차가 같은 726건을
+    통째로 다시 집는다. 게다가 SKILL.md 에 있다던 `committed.json` 재개가 코드에
+    없어서, 현황판을 채우려고 한 번 더 치자 700건을 처음부터 다시 저장했다(1시간).
+    """
+
+    def setUp(self):
+        from eroomlib import matrix
+        self.matrix = matrix
+        self.run_dir = tempfile.mkdtemp()
+        self.marks, self.handoffs, self.logged = [], [], []
+        self._orig = {
+            "read": matrix.read, "mark_many": matrix.mark_many,
+            "load": snapshot.load,
+            "_log_sheet": run_options._log_sheet,
+            "_log_axis_sheet": run_options._log_axis_sheet,
+            "_handoff": run_options._handoff,
+            "OptionMCP": run_options.OptionMCP,
+        }
+        matrix.read = lambda sheet: {}
+        matrix.mark_many = lambda sheet, task, d, matrix=None: (
+            self.marks.append(dict(d)) or len(d))
+        snapshot.load = lambda pid: {"옵션": {"판매행": [{"id": "1"}]}}
+        run_options._log_sheet = lambda *a, **k: self.logged.append("원장")
+        run_options._log_axis_sheet = lambda *a, **k: self.logged.append("축")
+        run_options._handoff = lambda sheet, rows, done, m: self.handoffs.append(dict(done))
+
+    def tearDown(self):
+        for k, v in self._orig.items():
+            setattr(self.matrix if k in ("read", "mark_many") else
+                    (snapshot if k == "load" else run_options), k, v)
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _args(self, **kw):
+        import argparse
+        base = dict(run_dir=self.run_dir, commit=True, sleep=0,
+                    no_sheet=False, no_matrix=False, ignore_committed=False)
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    @staticmethod
+    def _rows(pids):
+        return [(p, {"대표": "1", "유지": ["1"], "제외": [], "순서": ["1"]},
+                 {"이름": {}}, "정리대상") for p in pids]
+
+    def _fake_mcp(self, ok=True):
+        outer = self
+
+        class _M:
+            def open(self): pass
+
+            def close(self): pass
+
+            def option_update(self, pid, **kw):
+                outer.saved.append(pid)
+                if not ok:
+                    raise RuntimeError("저장 거부")
+
+            def workdata(self, pid):
+                return {"옵션": {"판매행": [{"id": "1"}]}}
+        return _M
+
+    def _run(self, pids, **kw):
+        self.saved = []
+        run_options.OptionMCP = self._fake_mcp()
+        run_options.R.verify = lambda *a, **k: []
+        run_options.snapshot.update = lambda pid, **k: None
+        run_options._commit("SHEET", self._rows(pids), self._args(**kw))
+
+    def test_no_sheet_여도_현황판과_이관은_나간다(self):
+        self._run(["P1", "P2"], no_sheet=True)
+        self.assertEqual(len(self.marks), 1)
+        self.assertEqual(set(self.marks[0]), {"P1", "P2"})
+        self.assertEqual(self.handoffs, [{"P1": "완료", "P2": "완료"}])
+
+    def test_no_matrix_라야_현황판이_막힌다(self):
+        self._run(["P1"], no_matrix=True)
+        self.assertEqual(self.marks, [])
+        self.assertEqual(self.handoffs, [])
+
+    def test_저장된_건은_committed에_즉시_쌓인다(self):
+        self._run(["P1", "P2"])
+        with open(os.path.join(self.run_dir, "committed.json"), encoding="utf-8") as f:
+            self.assertEqual(set(json.load(f)), {"P1", "P2"})
+
+    def test_재실행은_MCP를_다시_치지_않는다(self):
+        self._run(["P1", "P2"])
+        self._run(["P1", "P2"])          # 두 번째 회차 — 전건 재개 대상
+        self.assertEqual(self.saved, [])
+
+    def test_재개_회차도_현황판을_채운다(self):
+        """이 재개 기능을 만든 이유 그 자체 — 저장은 끝났는데 현황판이 빈 상태를 고친다."""
+        self._run(["P1", "P2"], no_matrix=True)   # 1회차: 저장만, 현황판 안 씀
+        self.assertEqual(self.marks, [])
+        self._run(["P1", "P2"])                   # 2회차: MCP 0회 + 현황판만
+        self.assertEqual(self.saved, [])
+        self.assertEqual(set(self.marks[-1]), {"P1", "P2"})
+        self.assertEqual(self.handoffs[-1], {"P1": "완료", "P2": "완료"})
+
+    def test_ignore_committed면_다시_저장한다(self):
+        self._run(["P1"])
+        self._run(["P1"], ignore_committed=True)
+        self.assertEqual(self.saved, ["P1"])
+
+    def test_실패해도_스냅샷을_실제상태로_되맞춘다(self):
+        """저장 2단계 중 ①만 넘어가고 죽으면 불사자에는 새 이름이, 스냅샷엔 옛 이름이 남는다.
+
+        그대로 두면 다음 회차 prep 이 낡은 상태로 계획을 세워 같은 상품이 매 회차 같은
+        사유로 실패한다(2-2 실측: 1회차 마커 실패 9건 → 2회차 같은 사유 4건 재발).
+        """
+        updated = {}
+        orig_update = run_options.snapshot.update
+        run_options.snapshot.update = lambda pid, **kw: updated.__setitem__(pid, kw)
+        try:
+            self.saved = []
+            run_options.OptionMCP = self._fake_mcp(ok=False)   # 저장이 죽는다
+            run_options._commit("SHEET", self._rows(["P1"]), self._args())
+        finally:
+            run_options.snapshot.update = orig_update
+        # 실패했어도 실제 상태(workdata)로 스냅샷이 되맞춰져야 한다
+        self.assertIn("P1", updated)
+        self.assertEqual(updated["P1"]["옵션"], {"판매행": [{"id": "1"}]})
+
+    def test_실패건은_committed에_안_들어간다(self):
+        self.saved = []
+        run_options.OptionMCP = self._fake_mcp(ok=False)
+        run_options._commit("SHEET", self._rows(["P1"]), self._args())
+        p = os.path.join(self.run_dir, "committed.json")
+        self.assertTrue(not os.path.exists(p) or json.load(open(p)) == {})
+
+    def test_재개_회차가_원본백업을_덮지_않는다(self):
+        """`before_commit.json` 은 유일한 되돌리기 경로다 — 남은 건만 담으면 안 된다."""
+        self._run(["P1", "P2"])
+        # P3 만 새로 도는 회차: 앞의 P1·P2 백업이 살아 있어야 restore 가 된다
+        self._run(["P1", "P2", "P3"])
+        with open(os.path.join(self.run_dir, "before_commit.json"), encoding="utf-8") as f:
+            self.assertEqual(set(json.load(f)), {"P1", "P2", "P3"})
+
+
 if __name__ == "__main__":
     unittest.main()

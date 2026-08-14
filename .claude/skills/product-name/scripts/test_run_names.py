@@ -9,6 +9,7 @@
 """
 import argparse
 import contextlib
+import glob
 import io
 import json
 import os
@@ -16,6 +17,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 for _s in (sys.stdout, sys.stderr):  # 콘솔 cp949 에서 한글 테스트명이 깨지지 않게
     try:
@@ -669,6 +671,35 @@ class MatrixRedoTest(unittest.TestCase):
         def boom(_sheet):
             raise RuntimeError("gws 응답 없음")
         self.assertEqual(run_names._matrix_redo("SHEET", {"P1"}, read=boom), {})
+
+
+class RedoCandidatesTest(unittest.TestCase):
+    """사유를 물어볼 후보 집합 — `--ids --redo` 가 자동 편입을 죽이던 버그 (2026-08-14).
+
+    발단: prep 이 `done_ids - want` 를 먼저 해서, 손으로 지목한 재작업이 후보에서
+    빠졌다. 사유가 안 실리니 재작업 라운드가 첫 라운드와 같은 이름을 다시 만들었다.
+    """
+
+    def test_수동_지목분도_후보에_남는다(self):
+        # `--redo` 가 done_ids 에서 뺀 뒤라도 redo_hit 로 되살아나야 한다.
+        got = run_names._redo_candidates({"P1", "P2"}, {"P2"}, {"P1"})
+        self.assertEqual(got, {"P1", "P2"})
+
+    def test_자동_편입_경로는_그대로다(self):
+        self.assertEqual(run_names._redo_candidates({"P1", "P2"}, {"P1"}, set()), {"P1"})
+
+    def test_시트에_없는_신규는_후보가_아니다(self):
+        # 빈칸은 어차피 대상이라 사유를 물어볼 것이 없다.
+        self.assertEqual(run_names._redo_candidates({"P9"}, set(), set()), set())
+
+    def test_그룹_밖_id는_redo_hit_라도_들어오지_않는다(self):
+        # redo_hit 는 `--ids` 를 그룹과 교집합하기 전에 잡혀 그룹 밖 id 가 섞일 수 있다
+        # (2-3 실측: 다른 마켓그룹으로 옮겨간 상품). 그건 pending 에 없어 실을 자리가 없다.
+        got = run_names._redo_candidates({"P1"}, {"P1"}, {"P1", "P_다른그룹"})
+        self.assertEqual(got, {"P1"})
+
+    def test_빈_입력(self):
+        self.assertEqual(run_names._redo_candidates(set(), set(), None), set())
 
 
 class RetireStaleRowsTest(unittest.TestCase):
@@ -1334,6 +1365,87 @@ class HoldsReentryGuardTest(unittest.TestCase):
 
     def test_본_라운드는_경고를_안_찍는다(self):
         self.assertNotIn("[재진입금지]", self._run("yong1-2"))
+
+
+class RetailBrandR11Test(unittest.TestCase):
+    """R11 (2026-08-14) — 남의 유통사 브랜드를 상품명에 넣었나.
+
+    발단: 2-1 표본검수. 중국산 계단카트에 채택 키워드 `코스트코접이식카트`. 셀러라이프
+    브랜드키워드 컷도 블랙리스트 `제외브랜드`(소비재 위주)도 유통사명을 안 걸렀다.
+    """
+
+    BASE = {
+        "새상품명": "계단 코스트코접이식카트 소형 계단용카트 기본형",
+        "term분해": ["계단", "코스트코", "접이식카트", "소형", "계단용", "카트",
+                   name_check.BASE_SUFFIX],
+        "키워드1": "코스트코접이식카트",
+        "키워드2": "계단용카트",
+        "원본상품명": "전동 계단 리프트 소형 화물 접이식 카트 이삿짐",
+        "관련어": [{"키워드": "코스트코접이식카트", "상품수": 893}],
+        "반증": "없음",
+    }
+
+    def _check(self, **over):
+        p = dict(self.BASE)
+        p.update(over)
+        return name_check.check_one(p)
+
+    def test_원본에_없는_브랜드를_붙이면_실패다(self):
+        r = self._check()
+        self.assertFalse(r["통과"])
+        self.assertTrue(any("R11" in v and "코스트코" in v for v in r["위반"]))
+
+    def test_원본에_이미_있으면_경고로만_낸다(self):
+        r = self._check(원본상품명="코스트코 접이식 카트 계단 화물")
+        self.assertTrue(r["통과"])
+        self.assertTrue(any("R11" in w for w in r["경고"]))
+
+    def test_브랜드가_없으면_아무것도_안_찍는다(self):
+        r = self._check(새상품명="계단 화물운반카트 소형 계단용카트 기본형",
+                        term분해=["계단", "화물운반카트", "소형", "계단용", "카트",
+                                name_check.BASE_SUFFIX],
+                        키워드1="화물운반카트")
+        self.assertFalse(any("R11" in x for x in r["위반"] + r["경고"]))
+
+
+class NokwViewlessBatchTest(unittest.TestCase):
+    """`--nokw-mode` 가 **뷰 없는 대상**도 배치에 싣는가 (2026-08-14).
+
+    발단: 2-1 회차. 통다운밖 12건은 `manifest.categories` 에 항목이 없어(not_found)
+    뷰도 배치도 0개가 됐다 — `--nokw-mode` 는 이미 만들어진 배치에 플래그만 얹는 코드라
+    정작 제 대상에 안 걸렸다. 손으로 배치를 만들어 우회해야 했다.
+    """
+
+    def _build(self, nokw):
+        import tempfile
+        run_dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(run_dir, "batches"), exist_ok=True)
+        # 카테고리 항목이 하나도 없는 manifest = 통다운밖만 있는 상태
+        with open(os.path.join(run_dir, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump({"categories": {}, "parents": {}, "not_found": ["A", "B"]}, f)
+        targets = [{"productId": "U01A", "상품명": "가림막 병풍", "카테고리": "가구>병풍"},
+                   {"productId": "U01B", "상품명": "초밥용기", "카테고리": "생활>용기"}]
+        with mock.patch.object(run_names, "_same_price_options", return_value=False), \
+             mock.patch.object(run_names, "_spec_view", return_value={}):
+            run_names._build_views_and_batches(
+                run_dir, targets, {}, no_parent=True, skipped_n=0,
+                wd_by_id={}, jk_by_id={}, nokw_mode=nokw)
+        return sorted(glob.glob(os.path.join(run_dir, "batches", "batch_*.json")))
+
+    def test_무키워드모드면_뷰가_없어도_배치가_생긴다(self):
+        files = self._build(nokw=True)
+        self.assertTrue(files, "뷰가 없다고 배치가 0개면 안 된다")
+        got = []
+        for f in files:
+            b = json.load(open(f, encoding="utf-8"))
+            self.assertTrue(b["무키워드모드"])
+            self.assertEqual(b["카테고리뷰"], "")      # 뷰는 비어 있어도 되는 규칙
+            got += [p["productId"] for p in b["products"]]
+        self.assertEqual(sorted(got), ["U01A", "U01B"])
+
+    def test_평상시_라운드는_뷰_없는_배치를_만들지_않는다(self):
+        # 직결어 0은 원래 카테고리 신호다(Step 5 ②) — 여기서 이름을 지으면 안 된다.
+        self.assertEqual(self._build(nokw=False), [])
 
 
 if __name__ == "__main__":

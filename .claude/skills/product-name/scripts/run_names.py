@@ -159,6 +159,48 @@ def _checked_files(checked_dir):
     return sorted(glob.glob(os.path.join(checked_dir, "checked_[0-9][0-9][0-9].json")))
 
 
+def _mk_product(pid, cat, tgt_by_id, wd_by_id, jk_by_id, thumb_map):
+    """배치에 실을 상품 1건. 대상에 없는 id 면 None.
+
+    카테고리 뷰가 있든(정상 경로) 없든(무키워드 경로) 같은 모양이어야 한다 —
+    워커 지시서가 이 키들을 이름으로 읽기 때문이다. 그래서 한 곳에서만 만든다.
+    """
+    t = tgt_by_id.get(pid)
+    if not t:
+        return None
+    wd = wd_by_id.get(pid) or {}
+    jk = jk_by_id.get(pid) or {}
+    return {
+        "productId": pid,
+        "원본상품명": t.get("상품명", ""),
+        "카테고리": cat,
+        "썸네일경로": thumb_map.get(pid, ""),      # 다운로드된 로컬(K열 있으면 비어 있음)
+        # 카테고리교정이 넘긴 증거 — J열 있으면 믿고, 없으면 원문명·옵션명으로 직접 판정
+        "실물판정": jk.get("실물판정", ""),          # J열. 있으면 이게 실물
+        "썸네일URL": jk.get("썸네일URL", ""),        # K열. 로컬 없을 때 여기서 fetch
+        "원문명": wd.get("원문명", ""),              # 중국어 원문(가공 전)
+        "옵션명": wd.get("옵션명", []),              # 실제 판매 단위(가공 전)
+        # 색상 예외 규칙(2026-07-30)의 유일한 기계적 근거 — 워커는 옵션 '가격'을
+        # 볼 수 없으므로(배치의 `옵션명`은 문자열뿐) 여기서 계산해 넘긴다.
+        "옵션동일가": _same_price_options(pid),
+        # 옵션 전량(2026-08-05). 위 `옵션명` 은 정체판별용 앞 8개 요약이라
+        # **규격을 판단할 수 없다** — 발단 사례에서 실물 라인(收碗车 11개)이 앞 8개에
+        # 하나도 없어 워커가 제목의 `三层` 만 보고 3단이라 결론냈다.
+        "옵션구성": _spec_view(pid),
+    }
+
+
+def _batch_for(run_dir, named_path):
+    """named_NNN.json → 짝이 되는 batch_NNN.json 경로(없으면 "").
+
+    R10(근거 없는 term)이 원문명·옵션명·옵션구성을 보려면 배치가 필요하다 —
+    named 는 워커 산출이라 가공 전 증거를 담지 않는다. 번호가 1:1이라 이름으로 찾는다.
+    """
+    stem = os.path.basename(named_path)[len("named_"):]
+    p = os.path.join(run_dir, "batches", "batch_" + stem)
+    return p if os.path.exists(p) else ""
+
+
 def resolve_sheet(args):
     """기록 대상 스프레드시트 id를 확정한다.
 
@@ -408,7 +450,10 @@ def cmd_prep(args):
         # 집는데, 상품명만 원장이 `상품명` 탭이라 A열에 행이 있으면 **다시 부르는 신호가
         # 닿지 않았다** — 옵션정리가 `flag` 를 찍어도 집는 쪽이 없어 사람이 `--ids --redo`
         # 를 손으로 돌려야 했고, 안 돌리면 그냥 사라졌다.
-        auto_redo = _matrix_redo(args.sheet, {g.get("productId") for g in group} & done_ids)
+        #
+        auto_redo = _matrix_redo(
+            args.sheet,
+            _redo_candidates({g.get("productId") for g in group}, done_ids, redo_hit))
         if auto_redo:
             done_ids = done_ids - set(auto_redo)
             _dump(os.path.join(run_dir, "redo_reasons.json"), auto_redo)
@@ -718,31 +763,9 @@ def _build_views_and_batches(run_dir, targets, thumb_map, no_parent, skipped_n=0
                     p_path = ""
             parent_view = p_path
 
-        prods = []
-        for pid in info.get("productIds", []):
-            t = tgt_by_id.get(pid)
-            if not t:
-                continue
-            wd = wd_by_id.get(pid) or {}
-            jk = jk_by_id.get(pid) or {}
-            prods.append({
-                "productId": pid,
-                "원본상품명": t.get("상품명", ""),
-                "카테고리": cat,
-                "썸네일경로": thumb_map.get(pid, ""),      # 다운로드된 로컬(K열 있으면 비어 있음)
-                # 카테고리교정이 넘긴 증거 — J열 있으면 믿고, 없으면 원문명·옵션명으로 직접 판정
-                "실물판정": jk.get("실물판정", ""),          # J열. 있으면 이게 실물
-                "썸네일URL": jk.get("썸네일URL", ""),        # K열. 로컬 없을 때 여기서 fetch
-                "원문명": wd.get("원문명", ""),              # 중국어 원문(가공 전)
-                "옵션명": wd.get("옵션명", []),              # 실제 판매 단위(가공 전)
-                # 색상 예외 규칙(2026-07-30)의 유일한 기계적 근거 — 워커는 옵션 '가격'을
-                # 볼 수 없으므로(배치의 `옵션명`은 문자열뿐) 여기서 계산해 넘긴다.
-                "옵션동일가": _same_price_options(pid),
-                # 옵션 전량(2026-08-05). 위 `옵션명` 은 정체판별용 앞 8개 요약이라
-                # **규격을 판단할 수 없다** — 발단 사례에서 실물 라인(收碗车 11개)이 앞 8개에
-                # 하나도 없어 워커가 제목의 `三层` 만 보고 3단이라 결론냈다.
-                "옵션구성": _spec_view(pid),
-            })
+        prods = [_mk_product(pid, cat, tgt_by_id, wd_by_id, jk_by_id, thumb_map)
+                 for pid in info.get("productIds", [])]
+        prods = [p for p in prods if p]
         if not prods:
             continue
 
@@ -769,6 +792,33 @@ def _build_views_and_batches(run_dir, targets, thumb_map, no_parent, skipped_n=0
     if nokw_mode:
         for b in batches:
             b["무키워드모드"] = True
+
+        # ★ 뷰가 아예 없는 대상도 배치에 싣는다 (2026-08-14 이룸님).
+        #   **이게 없으면 `--nokw-mode` 가 정작 제 대상에 안 걸린다.** 위 루프는
+        #   `manifest.categories` 를 도는데, 통다운밖(`not_found`) 상품은 카테고리 항목
+        #   자체가 만들어지지 않아 뷰도 배치도 0개가 된다 — 2-1 회차 12건이 이 구멍으로
+        #   빠져 손으로 배치를 만들어야 했다. 무키워드 경로는 **뷰가 비어도 되는 규칙**
+        #   (워커 지시서 §직결어가 0개일 때)이므로, 여기서 뷰 없는 배치를 만들어 준다.
+        #   평상시 라운드에는 절대 만들지 않는다 — 직결어 0은 원래 카테고리 신호다(Step 5 ②).
+        covered_ids = {p["productId"] for b in batches for p in b["products"]}
+        rest = [_mk_product(t["productId"], t.get("카테고리", ""),
+                            tgt_by_id, wd_by_id, jk_by_id, thumb_map)
+                for t in targets if t["productId"] not in covered_ids]
+        rest = [p for p in rest if p]
+        if rest:
+            # 뷰가 없어 판단이 전부 증거 읽기라 배치를 작게 쪼갠다(워커 1명당 부담 균일).
+            step = max(1, MAX_PER_BATCH // 2)
+            for i in range(0, len(rest), step):
+                batches.append({
+                    "카테고리": "(통다운밖 — 카테고리 뷰 없음)",
+                    "카테고리뷰": "", "카테고리파일": "", "상위뷰": "",
+                    "뷰크기": {"leaf": "", "상위": ""},
+                    "분할": f"{i // step + 1}/{(len(rest) - 1) // step + 1}",
+                    "무키워드모드": True,
+                    "products": rest[i:i + step],
+                })
+            print(f"  무키워드: 뷰 없는 대상 {len(rest)}건을 배치에 실었다 "
+                  f"(통다운에 그 카테고리 키워드가 0건)")
 
     for i, b in enumerate(batches, 1):
         _dump(os.path.join(batches_dir, f"batch_{i:03d}.json"), b)
@@ -970,6 +1020,23 @@ def _mark_matrix(sheet, status_by_id):
     except Exception as e:  # noqa: BLE001
         print(f"  [경고] 현황판 갱신 실패: {str(e)[:120]}", file=sys.stderr)
         return 0
+
+
+def _redo_candidates(group_ids, done_ids, redo_hit):
+    """현황판 재작업 사유를 물어볼 후보 = 이미 상품명 탭에 행이 있는 상품.
+
+    `redo_hit` 를 반드시 다시 더한다 (2026-08-14). `--redo` 가 바로 앞에서
+    `done_ids - want` 를 하므로, 손으로 `--ids --redo` 를 친 건은 `group & done_ids`
+    에서 통째로 빠진다 — **그래서 사유가 워커에 전혀 실리지 않았다.** 자동 편입과
+    수동 지목이 배타적으로 동작한 셈인데, 정작 사유가 제일 필요한 건 수동 쪽이다:
+    2-3 실측에서 옵션이 남긴 "대표옵션은 냉연강인데 상품명이 '스텐'" 사유가 안 실려
+    재작업 라운드가 같은 이름을 그대로 다시 만들었다.
+
+    상한은 언제나 `group_ids` 다 — `redo_hit` 는 `--ids` 를 그룹과 교집합하기 전에
+    잡히므로 그룹 밖 id(다른 마켓그룹으로 옮겨간 상품 등)가 섞일 수 있는데,
+    그건 어차피 `pending` 에 없어 사유를 실을 자리가 없다.
+    """
+    return set(group_ids) & (set(done_ids) | set(redo_hit or ()))
 
 
 def _matrix_redo(sheet, candidates, read=None):
@@ -1192,8 +1259,11 @@ def cmd_append(args):
     print(f"[1/2] 규칙 검증 ({len(named_files)}청크)...")
     for nf in named_files:
         out = os.path.join(checked_dir, os.path.basename(nf).replace("named_", "checked_"))
-        _run([py, os.path.join(SCRIPT_DIR, "name_check.py"),
-              "--input", nf, "--output", out], f"name_check({os.path.basename(nf)})")
+        cmd = [py, os.path.join(SCRIPT_DIR, "name_check.py"), "--input", nf, "--output", out]
+        bf = _batch_for(run_dir, nf)
+        if bf:
+            cmd += ["--batch", bf]
+        _run(cmd, f"name_check({os.path.basename(nf)})")
 
     if getattr(args, "sheet_map", None):
         _cmd_append_pooled(args, run_dir, checked_dir)
@@ -1465,8 +1535,11 @@ def cmd_check(args):
     os.makedirs(checked_dir, exist_ok=True)
     for nf in named_files:
         out = os.path.join(checked_dir, os.path.basename(nf).replace("named_", "checked_"))
-        _run([py, os.path.join(SCRIPT_DIR, "name_check.py"),
-              "--input", nf, "--output", out], f"name_check({os.path.basename(nf)})")
+        cmd = [py, os.path.join(SCRIPT_DIR, "name_check.py"), "--input", nf, "--output", out]
+        bf = _batch_for(run_dir, nf)
+        if bf:
+            cmd += ["--batch", bf]
+        _run(cmd, f"name_check({os.path.basename(nf)})")
 
     # named_NNN 이 지워졌는데(재팬아웃으로 배치를 포기) 옛 checked_NNN 이 남아 있으면
     # 집계에서 뺀다 — 안 그러면 지워진 배치가 영원히 실패로 잡힌다(피어리뷰 지적).

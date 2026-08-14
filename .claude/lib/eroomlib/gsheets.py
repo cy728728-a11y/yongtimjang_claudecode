@@ -71,7 +71,7 @@ def _with_retry(fn, what, max_retries=4):
             msg = str(e)
             last = e
             if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
-                wait = 2 ** (attempt + 1)
+                wait = min(2 ** (attempt + 1), 30)   # 상한 30초 — 쿼터 창이 60초다
                 print(f"[gsheets] {what} 429/쿼터, {wait}초 대기 후 재시도 "
                       f"({attempt + 1}/{max_retries})", file=sys.stderr)
                 time.sleep(wait)
@@ -110,7 +110,7 @@ def sheets_update(spreadsheet_id, rng, values_2d, value_input="RAW", max_retries
             msg = str(e)
             last_err = e
             if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
-                wait = 2 ** (attempt + 1)
+                wait = min(2 ** (attempt + 1), 30)   # 상한 30초 — 쿼터 창이 60초다
                 print(f"[gsheets] update 429/쿼터 오류, {wait}초 대기 후 재시도 "
                       f"({attempt + 1}/{max_retries}): {msg[:150]}", file=sys.stderr)
                 time.sleep(wait)
@@ -143,7 +143,7 @@ def sheets_batch_update(spreadsheet_id, data, value_input="USER_ENTERED",
         except Exception as e:
             msg, last_err = str(e), e
             if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
-                wait = 2 ** (attempt + 1)
+                wait = min(2 ** (attempt + 1), 30)   # 상한 30초 — 쿼터 창이 60초다
                 print(f"[gsheets] batchUpdate 429/쿼터 오류, {wait}초 대기 후 재시도 "
                       f"({attempt + 1}/{max_retries}): {msg[:150]}", file=sys.stderr)
                 time.sleep(wait)
@@ -175,10 +175,14 @@ def chunk_by_size(rows, budget=12000):
 _RETRY_HINTS = ("429", "quota", "RESOURCE_EXHAUSTED", "rateLimitExceeded")
 
 
-def append_rows(spreadsheet_id, tab, rows, max_retries=4):
+def append_rows(spreadsheet_id, tab, rows, max_retries=7):
     """rows(2차원 리스트)를 탭 끝에 append (USER_ENTERED, INSERT_ROWS).
 
-    429/쿼터 초과 오류는 지수 백오프(2·4·8·16초) 후 최대 max_retries 회 재시도.
+    429/쿼터 초과 오류는 지수 백오프(2·4·8·16·30·30초, 상한 30초) 후 최대
+    max_retries 회 재시도. **총 대기가 90초를 넘어야 한다** — 시트 쓰기 쿼터는
+    "분당 60회" 라 창이 60초다. 예전 기본값 4회(총 30초)는 창을 못 넘겨서,
+    한 그룹 append(275파일 × 2탭 ≈ 550쓰기)가 중간에 통째로 죽었다
+    (2026-08-13 용쌤3-3 실측 — 관련어 탭 13행에서 중단).
     그 외 오류(4xx 등)는 즉시 예외를 올린다.
     rows 가 크면 그대로 한 호출로 보낸다 — 청크 분할은 호출자 책임.
 
@@ -208,7 +212,7 @@ def append_rows(spreadsheet_id, tab, rows, max_retries=4):
             msg = str(e)
             last_err = e
             if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
-                wait = 2 ** (attempt + 1)
+                wait = min(2 ** (attempt + 1), 30)   # 상한 30초 — 쿼터 창이 60초다
                 print(f"[gsheets] append 429/쿼터 오류, {wait}초 대기 후 재시도 "
                       f"({attempt + 1}/{max_retries}): {msg[:150]}", file=sys.stderr)
                 time.sleep(wait)
