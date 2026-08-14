@@ -48,6 +48,18 @@ _OPT_IMG_MAX = 4  # 2바퀴(정체불명) 확인용 옵션 이미지 최대 장�
 _OPT_PREFIX = re.compile(r"^\s*[A-Za-z가-힣]?\s*[.)]\s*")
 
 
+def _money(*vals):
+    """첫 번째로 숫자로 읽히는 값을 int 로. `"12,420"` 같은 문자열도 받는다. 없으면 0."""
+    for v in vals:
+        if v is None or isinstance(v, bool):
+            continue
+        try:
+            return int(float(str(v).replace(",", "").strip()))
+        except (TypeError, ValueError):
+            continue
+    return 0
+
+
 def sku_evidence(skus):
     """uploadSkus[] → (옵션명 한국어, 옵션명 원문, 옵션 이미지URL) 각각 중복제거·상한.
 
@@ -180,6 +192,18 @@ class ProductMCP(_BaseMCP):
             # 타오바오 상품번호를 공유한다. 목록 조회에는 둘 다 없어 여기서만 얻는다.
             "불사자코드": str(data.get("uploadBulsajaCode") or ""),
             "타오바오상품번호": str(data.get("productNo") or ""),
+            # 배송비 3종 — 배송비 스킬(bulsaja-shipping-fee)이 쓴다. `WD_FIELDS` 에는
+            # 넣지 않는다(옵션·상세와 같은 이유 — 카테고리교정 products.json 을 부풀린다).
+            #   해외배송비 = uploadOverseaDeliveryFee. price_update(overseaFee) 가 바꾸는 값이고,
+            #     바뀌면 **옵션 판매가가 차액만큼 자동으로 따라 움직인다** → 변경폭 게이트의 기준점.
+            #   국내배송비 = uploadDelivery.delivery_fee (마켓 표기용, 이 스킬은 안 바꾼다)
+            #   환율 = uploadRecentExchangeRate (마진 검산용)
+            "해외배송비": _money(data.get("uploadOverseaDeliveryFee"),
+                            data.get("overseaDeliveryFee")),
+            "국내배송비": _money((data.get("uploadDelivery")
+                            if isinstance(data.get("uploadDelivery"), dict)
+                            else {}).get("delivery_fee")),
+            "환율": data.get("uploadRecentExchangeRate"),
             "상세": {
                 "AI생성": bool(det.get("aiImageGenerated")),
                 "장수": int(det.get("aiImageOutputCount") or 0),
