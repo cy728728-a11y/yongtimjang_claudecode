@@ -391,8 +391,10 @@ bulsaja_product_category(productId=<id>, keyword=<조회 최종차수>)
 `product-name` Step 5 ②가 `보류(카테고리의심)`·`스킵(카테고리미설정)` 건을 **묻지 않고**
 이 스킬의 서브플로로 돌린다. 본 흐름과의 차이만 적는다:
 
-- **진입**: `prep --ids <...> --include-done` + **새 run-dir**(`<그룹>_redo1` 접미 권장) —
-  G열이 이미 찬 행(1차 교정 완료분)을 재대상으로 넣는 유일한 경로
+- **진입**: `--sheet <그룹 시트> prep --ids <...> --include-done` + **새 run-dir**
+  (`<그룹>_redo1` 접미 권장) — G열이 이미 찬 행(1차 교정 완료분)을 재대상으로 넣는 유일한 경로.
+  새 run-dir 이라 `run_meta.json` 이 없으니 **`--sheet` 를 여기서 반드시 준다**
+  (없으면 중단한다 — §대량처리 ★)
 - **`auto --overwrite-done` 필수** — prep 의 `--include-done` 은 대상 선정만 뚫는다.
   apply 의 원장 보호는 별개라, 이 플래그가 없으면 조회까지 다 하고 저장에서 전건
   건너뛴다(3-1 파일럿 실측 2026-08-05: 7/7 스킵)
@@ -419,7 +421,7 @@ bulsaja_product_category(productId=<id>, keyword=<조회 최종차수>)
 
 ```bash
 bulsaja_mcp.py probe                        # 1순위: HTTP MCP 실동작 검증
-run_all.py prep    --run-dir <R> [--limit N]  # collect → workdata → 썸네일 → names.json
+run_all.py --sheet <S> prep --run-dir <R> [--limit N]  # collect → workdata → 썸네일 → names.json
 run_all.py batch   --run-dir <R> [--size 8]   # names.json → batches/ (팬아웃 단위)
 run_all.py pending --run-dir <R>              # 남은 배치 → Workflow args JSON
 #   (Workflow `catfix-fanout` 이 워커에 분배 → named/named_NNN.json)
@@ -428,6 +430,13 @@ run_all.py recheck --run-dir <R> [--ids ...]  # 2바퀴: 보류 건 이미지 �
 run_all.py consensus prep --run-dir <R>       # 잔여 저확신·매칭불가 → 변형 대상 추출
 run_all.py consensus run  --run-dir <R>       # 변형 조회 → 2/3 판정 → 유도 저장
 ```
+
+**★ `--sheet <그룹 시트 id>` 는 `prep` 에 한 번 넘긴다** — `run-dir/run_meta.json` 에 박혀
+이후 단계(`finish`·`steer`·`auto`·`consensus`)가 자동으로 물려받는다. 안 넘기고 시트가
+필요한 단계를 부르면 **중단**된다(2026-08-14 이전엔 `sheets.keyword_default`, 즉 **다른 그룹
+시트로 조용히 폴백**해서 `--ids` 가 0건 매칭으로 죽었다 — 3-2 재교정에서 실제로 밟았다).
+`--sheet` 를 다시 주면 그 값이 이기고 run_meta 도 갱신된다.
+
 `auto` 를 쪼개 쓰려면 `merge` / `finish` / `steer` 를 따로 부른다(같은 동작).
 `finish`·`auto` 의 `--overwrite-done` = 시트에 이미 `저장완료` 인 행까지 덮어쓴다(기본은 보호).
 **회귀 테스트**: `.venv/bin/python .claude/skills/bulsaja-category-fix/scripts/test_run_all.py`

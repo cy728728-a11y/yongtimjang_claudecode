@@ -34,8 +34,9 @@ except Exception:
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable
 
-# 경로·시트 id 는 workspace.toml 1벌에서 온다(없으면 DEFAULTS = 현행 값).
-# `.claude` 앵커를 찾아 lib 를 sys.path 에 올린 뒤 eroomlib 를 든다.
+# 경로는 workspace.toml 1벌에서 온다. `.claude` 앵커를 찾아 lib 를 sys.path 에 올린다
+# (아래 함수들이 eroomlib.gsheets 등을 인라인 import 한다).
+# 시트 id 는 여기서 읽지 않는다 — `--sheet` / run_meta.json 이 정본이다(§_resolve_sheet).
 _d = SCRIPT_DIR
 while _d and _d != os.path.dirname(_d):
     _lib = os.path.join(_d, "lib")
@@ -44,10 +45,67 @@ while _d and _d != os.path.dirname(_d):
             sys.path.insert(0, _lib)
         break
     _d = os.path.dirname(_d)
-from eroomlib.config import cfg as _cfg  # noqa: E402
 
-SHEET = _cfg("sheets.keyword_default")
 TAB = "시트1"
+
+# 시트를 실제로 읽거나 쓰는 서브커맨드. 나머지(batch·pending·merge)는 run-dir 안에서만 돈다.
+SHEET_CMDS = {"prep", "finish", "steer", "auto", "consensus"}
+RUN_META = "run_meta.json"
+
+
+def _sheet_from_meta(run_dir):
+    try:
+        with open(os.path.join(run_dir, RUN_META), encoding="utf-8") as f:
+            return (json.load(f).get("sheet") or "").strip() or None
+    except Exception:
+        return None
+
+
+def _save_sheet_meta(run_dir, sheet):
+    """run-dir 에 시트 id 를 박아 둔다 — 이후 단계가 손으로 다시 안 넘겨도 된다."""
+    try:
+        os.makedirs(run_dir, exist_ok=True)
+        path = os.path.join(run_dir, RUN_META)
+        meta = {}
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                meta = json.load(f)
+        if meta.get("sheet") == sheet:
+            return
+        meta["sheet"] = sheet
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"  [경고] run_meta.json 기록 실패({e}) — 다음 단계에 --sheet 를 직접 넘겨라")
+
+
+def _resolve_sheet(args):
+    """시트 id 를 정한다: `--sheet` 명시 > run-dir 에 기록된 것 > 중단.
+
+    예전엔 `--sheet` 기본값이 `sheets.keyword_default`(keyword-pick 폴백 시트)였다.
+    그래서 그룹 시트를 안 주면 **다른 그룹 시트를 조용히** 읽었다 — `--ids` 는 0건
+    매칭으로 죽고(2026-08-14 3-2 재교정에서 실제로 밟았다), 더 나쁘면 남의 그룹
+    시트에 쓴다. 폴백을 없애고, 대신 prep 이 기록한 값을 이후 단계가 물려받는다.
+    """
+    run_dir = getattr(args, "run_dir", None)
+    sheet = (getattr(args, "sheet", None) or "").strip()
+    if sheet:
+        if run_dir:
+            _save_sheet_meta(run_dir, sheet)
+        args.sheet = sheet
+        return
+    saved = _sheet_from_meta(run_dir) if run_dir else None
+    if saved:
+        args.sheet = saved
+        print(f"[시트] run_meta.json 에서 물려받음: {saved}")
+        return
+    args.sheet = None
+    if args.cmd in SHEET_CMDS:
+        sys.exit(
+            f"[중단] --sheet 가 없다. `{args.cmd}` 는 그룹 시트를 읽고 쓴다.\n"
+            f"  그룹 시트 id 를 넘겨라: run_all.py --sheet <시트id> {args.cmd} ...\n"
+            "  (한 번 넘기면 run-dir 의 run_meta.json 에 남아 이후 단계가 물려받는다)"
+        )
 
 
 # 카테고리 조회 엔진은 별도 스킬로 분리돼 있다(Step4). 절대경로로 호출한다.
@@ -873,7 +931,9 @@ def cmd_recheck(args):
 
 def main():
     ap = argparse.ArgumentParser(description="불사자 카테고리 교정 대량 파이프라인")
-    ap.add_argument("--sheet", default=SHEET)
+    ap.add_argument("--sheet", default=None,
+                    help="그룹 시트 id. 생략하면 run-dir 의 run_meta.json 에서 물려받는다 "
+                         "(둘 다 없으면 중단 — 예전처럼 남의 시트로 폴백하지 않는다)")
     ap.add_argument("--tab", default=TAB)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -987,8 +1047,7 @@ def main():
 
     # prep/finish 는 상위 --sheet/--tab 을 물려받도록 보정
     args = ap.parse_args()
-    if not hasattr(args, "sheet"):
-        args.sheet = SHEET
+    _resolve_sheet(args)
     args.func(args)
 
 
