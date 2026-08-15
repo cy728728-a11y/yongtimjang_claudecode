@@ -702,6 +702,122 @@ class RedoCandidatesTest(unittest.TestCase):
         self.assertEqual(run_names._redo_candidates(set(), set(), None), set())
 
 
+class AuditNamedTest(unittest.TestCase):
+    """append 감사 — 워커 산출물 ↔ 배치 정본 대조 (2026-08-15 용쌤4-1 사고).
+
+    옵션정리 apply 에는 이 감사가 있어 잘린 id 가 `--commit` 을 막았는데,
+    상품명 append 에는 없어서 26자 짜리 id 가 그대로 시트 A열에 들어갔다.
+    """
+
+    P1 = "U01KSER86W5QCP907SEXBMFQP4W"   # 27자 (정상)
+    P2 = "U01KSER86WGCHX4DQ09JC6QWZ2J"
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.d, "batches"))
+        os.makedirs(os.path.join(self.d, "named"))
+        self.addCleanup(shutil.rmtree, self.d, True)
+
+    def _batch(self, n, pids):
+        run_names._dump(os.path.join(self.d, "batches", f"batch_{n:03d}.json"),
+                        {"products": [{"productId": p} for p in pids]})
+
+    def _named(self, n, pids):
+        run_names._dump(os.path.join(self.d, "named", f"named_{n:03d}.json"),
+                        {"batch": n, "products": [{"productId": p} for p in pids]})
+
+    def _ids(self, n):
+        doc = run_names._load(os.path.join(self.d, "named", f"named_{n:03d}.json"))
+        return [p["productId"] for p in doc["products"]]
+
+    def test_가운데_글자가_빠진_id를_고친다(self):
+        # 4-1 상품명 실측: …BMFQP4W(27) → …BMFQ4W(26). 접두 매칭으로는 안 잡힌다.
+        self._batch(1, [self.P1]); self._named(1, ["U01KSER86W5QCP907SEXBMFQ4W"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            warns, missing, fixed = run_names._audit_named(self.d)
+        self.assertEqual((warns, missing, fixed), ([], False, 1))
+        self.assertEqual(self._ids(1), [self.P1])
+
+    def test_뒤가_잘린_id를_고친다(self):
+        # 4-1 옵션 실측: …JC6QWZ2J(27) → …JC6QW(24)
+        self._batch(2, [self.P2]); self._named(2, ["U01KSER86WGCHX4DQ09JC6QW"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            warns, missing, fixed = run_names._audit_named(self.d)
+        self.assertEqual((warns, missing, fixed), ([], False, 1))
+        self.assertEqual(self._ids(2), [self.P2])
+
+    def test_후보가_둘이면_손대지_않고_보고한다(self):
+        a, b = "U01AAAAAAAAAAAAAAAAAAAAAAAX", "U01AAAAAAAAAAAAAAAAAAAAAAAY"
+        self._batch(3, [a, b]); self._named(3, ["U01AAAAAAAAAAAAAAAAAAAAAAA"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            warns, missing, fixed = run_names._audit_named(self.d)
+        self.assertEqual(fixed, 0)
+        self.assertTrue(missing)
+        self.assertTrue(any("미지의 상품id" in w for w in warns))
+
+    def test_누락은_append를_막는_신호로_보고한다(self):
+        self._batch(4, [self.P1, self.P2]); self._named(4, [self.P1])
+        with contextlib.redirect_stdout(io.StringIO()):
+            warns, missing, fixed = run_names._audit_named(self.d)
+        self.assertTrue(missing)
+        self.assertTrue(any("누락 상품 1건" in w for w in warns))
+        self.assertTrue(any("미완 배치" in w for w in warns))
+
+    def test_정상이면_조용하다(self):
+        self._batch(5, [self.P1, self.P2]); self._named(5, [self.P1, self.P2])
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(run_names._audit_named(self.d), ([], False, 0))
+
+    def test_배치가_없는_구형_run_dir는_통과시킨다(self):
+        shutil.rmtree(os.path.join(self.d, "batches"))
+        self.assertEqual(run_names._audit_named(self.d), ([], False, 0))
+
+
+class DropGoneTest(unittest.TestCase):
+    """삭제대기 게이트 (2026-08-15 용쌤4-1 사고).
+
+    prep 의 멱등 판정은 `상품명` 탭 A열 기준인데 삭제대기는 현황판에만 찍힌다 —
+    두 저장소가 어긋나 삭제 예정 상품 137/227건이 대상에 들어갔고 93건이 rename 됐다.
+    """
+
+    M = {
+        # 상품명 열은 멀쩡한데 다른 열이 삭제대기 → 잡아야 한다(4-1 에서 실제로 이 모양이었다)
+        "GONE1": {"row": 2, "상품명": "", "옵션": "삭제대기(제외카테고리)",
+                  "썸네일": "삭제대기(제외카테고리)", "상세": "삭제대기(제외카테고리)"},
+        # 이미 지운 상품
+        "GONE2": {"row": 3, "상품명": "상품삭제(이룸님)", "옵션": "해당없음",
+                  "썸네일": "해당없음"},
+        # 정상 대상
+        "LIVE": {"row": 4, "상품명": "", "옵션": "완료", "썸네일": ""},
+        # 재작업도 정상 대상이다 — 게이트가 이걸 먹으면 안 된다
+        "REDO": {"row": 5, "상품명": "재작업(옵션: 대표충돌)", "옵션": "완료", "썸네일": ""},
+    }
+
+    def _pend(self, *ids):
+        return [{"productId": i} for i in ids]
+
+    def test_한_열만_삭제대기여도_뺀다(self):
+        kept, gone = run_names._drop_gone(
+            self._pend("GONE1", "LIVE", "GONE2", "REDO"), self.M)
+        self.assertEqual([g["productId"] for g in kept], ["LIVE", "REDO"])
+        self.assertEqual(gone, 2)
+
+    def test_현황판에_없는_상품은_남긴다(self):
+        # 신규 수집분은 아직 현황판에 행이 없다 — 게이트가 이걸 지우면 안 된다.
+        kept, gone = run_names._drop_gone(self._pend("NEW"), self.M)
+        self.assertEqual([g["productId"] for g in kept], ["NEW"])
+        self.assertEqual(gone, 0)
+
+    def test_현황판을_못_읽으면_경고하고_아무것도_안_뺀다(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            kept, gone = run_names._drop_gone(self._pend("GONE1", "LIVE"), {})
+        self.assertEqual(len(kept), 2)
+        self.assertEqual(gone, 0)
+        self.assertIn("게이트를 걸지 못했습니다", buf.getvalue())
+
+
 class RetireStaleRowsTest(unittest.TestCase):
     """재진입 시 옛 `생성완료` 행 내리기 — rename 이 옛 이름까지 반영하는 걸 막는다."""
 

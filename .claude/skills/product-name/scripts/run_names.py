@@ -62,6 +62,7 @@ import spec_match  # noqa: E402  (이 스킬 소유 — 규격어↔옵션 정�
 from eroomlib import config as _cfg  # noqa: E402  (경로·폴더ID·시트ID 1벌)
 from eroomlib import snapshot  # noqa: E402  (공용 상품 스냅샷 — rename 후 상품명 되쓰기)
 from eroomlib import matrix  # noqa: E402  (현황판 00_진행 — 상품명 열 갱신)
+import category_gate  # noqa: E402  (bulsaja-category-fix 소유 — 삭제대기 판정 1벌)
 
 # --- 고정 설정 -------------------------------------------------------------
 # 출력은 **그룹별 카테고리교정 로그 시트의 '상품명' 탭**이다(2026-07-23 결정).
@@ -199,6 +200,81 @@ def _batch_for(run_dir, named_path):
     stem = os.path.basename(named_path)[len("named_"):]
     p = os.path.join(run_dir, "batches", "batch_" + stem)
     return p if os.path.exists(p) else ""
+
+
+def _is_subseq(short, full):
+    """`short` 가 `full` 에서 글자 몇 개를 뺀 것인가 (순서 유지).
+
+    워커의 id 훼손은 **글자 누락** 형태로 나타난다 — 뒤가 잘리기도 하고
+    (`…JC6QWZ2J` → `…JC6QW`) 가운데 한 글자가 빠지기도 한다
+    (`…BMFQP4W` → `…BMFQ4W`). 접두 매칭만으로는 후자를 못 잡아서 부분수열로 본다.
+    """
+    it = iter(full)
+    return all(c in it for c in short)
+
+
+def _audit_named(run_dir, repair=True):
+    """워커 산출물(named/)을 배치 정본(batches/) 대비 대조한다 (2026-08-15).
+
+    옵션정리 `run_options._audit_results` 와 같은 역할인데 **상품명 축에는 없었다.**
+    그래서 이번 4-1 에서 워커가 자른 id 가 감사 없이 append 를 통과해 시트 A열에
+    26자 짜리가 들어갔다(옵션 축은 같은 사고가 감사에 걸려 `--commit` 이 막혔다).
+
+    `repair=True` 면 훼손된 id 를 **같은 배치 안에서 유일하게 일치하는 진짜 id 로 고친다** —
+    정본이 배치 파일이고 후보가 5건 안팎이라 유일 매칭이면 사람이 하던 판단과 같다.
+    유일하지 않으면 손대지 않고 환각으로 보고한다.
+
+    반환: (경고 리스트, 누락 여부, 고친 수).
+    """
+    exp = {}
+    for bf in sorted(glob.glob(os.path.join(run_dir, "batches", "batch_[0-9][0-9][0-9].json"))):
+        n = int(os.path.basename(bf)[6:9])
+        exp[n] = {p.get("productId") for p in (_load(bf) or {}).get("products", [])
+                  if p.get("productId")}
+    if not exp:
+        return [], False, 0        # 구형 run-dir — 대조할 정본이 없다
+
+    warns, fixed, got, bad_num = [], 0, set(), []
+    for nf in _named_files(run_dir):
+        n = int(os.path.basename(nf)[6:9])
+        doc = _load(nf) or {}
+        n_doc = doc.get("batch", doc.get("배치"))
+        if n_doc is not None and int(n_doc) != n:
+            bad_num.append(f"{os.path.basename(nf)} 내부 batch={n_doc}")
+        want = exp.get(n, set())
+        items = doc.get("products") or []
+        seen = {p.get("productId") for p in items if p.get("productId")}
+        if repair and want:
+            for p in items:
+                pid = p.get("productId")
+                if not pid or pid in want:
+                    continue
+                cand = [w for w in want - seen if _is_subseq(pid, w)]
+                if len(cand) == 1:
+                    print(f"  [감사] id 훼손 교정 {os.path.basename(nf)}: "
+                          f"{pid}({len(pid)}자) → {cand[0]}")
+                    p["productId"] = cand[0]
+                    seen.discard(pid)
+                    seen.add(cand[0])
+                    fixed += 1
+            if fixed:
+                _dump(nf, doc)
+        got |= {p.get("productId") for p in items if p.get("productId")}
+
+    want_all = {pid for pids in exp.values() for pid in pids}
+    missing = sorted(want_all - got)
+    unknown = sorted(got - want_all)
+    done = {n for n, pids in exp.items() if pids and pids <= got}
+    miss_batches = sorted(set(exp) - done)
+    if miss_batches:
+        warns.append(f"미완 배치 {len(miss_batches)}개: {miss_batches[:10]}")
+    if missing:
+        warns.append(f"누락 상품 {len(missing)}건: {missing[:5]}")
+    if unknown:
+        warns.append(f"미지의 상품id {len(unknown)}건(워커 환각 — 고치지 못했다): {unknown[:5]}")
+    for m in bad_num:
+        warns.append(f"파일명↔내부 배치번호 불일치: {m}")
+    return warns, bool(missing), fixed
 
 
 def resolve_sheet(args):
@@ -451,9 +527,16 @@ def cmd_prep(args):
         # 닿지 않았다** — 옵션정리가 `flag` 를 찍어도 집는 쪽이 없어 사람이 `--ids --redo`
         # 를 손으로 돌려야 했고, 안 돌리면 그냥 사라졌다.
         #
+        # 현황판은 여기서 **1회만** 읽는다 — 재작업 자동 편입과 삭제대기 게이트가 같이 쓴다.
+        try:
+            _m = matrix.read(args.sheet)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 현황판 읽기 실패: {str(e)[:120]}", file=sys.stderr)
+            _m = {}
         auto_redo = _matrix_redo(
             args.sheet,
-            _redo_candidates({g.get("productId") for g in group}, done_ids, redo_hit))
+            _redo_candidates({g.get("productId") for g in group}, done_ids, redo_hit),
+            read=lambda _s: _m)
         if auto_redo:
             done_ids = done_ids - set(auto_redo)
             _dump(os.path.join(run_dir, "redo_reasons.json"), auto_redo)
@@ -474,6 +557,10 @@ def cmd_prep(args):
             _dump(os.path.join(run_dir, "redo.json"), exempt)
 
         pending = [g for g in group if g.get("productId") not in done_ids]
+        # 삭제대기 게이트 — A열 멱등만으로는 안 걸린다(`_drop_gone` 주석 참조).
+        pending, gone = _drop_gone(pending, _m)
+        if gone:
+            print(f"  삭제대기·삭제완료 {gone}건 제외 (현황판 게이트)")
         for g in pending:
             if g.get("productId") in auto_redo:
                 g["재작업사유"] = auto_redo[g["productId"]]
@@ -1062,6 +1149,37 @@ def _matrix_redo(sheet, candidates, read=None):
             if pid in candidates}
 
 
+def _drop_gone(pending, m):
+    """현황판이 "이 상품은 이미 없다"고 말하는 건을 대상에서 뺀다 (2026-08-15 4-1 사고).
+
+    **왜 필요한가**: prep 의 멱등 판정은 `상품명` 탭 A열 존재 기준인데, 제외카테고리
+    삭제대기 게이트는 **현황판에만** 찍힌다. 두 저장소가 어긋나 있어 A열에 행이 없는
+    삭제대기 상품이 그대로 대상에 들어갔다 — 4-1 실측 **대상 227건 중 137건(60%)이
+    삭제 예정 상품**이었고, 그중 93건은 rename 까지 반영됐다. 워커 비용의 절반 이상이
+    지워질 상품에 쓰였다.
+
+    판정은 `category_gate.already_gone` 1벌을 그대로 쓴다 — **7개 작업 열 중 하나라도**
+    `삭제대기`·`상품삭제`·`해당없음` 이면 없는 것으로 본다. 열 하나가 덮여도 나머지가
+    살아 있어 버틴다(4-1 에서 `상품명` 열이 append 로 덮인 뒤에도 `썸네일` 열로 사고를
+    찾아낸 게 이 성질이다). 규칙을 여기 다시 적지 않는다 — 두 벌이 되면 어긋난다.
+
+    반환: (남길 것, 뺀 수).
+    """
+    if not m:
+        # 현황판을 못 읽었다 = 게이트가 통째로 안 걸린 상태다. 조용히 넘어가면 안 된다.
+        print("  [경고] 현황판을 못 읽어 삭제대기 게이트를 걸지 못했습니다 — "
+              "삭제 예정 상품이 대상에 섞일 수 있습니다.", file=sys.stderr)
+        return pending, 0
+    kept, gone = [], 0
+    for g in pending:
+        rec = m.get(g.get("productId"))
+        if rec and category_gate.already_gone(rec):
+            gone += 1
+            continue
+        kept.append(g)
+    return kept, gone
+
+
 def _handoff_flip_suspect(sheet, checked_dir, flag=None):
     """`보류(옵션뒤집힘)` 을 현황판 `옵션` 열 재작업 flag 로 넘긴다 (2026-08-06).
 
@@ -1250,6 +1368,18 @@ def cmd_append(args):
     if not named_files:
         print(f"named 파일이 없습니다: {os.path.join(run_dir, 'named')}")
         return
+
+    # 0) 감사 — 워커 산출물을 배치 정본과 대조. 훼손된 id 는 고치고, 누락은 append 를 막는다.
+    #    (옵션정리 apply 의 `_audit_results` 와 같은 방어선. 2026-08-15 추가)
+    warns, has_missing, fixed = _audit_named(run_dir)
+    for w in warns:
+        print(f"  [감사] {w}")
+    if fixed:
+        print(f"  [감사] id 훼손 {fixed}건 교정 — named 파일을 되썼다")
+    if has_missing and not getattr(args, "allow_missing", False):
+        print("\n누락 상품이 있어 append 를 막는다. pending 재계산 → 재팬아웃으로 채우거나, "
+              "의도된 것이면 --allow-missing.", file=sys.stderr)
+        sys.exit(3)
 
     py = _py()
     checked_dir = os.path.join(run_dir, "checked")
@@ -1964,6 +2094,8 @@ def main():
                     help="pid→그룹시트 매핑(sheet_map.json) — 지정하면 풀링 모드로 라우팅한다"
                          "(대량다듬기 M3b)")
     p2.add_argument("--tab", default=NAME_TAB, help="기록할 탭 이름")
+    p2.add_argument("--allow-missing", action="store_true",
+                    help="감사가 누락 상품을 잡아도 append 를 강행한다(의도된 부분 반영 전용)")
     p2.set_defaults(func=cmd_append)
 
     p3 = sub.add_parser("rename", help="시트 생성완료 건을 불사자에 반영")
