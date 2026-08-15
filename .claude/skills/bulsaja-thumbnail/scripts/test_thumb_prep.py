@@ -460,6 +460,43 @@ class AuditCommitTest(unittest.TestCase):
         self.assertEqual(self.marked, {"U01ok": "완료(정합확인)"},
                          "삭제(해당없음) 상품에 일감을 만들었다")
 
+    def _index(self, pids):
+        """audit_batches_index.json + 그 배치 파일 — 미대조 검사의 정본."""
+        bdir = os.path.join(self.run_dir, "audit_batches")
+        os.makedirs(bdir, exist_ok=True)
+        path = os.path.join(bdir, "audit_batch_001.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"배치": 1, "products": [{"productId": p} for p in pids]},
+                      f, ensure_ascii=False)
+        with open(os.path.join(self.run_dir, "audit_batches_index.json"),
+                  "w", encoding="utf-8") as f:
+            json.dump([{"n": 1, "path": path, "imgs": 2 * len(pids),
+                        "count": len(pids)}], f)
+
+    def test_배치_대비_미대조는_경고하고_목록을_남긴다(self):
+        # 결과 파일이 통째로 빠져도 ###AUDIT### 이 정상 종료로 찍혀 "감사했는데 깨끗하다"로
+        # 읽힌다(2026-08-15 2-3: run 팬아웃이 "완료배치 7" 을 반환했는데 디스크에 result 가
+        # 없었다). verdict 처럼 차단하진 않되 **건수는 반드시 보인다.**
+        self._index(["U01ok", "U01bad"])
+        self._commit([{"productId": "U01ok", "판정": "일치"}])
+        with open(os.path.join(self.run_dir, "audit_missing.json"),
+                  encoding="utf-8") as f:
+            self.assertEqual(json.load(f), ["U01bad"])
+        # 차단은 하지 않는다 — 판정된 건은 그대로 반영된다
+        self.assertEqual(self.marked, {"U01ok": "완료(정합확인)"})
+
+    def test_전건_대조되면_미대조_파일을_만들지_않는다(self):
+        self._index(["U01ok"])
+        self._commit([{"productId": "U01ok", "판정": "일치"}])
+        self.assertFalse(os.path.exists(
+            os.path.join(self.run_dir, "audit_missing.json")))
+
+    def test_인덱스가_없으면_미대조_검사를_건너뛴다(self):
+        # 그 축을 안 돌린 run-dir — 대조할 정본이 없다. 거짓 경고를 내지 않는다.
+        self._commit([{"productId": "U01ok", "판정": "일치"}])
+        self.assertFalse(os.path.exists(
+            os.path.join(self.run_dir, "audit_missing.json")))
+
 
 class ResultsJoinAuditTest(unittest.TestCase):
     """_results 조인·_audit — 워커 환각이 백업·복원 경로에 못 들어가는지."""

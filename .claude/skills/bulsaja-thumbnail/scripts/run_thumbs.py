@@ -82,8 +82,14 @@ POLL_INTERVAL = 10
 # 큐가 포화되면 전건이 상한까지 기다렸다 실패한다 — 상품마다 동기라 벽시계가 그대로
 # 늘어난다(2026-08-12 25-2 실측: 14건 연속 타임아웃, 건당 5분). **회수 경로가 있으므로
 # 짧게 두는 쪽이 낫다**(SKILL.md §알려진 함정) — 접수는 이미 됐고 크레딧도 나갔으니
-# `recover` 가 0크레딧으로 걷어온다. 큐가 밀리는 회차엔 `THUMB_POLL_TIMEOUT=60` 으로
-# 줄여 접수만 빠르게 돌리고 끝나서 recover 로 수확한다.
+# `recover` 가 0크레딧으로 걷어온다.
+#
+# **접수모드는 장애 대응이 아니라 대량 회차의 기본 전략이다**(2026-08-15 2-3 실측).
+# 큐가 완전히 정상이어도(타임아웃 0 · 429 0) 인라인은 서버가 이미지를 만드는 시간을
+# 상품마다 혼자 기다린다 — 건당 약 80초. `THUMB_POLL_TIMEOUT=20` 으로 접수만 하고
+# 넘기면 서버가 병렬로 만들고 `recover` 가 걷어온다 — 건당 약 20초(120건 환산
+# 2시간 40분 → 40분). **50건을 넘으면 접수모드를 기본으로 잡는다.**
+# 값은 POLL_INTERVAL(10) 의 배수로 준다.
 POLL_TIMEOUT = int(os.environ.get("THUMB_POLL_TIMEOUT") or 300)
 
 # 복원 전용 재시도 — 전송층 재시도를 다 쓴 뒤에도 다시 붙는다. 복원 실패는 "미승인
@@ -933,8 +939,17 @@ def _audit_commit(sheet, run_dir):
         print(f"audit_results 가 없다: {os.path.join(run_dir, 'audit_results')}")
         return
     # 잘린 id 는 현황판에 없어서 조용히 스킵된다 = 불일치 재작업 flag 가 안 찍힌다.
-    _heal_pids(products, _index_pids(run_dir, "audit_batches_index.json"), "정합검사")
+    batch_pids = _index_pids(run_dir, "audit_batches_index.json")
+    _heal_pids(products, batch_pids, "정합검사")
     mismatch, match, uncomparable, main_suspect = R.audit_partition(products)
+
+    # 배치 대비 누락 — 결과 파일이 통째로 빠져도 `###AUDIT###` 은 정상 종료로 찍힌다
+    # = "감사했는데 깨끗하다"로 읽힌다(2026-08-15 2-3: run 팬아웃이 "완료배치 7" 을
+    # 반환했는데 result_002.json 이 디스크에 없었다. audit 배치는 12건 단위라 하나가
+    # 조용히 빠지면 12건이 대조 안 된 채 넘어간다). 치명적이진 않지만 — 현황판이 빈칸
+    # 으로 남아 다음 prep 이 다시 집는다 — 조용한 누락은 그 자체가 결함이다.
+    # `verdict` 처럼 차단하진 않는다(audit 은 크레딧도 자동반영도 안 걸린다).
+    missing = sorted(batch_pids - {p.get("productId") for p in products})
 
     m = matrix.read(sheet)
     vals = {}
@@ -967,6 +982,13 @@ def _audit_commit(sheet, run_dir):
     if uncomparable:
         _dump(os.path.join(run_dir, "audit_uncomparable.json"), uncomparable)
         print(f"  대조불가 목록: {os.path.join(run_dir, 'audit_uncomparable.json')}")
+    if missing:
+        _dump(os.path.join(run_dir, "audit_missing.json"), missing)
+        print(f"  ⚠ 미대조 {len(missing)}건 — 팬아웃이 안 끝났다. 이 건들은 현황판이 "
+              f"빈칸으로 남아 다음 prep 이 다시 집는다(=이번 감사는 전건이 아니다).\n"
+              f"    끝내려면: pending --audit 로 남은 배치를 마저 돌리고 다시 --commit\n"
+              f"    예: {missing[:5]}\n"
+              f"    목록: {os.path.join(run_dir, 'audit_missing.json')}")
 
 
 # ---------------------------------------------------------------------------

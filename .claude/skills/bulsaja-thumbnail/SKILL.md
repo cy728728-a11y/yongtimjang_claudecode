@@ -57,6 +57,7 @@ python ... run_thumbs.py prescreen --group-name "…" --run-dir <R> --commit
 # ③ apply — 생성도 반영도 승인 대기 없음 (검수 판정 주체 = Claude)
 python ... run_thumbs.py apply --run-dir <R>              # 미리보기(대상+기준이미지+예상크레딧). 선택
 python ... run_thumbs.py apply --run-dir <R> --generate   # 바로 생성(크레딧 소모) → review.html
+#    **50건 초과면 접수모드가 기본** — `THUMB_POLL_TIMEOUT=20` + recover. §대량 회차는 접수모드로
 
 # ④ verdict — 생성본 3축 판정(크레딧 0). **9건 이상이면 팬아웃** → §검수 판정
 python ... run_thumbs.py verdict --run-dir <R>            # → verdict/batches/ + Workflow args
@@ -258,6 +259,12 @@ python … run_thumbs.py audit --run-dir <R> --commit   # 판정을 현황판에
   **`대조불가`(판단불가) → flag 하지 않는다**(무한 재작업 루프 방지, 집계만)
 - **대표옵션 이미지가 404 면 대조불가가 아니라 삭제 대상이다** — audit 이 배치에서 빼고
   `audit_delete_404.json` 으로 분리한다 → §404 자동 삭제 정책대로 메인이 즉시 삭제
+- **`audit --commit` 은 배치 대비 미대조 건수를 경고한다**(2026-08-15 코드화). 결과 파일이
+  통째로 빠져도 `###AUDIT###` 은 정상 종료로 찍혀 **"감사했는데 깨끗하다"로 읽힌다** —
+  audit 배치가 12건 단위라 하나만 빠져도 12건이 대조 안 된 채 넘어간다(§6-G 조용한 누락과
+  같은 결함). `verdict` 처럼 차단하지는 않는다(크레딧도 자동반영도 안 걸리고, 현황판이
+  빈칸으로 남아 다음 prep 이 다시 집는다). **⚠ 경고가 뜨면 그 회차 감사는 전건이 아니다** —
+  `pending --audit` 로 남은 배치를 마저 돌리고 다시 `--commit`. 목록은 `audit_missing.json`
 
 ## 결과 파일 형식 (Claude가 만드는 것 — `run` 단계)
 
@@ -400,6 +407,13 @@ python … run_thumbs.py apply --run-dir <R> --commit       # 반영
   **파일명 접미(`_2`·`_9`·`_Y`)까지 벤 형태도 벗겨서 복구한다**(2026-08-15 — 그전엔
   접두만 봐서 이 형태 2건을 손으로 고쳤다. ULID 는 `_` 를 안 쓰니 첫 `_` 앞까지 자르면
   안전하다). 규칙은 `thumb_rules.heal_pid` 하나로 모아 `run`·`audit`·`verdict` 가 공유
+- **잘린 id 를 봤다고 손으로 고치지 마라 — 먼저 자동복구가 도는지 확인한다**(2026-08-15
+  헛수고 1회). `prescreen`·`audit`·`verdict`·`run` 수합부가 전부 `_heal_pids` 를 부르고,
+  `*_batches_index.json` 이 있으면 **자기 배치 안 접두 매칭으로 알아서 복구**한다 —
+  그냥 commit 하면 된다. **단, 가운데가 빠진 형태는 자동 복구가 안 된다**(옵션 팬아웃 실측:
+  `…NVAR72SRNRG0MKRWQG1` → `…NVAR72SRNRG0MKRW1`, `QG` 누락에 끝 글자는 유지). 접두가
+  안 걸려 **환각으로 분류**되고 감사가 commit 을 막는다 — 이때만 배치 정본과
+  **내용(상품명 ↔ 메인상품)** 을 대조해 결과 파일의 id 를 고친다(재팬아웃 불필요, 비용 0)
 - **재생성분만 다시 판정하려면 `verdict --run-dir <R> --ids <상품id…>`** (2026-08-15).
   그전엔 `--ids` 가 없어 배치를 손으로 조립하고 기존 결과에서 그 건들만 빼서 복원해야 했다.
   이제 앞 라운드의 `vresult` 는 `verdict/rounds/NNN/` 으로 **보존**(재생성 전 판정이
@@ -567,6 +581,30 @@ review.html 경로(이룸님 사후 검토용).
 | **생성 로그의 `HTTP 429` 를 실패로 보고 재생성** | 위와 같은 함정이다. 폴링에서 난 429 는 **접수가 이미 성공**한 것이라 taskId 가 남아 있고 서버엔 결과가 다 나와 있다(2026-08-14 2-2 실측: 429 6건 전부 생성 완료, 회수 크레딧 0). 재생성하면 5크레딧×N 을 두 번 낸다. **에러 문구로 판단하지 말고 `recover` 를 먼저 돌려라** |
 | 타임아웃이 많다고 `POLL_TIMEOUT` 을 늘림 | 생성은 상품마다 동기로 돈다. 상한을 늘리면 큐가 밀렸을 때 전체 벽시계가 그대로 늘어난다 — 회수 경로가 있으면 오히려 짧게 두는 게 낫다 |
 | **큐가 막힌 시간대에 기본 설정으로 밀어붙임** | 아래 §큐가 막혔을 때 참조. 기본 300초로 돌리면 **건당 5분씩 전건 실패**한다 |
+| **50건 넘는 회차를 인라인으로 밀어붙임** | 접수모드를 "큐가 막혔을 때만 쓰는 비상 수단"으로 오해한 것이다. 큐가 정상이어도 인라인은 건당 약 80초 vs 접수모드 약 20초 — 120건이면 2시간 40분 vs 40분(2026-08-15 2-3 실측). 아래 §대량 회차는 접수모드로 |
+| **생성을 kill 하고 곧장 재개** | 짝 없는 `[기준]`(미승인 이미지가 대표로 살아있음)과 접수분(크레딧 이미 나감)이 둘 다 방치된다. **restore → recover → 재개** 순서다 — 아래 §안전하게 kill 하기 |
+
+### 대량 회차는 접수모드로 돈다 (2026-08-15 2-3 실측 — 큐가 정상이어도)
+
+생성은 상품마다 **동기**다. 인라인으로 돌면 서버가 이미지를 만드는 시간을 상품마다 혼자
+기다린다 — **큐가 완전히 정상이어도(타임아웃 0 · 429 0) 건당 약 80초.** 접수만 하고
+넘어가면 서버가 여러 건을 병렬로 만들고 `recover` 가 0크레딧으로 걷어온다.
+
+| 방식 | 건당 | 120건 환산 |
+|---|---|---|
+| 인라인(`POLL_TIMEOUT=300` 기본) | 약 80초 | 약 2시간 40분 |
+| 접수모드(`THUMB_POLL_TIMEOUT=20`) | 약 20초 | **약 40분** |
+
+```bash
+THUMB_POLL_TIMEOUT=20 python … run_thumbs.py apply --run-dir <R> --generate  # 접수 위주
+python … run_thumbs.py recover --run-dir <R>                                 # 수확(크레딧 0·멱등)
+```
+
+**판단 기준: 대상이 50건을 넘으면 접수모드를 기본으로 잡는다.** 아래 §큐가 막혔을 때가
+쓰는 것과 같은 수단이지만 **비상 수단이 아니다** — 큐 상태와 무관하게 대량이면 이게 빠르다.
+소량(≤50건)은 인라인이 단순해서 낫다(recover 왕복이 필요 없다).
+`POLL_INTERVAL=10` 이라 `THUMB_POLL_TIMEOUT` 은 10의 배수로 준다(20 권장).
+`recover` 는 대기 0 이 될 때까지 몇 번을 불러도 안전하다(멱등).
 
 ### 큐가 막혔을 때 — 접수모드로 갈아탄다 (2026-08-15 25-2 실측)
 
@@ -590,19 +628,35 @@ python … run_thumbs.py recover --run-dir <R>
 건너뛴다(`thumb_rules.generate_plan`) — **taskId 만 있는 접수분은 다시 접수돼 크레딧이
 이중으로 나간다.** 2번 `recover` 로 `생성본` 을 먼저 채웠다면 재개 모드도 안전하다.
 
-### 안전하게 kill 하기
+### 안전하게 kill 하기 — 그리고 **restore → recover → 재개** 순서로만 재개한다
 
-`[기준] … 대표(0번)로 올림` 과 `[방어] … 승인 전 상태로 복원` 은 짝이다. 짝이 안 맞는
-지점에서 끊으면 **미승인 이미지가 대표로 남는다.**
+생성 루프는 상품마다 `[기준] 대표(0번)로 올림 → 생성 → [방어] 승인 전 상태로 복원` 이다.
+끊으면 **짝이 안 맞는 상품**이 남는다 = 승인 안 한 이미지가 대표로 살아 있다.
 
 두 줄 개수가 같아지는 순간을 폴링으로 잡으려 하지 마라 — 방어 직후 바로 다음 `[기준]`
-이 찍혀 창을 계속 놓친다(2026-08-15 두 번 실패). **그냥 끊고 짝 없는 `[기준]` 을 찾아
-복원한다:**
+이 찍혀 창을 계속 놓친다(2026-08-15 25-2 에서 **2회 다 실패**). **그냥 끊고 사후에 짝을
+찾는 쪽이 확실하다.** 순서를 틀리면 둘 다 사고가 나므로 아래 ①②③ 순서를 지킨다.
+
+**① 짝 없는 `[기준]` 을 찾아 복원** — 미승인 이미지가 대표로 남는 것을 먼저 막는다
 
 ```bash
 python3 -c "import re,sys;L=open(sys.argv[1]).read().splitlines();b=[m.group(1) for l in L if (m:=re.search(r'\[기준\] (\w+):',l))];g={m.group(1) for l in L if (m:=re.search(r'\[방어\] (\w+):',l))};print([x for x in b if x not in g])" <생성로그>
 python … run_thumbs.py restore --run-dir <R> --ids <위에서 나온 pid>
 ```
+
+**② `recover` 로 접수분을 먼저 수확** (크레딧 0 · 멱등)
+
+```bash
+python … run_thumbs.py recover --run-dir <R>
+```
+
+**③ 그 다음에 재개한다.**
+
+**②를 건너뛰면 크레딧을 두 번 낸다.** 재개 판정(`thumb_rules.generate_plan`)은 `생성본`
+이 있는 건만 건너뛰므로 **taskId 만 있는 접수분은 미생성으로 보고 다시 접수한다.**
+"끊었으니 그 건은 실패"가 아니라 **"접수는 됐고 크레딧도 이미 나갔다"** 가 맞다
+(2026-08-15 2-3: kill 후 짝 없는 `[기준]` 1건 restore + 접수분 1건 5크레딧 회수 ·
+25-2: 같은 방식으로 6건 30크레딧 회피).
 
 ### `보류(저장실패)` 를 믿지 마라 — 재저장 전에 실물부터 대조한다
 
@@ -621,6 +675,6 @@ decisions.json 의 `사용가능` × generated.json 의 `생성본`  vs  workdat
 
 ```bash
 python .claude/skills/bulsaja-thumbnail/scripts/test_thumb_rules.py    # 65건 (recover·호스트판별 포함)
-python .claude/skills/bulsaja-thumbnail/scripts/test_thumb_prep.py     # 47건 (verdict 배치·수합·id복구 포함)
+python .claude/skills/bulsaja-thumbnail/scripts/test_thumb_prep.py     # 50건 (verdict 배치·수합·id복구·audit 미대조 포함)
 python .claude/skills/bulsaja-thumbnail/scripts/test_review_html.py    # 11건
 ```
