@@ -39,6 +39,7 @@ import argparse
 import glob
 import json
 import os
+import shutil
 import sys
 import time
 
@@ -1013,21 +1014,18 @@ def _heal_pids(products, valid, axis):
     2026-08-14 실측: 3-2 verdict 2건 · 2-2 verdict 15건 — **지시서에 경고를 넣은 당일
     재발**했다. 지시문으로는 안 막히므로 수합부에서 되살린다.
 
-    복구 조건은 **접두 후보가 그 축 전체에서 정확히 1개**일 때뿐이다. 잘린 id 는 정본의
-    접두사이고 27자 ULID 라, 24자 접두가 한 상품만 가리키면 그게 정답이다. 0개·2개 이상은
-    손대지 않고 기존대로 환각 처리한다(fail-closed).
+    복구 규칙은 `R.heal_pid` 에 있다 — 잘리기만 한 것도, 파일명 접미(`_2`·`_Y`)까지
+    벤 것도 받는다(2026-08-15 용쌤2-1: 접미까지 벤 2건은 예전 로직이 못 잡아 손으로
+    고쳤다). 후보가 정확히 1개일 때만 고친다(fail-closed).
     """
     if not valid:
         return []
     healed = []
     for p in products:
-        pid = p.get("productId")
-        if not pid or pid in valid:
-            continue
-        cand = [x for x in valid if x.startswith(pid)]
-        if len(cand) == 1:
-            p["productId"] = cand[0]
-            healed.append(f"{pid}→{cand[0]}")
+        fixed = R.heal_pid(p.get("productId"), valid)
+        if fixed:
+            healed.append(f"{p['productId']}→{fixed}")
+            p["productId"] = fixed
     if healed:
         print(f"  [복구] {axis}: 잘린 productId {len(healed)}건 — 접두 매칭으로 되살림: "
               f"{healed[:3]}", file=sys.stderr)
@@ -1183,19 +1181,34 @@ def cmd_apply(args):
         print("\n이번에 생성할 대상이 없다(전부 건너뜀).")
         return
     total_credits = R.credit_estimate(len(items))
-    staged = 0
-    print(f"\n{'상품id':<28} {'모드':<8} {'올림':<5} {'기준이미지(실제 생성에 쓰는 URL)'}")
-    print("-" * 100)
+    staged, repaint = 0, []
+    print(f"\n{'상품id':<28} {'모드':<8} {'올림':<5} {'기준출처':<9} "
+          f"{'기준이미지(실제 생성에 쓰는 URL)'}")
+    print("-" * 110)
     for p in items:
         ref = R.reference_url(p)
         need = R.staged_thumbnails(p.get("기존썸네일") or [], ref) is not None
+        src = R.reference_source(p)
         staged += bool(need)
+        if not need:
+            repaint.append((p["productId"], src))
         print(f"{p['productId']:<28} {p.get('모드', '기본'):<8} "
-              f"{'O' if need else '-':<5} {ref[:60]}")
+              f"{'O' if need else '-':<5} {src:<9} {ref[:60]}")
     print(f"\n대상 {len(items)}건 · 예상 크레딧 {total_credits:,} "
           f"(장당 {R.CREDITS_PER_IMAGE})")
     # '올림 O' = 기준이 현재 대표가 아니라서, 생성 직전에 대표로 올렸다가 되돌리는 건.
     print(f"기준을 대표로 올려야 하는 건 {staged}건 / 기존 대표 그대로 {len(items) - staged}건")
+    # **`올림 -` 를 사람이 눈으로 훑는 대신 여기서 센다** (2026-08-15 광집게·크레인):
+    # 기준이 이미 0번이면 불사자는 기존 대표를 그대로 배경교체한다. 그 대표가 딴 물건이면
+    # 딴 물건이 예쁘게 재생성될 뿐이고, 재생성해도 같은 증상이 반복된다.
+    if repaint:
+        blind = [pid for pid, src in repaint if src == R.REF_EXISTING]
+        print(f"\n  [주의] 기존 대표를 그대로 배경교체하는 건 {len(repaint)}건 — "
+              f"그 대표가 대표옵션과 다른 물건이면 결과도 다른 물건이다.")
+        if blind:
+            print(f"  [주의] 그중 {len(blind)}건은 **워커 판단도 대표옵션도 없이** 기존 "
+                  f"대표로 떨어진 것이다(기준출처 {R.REF_EXISTING}) — 태우기 전에 봐라: "
+                  f"{blind[:5]}")
     print("\n미리보기다. 실제 생성은 --generate — 승인 대기 없이 바로 부른다(2026-08-06).")
 
 
@@ -1282,6 +1295,13 @@ def _generate(sheet, run_dir, items, args):
                     if staged:
                         mcp.update_thumbnails(pid, staged)
                         print(f"  [기준] {pid}: 기준 이미지를 대표(0번)로 올림")
+                    else:
+                        # **없는 줄 대신 있는 줄로 남긴다** (2026-08-15 광집게·크레인):
+                        # 사고를 캘 때 `올림` 줄이 "이 두 건만 없었다"로만 드러나
+                        # 수백 줄 로그를 눈으로 세야 했다. 올릴 게 없다 = 불사자가
+                        # 기존 대표를 그대로 배경교체한다는 뜻이라 그걸 명시한다.
+                        print(f"  [기준] {pid}: 올릴 것 없음({R.reference_source(p)}) — "
+                              f"기존 대표를 그대로 배경교체한다")
                     task = mcp.generate(pid, prompt=prompt)
                     # **접수 즉시 기록** — 폴링은 몇 분씩 걸리고 그 사이에 kill 되면
                     # taskId 가 통째로 사라져 회수도 못 한다(2026-08-06 실측: 6건 중
@@ -1382,12 +1402,18 @@ def _commit(sheet, run_dir, args):
     mcp = ThumbMCP()
     mcp.open()
     done, held, main_suspect = {}, {}, {}
-    sheet_rows = []
+    sheet_rows, finalized = [], []
     try:
         for pid, g in generated.items():
             dec = decisions.get(pid) or {}
             verdict = dec.get("판정", "사용가능")
             reason = dec.get("사유", "")
+            # **fallback 이 이미 종결한 건은 통째로 건너뛴다** (2026-08-15 조용한 되감기).
+            # 현황판도 시트도 손대지 않는다 — 여기서 손대면 `완료(원본대체…)` 가
+            # 판정값에 밀려 `보류(제외)` 로 되돌아간다. 자세한 경위는 `R.FINAL_VERDICTS`.
+            if R.is_final(verdict):
+                finalized.append(pid)
+                continue
             if "생성본" not in g:
                 # 7튜플 고정 — `_log_sheet` 이 (pid, 상품명, 생성본, 판정, 사유, 크레딧,
                 # 상태)로 언패킹한다. 여기만 8개를 넣어 대량 커밋이 시트 단계에서
@@ -1435,9 +1461,21 @@ def _commit(sheet, run_dir, args):
         mcp.close()
 
     print(f"\n###COMMIT### 반영 {len(done)}건 / 보류·실패 {len(held)}건"
-          + (f" (그중 대표옵션의심 {len(main_suspect)}건 → 옵션 재작업)" if main_suspect else ""))
+          + (f" (그중 대표옵션의심 {len(main_suspect)}건 → 옵션 재작업)" if main_suspect else "")
+          + (f" / fallback 종결 {len(finalized)}건 건너뜀" if finalized else ""))
     if not args.no_sheet:
-        _log_sheet(sheet, sheet_rows)
+        # **시트 실패가 현황판을 막지 않게 한다** (2026-08-15 용쌤2-1 §3 실측):
+        # 422행 회차에서 시트 쓰기가 세 번 죽었다(429 두 번 + 500 한 번). 그때마다
+        # 불사자 반영은 **이미 끝나 있었는데** 예외가 여기서 터져 아래 현황판 갱신까지
+        # 통째로 날아갔다 — 그러면 다음 prep 이 이미 끝난 건을 pending 으로 또 집어간다.
+        # 현황판이 다음 회차의 정본이므로 시트보다 우선한다.
+        try:
+            _log_sheet(sheet, sheet_rows)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 시트 본문 기록 실패 — 현황판은 그대로 진행한다: "
+                  f"{type(e).__name__}: {str(e)[:150]}\n"
+                  f"         복구: apply --run-dir <R> --commit --no-sheet "
+                  f"(불사자 반영·현황판은 멱등)", file=sys.stderr)
     if not args.no_matrix:
         vals = dict(done)
         vals.update(held)
@@ -1484,6 +1522,31 @@ def _pending_verdict_batches(run_dir):
                 run_dir, "verdict", "results", f"vresult_{b['n']:03d}.json"))]
 
 
+def _rotate_verdict_round(run_dir):
+    """직전 판정 라운드(vresult + 배치 인덱스)를 `verdict/rounds/NNN/` 으로 밀어둔다.
+
+    `--ids` 로 일부만 다시 판정할 때, 앞 라운드의 `vresult_*.json` 이 그대로 남아 있으면
+    `--commit` 이 그것까지 읽어 **이번 배치에 없는 상품**으로 잡고 환각 경고를 쏟는다.
+    지우지는 않는다 — 재생성 전 판정이 왜 그랬는지가 근거로 남아야 한다.
+    """
+    res = os.path.join(run_dir, "verdict", "results")
+    idx = os.path.join(run_dir, "verdict_batches_index.json")
+    if not glob.glob(os.path.join(res, "vresult_*.json")):
+        return None
+    rounds = os.path.join(run_dir, "verdict", "rounds")
+    n = 1
+    while os.path.exists(os.path.join(rounds, f"{n:03d}")):
+        n += 1
+    dst = os.path.join(rounds, f"{n:03d}")
+    os.makedirs(dst, exist_ok=True)
+    for f in glob.glob(os.path.join(res, "vresult_*.json")):
+        shutil.move(f, os.path.join(dst, os.path.basename(f)))
+    if os.path.exists(idx):
+        shutil.copy2(idx, os.path.join(dst, "verdict_batches_index.json"))
+    print(f"  앞 라운드 판정 결과를 보존: {dst}")
+    return dst
+
+
 def cmd_verdict(args):
     """생성본 3축 판정을 **팬아웃으로** 돌리는 경로 (2026-08-06 결함정리 §2-3).
 
@@ -1493,6 +1556,12 @@ def cmd_verdict(args):
 
     `verdict --run-dir <R>`          배치 생성 + Workflow args 출력
     `verdict --run-dir <R> --commit` vresult 를 모아 `decisions.json` 작성
+    `verdict --run-dir <R> --ids …`  **그 상품만** 다시 판정(재생성분 재판정)
+
+    `--ids` 가 없어서 재생성분만 다시 판정하려면 배치를 손으로 조립하고, 기존 결과에서
+    그 건들만 빼서 복원해야 했다(2026-08-15 용쌤2-1 §7). 이제 지목한 건만 새 라운드로
+    돌린다 — 앞 라운드의 결과·인덱스는 `verdict/rounds/NNN/` 로 밀어두고(누적 근거는
+    남긴다), `--commit` 은 `decisions.json` 에 **덮어쓰지 않고 합친다**.
     """
     run_dir = os.path.abspath(args.run_dir)
     gen_path = os.path.join(run_dir, "generated.json")
@@ -1504,6 +1573,19 @@ def cmd_verdict(args):
     ok = {pid: g for pid, g in generated.items() if g.get("생성본")}
     if args.commit:
         return _verdict_commit(run_dir, ok)
+
+    only = [p for p in (getattr(args, "ids", None) or []) if p.strip()]
+    if only:
+        unknown = [p for p in only if p not in ok]
+        if unknown:
+            print(f"  [경고] 생성본이 없어 판정할 수 없는 id {len(unknown)}건: "
+                  f"{unknown[:3]}", file=sys.stderr)
+        ok = {pid: g for pid, g in ok.items() if pid in set(only)}
+        if not ok:
+            print("판정할 대상이 없다(--ids 가 전부 생성본 없음).", file=sys.stderr)
+            sys.exit(2)
+        _rotate_verdict_round(run_dir)
+        print(f"  --ids {len(ok)}건만 다시 판정한다(앞 라운드 결과는 rounds/ 로 보존).")
 
     thumbs_dir = os.path.join(run_dir, "verdict", "thumbs")
     items = []
@@ -1591,13 +1673,11 @@ def _verdict_commit(run_dir, ok):
             # 누락으로도 잡혀 commit 이 막힌다(2026-08-14 실측: 3-2 2건·2-2 15건 —
             # 지시서에 경고를 넣은 당일 재발했다. 지시문으로는 안 막힌다).
             # 판정 내용은 멀쩡하므로 되살린다. 단 **자기 배치 안에서만** 접두 매칭한다
-            # (배치를 넘으면 남의 판정을 엉뚱한 상품에 붙이게 된다). 후보가 정확히
-            # 1개일 때만 고치고, 0개·2개 이상이면 손대지 않고 기존대로 환각 처리한다.
-            if mine and pid not in mine:
-                cand = [x for x in mine if x.startswith(pid)]
-                if len(cand) == 1:
-                    healed.append(f"{pid}→{cand[0]}")
-                    pid = cand[0]
+            # (배치를 넘으면 남의 판정을 엉뚱한 상품에 붙이게 된다). 규칙은 `R.heal_pid`.
+            fixed = R.heal_pid(pid, mine) if mine else None
+            if fixed:
+                healed.append(f"{pid}→{fixed}")
+                pid = fixed
             rows += 1
             got[pid] = {"판정": str(p.get("판정") or "사용가능").strip(),
                         "사유": str(p.get("사유") or "").strip()}
@@ -1616,12 +1696,21 @@ def _verdict_commit(run_dir, ok):
               f"(그대로 두면 미판정이 '사용가능'으로 반영된다): {missing[:5]}",
               file=sys.stderr)
         sys.exit(3)
+    # **덮어쓰지 않고 합친다** — `verdict --ids` 로 일부만 다시 판정한 라운드가
+    # 나머지 상품의 판정을 지워 버리면, `apply --commit` 이 그 건들을 판정 없음
+    # (= 전부 '사용가능')으로 반영한다. 전건 재판정이면 어차피 전 키를 덮는다.
+    # `fallback` 이 종결한 건(`R.FINAL_VERDICTS`)은 판정이 다시 와도 지키지 않는다 —
+    # 재판정 대상으로 지목했다면 그게 사람의 뜻이다.
     dec_path = os.path.join(run_dir, "decisions.json")
-    _dump(dec_path, got)
+    merged = (_load(dec_path) if os.path.exists(dec_path) else {}) or {}
+    kept = len([p for p in merged if p not in got])
+    merged.update(got)
+    _dump(dec_path, merged)
     by = {}
     for pid, d in got.items():
         by.setdefault(d["판정"], []).append(pid)
-    print(f"\n###VERDICT### decisions.json {len(got)}건 (결과행 {rows})")
+    print(f"\n###VERDICT### decisions.json {len(got)}건 (결과행 {rows})"
+          + (f" · 앞 라운드 판정 {kept}건 유지" if kept else ""))
     for v, pids in sorted(by.items(), key=lambda t: -len(t[1])):
         print(f"  {v}: {len(pids)}건" + (f" — {pids[:3]}" if v != "사용가능" else ""))
     print(f"  {dec_path}")
@@ -1841,6 +1930,23 @@ def cmd_fallback(args):
     finally:
         mcp.close()
 
+    # **판정을 정본(`decisions.json`)에도 남긴다** — 이게 빠져서 나중에 돈 커밋이
+    # 원본대체를 통째로 되감았다(2026-08-15 실측 19건 · `R.FINAL_VERDICTS` 참조).
+    # 현황판만 고치면 `decisions.json` 의 `제외` 가 살아남아 다음 커밋에서 다시 이긴다.
+    if done and getattr(args, "run_dir", ""):
+        dec_path = os.path.join(args.run_dir, "decisions.json")
+        dec = (_load(dec_path) if os.path.exists(dec_path) else {}) or {}
+        for pid, state in done.items():
+            dec[pid] = {"판정": R.VERDICT_FALLBACK,
+                        "사유": (args.reason or state)[:200]}
+        _dump(dec_path, dec)
+        print(f"  decisions.json 갱신: {len(done)}건 '{R.VERDICT_FALLBACK}' "
+              f"(이후 apply --commit 이 건너뛴다)")
+    elif done:
+        print("  [경고] --run-dir 이 없어 decisions.json 을 못 고쳤다 — 나중에 "
+              "`apply --commit` 을 돌리면 이 원본대체가 되감긴다. "
+              "--run-dir 을 주고 다시 걸어라(멱등·크레딧 0).", file=sys.stderr)
+
     if rows and not args.no_sheet:
         ensure_tab(sheet, TAB, HEADER)
         append_rows(sheet, TAB, rows)
@@ -1930,6 +2036,9 @@ def main():
     v = sub.add_parser("verdict",
                        help="생성본 3축 판정 배치 생성/수합(크레딧 0) — 팬아웃 경로")
     v.add_argument("--run-dir", required=True)
+    v.add_argument("--ids", nargs="+", default=None,
+                   help="이 상품들만 다시 판정(재생성분 재판정). 앞 라운드 결과는 "
+                        "verdict/rounds/ 로 보존하고 --commit 이 decisions 를 합친다")
     v.add_argument("--batch-size", type=int, default=VERDICT_BATCH_SIZE)
     v.add_argument("--commit", action="store_true",
                    help="verdict/results/*.json → decisions.json")

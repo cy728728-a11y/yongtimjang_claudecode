@@ -16,8 +16,15 @@
 import re
 from urllib.parse import urlparse
 
-# 가공(불사자 AI 처리) 완료로 보는 호스트. 이 호스트가 아니면(주로 alicdn.com) 미가공 원본.
-PROCESSED_HOST = "cdn.bulsaja.com"
+# 가공(불사자 AI 처리) 완료로 보는 호스트. 여기 없으면(주로 alicdn.com) 미가공 원본.
+#   · cdn.bulsaja.com — 불사자가 저장한 가공물
+#   · fal.media       — 불사자 AI 생성 엔진이 직접 내주는 출력. **서브도메인으로 온다**
+#                       (관측: `v3b.fal.media`). 2026-08-15 25-2 에서 101건이 "미가공
+#                       원본"으로 분류돼 재생성 대상이 됐다 — 실제로는 이미 AI 생성본이라
+#                       505크레딧을 헛쓸 뻔했다. 게다가 이 군의 정합검사 불일치율은
+#                       42.6%(43/101)로 cdn 군 35.3%(65/184)보다 **나쁘다** — 놓치면
+#                       불량한 생성본이 audit 없이 통과한다.
+PROCESSED_HOSTS = ("cdn.bulsaja.com", "fal.media")
 
 # 재생성 상한 — 안(경우)당 최대 2회, 헤르메스 06/07 공통 규칙.
 MAX_REGEN = 2
@@ -36,8 +43,9 @@ def host_of(url):
 
 
 def is_processed_url(url):
-    """이 URL 1장이 불사자 가공물인가."""
-    return host_of(url) == PROCESSED_HOST
+    """이 URL 1장이 불사자 가공물인가. **서브도메인도 인정한다**(`v3b.fal.media`)."""
+    host = host_of(url)
+    return any(host == h or host.endswith("." + h) for h in PROCESSED_HOSTS)
 
 
 def product_status(thumbnails):
@@ -85,6 +93,80 @@ NO_REAL_BASE = "실물기준없음"
 def no_real_base(redo_reason):
     """재작업사유가 '옵션에 실물 이미지가 없다'는 되돌림인가."""
     return NO_REAL_BASE in str(redo_reason or "")
+
+
+# `fallback`(대표옵션 원본대체)이 **이미 종결한** 상품의 판정값. 이후 `apply --commit`
+# 이 이 값을 보면 손대지 않고 지나간다.
+#
+# **왜 필요한가** (2026-08-15 용쌤2-1 실측 — 조용한 되감기): 판정 큐를 `fallback` →
+# `apply --commit` 순서로 처리했더니 현황판 완료가 **658 → 628 로 떨어졌다.**
+# `완료(원본대체·대표옵션)` 19건이 `보류(제외)` 로 되돌아간 것이다. 원인은
+# `fallback` 이 현황판만 고치고 `decisions.json` 의 판정은 `제외` 인 채로 남긴 것 —
+# 나중에 커밋이 돌면 `decisions.json` 을 정본으로 현황판을 되쓰므로 그 `제외` 가
+# 다시 이긴다. **에러도 경고도 없다.** 그래서 fallback 이 판정을 이 값으로 덮어쓰고,
+# 커밋은 이 값을 종결로 인정한다 — 순서가 어느 쪽이든 되감기지 않는다.
+VERDICT_FALLBACK = "원본대체"
+FINAL_VERDICTS = (VERDICT_FALLBACK,)
+
+
+def is_final(verdict):
+    """`apply --commit` 이 손대면 안 되는, 이미 종결된 판정인가."""
+    return any(v in str(verdict or "") for v in FINAL_VERDICTS)
+
+
+def heal_pid(pid, valid):
+    """워커가 **이미지 파일명에서 베낀** 상품코드를 정본으로 되돌린다. 못 고치면 None.
+
+    `materialize_image` 가 파일명을 24자로 자르고 뒤에 장 번호를 붙인다
+    (`U01KSD7D7Y3338WQQKZWT0XT_2.jpg`) — productId 는 27자다. 워커가 눈앞의 파일명에서
+    상품코드를 옮겨 적으면 정본과 어긋나 판정이 통째로 버려진다.
+
+    두 형태를 다 받는다:
+      · 잘리기만 한 것       `U01KSD7D7Y3338WQQKZWT0XT`
+      · 파일명 접미까지 벤 것 `U01KSD7D7Y3338WQQKZWT0XT_2` / `..._9` / `..._Y`
+
+    ULID 는 Crockford base32 라 `_` 가 절대 안 들어간다 — 첫 `_` 앞까지만 남기면
+    안전하게 접미를 벗길 수 있다(2026-08-15 용쌤2-1: 접미까지 벤 2건을 손으로 고쳤다).
+
+    복구 조건은 **접두 후보가 정확히 1개**일 때뿐이다. 잘린 id 는 정본의 접두사이고
+    27자 ULID 라 24자 접두가 한 상품만 가리키면 그게 정답이다. 0개·2개 이상은
+    고치지 않는다(fail-closed — 남의 판정을 엉뚱한 상품에 붙이느니 버린다).
+    """
+    pid = str(pid or "")
+    if not pid or not valid or pid in valid:
+        return None
+    for stem in (pid, pid.split("_")[0]):
+        if not stem or stem in valid:
+            continue
+        cand = [x for x in valid if x.startswith(stem)]
+        if len(cand) == 1:
+            return cand[0]
+    return None
+
+
+# `reference_url` 이 기준을 어디서 가져왔는지 — 미리보기·생성 로그의 경고 근거다.
+REF_WORKER = "워커선택"        # 워커가 후보에서 고른 것
+REF_MAIN_OPTION = "대표옵션"   # prep 선기록(규칙 0)
+REF_EXISTING = "기존대표"      # 아무것도 없어 기존 0번으로 떨어진 것 — **맹목 배경교체**
+
+
+def reference_source(product):
+    """`reference_url` 이 어느 우선순위에서 나왔는지. 값은 `REF_*` 셋 중 하나.
+
+    **왜 필요한가** (2026-08-15 용쌤2-1 광집게·크레인): 생성 로그에 `[기준] … 대표(0번)
+    로 올림` 줄이 이 두 건만 없었다. 기준이 이미 0번이라 올릴 게 없었던 것인데, 그러면
+    불사자는 **기존 대표를 그대로 배경교체한다** — 용팀장이 "원래 있던 썸네일이 새로
+    생성됐다"고 지적한 그대로다. 재생성해도 같은 증상이라 원본대체로 종결했다.
+
+    `REF_EXISTING` 은 그중에서도 위험하다: 워커 판단도 대표옵션도 없이 기존 대표로
+    떨어진 것이라, 그 대표가 딴 물건이면 딴 물건이 그대로 예쁘게 재생성된다.
+    """
+    idx = product.get("기준이미지")
+    if isinstance(idx, int) and not isinstance(idx, bool):
+        return REF_WORKER
+    if str(product.get("대표옵션이미지") or "").strip():
+        return REF_MAIN_OPTION
+    return REF_EXISTING
 
 
 def generate_plan(items, prev=None, only_ids=None):

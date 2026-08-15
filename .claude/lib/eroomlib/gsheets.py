@@ -72,7 +72,7 @@ def _with_retry(fn, what, max_retries=4):
             last = e
             if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
                 wait = min(2 ** (attempt + 1), 30)   # 상한 30초 — 쿼터 창이 60초다
-                print(f"[gsheets] {what} 429/쿼터, {wait}초 대기 후 재시도 "
+                print(f"[gsheets] {what} 재시도 가능 오류, {wait}초 대기 후 재시도 "
                       f"({attempt + 1}/{max_retries})", file=sys.stderr)
                 time.sleep(wait)
                 continue
@@ -111,7 +111,7 @@ def sheets_update(spreadsheet_id, rng, values_2d, value_input="RAW", max_retries
             last_err = e
             if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
                 wait = min(2 ** (attempt + 1), 30)   # 상한 30초 — 쿼터 창이 60초다
-                print(f"[gsheets] update 429/쿼터 오류, {wait}초 대기 후 재시도 "
+                print(f"[gsheets] update 재시도 가능 오류, {wait}초 대기 후 재시도 "
                       f"({attempt + 1}/{max_retries}): {msg[:150]}", file=sys.stderr)
                 time.sleep(wait)
                 continue
@@ -144,7 +144,7 @@ def sheets_batch_update(spreadsheet_id, data, value_input="USER_ENTERED",
             msg, last_err = str(e), e
             if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
                 wait = min(2 ** (attempt + 1), 30)   # 상한 30초 — 쿼터 창이 60초다
-                print(f"[gsheets] batchUpdate 429/쿼터 오류, {wait}초 대기 후 재시도 "
+                print(f"[gsheets] batchUpdate 재시도 가능 오류, {wait}초 대기 후 재시도 "
                       f"({attempt + 1}/{max_retries}): {msg[:150]}", file=sys.stderr)
                 time.sleep(wait)
                 continue
@@ -171,8 +171,19 @@ def chunk_by_size(rows, budget=12000):
         yield start, cur
 
 
-# 429/쿼터 초과로 판단할 오류 메시지 키워드
-_RETRY_HINTS = ("429", "quota", "RESOURCE_EXHAUSTED", "rateLimitExceeded")
+# 다시 걸면 풀릴 오류로 판단할 메시지 키워드.
+#
+# 쿼터(429)뿐 아니라 **구글 쪽 일시 장애(5xx)도 재시도한다** — 2026-08-15 용쌤2-1
+# 422행 회차에서 시트 쓰기가 세 번 죽었는데 그중 하나가 500 이었다. 500 은 힌트에
+# 없어서 백오프 없이 그대로 올라갔고, 그때마다 호출부의 뒷단계(현황판 갱신)까지
+# 통째로 날아갔다. 5xx 는 대개 몇 초 뒤 풀린다.
+#
+# 코드는 `_run_gws` 가 만드는 `gws API 오류 <code>:` 형태로 매칭한다 — 맨 숫자
+# ("500")로 매칭하면 메시지 본문이나 range 안의 숫자에 걸려 오탐한다.
+_RETRY_HINTS = ("429", "quota", "RESOURCE_EXHAUSTED", "rateLimitExceeded",
+                "gws API 오류 500", "gws API 오류 502", "gws API 오류 503",
+                "gws API 오류 504", "internalError", "backendError",
+                "Service Unavailable")
 
 
 def append_rows(spreadsheet_id, tab, rows, max_retries=7):
@@ -213,7 +224,7 @@ def append_rows(spreadsheet_id, tab, rows, max_retries=7):
             last_err = e
             if any(h.lower() in msg.lower() for h in _RETRY_HINTS) and attempt < max_retries - 1:
                 wait = min(2 ** (attempt + 1), 30)   # 상한 30초 — 쿼터 창이 60초다
-                print(f"[gsheets] append 429/쿼터 오류, {wait}초 대기 후 재시도 "
+                print(f"[gsheets] append 재시도 가능 오류, {wait}초 대기 후 재시도 "
                       f"({attempt + 1}/{max_retries}): {msg[:150]}", file=sys.stderr)
                 time.sleep(wait)
                 continue

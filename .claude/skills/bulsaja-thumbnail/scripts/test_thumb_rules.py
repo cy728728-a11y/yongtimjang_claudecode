@@ -20,6 +20,10 @@ PROCESSED_MCP_ASSETS = "https://cdn.bulsaja.com/mcp-assets/11154/U01KY54HA4RRXCG
 PROCESSED_SOURCING = "https://cdn.bulsaja.com/sourcing-product/images/U01KPZYXXRECAVR0Z8K2ZD1AVKA/thumbnail-image/1SOeYCF2t7yRqTu.jpeg"
 PROCESSED_PRODUCTS = "https://cdn.bulsaja.com/products/U01K10FF4B2A12D71K0DXKAPEX1/a73962d2-713e-4544-8da2-640a3ffd4f1d.jpg"
 PROCESSED_AI_OUTPUT = "https://cdn.bulsaja.com/ai-image/output/11154/5c1d2bfc464f8192c726e688c5e8e4c948da6cc3fb4acad315e32769e68c72f4-ef077f993beae00afa43d53b67fd0472451808a626afbc7c4ad5cd2b419cf9e1.jpg"
+# 생성 엔진이 직접 내주는 출력 — 서브도메인으로 온다(2026-08-15 25-2 에서 253회 관측).
+FAL_OUTPUT = "https://v3b.fal.media/files/b/penguin/8mMhs3nCwFtHRDzOJZaVo_output.png"
+# 스마트스토어 업로드 결과물. 가공 여부와 무관하다 — 미가공으로 둔다.
+NAVER_UPLOADED = "https://shop-phinf.pstatic.net/20260811_137/1754889_01_.jpg"
 
 
 class HostTest(unittest.TestCase):
@@ -36,6 +40,23 @@ class HostTest(unittest.TestCase):
     def test_빈_URL은_미가공(self):
         self.assertFalse(R.is_processed_url(""))
         self.assertFalse(R.is_processed_url(None))
+
+    def test_fal미디어는_서브도메인도_가공됨(self):
+        # 생성 엔진 출력은 서브도메인으로 온다(관측: v3b.fal.media).
+        # 2026-08-15 25-2 에서 101건이 이걸 못 잡아 재생성 대상이 됐다.
+        self.assertTrue(R.is_processed_url(FAL_OUTPUT))
+        self.assertEqual(R.host_of(FAL_OUTPUT), "v3b.fal.media")
+        self.assertTrue(R.is_processed_url("https://fal.media/files/abc.jpg"))
+
+    def test_가공호스트를_흉내낸_도메인은_미가공(self):
+        # 접미 비교가 점 경계를 지켜야 한다 — 안 그러면 evilfal.media 가 통과한다.
+        for url in ("https://evilfal.media/x.jpg",
+                    "https://notcdn.bulsaja.com.attacker.io/x.jpg"):
+            self.assertFalse(R.is_processed_url(url), url)
+
+    def test_네이버_업로드본은_가공으로_보지_않는다(self):
+        # shop-phinf 는 업로드 결과물일 뿐 AI 가공의 증거가 아니다(측정된 불량률 없음).
+        self.assertFalse(R.is_processed_url(NAVER_UPLOADED))
 
 
 class ProductStatusTest(unittest.TestCase):

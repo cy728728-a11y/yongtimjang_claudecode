@@ -1,0 +1,389 @@
+<title>2-2 판정 대기 큐</title>
+<style>
+  :root{
+    --ground:#EEF2F1; --surface:#FFFFFF; --surface-2:#F6F9F8;
+    --ink:#0E1A19; --muted:#566765; --faint:#849693; --line:#D6DEDC;
+    --accent:#0B5750; --accent-soft:#DCEAE7;
+    --now:#9C3520; --now-soft:#F7E4DE;
+    --rule:#7E5C08; --rule-soft:#F7EDD5;
+    --hand:#3A4880; --hand-soft:#E3E7F5;
+    --ok:#2C6A45; --ok-soft:#DEEDE3;
+    --shadow:0 1px 2px rgba(14,26,25,.06), 0 8px 24px -12px rgba(14,26,25,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0B1110; --surface:#141C1B; --surface-2:#101817;
+      --ink:#E2EAE8; --muted:#93A5A2; --faint:#6B7C79; --line:#26322F;
+      --accent:#5CC7B6; --accent-soft:#16302C;
+      --now:#E58A6C; --now-soft:#33201A;
+      --rule:#D9AE47; --rule-soft:#2E2716;
+      --hand:#93A2DC; --hand-soft:#1B2038;
+      --ok:#6FBA8B; --ok-soft:#15291D;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0B1110; --surface:#141C1B; --surface-2:#101817;
+    --ink:#E2EAE8; --muted:#93A5A2; --faint:#6B7C79; --line:#26322F;
+    --accent:#5CC7B6; --accent-soft:#16302C;
+    --now:#E58A6C; --now-soft:#33201A;
+    --rule:#D9AE47; --rule-soft:#2E2716;
+    --hand:#93A2DC; --hand-soft:#1B2038;
+    --ok:#6FBA8B; --ok-soft:#15291D;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;
+    font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+  .wrap{max-width:1080px; margin:0 auto; padding:40px 24px 80px; display:flex; flex-direction:column; gap:40px}
+
+  /* ── identity ── */
+  .id-block{display:flex; flex-direction:column; gap:10px}
+  .eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:700}
+  h1{margin:0; font-size:34px; line-height:1.15; letter-spacing:-.02em; font-weight:800; text-wrap:balance}
+  .sub{margin:0; color:var(--muted); font-size:14px}
+  .sub b{color:var(--ink); font-weight:600}
+
+  /* ── stage rail ── */
+  .rail{display:flex; flex-direction:column; gap:2px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px 20px; box-shadow:var(--shadow)}
+  .rail h2{margin:0 0 12px; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .stage{display:grid; grid-template-columns:76px 1fr 132px; align-items:center; gap:14px; padding:7px 0; border-top:1px solid var(--line)}
+  .stage:first-of-type{border-top:none}
+  .stage-name{font-weight:600; font-size:14px; display:flex; align-items:baseline; gap:7px}
+  .stage-num{font-size:10px; color:var(--faint); font-weight:700}
+  .bar{display:flex; height:9px; border-radius:5px; overflow:hidden; background:var(--surface-2); border:1px solid var(--line)}
+  .bar span{display:block}
+  .b-ok{background:var(--ok)} .b-pend{background:var(--now)} .b-blank{background:var(--line)} .b-na{background:var(--faint); opacity:.35}
+  .stage-fig{font-size:12px; color:var(--muted); text-align:right}
+  .stage-fig b{color:var(--ink); font-weight:700}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; padding-top:12px; border-top:1px solid var(--line); font-size:11.5px; color:var(--muted)}
+  .legend i{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; vertical-align:middle}
+
+  /* ── tiers ── */
+  .tier{display:flex; flex-direction:column; gap:14px}
+  .tier-head{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding-left:13px; border-left:4px solid var(--tc)}
+  .tier-head h2{margin:0; font-size:21px; letter-spacing:-.01em; font-weight:750}
+  .tier-count{font-size:12px; font-weight:700; color:var(--tc); background:var(--tc-soft); padding:2px 9px; border-radius:99px}
+  .tier-note{margin:0; font-size:13.5px; color:var(--muted); flex-basis:100%}
+  .t-now{--tc:var(--now); --tc-soft:var(--now-soft)}
+  .t-rule{--tc:var(--rule); --tc-soft:var(--rule-soft)}
+  .t-hand{--tc:var(--hand); --tc-soft:var(--hand-soft)}
+
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); overflow:hidden}
+  .card-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:13px 18px; background:var(--surface-2); border-bottom:1px solid var(--line); flex-wrap:wrap}
+  .card-head h3{margin:0; font-size:14.5px; font-weight:700; letter-spacing:-.005em}
+  .card-head .n{font-size:12px; color:var(--muted); font-weight:600}
+  .ask{margin:0; padding:10px 18px; font-size:13px; color:var(--muted); background:var(--surface); border-bottom:1px solid var(--line)}
+  .ask b{color:var(--ink)}
+
+  .item{display:grid; grid-template-columns:1fr; gap:5px; padding:13px 18px; border-top:1px solid var(--line)}
+  .item:first-of-type{border-top:none}
+  .item-top{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+  .pname{font-weight:600; font-size:14px}
+  .pid{font-size:11px; color:var(--faint)}
+  .why{margin:0; font-size:13.5px; color:var(--muted)}
+  .why b{color:var(--ink); font-weight:600}
+  .opts{display:flex; gap:7px; flex-wrap:wrap; margin-top:3px}
+  .opt{font-size:11.5px; font-weight:600; padding:2px 9px; border-radius:5px; border:1px solid var(--line); color:var(--muted); background:var(--surface-2)}
+
+  .tally{width:100%; border-collapse:collapse; font-size:13px}
+  .tally th,.tally td{text-align:left; padding:9px 18px; border-top:1px solid var(--line)}
+  .tally th{font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); font-weight:700; border-top:none; background:var(--surface-2)}
+  .tally td.num{text-align:right; font-weight:700}
+  .scroll{overflow-x:auto}
+
+  .flag{background:var(--now-soft); border:1px solid var(--now); border-radius:10px; padding:18px 20px; display:flex; flex-direction:column; gap:9px}
+  .flag h3{margin:0; font-size:16px; font-weight:750; color:var(--now)}
+  .flag p{margin:0; font-size:14px}
+  .flag .ev{font-size:13px; color:var(--muted); border-left:3px solid var(--now); padding-left:12px}
+
+  footer{border-top:1px solid var(--line); padding-top:20px; color:var(--muted); font-size:12.5px; display:flex; flex-direction:column; gap:5px}
+  a{color:var(--accent)}
+  @media (max-width:640px){
+    .stage{grid-template-columns:64px 1fr; }
+    .stage-fig{grid-column:2; text-align:left}
+    h1{font-size:27px}
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="id-block">
+    <div class="eyebrow">2번_용쌤2-2 · groupId 1001186 · 부킹(용쌤)</div>
+    <h1>썸네일 빼고 남은 판정 큐</h1>
+    <p class="sub">상품 <b>994건</b> 기준 · 2026-08-15 시트 조회 · 사람이 답을 정해야 풀리는 것만 모았다. 자동으로 도는 건 뺐다.</p>
+  </header>
+
+  <!-- ── 파이프라인 현황 ── -->
+  <section class="rail">
+    <h2>파이프라인 현황</h2>
+
+    <div class="stage">
+      <div class="stage-name"><span class="stage-num mono">01</span>수집</div>
+      <div class="bar"><span class="b-ok" style="flex:994"></span></div>
+      <div class="stage-fig mono"><b>994</b> 완료</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-name"><span class="stage-num mono">02</span>카테고리</div>
+      <div class="bar"><span class="b-ok" style="flex:980"></span><span class="b-pend" style="flex:14"></span></div>
+      <div class="stage-fig mono"><b>980</b> 완료 · 14 대기</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-name"><span class="stage-num mono">03</span>상품명</div>
+      <div class="bar"><span class="b-ok" style="flex:459"></span><span class="b-pend" style="flex:253"></span><span class="b-blank" style="flex:14"></span><span class="b-na" style="flex:268"></span></div>
+      <div class="stage-fig mono"><b>459</b> 완료 · 267 대기</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-name"><span class="stage-num mono">04</span>옵션</div>
+      <div class="bar"><span class="b-ok" style="flex:692"></span><span class="b-pend" style="flex:45"></span><span class="b-blank" style="flex:1"></span><span class="b-na" style="flex:256"></span></div>
+      <div class="stage-fig mono"><b>692</b> 완료 · 46 대기</div>
+    </div>
+
+    <div class="stage" style="opacity:.55">
+      <div class="stage-name"><span class="stage-num mono">05</span>썸네일</div>
+      <div class="bar"><span class="b-ok" style="flex:425"></span><span class="b-pend" style="flex:237"></span><span class="b-blank" style="flex:60"></span><span class="b-na" style="flex:272"></span></div>
+      <div class="stage-fig mono"><b>425</b> 완료 · 진행중</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-name"><span class="stage-num mono">06</span>상세 이후</div>
+      <div class="bar"><span class="b-blank" style="flex:722"></span><span class="b-na" style="flex:272"></span></div>
+      <div class="stage-fig mono"><b>722</b> 미착수</div>
+    </div>
+
+    <div class="legend">
+      <span><i class="b-ok"></i>완료</span>
+      <span><i class="b-pend"></i>보류·재작업</span>
+      <span><i class="b-blank"></i>미착수</span>
+      <span><i class="b-na"></i>삭제(해당없음)</span>
+    </div>
+  </section>
+
+  <!-- ── TIER 1 ── -->
+  <section class="tier t-now">
+    <div class="tier-head">
+      <h2>지금 답 하나만 주면 풀리는 것</h2>
+      <span class="tier-count">14건</span>
+      <p class="tier-note">전부 "둘 중 뭐가 맞냐"는 질문이다. 답만 주면 내가 이어서 돌린다.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>상품명 — 옵션 쪽에서 되돌아온 질문</h3><span class="n mono">5건</span></div>
+      <p class="ask"><b>왜 멈췄나.</b> 옵션 정리를 하다 보니 상품명이 실물과 안 맞는 게 드러나서 되돌려보낸 것들이다. 어느 쪽이 진짜인지 정해야 상품명을 다시 만든다.</p>
+
+      <div class="item">
+        <div class="item-top"><span class="pname">라탄 테이블 세트 정원 발코니 테라스 6인 야외 실외</span><span class="pid mono">U01KS1WY75W2R0KMVAG30JW5THN</span></div>
+        <p class="why">상품명은 <b>6인</b>인데 현재 대표옵션은 <b>4인용(130x90 티크)</b>. 옵션에 6인용도 있다.</p>
+        <div class="opts"><span class="opt">6인용을 대표로</span><span class="opt">이름을 4인으로</span></div>
+      </div>
+
+      <div class="item">
+        <div class="item-top"><span class="pname">아크릴 테이블 투명 인테리어 휴대용 접이식 쇼파</span><span class="pid mono">U01KS1WY75VHFR9KFA1NTDKZPQ6</span></div>
+        <p class="why">이름에 <b>접이식</b>이 있는데 중국어 원문·옵션은 전부 <b>整装(완전조립)</b>뿐이다. 접이식이라는 근거가 어디에도 없다.</p>
+        <div class="opts"><span class="opt">'접이식' 빼고 재작성</span><span class="opt">그대로 둠</span></div>
+      </div>
+
+      <div class="item">
+        <div class="item-top"><span class="pname">조립식벽돌 50CM 판넬 디스플레이 송판 인테리어 가벽</span><span class="pid mono">U01KS1WY75HZKZHB0S5YNE77G4S</span></div>
+        <p class="why">상품명과 실제 메인상품이 <b>한 낱말도 안 겹친다.</b> 실물은 '3D 입체무늬 촬영 배경보드(패턴·색상 다양)'.</p>
+        <div class="opts"><span class="opt">배경보드 기준 재작성</span><span class="opt">품목 자체가 틀렸으면 삭제</span></div>
+      </div>
+
+      <div class="item">
+        <div class="item-top"><span class="pname">진료 카운터 원형 이동식 바퀴 보조 바퀴달린 의자</span><span class="pid mono">U01KS1WY78590F3JVY63QZ78ZZM</span></div>
+        <p class="why">옵션 뒤집힘 복구건. 본품은 <b>등받이형 미용실 살롱스툴</b> 기준으로 다시 써야 한다.</p>
+        <div class="opts"><span class="opt">살롱스툴 기준 재작성 (권장)</span></div>
+      </div>
+
+      <div class="item">
+        <div class="item-top"><span class="pname">사이드 테이블 높이조절 스탠딩 월넛 이동식 보조</span><span class="pid mono">U01KS1WY77N4WW6BBVCA119AYX5</span></div>
+        <p class="why">옵션 뒤집힘 복구건. 본품은 <b>월넛 블랙프레임 80x40 리프팅 캐스터 사이드테이블</b>.</p>
+        <div class="opts"><span class="opt">본품 기준 재작성 (권장)</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>카테고리 — 확인 요청</h3><span class="n mono">4건</span></div>
+      <p class="ask"><b>왜 멈췄나.</b> 네이버 정답 카테고리와 부분만 맞아서 자동 저장을 막아둔 것들이다.</p>
+
+      <div class="item">
+        <div class="item-top"><span class="pname">얼굴추적 짐벌 팬틸팅 카메라 촬영 거치대 팬틸트</span><span class="pid mono">U01KS1WY78N27NX8Y1X827AGR49</span></div>
+        <p class="why">부분일치확인요</p>
+      </div>
+      <div class="item">
+        <div class="item-top"><span class="pname">팬틸트 카메라 각도조절 거치대 리모컨 무선 회전</span><span class="pid mono">U01KS1WY74AMQPD5PC7BRYJS8SE</span></div>
+        <p class="why">부분일치확인요. <b>이 상품은 상품명 표본검수에서도 걸렸다</b> — 실물은 팬틸트 헤드 단품인데 이름이 '삼각대'를 두 번 지칭한다.</p>
+        <div class="opts"><span class="opt">카테고리·상품명 같이 재작업</span></div>
+      </div>
+      <div class="item">
+        <div class="item-top"><span class="pname">주전자 잔 찻잔 커피 세트 엔틱 칼 술잔 구리 선물</span><span class="pid mono">U01KS1WY776D6NAM26HRYE5R2R0</span></div>
+        <p class="why">부분일치확인요</p>
+      </div>
+      <div class="item">
+        <div class="item-top"><span class="pname">접이식 카트 워커 경량 어르신유모차 노인보행기</span><span class="pid mono">U01KS1WY76J6TKSPRGJX3Q5QR09</span></div>
+        <p class="why">카테고리 '생활/건강 &gt; 실버용품 &gt; 보행차/실버카'인데 <b>실제 상품은 장난감 유모차</b>다. 카테고리도 이름도 실물과 안 맞는다.</p>
+        <div class="opts"><span class="opt">완구 카테고리로 교정</span><span class="opt">품목 불일치로 삭제</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>기타 단건</h3><span class="n mono">5건</span></div>
+      <div class="item">
+        <div class="item-top"><span class="pname">건어물 어포 쥐포 오징어 야시장 롤러 프레스 수동</span><span class="pid mono">U01KS1WY75PPGP61B49YTXJD2N6</span></div>
+        <p class="why">상품명 <b>보류(실물불명)</b> — 이미지로 뭘 파는 건지 특정이 안 됐다.</p>
+      </div>
+      <div class="item">
+        <div class="item-top"><span class="pname">옵션 저장을 서버가 거부하는 상품</span><span class="pid mono">3건</span></div>
+        <p class="why">조립식 철제 선반 / 카운터 안내 테이블 / 음식점 고무바닥매트. 저장 요청은 맞는데 <b>불사자 서버가 대표 상태를 안 받는다.</b> 마지막 건은 옵션이 600개짜리다.</p>
+        <div class="opts"><span class="opt">앱에서 직접 대표 지정</span><span class="opt">포기하고 넘김</span></div>
+      </div>
+      <div class="item">
+        <div class="item-top"><span class="pname">삭제가 잠긴 상품 (좌식 의료용자전거)</span><span class="pid mono">U01K5HZBBKY4ST0A11WC85VR851</span></div>
+        <p class="why">원본이 404라 삭제 대상인데 <b>앱에서 잠금이 걸려 있어</b> 스킬이 못 지운다. 잠금만 풀어주면 정리된다.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TIER 2 ── -->
+  <section class="tier t-rule">
+    <div class="tier-head">
+      <h2>규칙을 정해줘야 움직이는 것</h2>
+      <span class="tier-count">260건</span>
+      <p class="tier-note">개별 판정이 아니라 "이 무더기를 어떻게 할래"를 정하는 문제다. 전부 상품명 단계에 쌓여 있다.</p>
+    </div>
+
+    <div class="card">
+      <div class="scroll"><table class="tally">
+        <thead><tr><th>무더기</th><th class="num">건수</th><th>왜 멈춰 있나</th></tr></thead>
+        <tbody>
+          <tr><td><b>보류(카테고리의심)</b></td><td class="num mono">113</td><td>카테고리가 미심쩍어 상품명을 안 만들었다. 지난 회차 누적분이고 <b>재교정 1회 한정</b> 규칙에 걸려 자동으로 다시 안 들어간다.</td></tr>
+          <tr><td><b>검증실패</b></td><td class="num mono">108</td><td>만든 이름이 자체 검증을 통과 못 했다. 같은 규칙으로 자동 재진입이 막혀 있다.</td></tr>
+          <tr><td><b>보류(키워드부족)</b></td><td class="num mono">25</td><td>셀러라이프 카테고리에 쓸 만한 키워드가 모자라 이름을 못 지었다.</td></tr>
+          <tr><td><b>미착수(빈칸)</b></td><td class="num mono">14</td><td>카테고리 5종(인테리어파티션·사무캐비닛·파라솔·PC마이크·기타사무교구)이 <b>셀러라이프 통다운에 아예 없다.</b> 뷰가 안 만들어져 무키워드 경로도 못 탄다.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="ask" style="border-bottom:none; border-top:1px solid var(--line)"><b>정할 것.</b> ① 재교정 1회 한정을 풀고 221건(113+108)을 한 번 더 태울지 ② 키워드부족 25건을 무키워드 경로로 보낼지 ③ 통다운 14건은 셀러라이프 갱신까지 그냥 둘지.</p>
+    </div>
+  </section>
+
+  <!-- ── TIER 3 ── -->
+  <section class="tier t-hand">
+    <div class="tier-head">
+      <h2>불사자 앱에서 손으로 해야 하는 것</h2>
+      <span class="tier-count">276건</span>
+      <p class="tier-note">MCP에 변경 API가 없어서 자동화가 닿지 않는 구간이다.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>옵션축 이름 고치기</h3><span class="n mono">276건 · 전부 대기</span></div>
+      <p class="ask">축 이름이 값과 안 맞는 것들이다. 예를 들어 축 이름은 <b>색상</b>인데 값은 모델명·규격이 들어 있다. 시트 <b>옵션축</b> 탭에 상품별로 제안 이름까지 적혀 있다.</p>
+      <div class="scroll"><table class="tally">
+        <thead><tr><th>신호</th><th class="num">건수</th></tr></thead>
+        <tbody>
+          <tr><td>색상 축인데 값에 색이 없다</td><td class="num mono">109</td></tr>
+          <tr><td>번역 잔재 (颜色分类 등 중국어 축명)</td><td class="num mono">17</td></tr>
+          <tr><td>번역 잔재 + 색상 축 불일치</td><td class="num mono">10</td></tr>
+          <tr><td>의미 없는 축 이름</td><td class="num mono">4</td></tr>
+          <tr><td>신호 없음 (검토만)</td><td class="num mono">136</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ── 발견 ── -->
+  <section class="tier">
+    <div class="card" style="border-color:var(--ok)">
+      <div class="card-head" style="background:var(--ok-soft); border-bottom-color:var(--ok)">
+        <h3 style="color:var(--ok)">옵션 판정 큐 — 58건 중 45건은 판정거리가 아니었다</h3>
+        <span class="n mono">2026-08-15 처리</span>
+      </div>
+      <p class="ask"><b>08-07에 스킬이 교체됐는데(커밋 <code>317981f</code>), 그 전 회차의 보류가 원장에 그대로 남아 있었다.</b> 지금 코드로는 나올 수 없는 상태값이라 사람이 볼 게 아니라 다시 돌릴 대상이다.</p>
+      <div class="scroll"><table class="tally">
+        <thead><tr><th>보류 상태</th><th class="num">건수</th><th>지금 어떻게 되나</th></tr></thead>
+        <tbody>
+          <tr><td><b>보류(기본형 수동판단)</b></td><td class="num mono">18</td><td><b>폐지된 규칙이다.</b> 코드에 문자열조차 없고, <code>test_마커수동은_폐지됐다</code> 가 같은 입력에 <code>정리대상</code>이 나오는지 못박아 뒀다. 주석에 "용쌤1-1에서 75건이 그랬다"는 전례까지 있다</td></tr>
+          <tr><td><b>보류(기본형)</b></td><td class="num mono">20</td><td>당시엔 전부-아니면-전무라 통째로 막혔다. 지금은 <b>부분저장</b>(이름만 건너뛰고 판매·대표·순서는 저장) + 재작업 표시로 자동 재진입</td></tr>
+          <tr><td><b>확인요 · 이름규칙</b></td><td class="num mono">7</td><td>구버전 판정. 재실행하면 현행 규칙으로 다시 매겨진다</td></tr>
+        </tbody>
+      </table></div>
+      <p class="ask" style="border-bottom:none; border-top:1px solid var(--line)"><b>오늘 처리분</b> — 워커 판정이 원장에 닿지 않았던 28건을 다시 돌려 <b>20건 저장</b>(2인용 자전거 0→104 · 24인치 자전거 0→54 · 자이언트플라워 0→32 · 인버터 0→21). 품목이 아예 다른 <b>6건은 이미 휴지통</b>이라 현황판만 맞췄다.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>대표옵션을 어디에 둘까 — 6건</h3><span class="n mono">전부 같은 사유</span></div>
+      <p class="ask"><b>대표 = 기준가다.</b> 판매 범위가 <b>기준가 이상 ~ 기준가 1.5배 이하</b>로 잘리므로, 대표를 어디에 두느냐가 몇 개를 팔 수 있는지를 정한다. 워커가 최저가 아닌 값을 대표로 찍었고(지시서 §5는 "최저가 동률일 때만"), 스크립트는 규칙대로 최저가를 쓰고 판단을 올렸다.</p>
+
+      <div class="item" style="background:var(--now-soft)">
+        <div class="item-top"><span class="pname">나무조명 LED 야외 PAR30 축제 글램핑</span><span class="pid mono">U01KS1WY75PYKS3F0NXYP81J209</span></div>
+        <p class="why">가격대 <b>45,300 ~ 622,800원</b>으로 13배나 벌어져 있다. 최저가(꽃가지 75cm)를 대표로 두면 상한이 67,950원이라 <b>주력인 1.5m 480구(86,100원)가 통째로 잘린다.</b></p>
+        <div class="scroll"><table class="tally" style="margin-top:6px">
+          <thead><tr><th>대표를 어디에</th><th class="num">상한</th><th class="num">팔 수 있는 옵션</th></tr></thead>
+          <tbody>
+            <tr><td>최저가 45,300원 (현재)</td><td class="num mono">67,950</td><td class="num mono" style="color:var(--now)">1 / 23</td></tr>
+            <tr><td><b>중간값 149,200원</b></td><td class="num mono">223,800</td><td class="num mono" style="color:var(--ok)"><b>10 / 23</b></td></tr>
+          </tbody>
+        </table></div>
+        <div class="opts"><span class="opt" style="border-color:var(--ok); color:var(--ok)">대표 올리기 (권장 — 1개 → 10개)</span><span class="opt">이대로 (1개만 판매)</span></div>
+      </div>
+
+      <div class="item" style="background:var(--ok-soft)">
+        <div class="item-top"><span class="pname">대형 자바라 천막 포장마차 쉘터 프레임</span><span class="pid mono">U01KS1WY75PZ6VAQ5V0D85TEXJQ</span></div>
+        <p class="why">가격대가 <b>43,800 ~ 54,200원</b>으로 촘촘하다. 최저가 대표면 <b>37개 전부</b> 범위 안에 들어온다. 대표를 올리면 오히려 싼 것들이 하한 밑으로 떨어져 21개로 준다.</p>
+        <div class="opts"><span class="opt" style="border-color:var(--ok); color:var(--ok)">이대로 승인 (권장 — 손실 0)</span></div>
+      </div>
+
+      <div class="item" style="background:var(--ok-soft)">
+        <div class="item-top"><span class="pname">음식점 고무바닥매트 깔판 복도 타이어</span><span class="pid mono">U01KS1WY73JP67MD9ZFCGCAKY3V</span></div>
+        <p class="why">600행짜리. 최저가 66,500원 대표가 <b>441개</b>를 살리는데, 대표를 올리면 270개로 준다. 최저가가 유리하다.</p>
+        <div class="opts"><span class="opt" style="border-color:var(--ok); color:var(--ok)">이대로 승인 (권장)</span></div>
+      </div>
+
+      <div class="item" style="background:var(--ok-soft)">
+        <div class="item-top"><span class="pname">프리다이빙 장비 가방 핀백 하드케이스</span><span class="pid mono">U01KS1WY77HG63R6E89DB9KX1M9</span></div>
+        <p class="why">11개 중 최저가 대표로 <b>7개</b>. 대표를 올리면 6개로 오히려 준다.</p>
+        <div class="opts"><span class="opt" style="border-color:var(--ok); color:var(--ok)">이대로 승인 (권장)</span></div>
+      </div>
+
+      <div class="item">
+        <div class="item-top"><span class="pname">겨울 인조나무 조화 장식품 실내</span><span class="pid mono">U01KS1WY75WT6C0A46NRM3M8J3H</span></div>
+        <p class="why">55,100 ~ 322,000원. 최저가 대표 <b>9개</b> → 대표를 올리면 <b>13개</b>. 이득이 크진 않다.</p>
+        <div class="opts"><span class="opt">이대로 (9개)</span><span class="opt">대표 올리기 (13개)</span></div>
+      </div>
+
+      <div class="item">
+        <div class="item-top"><span class="pname">로블록스 마인크래프트 자석블록 세트</span><span class="pid mono">U01KS1WY7692PEM6X5J69XA6TJ9</span></div>
+        <p class="why">69,300 ~ 474,000원. 최저가 대표 <b>8개</b> → 올리면 <b>9개</b>. 차이가 거의 없다.</p>
+        <div class="opts"><span class="opt">이대로 (권장 — 차이 1개)</span><span class="opt">대표 올리기</span></div>
+      </div>
+
+      <p class="ask" style="border-bottom:none; border-top:1px solid var(--line)"><b>정리하면 손댈 건 나무조명 하나다.</b> 나머지 5건은 최저가 대표가 이미 최선이거나(자바라·고무매트·프리다이빙) 차이가 미미하다(인조나무·로블록스). 대표를 올리면 <b>그보다 싼 옵션은 하한 밑으로 떨어져 빠진다</b>는 점이 판단의 축이다.</p>
+    </div>
+
+    <div class="flag" style="display:none">
+      <h3>먼저 봐야 할 것 — 워커 판정이 원장에 안 들어갔다</h3>
+      <p><b>28개 상품이 워커 판정 없이 기록됐다.</b> 그래서 옵션이 전부 "비상품/메인상품 아님"으로 떨어지고 <b>남은 게 0개</b>가 됐다. 워커가 과하게 거른 게 아니다 — 판정 자체가 원장에 닿지 않았다.</p>
+      <p class="ev">
+        <b>증거 1.</b> 그 28건은 원장의 <b>메인상품·대표옵션·기준가가 전부 빈칸</b>이다. 반면 보류(기본형 수동판단) 18건과 확인요 9건은 <b>27건 전부 채워져 있다.</b><br>
+        <b>증거 2.</b> 24인치 MTB 자전거의 워커 결과 파일을 열어보면 <b>54개를 전부 <code>유지</code>에 넣었고 <code>제외</code>는 빈 배열</b>이다. 메인상품도 "24/26인치 성인 산악자전거(색상·기어단수별)"로 제대로 적었다.<br>
+        <b>증거 3.</b> run <code>2-2</code>는 배치 199개에 <b>결과 0개</b>(워커 미실행), run <code>2-2u</code>는 배치 194개에 결과 969건. 원장은 결과가 없는 <code>2-2</code> 쪽으로 쓰였다.
+      </p>
+      <p><b>반영만 하면 23개 상품에서 옵션 618개가 살아난다.</b> 2인용 자전거 0→114 · 차량용 인버터 0→80 · 24인치 자전거 0→54 · 병뚜껑 밀봉기 0→46.</p>
+      <p style="color:var(--muted); font-size:13.5px"><b>다만 그 판정은 8월 6일자라 9일 묵었다.</b> 그대로 밀지 말고 그 28건만 <code>prep</code>을 다시 돌리는 게 맞다 — 가격·옵션이 그새 바뀌었으면 낡은 계획이 덮어쓴다. 크레딧 안 드는 구간이다.</p>
+      <p style="color:var(--muted); font-size:13.5px">※ <b>보류(기본형 수동판단) 18건과 확인요 9건은 이것과 별개다.</b> 원장이 채워져 있으니 워커가 실제로 판정한 것이고, 그건 진짜 사람 판정 큐다.</p>
+    </div>
+  </section>
+
+  <footer>
+    <div>출처: 구글시트 <span class="mono">1wMKUs…VXBZo</span> 의 <b>00_진행 · 옵션 · 옵션축</b> 탭 · 2026-08-15 조회</div>
+    <div>썸네일은 이 페이지에서 뺐다 — 별도로 돌고 있고 남은 건 재생성 6건뿐이다.</div>
+  </footer>
+
+</div>

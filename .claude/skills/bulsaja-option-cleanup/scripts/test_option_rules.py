@@ -78,7 +78,7 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(p["기준가"], 10000)
         self.assertEqual(p["유지"], ["1", "2"])
         self.assertEqual(next(e["사유"] for e in p["제외"] if e["id"] == "99"),
-                         "비상품/메인상품 아님")
+                         R.DROP_REASON_MISSING)
 
     def test_워커가_미리_뺀_상한초과분에_가격_근거를_되살린다(self):
         """`유지` 에 넣었어야 할 큰 규격을 워커가 손으로 빼 오면 사유가 뭉개진다.
@@ -99,7 +99,7 @@ class PlanTest(unittest.TestCase):
         rows = [row(99, 500), row(1, 10000), row(2, 14000)]
         p = R.plan(opt(rows), keep_ids={"1", "2"})
         self.assertEqual(next(e["사유"] for e in p["제외"] if e["id"] == "99"),
-                         "비상품/메인상품 아님")
+                         R.DROP_REASON_MISSING)
 
     def test_스크립트가_직접_뺀_건은_사유가_한_번만_붙는다(self):
         """`유지` 에 정상적으로 들어온 상한 초과분 — 종전 사유 그대로다."""
@@ -108,6 +108,41 @@ class PlanTest(unittest.TestCase):
         why = next(e["사유"] for e in p["제외"] if e["id"] == "2")
         self.assertNotIn("비상품", why)
         self.assertEqual(why.count("1.5배 상한 초과"), 1)
+
+    def test_워커가_쓴_제외_사유가_원장에_남는다(self):
+        """2026-08-15 — 워커 사유를 버리고 고정 문자열로 덮어써 매 런 2,772건이 사라졌다."""
+        rows = [row(1, 10000), row(99, 3000)]
+        p = R.plan(opt(rows), keep_ids={"1"},
+                   drop_reasons={"99": "부속품단독: 원문 '单独顶（无支架）' — 지붕만, 프레임 미포함"})
+        self.assertEqual(next(e["사유"] for e in p["제외"] if e["id"] == "99"),
+                         "부속품단독: 원문 '单独顶（无支架）' — 지붕만, 프레임 미포함")
+
+    def test_사유를_안_준_행만_미기재로_표시된다(self):
+        """정당한 제외와 '워커가 사유를 안 썼다'가 원장에서 구분돼야 한다."""
+        rows = [row(1, 10000), row(98, 3000), row(99, 2000)]
+        p = R.plan(opt(rows), keep_ids={"1"}, drop_reasons={"98": "사이즈표: 치수 안내행"})
+        why = {e["id"]: e["사유"] for e in p["제외"]}
+        self.assertEqual(why["98"], "사이즈표: 치수 안내행")
+        self.assertEqual(why["99"], R.DROP_REASON_MISSING)
+        self.assertIn("사유 미기재", R.DROP_REASON_MISSING)
+
+    def test_파생_사유는_워커가_덮지_못한다(self):
+        """1.5배 상한·재고 0 은 스크립트가 계산한 사실이다 — 워커 문장이 이기면 안 된다."""
+        rows = [row(1, 10000), row(2, 30000), row(3, 12000, stock=0)]
+        p = R.plan(opt(rows), keep_ids={"1", "2", "3"},
+                   drop_reasons={"2": "다른모델: 큰 규격", "3": "홍보배너: 안내문"})
+        why = {e["id"]: e["사유"] for e in p["제외"]}
+        self.assertIn("1.5배 상한 초과", why["2"])
+        self.assertNotIn("다른모델", why["2"])
+        self.assertIn("판매불가", why["3"])
+
+    def test_워커_사유에도_상한_초과_가격_근거는_덧붙는다(self):
+        rows = [row(1, 10000), row(2, 30000)]
+        p = R.plan(opt(rows), keep_ids={"1"}, drop_reasons={"2": "다른모델: 대형 규격"})
+        why = next(e["사유"] for e in p["제외"] if e["id"] == "2")
+        self.assertIn("다른모델", why)
+        self.assertIn("1.5배 상한 초과", why)
+
 
     def test_판매가_오름차순이고_동가는_원본_순서다(self):
         rows = [row(1, 14000), row(2, 10000), row(3, 10000)]
@@ -145,6 +180,50 @@ class PlanTest(unittest.TestCase):
         self.assertTrue(any("저장하면 안 된다" in w for w in p["경고"]))
 
 
+class WorkerQCTest(unittest.TestCase):
+    """워커가 지시서를 지켰는지 **재는** 검사 (2026-08-15, 4-2 발).
+
+    말한 걸 지켰는지 재는 자리가 없으면 지켜지지 않는다 — 4-1 에서 51%가 `제외` 를 비웠고,
+    4-2 에서 17건이 금지된 근거를 썼다(손으로 79건을 되돌린 뒤 1건으로 수렴).
+    """
+
+    def test_유지_제외_어디에도_없는_판매행을_행_단위로_잡는다(self):
+        rows = [row(1, 10000), row(2, 11000), row(3, 12000)]
+        qc = R.worker_qc(opt(rows), {"유지": ["1"], "제외": [{"id": "2", "사유": "사이즈표: 안내"}]})
+        self.assertEqual(qc["미언급"], ["3"])
+        self.assertTrue(qc["위반"])
+
+    def test_전부_적었으면_위반이_아니다(self):
+        rows = [row(1, 10000), row(2, 11000)]
+        qc = R.worker_qc(opt(rows), {"유지": ["1"],
+                                     "제외": [{"id": "2", "사유": "다른모델: 단일모터"}]})
+        self.assertEqual(qc["미언급"], [])
+        self.assertEqual(qc["무분류수"], 0)
+        self.assertFalse(qc["위반"])
+
+    def test_현재상태를_근거로_뺐으면_잡는다(self):
+        rows = [row(1, 10000), row(2, 11000)]
+        qc = R.worker_qc(opt(rows), {"유지": ["1"], "제외": [
+            {"id": "2", "사유": "현재제외 상태 유지 — 최고가·재고 저조"}]})
+        self.assertEqual([x["id"] for x in qc["상태근거"]], ["2"])
+
+    def test_상태를_뒤집었다는_서술은_잡지_않는다(self):
+        """4-1 에서 12건 중 9건이 이런 정상 건이었다 — 낱말만 보면 정상을 재작업시킨다."""
+        rows = [row(1, 10000), row(2, 11000), row(3, 12000)]
+        qc = R.worker_qc(opt(rows), {"유지": ["1"], "제외": [
+            {"id": "2", "사유": "홍보배너: 우선발송 안내문 — 기존 현재대표였으나 뒤집힘"},
+            {"id": "3", "사유": "부속품단독: LED 미포함 — 현재상태는 유지였으나 정정"}]})
+        self.assertEqual(qc["상태근거"], [])
+        self.assertFalse(qc["위반"])
+
+    def test_분류가_안_붙은_사유를_센다(self):
+        rows = [row(1, 10000), row(2, 11000), row(3, 12000)]
+        qc = R.worker_qc(opt(rows), {"유지": ["1"], "제외": [
+            {"id": "2", "사유": "부속품단독: 원문 单独"},
+            {"id": "3", "사유": "그냥 본품이 아님"}]})
+        self.assertEqual(qc["무분류수"], 1)
+
+
 class SpecMainTest(unittest.TestCase):
     """상품명이 규격어로 지정한 대표 (2026-08-05 이룸님).
 
@@ -180,8 +259,15 @@ class SpecMainTest(unittest.TestCase):
         self.assertIsNotNone(p["대표충돌"])
         self.assertEqual(p["대표충돌"]["지정"], "2")
         self.assertEqual(p["대표충돌"]["근거키워드"], "3단서빙카트")
-        self.assertEqual(p["대표충돌"]["사유"], "비상품/메인상품 아님")
+        self.assertEqual(p["대표충돌"]["사유"], R.DROP_REASON_MISSING)
         self.assertIsNone(p["대표"], "충돌이면 계산하지 않는다")
+
+    def test_대표충돌_사유에_워커_문장이_올라간다(self):
+        """`다른모델이 맞다` 와 `잘못 뺐다` 는 사유를 읽어야 갈린다 — 그래서 사유가 정본이다."""
+        rows = [row(1, 10000), row(2, 12000)]
+        p = R.plan(opt(rows), keep_ids={"1"}, spec_main="2", spec_keyword="3단",
+                   drop_reasons={"2": "다른모델: 상품명·대표군은 듀얼모터인데 이 행은 단일모터"})
+        self.assertIn("다른모델", p["대표충돌"]["사유"])
 
     def test_지정_옵션이_재고0이어도_대표충돌이다(self):
         rows = [row(1, 10000), row(2, 12000, stock=0)]
@@ -645,6 +731,49 @@ class LabelTest(unittest.TestCase):
         dims = [{"이름": "종류", "values": [{"vid": 1, "name": "A. 블랙"}]}]
         o = {"차원": dims, "판매행": [], "vid고유": True}
         self.assertEqual(R.with_prefix_cleanup(o, {}), {})
+
+    def test_기존_이름끼리_겹치면_기계적으로_갈라놓는다(self):
+        # 25-2 실측: 워커가 손도 안 댄 기존 이름끼리 겹쳐 저장이 통째로 거부됐다
+        # ("최종 옵션 이름이 서로 겹쳐 저장할 수 없습니다. 겹치는 이름 16가지").
+        dims = [{"이름": "색상", "values": [{"vid": 1, "name": "펄 화이트 일반"},
+                                          {"vid": 2, "name": "펄 화이트 일반"},
+                                          {"vid": 3, "name": "펄 화이트 일반"}]}]
+        o = {"차원": dims, "판매행": [], "vid고유": True}
+        out = R.with_dedup_cleanup(o, {})
+        self.assertEqual(R.check_names(R.effective_names(o, out),
+                                       groups=R.pos_groups(o))["중복"], {},
+                         "중복을 못 풀었다")
+        self.assertNotIn("@0:1", out, "첫 번째는 그대로 둬야 한다")
+        self.assertEqual(out["@0:2"], "펄 화이트 일반 2")
+        self.assertEqual(out["@0:3"], "펄 화이트 일반 3")
+
+    def test_기본형_마커가_붙은_이름은_번호를_면한다(self):
+        # 마커는 상품명과 짝을 이루는 유일한 표식이라 이름 끝에 남아야 한다.
+        dims = [{"이름": "색상", "values": [{"vid": 1, "name": "회색 테이블"},
+                                          {"vid": 2, "name": "회색 테이블 기본형"}]}]
+        o = {"차원": dims, "판매행": [], "vid고유": True}
+        out = R.with_dedup_cleanup(o, {"1": "회색 테이블 기본형"})
+        self.assertEqual(out["1"], "회색 테이블 기본형", "마커 붙은 워커 이름에 번호를 붙였다")
+        self.assertTrue(out["@0:2"].endswith(" 2"))
+
+    def test_중복이_없으면_아무것도_안_바꾼다(self):
+        dims = [{"이름": "색상", "values": [{"vid": 1, "name": "블랙"},
+                                          {"vid": 2, "name": "화이트"}]}]
+        o = {"차원": dims, "판매행": [], "vid고유": True}
+        self.assertEqual(R.with_dedup_cleanup(o, {"1": "무광 블랙"}), {"1": "무광 블랙"})
+
+    def test_차원이_다르면_같은_이름을_그대로_둔다(self):
+        out = R.with_dedup_cleanup(_dual(), {})
+        self.assertEqual(out, {}, "차원이 다른 동명을 중복으로 잡았다")
+
+    def test_번호를_붙여도_이름_상한을_넘지_않는다(self):
+        long = "가" * R.NAME_MAX
+        dims = [{"이름": "색상", "values": [{"vid": 1, "name": long},
+                                          {"vid": 2, "name": long}]}]
+        o = {"차원": dims, "판매행": [], "vid고유": True}
+        out = R.with_dedup_cleanup(o, {})
+        self.assertLessEqual(len(out["@0:2"]), R.NAME_MAX)
+        self.assertTrue(out["@0:2"].endswith(" 2"))
 
     def test_이름변경표는_안_바뀐_것도_남긴다(self):
         o = opt([row(1, 10000), row(2, 20000)])

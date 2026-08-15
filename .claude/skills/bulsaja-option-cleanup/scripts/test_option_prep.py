@@ -457,6 +457,70 @@ class HandoffTest(unittest.TestCase):
         self.assertEqual(sorted(c[0] for c in self.calls), ["상품명", "썸네일"])
 
 
+class RoundtripCloseTest(unittest.TestCase):
+    """옵션↔썸네일 왕복 종결 — 2회차부터는 `실물기준없음` 을 코드가 붙인다.
+
+    2026-08-15 용쌤2-1 §9: 옵션 57건을 고쳐 31건을 썸네일로 돌려보냈는데 2회전에서
+    `대표옵션의심` 8건 · `기준이미지없음` 1건이 또 나왔다. 끊는 낱말은 이미 있고
+    워커 프롬프트도 그걸 넣으라고 시키는데 **워커가 안 붙였다**.
+    """
+
+    def setUp(self):
+        self.calls = []
+        self.run_dir = tempfile.mkdtemp()
+        self._orig = run_options.matrix.flag_many
+        run_options.matrix.flag_many = (
+            lambda sheet, task, items, from_task=None, **kw:
+            (self.calls.append((task, dict(items))), len(items))[1])
+
+    def tearDown(self):
+        run_options.matrix.flag_many = self._orig
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _batch(self, redo_reason):
+        """배치에 `재작업사유`(썸네일이 되돌리며 남긴 값)를 실어둔다."""
+        os.makedirs(os.path.join(self.run_dir, "batches"), exist_ok=True)
+        with open(os.path.join(self.run_dir, "batches", "batch_001.json"),
+                  "w", encoding="utf-8") as f:
+            json.dump({"products": [{"productId": "P1", "재작업사유": redo_reason}]},
+                      f, ensure_ascii=False)
+
+    def _run(self, redo_reason, handoff_reason):
+        self._batch(redo_reason)
+        rows = [("P1", {"대표": "1"},
+                 {"이관": [{"단계": "썸네일", "사유": handoff_reason}]}, "정리대상")]
+        run_options._handoff("SHEET", rows, {"P1": "완료"}, {}, self.run_dir)
+        return self.calls[0][1]["P1"] if self.calls else None
+
+    def test_썸네일이_되돌린_건이면_실물기준없음을_붙인다(self):
+        for mark in run_options.FROM_THUMB_MARKS:
+            with self.subTest(mark=mark):
+                self.calls.clear()
+                got = self._run(f"[썸네일] {mark}: 대표옵션이 배너다", "대표를 새로 세웠다")
+                self.assertTrue(got.startswith(run_options.NO_REAL_BASE), got)
+                self.assertIn("대표를 새로 세웠다", got, "원래 사유가 사라졌다")
+
+    def test_워커가_이미_붙였으면_두_번_안_붙인다(self):
+        got = self._run("[썸네일] 기준이미지없음",
+                        f"{run_options.NO_REAL_BASE}: 옵션 이미지가 전부 도면")
+        self.assertEqual(got.count(run_options.NO_REAL_BASE), 1)
+
+    def test_첫_이관에는_붙이지_않는다(self):
+        """옵션이 처음 보내는 건은 대표를 새로 세운 것뿐 — 왕복이 아니다."""
+        got = self._run("", "대표 동률로 원본 순서 지정")
+        self.assertEqual(got, "대표 동률로 원본 순서 지정")
+
+    def test_썸네일발이_아닌_재작업사유에는_붙이지_않는다(self):
+        got = self._run("[상품명] 규격어 누락", "대표색 불일치")
+        self.assertEqual(got, "대표색 불일치")
+
+    def test_run_dir_이_없으면_종전대로_동작한다(self):
+        rows = [("P1", {"대표": "1"},
+                 {"이관": [{"단계": "썸네일", "사유": "대표색 불일치"}]}, "정리대상")]
+        run_options._handoff("SHEET", rows, {"P1": "완료"}, {})
+        self.assertEqual(self.calls[0][1]["P1"], "대표색 불일치")
+
+
 class DeletionCandidateTest(unittest.TestCase):
     """`삭제후보` — 상품명과 옵션 실물이 아예 다른 품목 (2026-08-06 이룸님)."""
 
@@ -554,18 +618,25 @@ class CommitResumeAndMatrixTest(unittest.TestCase):
             "_handoff": run_options._handoff,
             "OptionMCP": run_options.OptionMCP,
         }
+        self._orig_verify = run_options.R.verify
         matrix.read = lambda sheet: {}
         matrix.mark_many = lambda sheet, task, d, matrix=None: (
             self.marks.append(dict(d)) or len(d))
         snapshot.load = lambda pid: {"옵션": {"판매행": [{"id": "1"}]}}
         run_options._log_sheet = lambda *a, **k: self.logged.append("원장")
         run_options._log_axis_sheet = lambda *a, **k: self.logged.append("축")
-        run_options._handoff = lambda sheet, rows, done, m: self.handoffs.append(dict(done))
+        run_options._handoff = (lambda sheet, rows, done, m, run_dir="":
+                                self.handoffs.append(dict(done)))
 
     def tearDown(self):
         for k, v in self._orig.items():
             setattr(self.matrix if k in ("read", "mark_many") else
                     (snapshot if k == "load" else run_options), k, v)
+        # **`run_options.R` 은 option_rules 모듈 그 자체다** — `_run` 이 거기에 꽂은
+        # `verify` 스텁을 안 되돌리면 프로세스 전역으로 남는다. 실제로 discover 실행에서
+        # 뒤에 오는 test_option_rules 의 검증 테스트 8개가 통째로 무력화돼 있었다
+        # (혼자 돌리면 통과, 전체로 돌리면 실패 — 반대로 착각하기 쉬운 형태다).
+        run_options.R.verify = self._orig_verify
         shutil.rmtree(self.run_dir, ignore_errors=True)
 
     def _args(self, **kw):

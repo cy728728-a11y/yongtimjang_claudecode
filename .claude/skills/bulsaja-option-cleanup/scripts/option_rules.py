@@ -39,6 +39,26 @@ PRICE_MULTIPLE_LOW = 0.5
 BASE_SUFFIX = "기본형"
 # rename 키가 (차원, 값) 위치 지정임을 나타내는 접두사. 판매행 id("1:1")와 구분하려고 붙인다.
 POS_KEY_PREFIX = "@"
+
+# 제외 사유의 **기본값** — 워커가 사유를 안 썼을 때만 쓴다 (2026-08-15).
+# `(사유 미기재)` 를 달아 두는 게 핵심이다. 예전엔 워커 사유를 버리고 이 문자열로 전건을
+# 덮어써서, 원장만 보면 **정당한 제외**와 **워커가 사유를 안 썼다**가 똑같이 보였다
+# (4-1 실측: 상세 사유 2,772건이 매 런마다 버려졌다).
+DROP_REASON_MISSING = "비상품/메인상품 아님(사유 미기재)"
+
+# 제외 8분류 — 워커가 사유 앞 토막에 그대로 쓰는 낱말(`부속품단독: 원문 …`).
+# `옵션명-규칙.md §메인상품 선별` 의 목록과 **같은 것**이다. 문서와 여기가 갈리면
+# `worker_qc` 의 `무분류수` 가 전건을 무분류로 센다.
+DROP_CATEGORIES = ("구매금지안내", "사이즈표", "보증금", "추가금", "홍보배너",
+                   "부속품단독", "다른모델", "불완전구성", "가격유인")
+
+# 워커 준수 검사용 낱말 (2026-08-15, 4-2 발).
+# `현재제외`·`현재대표` 는 자주 뒤집혀 있어 제외 근거가 될 수 없다(§현재 상태를 믿지 마라).
+# **낱말만 보면 안 된다** — 상태를 *뒤집었다고 서술*한 정상 건까지 걸린다(4-1: 12건 중
+# 9건이 정상이었다). 상태어 + 의존어가 함께 있고 뒤집음 서술이 없을 때만 위반이다.
+_STATE_WORD = re.compile(r"현재\s*(상태|제외|대표)|재고\s*정책|이미\s*제외|판매\s*중지")
+_RELY_WORD = re.compile(r"그대로|유지|존중|준용|이므로|라서|에\s*따라|근거로|반영")
+_OVERRIDE_WORD = re.compile(r"였으나|이었으나|였지만|이지만|뒤집|복구|정정|무시하고")
 # 정렬용 접두사: 'A. ' 'B) ' '가. ' 등. 실제 사이즈 S/M/L/XL 은 보존해야 하므로
 # **한 글자 + 구두점** 형태만 벗긴다(뒤에 반드시 공백 아닌 내용이 남아야 한다).
 _PREFIX = re.compile(r"^\s*[A-Za-z0-9가-힣]\s*[.)]\s+(?=\S)")
@@ -325,6 +345,41 @@ def with_prefix_cleanup(option, names):
     return out
 
 
+def with_dedup_cleanup(option, names):
+    """같은 차원 안에서 겹치는 최종 이름을 **기계적으로** 갈라 놓는다 (2026-08-15).
+
+    불사자는 `renameValues` 에 실리지 않은 값까지 포함해 **전 옵션의 최종 이름**을 보고
+    겹치면 저장 자체를 거부한다("최종 옵션 이름이 서로 겹쳐 저장할 수 없습니다").
+    그래서 워커가 손도 안 댄 **기존 이름끼리의 중복**이 상품을 통째로 떨어뜨린다
+    (25-2 신규 958건 실측 1건 — 워커 메모는 "중복은 제외행끼리라 영향 없음"이었지만
+     서버는 판매 여부를 가리지 않는다. 팬아웃을 다시 돌려도 같은 자리에서 또 실패했다).
+
+    갈라놓기는 판단이 아니라 변환이다 — 첫 번째는 그대로 두고 뒤엣것에 ` 2`, ` 3` …을
+    붙인다. `기본형` 마커가 붙은 이름을 **첫 번째로 고정**해 마커가 번호에 밀려
+    이름 끝을 벗어나지 않게 한다(마커는 상품명과 짝을 이루는 유일한 표식이다).
+    상한(`NAME_MAX`)을 넘으면 접미 자리만큼 **앞을 잘라** 붙인다.
+
+    `with_prefix_cleanup` 과 달리 `names` 가 비어도 돈다 — 이름을 안 바꾸는 상품도
+    기존 이름끼리 겹치면 판매·대표·순서 저장까지 같이 막히기 때문이다.
+    """
+    out = dict(names or {})
+    eff = effective_names(option, out)
+    groups = pos_groups(option)
+    dup = check_names(eff, groups=groups)["중복"]
+    if not dup:
+        return out
+    for _name, keys in dup.items():
+        # 마커가 붙은 이름을 앞에 세운다(그 이름만 번호를 면한다). 나머지는 안정 정렬.
+        ordered = sorted(keys, key=lambda k: (not has_base_suffix(eff.get(k, "")), keys.index(k)))
+        for n, key in enumerate(ordered[1:], start=2):
+            base = str(eff.get(key, "")).strip()
+            suffix = f" {n}"
+            if len(base) + len(suffix) > NAME_MAX:
+                base = base[:NAME_MAX - len(suffix)].strip()
+            out[key] = f"{base}{suffix}"
+    return out
+
+
 def has_base_suffix(name):
     """이름이 `기본형` 으로 끝나는가."""
     return str(name or "").strip().endswith(BASE_SUFFIX)
@@ -519,8 +574,47 @@ def sellable(row, require_stock=True):
     return True
 
 
+def worker_qc(option, worker):
+    """워커가 지시서를 지켰는지 **기계로 잰다** (2026-08-15). 판단은 하지 않는다.
+
+    지시서에 규칙을 적는 것만으론 지켜지지 않는다 — 4-1 에서 워커 51%가 `제외` 를 통째로
+    비웠고, 4-2 에서 17건이 금지된 근거(`현재제외 상태 유지`)를 썼다. 재는 자리를 만든다.
+
+    ① **미언급** — `유지`·`제외` 어디에도 안 적힌 판매행. **행 단위로 센다.**
+       "제외 배열이 비었다"(상품 단위)로 보면 부분 생략을 놓친다 — 판매행 450개 중
+       234개만 안 적은 상품은 배열이 비어 있지 않아 그물에 안 걸린다.
+    ② **상태근거** — 현재 상태에 *의존해* 뺐다고 쓴 행. 상태를 *뒤집었다*고 쓴 건 정상이다
+       (`홍보배너: … 기존 현재대표였으나 뒤집힘`). 세 겹(상태어·의존어·뒤집음 없음)을
+       거쳐야 오탐이 안 난다.
+    ③ **무분류수** — 사유 앞 토막이 `DROP_CATEGORIES` 가 아닌 제외행 수. 분류가 붙어야
+       `대표충돌` 을 기계로 가릴 수 있다.
+
+    저장을 막지 않는다 — 제외 목록 자체는 유지 여집합이라 완전하고, 흔들리는 건
+    "사유를 믿어도 되는가"뿐이다. 재실행 판단은 사람이 수치를 보고 한다.
+    """
+    rows = list((option or {}).get("판매행") or [])
+    drops = [e for e in ((worker or {}).get("제외") or ())
+             if isinstance(e, dict) and e.get("id")]
+    said = {str(i) for i in ((worker or {}).get("유지") or ())}
+    said |= {str(e["id"]) for e in drops}
+    unsaid = [str(r["id"]) for r in rows if str(r["id"]) not in said]
+
+    state, uncat = [], 0
+    for e in drops:
+        why = str(e.get("사유") or "").strip()
+        if (_STATE_WORD.search(why) and _RELY_WORD.search(why)
+                and not _OVERRIDE_WORD.search(why)):
+            state.append({"id": str(e["id"]), "사유": why[:140]})
+        if why.split(":", 1)[0].strip() not in DROP_CATEGORIES:
+            uncat += 1
+    return {"판매행수": len(rows), "제외수": len(drops),
+            "미언급": unsaid, "상태근거": state, "무분류수": uncat,
+            "위반": bool(unsaid or state)}
+
+
 def plan(option, keep_ids, names=None, prefer_id=None, require_stock=True,
-         multiple=PRICE_MULTIPLE, spec_main=None, spec_keyword=""):
+         multiple=PRICE_MULTIPLE, spec_main=None, spec_keyword="",
+         drop_reasons=None):
     """정리안을 계산한다. 불사자를 부르지 않는다.
 
     option    = 스냅샷의 `옵션` (차원·판매행·vid고유)
@@ -532,6 +626,9 @@ def plan(option, keep_ids, names=None, prefer_id=None, require_stock=True,
                 `상품명 = 대표옵션 = 썸네일` 이 한 물건을 가리킨다. 지정 옵션이 유지 집합에
                 없으면 계산하지 않고 `대표충돌` 을 세워 돌려준다(저장 금지).
     spec_keyword = 그 지정의 근거 키워드 — 원장에 남길 용도.
+    drop_reasons = {판매행 id: 워커가 쓴 제외 사유} (2026-08-15). **워커 사유가 정본이다** —
+                안 넘기면 제외행 전부가 `DROP_REASON_MISSING` 으로 덮여 왜 뺐는지가
+                원장에서 사라진다(표본검수·사후 재작업·`대표충돌` 판정이 전부 이걸 읽는다).
 
     반환: {대표, 기준가, 상한, 하한, 유지[], 제외[{id,사유}], 순서[], 경고[],
            이름검사, 대표충돌}
@@ -539,6 +636,7 @@ def plan(option, keep_ids, names=None, prefer_id=None, require_stock=True,
     rows = list(option.get("판매행") or [])
     order_of = {r["id"]: i for i, r in enumerate(rows)}
     keep = set(keep_ids or ())
+    why_of = {str(k): str(v).strip() for k, v in (drop_reasons or {}).items()}
     warn = []
 
     # ① 메인상품이면서 실제로 팔 수 있는 행만 후보
@@ -549,9 +647,14 @@ def plan(option, keep_ids, names=None, prefer_id=None, require_stock=True,
               "유지": [], "제외": [], "순서": [], "경고": warn, "이름검사": None,
               "대표충돌": None}
 
+    # 워커가 뺀 행 — **워커가 쓴 사유가 정본**이고, 없을 때만 기본값을 쓴다.
+    # 여기 담은 항목만 아래 ③-b 에서 가격 근거를 덧붙인다(스크립트가 뺀 건은 대상 아님).
+    worker_drops = []
     for r in rows:
         if r["id"] not in keep:
-            result["제외"].append({"id": r["id"], "사유": "비상품/메인상품 아님"})
+            e = {"id": r["id"], "사유": why_of.get(str(r["id"])) or DROP_REASON_MISSING}
+            result["제외"].append(e)
+            worker_drops.append(e)
     for r in dropped_unsellable:
         result["제외"].append({"id": r["id"], "사유": "판매불가(가격 없음 또는 재고 0)"})
 
@@ -598,7 +701,7 @@ def plan(option, keep_ids, names=None, prefer_id=None, require_stock=True,
     # ③-b 워커가 미리 뺀 행에 **가격 근거를 되살린다** (2026-08-14 3-2 실측).
     #     `유지` 에는 메인상품 판매행 전부를 넣고 상한 걸러내기는 여기서 하는 게 규칙인데
     #     (워커 프롬프트 §2), 워커가 상한 초과분을 손으로 먼저 빼 오는 일이 잦다. 그러면
-    #     사유가 전부 `비상품/메인상품 아님` 으로 뭉개져 **왜 안 파는지가 사라진다**
+    #     사유가 `비상품` 한 줄로 뭉개져 **왜 안 파는지가 사라진다**
     #     (실측: 150cm 공원벤치·3x3m 갠트리크레인·270mm 감압지가 전부 '비상품'으로 찍혔다).
     #     무엇을 파느냐는 안 바뀌므로 저장을 막지 않고, 사유에 가격 사실만 덧붙인다.
     #
@@ -607,9 +710,10 @@ def plan(option, keep_ids, names=None, prefer_id=None, require_stock=True,
     #     가격 사유를 붙이면 정상 제외를 '워커가 잘못 뺐다'로 읽히게 만든다.
     #     상한 초과는 반대다 — 본품보다 비싼 행은 대개 **같은 제품의 큰 규격**이라,
     #     그게 '비상품' 으로만 적히면 왜 안 파는지가 실제로 사라진다.
-    for e in result["제외"]:
-        if e["사유"] != "비상품/메인상품 아님":
-            continue
+    #
+    #     **워커가 쓴 행에만 붙인다**(`worker_drops`). 스크립트가 계산해 뺀 행(1.5배·재고 0)은
+    #     이미 사유에 숫자가 있어 두 번 붙으면 안 된다.
+    for e in worker_drops:
         r = next((x for x in rows if x["id"] == e["id"]), None)
         if r is None or _price(r) is None or _price(r) <= cap:
             continue

@@ -112,6 +112,25 @@ def _today():
     return datetime.date.today().isoformat()
 
 
+def _promote_main(mcp, pid, plan, sleep=0.0):
+    """제외 청크를 보내기 **전에** 새 대표를 판매중·대표로 먼저 세운다 (2026-08-15).
+
+    `excludeSkuIds` 는 200개 상한이라 제외가 많은 상품은 앞 덩어리를 따로 보내는데,
+    그 덩어리에 **현재 대표행**이 섞여 있으면 서버가 "대표 옵션을 판매 제외하거나 대표
+    상태가 올바르지 않습니다"로 저장을 통째로 거부한다 — 그 호출에는 대표를 실을 수
+    없기 때문이다(순서를 함께 실으면 아직 안 뺀 행 때문에 또 거부당한다).
+    25-2 신규 958건 실측: 저장 실패 10건 중 **9건이 전부 제외 200 초과 상품**이었고,
+    팬아웃을 다시 돌려도 같은 자리에서 같은 이유로 또 실패했다.
+
+    대표를 먼저 옮겨 두면 그 뒤로 옛 대표가 어느 덩어리에 들어가든 상관없다.
+    `includeSkuIds` 로 새 대표를 함께 판매중으로 올린다 — 이미 제외돼 있어도 통과한다.
+    이름·순서는 싣지 않는다(이름+순서 금지 조합 · 미완 제외 상태에서의 순서 거부 회피).
+    """
+    mcp.option_update(pid, includeSkuIds=[plan["대표"]], mainSkuId=plan["대표"])
+    if sleep:
+        time.sleep(sleep)
+
+
 class OptionMCP(snapshot.ProductMCP):
     """transport + workdata 는 상속하고, 이 스킬 고유 도구만 얹는다."""
 
@@ -630,7 +649,15 @@ def _plans(run_dir, spec_main=None):
                       keep_ids=set(p.get("유지") or ()),
                       names=names,
                       prefer_id=prefer,
-                      spec_main=sm or None, spec_keyword=sk)
+                      spec_main=sm or None, spec_keyword=sk,
+                      # 워커가 쓴 제외 사유를 그대로 넘긴다 (2026-08-15). 안 넘기면
+                      # 제외행 전부가 고정 문자열로 덮여 **왜 뺐는지가 원장에서 사라진다**
+                      # (4-1 실측: 상세 사유 2,772건이 매 런마다 버려졌다).
+                      drop_reasons={str(e.get("id")): e.get("사유", "")
+                                    for e in (p.get("제외") or [])
+                                    if isinstance(e, dict) and e.get("id")})
+        # 워커가 지시서를 지켰는지 재 둔다 — 사유가 비면 표본검수가 판정을 못 한다.
+        plan["워커준수"] = R.worker_qc(rec["옵션"], p)
         # 규격어 지정으로 대표가 옮겨지면 `기본형` 마커도 따라 옮겨진다. 저장 경로
         # (`_commit` 은 `w["이름"]` 을 쓴다)가 같은 이름을 보게 워커 결과에 되쓴다 —
         # 두 벌이면 검사는 통과하고 저장은 옛 이름으로 나간다.
@@ -717,6 +744,43 @@ def _print_table(rows):
             print(f"{pid:<28} {st:<14}")
 
 
+def _print_worker_qc(rows, run_dir):
+    """워커 준수 수치를 **표본검수보다 먼저** 찍는다 (2026-08-15).
+
+    순서가 핵심이다. 사유가 없으면 표본을 봐도 판정이 안 된다 — 4-1 표본검수에서
+    제외 0건인 상품 2건을 "제외 과다"로 의심하는 오판이 실제로 났다.
+
+    저장은 막지 않는다(제외 목록 자체는 여집합이라 완전하다). 대신 재실행 대상 상품id를
+    `worker_qc.json` 으로 떨어뜨려 재팬아웃을 기계적으로 만든다 — 4-2 가 손으로 79건을
+    뽑던 목록이다. 손으로 하면 다음 사람이 안 한다.
+    """
+    qc = [(pid, plan.get("워커준수") or {}) for pid, plan, _w, _st in rows if plan]
+    if not qc:
+        return
+    unsaid = [(pid, q) for pid, q in qc if q.get("미언급")]
+    state = [(pid, q) for pid, q in qc if q.get("상태근거")]
+    uncat = sum(q.get("무분류수") or 0 for _pid, q in qc)
+    drops = sum(q.get("제외수") or 0 for _pid, q in qc)
+    print(f"\n[워커준수] 상품 {len(qc)}건 · 워커가 사유를 쓴 제외행 {drops}개 "
+          f"· 무분류 {uncat}개")
+    if unsaid:
+        n = sum(len(q["미언급"]) for _pid, q in unsaid)
+        print(f"  ⚠ 미언급 {len(unsaid)}건({n}행) — 유지·제외 어디에도 안 적힌 판매행이 있다. "
+              f"그 행들은 사유 없이 제외로 떨어진다")
+        for pid, q in sorted(unsaid, key=lambda x: -len(x[1]["미언급"]))[:5]:
+            print(f"    {pid} {len(q['미언급'])}/{q['판매행수']}행")
+    if state:
+        print(f"  ⚠ 상태근거 {len(state)}건 — `현재제외`·`현재대표` 를 제외 근거로 썼다"
+              f"(뒤집혀 있는 게 흔해 근거가 못 된다)")
+        for pid, q in state[:5]:
+            print(f"    {pid} {q['상태근거'][0]['사유'][:70]}")
+    if unsaid or state:
+        path = os.path.join(run_dir, "worker_qc.json")
+        _dump(path, {"재실행대상": sorted({pid for pid, _q in unsaid + state}),
+                     "상세": {pid: q for pid, q in qc if q.get("위반")}})
+        print(f"  → 재실행 대상 {len({pid for pid, _q in unsaid + state})}건: {path}")
+
+
 def _print_review(rows):
     """승인 검수표 — 승인해야 할 **옵션명 그 자체**를 보여준다.
 
@@ -800,6 +864,8 @@ def cmd_apply(args):
         if not rows:
             return
     _print_table(rows)
+    # 표본검수 **앞**이다 — 사유를 믿어도 되는지 먼저 알아야 표본 판정이 성립한다.
+    _print_worker_qc(rows, run_dir)
     if not args.no_review:
         _print_review(rows)
 
@@ -870,6 +936,9 @@ def cmd_apply(args):
             "이름변경": [c for c in ((plan or {}).get("이름변경") or []) if c["변경"]],
             "제외상세": [{"id": e["id"], "이름": _lab(plan, e["id"]), "사유": e["사유"]}
                      for e in ((plan or {}).get("제외") or [])],
+            # 워커 준수(2026-08-15) — 세로 러너가 "이 사유를 믿어도 되나"를 판정하는 재료.
+            "미언급": list(((plan or {}).get("워커준수") or {}).get("미언급") or []),
+            "상태근거": list(((plan or {}).get("워커준수") or {}).get("상태근거") or []),
             "기준가": (plan or {}).get("기준가") or "",
             "상한": (plan or {}).get("상한") or "",
             "경고": list((plan or {}).get("경고") or []),
@@ -932,7 +1001,10 @@ def _names_to_save(w, before, partial):
     names = {str(k): v for k, v in (w.get("이름") or {}).items()}
     # 워커가 안 준 값에 남은 정렬용 접두사를 기계적으로 메운다 — 그 한 값 때문에
     # 이름 저장 후 검사가 상품을 통째로 떨어뜨린다(용쌤1-3: 실패 36건 중 32건).
-    return R.with_prefix_cleanup(before, names)
+    names = R.with_prefix_cleanup(before, names)
+    # 제외행까지 포함한 **전 옵션**의 이름 중복을 기계적으로 갈라 놓는다 — 서버는 판매
+    # 여부를 안 가리고 겹치면 저장을 거부한다(25-2 실측 1건, §with_dedup_cleanup).
+    return R.with_dedup_cleanup(before, names)
 
 
 def _memo(plan, w):
@@ -1117,7 +1189,7 @@ def _commit(sheet, rows, args):
                 if committed:
                     n = matrix.mark_many(sheet, TASK, dict(committed), matrix=m)
                     print(f"  현황판({matrix.TAB}) {TASK}: {n}칸 갱신(재개분)")
-                _handoff(sheet, rows, dict(committed), m)
+                _handoff(sheet, rows, dict(committed), m, args.run_dir)
             except Exception as e:  # noqa: BLE001
                 print(f"  [경고] 현황판·이관 실패: {str(e)[:120]}", file=sys.stderr)
         return
@@ -1187,6 +1259,7 @@ def _commit(sheet, rows, args):
                         # 제외가 200을 넘어 나눠 보내야 하는 상품이면 여기서도 앞 덩어리를
                         # 먼저 흘려보내야 한다 — 마지막 덩어리만 실으면 대표 상태가 그대로라
                         # 같은 이유로 또 거부당한다(용쌤1-1 1,000행 상품에서 실측).
+                        _promote_main(mcp, pid, plan, args.sleep)
                         for chunk in drop_chunks:
                             mcp.option_update(pid, excludeSkuIds=chunk)
                             time.sleep(args.sleep)
@@ -1209,8 +1282,12 @@ def _commit(sheet, rows, args):
                     if bad["위반"] or bad["중복"]:
                         raise RuntimeError(f"이름 저장 후 검증 실패: {bad}")
 
-                # ②-0 제외가 200을 넘으면 앞 덩어리들을 먼저 흘려보낸다(대표·순서 없이).
-                #     대표·순서를 여기 실으면 아직 빼지 않은 행이 순서에 남아 거부당한다.
+                # ②-0 제외가 200을 넘으면 앞 덩어리들을 먼저 흘려보낸다(순서 없이).
+                #     순서를 여기 실으면 아직 빼지 않은 행이 순서에 남아 거부당한다.
+                #     대표는 **청크를 보내기 전에 먼저 옮겨 둔다**(_promote_main) — 앞 덩어리에
+                #     현재 대표행이 섞여 있으면 서버가 "대표를 판매 제외한다"며 통째로 거부한다.
+                if drop_chunks:
+                    _promote_main(mcp, pid, plan, args.sleep)
                 for chunk in drop_chunks:
                     mcp.option_update(pid, excludeSkuIds=chunk)
                     time.sleep(args.sleep)
@@ -1278,7 +1355,7 @@ def _commit(sheet, rows, args):
             m = matrix.read(sheet)
             n = matrix.mark_many(sheet, TASK, vals, matrix=m)
             print(f"  현황판({matrix.TAB}) {TASK}: {n}칸 갱신")
-            _handoff(sheet, rows, saved, m)
+            _handoff(sheet, rows, saved, m, args.run_dir)
         except Exception as e:  # noqa: BLE001
             print(f"  [경고] 현황판 갱신 실패: {str(e)[:120]}", file=sys.stderr)
 
@@ -1292,7 +1369,36 @@ def _commit(sheet, rows, args):
 HANDOFF_ALWAYS = ("상품명",)
 
 
-def _handoff(sheet, rows, done, m):
+# 썸네일이 "대표옵션 쪽이 뿌리다"라며 되돌릴 때 쓰는 낱말 2종(`thumb_rules.TO_OPTION_VERDICTS`).
+FROM_THUMB_MARKS = ("기준이미지없음", "대표옵션의심")
+# 그 되돌림을 **끝내는** 낱말(`thumb_rules.NO_REAL_BASE`). 이게 붙어 가면 썸네일 prep 이
+# 선기록하지 않고 비전 배치로 보내, 워커가 후보 이미지에서 직접 고른다.
+NO_REAL_BASE = "실물기준없음"
+
+
+def _close_roundtrip(reason, redo_reason):
+    """썸네일로 되돌려 보내는 사유에 `실물기준없음` 을 강제로 붙여야 하는가.
+
+    **왜 필요한가** (2026-08-15 용쌤2-1 §9): 옵션 57건을 고쳐 31건을 썸네일로 돌려보냈는데
+    2회전에서 `대표옵션의심` 8건 · `기준이미지없음` 1건이 **또** 나왔다. 옵션 이미지가
+    전부 배너·풀세트·도면인 상품이 실재해서, 옵션이 대표를 몇 번 다시 세워도 썸네일이
+    같은 이유로 또 되돌린다 — 무한 왕복이다.
+
+    끊는 낱말(`실물기준없음`)은 이미 있고 워커 프롬프트(§2-10)도 그걸 넣으라고 시킨다.
+    그런데 **워커가 안 붙였다** — 잘린 productId 와 같은 부류의 지시 불이행이라
+    지시문으로는 안 막힌다. 그래서 왕복 2회차부터는 코드가 붙인다.
+
+    판정 근거는 `재작업사유`(썸네일이 현황판에 찍어 배치에 실려 온 값)다. 그게 이미
+    썸네일발 되돌림이면 **이번이 최소 2회차** — 옵션이 한 번 손보고 넘긴 걸 썸네일이
+    거절했다는 뜻이다. 이때 붙여도 손해가 없다: 썸네일이 후보에서 고르는 경로로 갈 뿐,
+    크레딧도 안 들고 새로 세운 대표도 후보에 그대로 들어 있다.
+    """
+    if NO_REAL_BASE in str(reason or ""):
+        return False
+    return any(k in str(redo_reason or "") for k in FROM_THUMB_MARKS)
+
+
+def _handoff(sheet, rows, done, m, run_dir=""):
     """워커가 남긴 `이관` 을 다른 단계의 현황판 칸으로 넘긴다.
 
     옵션을 보다 보면 옵션 범위 **밖**의 문제가 보인다 — 썸네일에 없는 색, 상품명 오표기.
@@ -1315,6 +1421,8 @@ def _handoff(sheet, rows, done, m):
         if tie:
             by_task.setdefault("썸네일", {}).setdefault(
                 pid, f"대표 동률로 원본 순서 지정 — 썸네일을 대표옵션과 맞출 것({tie[:40]})")
+    bprod = _batch_products(run_dir) if run_dir else {}
+    closed = []
     for pid, _plan, w, _st in rows:
         for h in (w.get("이관") or []):
             if pid not in done and (h.get("단계") or "").strip() not in HANDOFF_ALWAYS:
@@ -1323,7 +1431,15 @@ def _handoff(sheet, rows, done, m):
             if task not in matrix.TASKS or not reason:
                 print(f"  [경고] 이관 무시({pid}): 단계 '{task}'")
                 continue
+            # 왕복 2회차인데 워커가 끊는 낱말을 안 붙였으면 코드가 붙인다(`_close_roundtrip`).
+            if task == "썸네일" and _close_roundtrip(
+                    reason, (bprod.get(pid) or {}).get("재작업사유")):
+                reason = f"{NO_REAL_BASE}: {reason}"[:200]
+                closed.append(pid)
             by_task.setdefault(task, {})[pid] = reason
+    if closed:
+        print(f"  [왕복종결] 썸네일이 이미 되돌린 건 {len(closed)}건에 "
+              f"'{NO_REAL_BASE}' 를 붙였다 — 썸네일이 후보에서 직접 고른다: {closed[:5]}")
     for task, items in by_task.items():
         k = matrix.flag_many(sheet, task, items, from_task=TASK, matrix=m)
         print(f"  {task} 재작업 표시: {k}건")
