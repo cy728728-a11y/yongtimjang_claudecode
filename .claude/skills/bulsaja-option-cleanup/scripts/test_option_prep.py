@@ -521,6 +521,84 @@ class RoundtripCloseTest(unittest.TestCase):
         self.assertEqual(self.calls[0][1]["P1"], "대표색 불일치")
 
 
+class OrphanRecoveryTest(unittest.TestCase):
+    """썸네일 보류 미아 회수 — 옵션이 저장했는데 워커가 이관을 안 남긴 건.
+
+    2026-08-15 용쌤2-1 3회차 실측: 옵션 3회전이 48건을 저장했는데 썸네일로 배턴이 간 건
+    20건뿐이고 26건이 `보류` 인 채 남았다. 썸네일 `prep` 은 빈칸+재작업만 집으므로
+    (`matrix.pending`) 그 26건은 **어느 축도 안 집는 미아**가 된다. 에러도 경고도 없다.
+    """
+
+    def setUp(self):
+        self.calls = []
+        self.run_dir = tempfile.mkdtemp()
+        self._orig = run_options.matrix.flag_many
+        run_options.matrix.flag_many = (
+            lambda sheet, task, items, from_task=None, **kw:
+            (self.calls.append((task, dict(items))), len(items))[1])
+
+    def tearDown(self):
+        run_options.matrix.flag_many = self._orig
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _batch(self, prev_main):
+        os.makedirs(os.path.join(self.run_dir, "batches"), exist_ok=True)
+        with open(os.path.join(self.run_dir, "batches", "batch_001.json"),
+                  "w", encoding="utf-8") as f:
+            json.dump({"products": [{
+                "productId": "P1", "재작업사유": "",
+                "판매행": [{"id": "r1", "현재대표": prev_main == "r1"},
+                         {"id": "r2", "현재대표": prev_main == "r2"}],
+            }]}, f, ensure_ascii=False)
+
+    def _run(self, thumb_cell, new_main="r1", prev_main="r1", handoffs=()):
+        self._batch(prev_main)
+        rows = [("P1", {"대표": new_main}, {"이관": list(handoffs)}, "정리대상")]
+        run_options._handoff("SHEET", rows, {"P1": "완료"},
+                             {"P1": {"썸네일": thumb_cell}}, self.run_dir)
+        thumb = [c for c in self.calls if c[0] == "썸네일"]
+        return thumb[0][1].get("P1") if thumb else None
+
+    def test_대표가_그대로면_실물기준없음으로_종결한다(self):
+        # 기준이 한 글자도 안 변했다 — 되돌려봐야 썸네일이 같은 이유로 또 되돌린다
+        for mark in run_options.FROM_THUMB_MARKS:
+            with self.subTest(mark=mark):
+                self.calls.clear()
+                got = self._run(f"보류({mark})", new_main="r1", prev_main="r1")
+                self.assertTrue(got.startswith(run_options.NO_REAL_BASE), got)
+                self.assertIn(mark, got, "원래 보류 사유가 사라졌다")
+
+    def test_대표가_바뀌었으면_재판단으로_되돌린다(self):
+        got = self._run("보류(대표옵션의심)", new_main="r2", prev_main="r1")
+        self.assertNotIn(run_options.NO_REAL_BASE, got)
+        self.assertIn("대표옵션의심", got)
+
+    def test_옵션이_풀_수_없는_보류는_건드리지_않는다(self):
+        # 생성실패·주의는 대표옵션과 무관하다 — 일감을 만들면 안 된다
+        for cell in ("보류(생성실패)", "보류(주의)", "보류(글자변조)"):
+            with self.subTest(cell=cell):
+                self.calls.clear()
+                self.assertIsNone(self._run(cell))
+
+    def test_이미_완료거나_빈칸이면_건드리지_않는다(self):
+        for cell in ("완료", "", "재작업(썸네일: 이미 잡혀 있다)", "해당없음"):
+            with self.subTest(cell=cell):
+                self.calls.clear()
+                self.assertIsNone(self._run(cell))
+
+    def test_워커가_이관을_남겼으면_덮어쓰지_않는다(self):
+        got = self._run("보류(대표옵션의심)",
+                        handoffs=[{"단계": "썸네일", "사유": "워커가 직접 쓴 사유"}])
+        self.assertEqual(got, "워커가 직접 쓴 사유")
+
+    def test_저장_못_한_건은_되찍지_않는다(self):
+        self._batch("r1")
+        rows = [("P1", {"대표": "r1"}, {"이관": []}, "보류(대표충돌)")]
+        run_options._handoff("SHEET", rows, {},          # done 이 비어 있다
+                             {"P1": {"썸네일": "보류(대표옵션의심)"}}, self.run_dir)
+        self.assertEqual(self.calls, [])
+
+
 class DeletionCandidateTest(unittest.TestCase):
     """`삭제후보` — 상품명과 옵션 실물이 아예 다른 품목 (2026-08-06 이룸님)."""
 

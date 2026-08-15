@@ -338,6 +338,63 @@ def _redo_exempt(redo_hit, auto_redo):
     return sorted(set(redo_hit or ()) | set(auto_redo or {}))
 
 
+def _fill_workdata(run_dir, workdata_path, pending, py, sleep):
+    """캐시된 `workdata.json` 에 **없는 대상만** 조회해 덧붙인다.
+
+    **왜 필요한가** (2026-08-15 용쌤2-1 3회차 실측). `workdata.json` 은 캐시 재사용이라
+    거기 없는 상품id 는 뒤 단계가 통째로 못 본다 — `[4/6] 대상 0건 / 카테고리미설정 스킵
+    1건` 으로 떨어지고 "카테고리 교정을 먼저 하세요"로 멈춘다. 그룹 목록 API 가 빼먹은
+    17건을 `group.json` 에 손으로 넣어도 여기서 다시 막혔다(2회차 인계는 group.json 만
+    넣으면 된다고 적었는데 부족했다).
+
+    `--force` 는 전건 재수집이라 이 경로를 안 탄다. 스냅샷이 적중하면 MCP 호출은 0회다.
+    """
+    have = {w.get("productId") for w in _load(workdata_path)}
+    miss = [p for p in pending if p.get("productId") not in have]
+    if not miss:
+        return
+    print(f"  캐시에 없는 대상 {len(miss)}건 → 그 건만 조회해 덧붙인다: "
+          + ", ".join(p["productId"] for p in miss[:3])
+          + (f" 외 {len(miss) - 3}건" if len(miss) > 3 else ""))
+    tmp_in = os.path.join(run_dir, "workdata_missing_in.json")
+    tmp_out = os.path.join(run_dir, "workdata_missing_out.json")
+    _dump(tmp_in, miss)
+    _run([py, os.path.join(BULSAJA_SCRIPTS, "bulsaja_mcp.py"), "workdata",
+          "--input", tmp_in, "--output", tmp_out, "--sleep", str(sleep)],
+         "bulsaja_mcp.py workdata(누락분)")
+    got = _load(tmp_out)
+    if not got:
+        print("  [경고] 누락분 조회 결과가 비었다 — 뒤 단계가 그 건을 못 본다.",
+              file=sys.stderr)
+        return
+    _dump(workdata_path, _load(workdata_path) + got)
+    print(f"  workdata.json 에 {len(got)}건 덧붙였다 (총 {len(have) + len(got)}건)")
+
+
+def _merge_exempt(run_dir, exempt):
+    """이번 회차 면제분을 **기존 `redo.json` 위에 합친다** (덮어쓰지 않는다).
+
+    **왜 필요한가 — 이게 제일 비싼 결함이다** (2026-08-15 용쌤2-1 3회차 실측).
+    `redo.json` 은 append 가 A열 중복 검사에서 면제할 목록이고, prep 은 현황판 재작업분을
+    자동 편입(`_matrix_redo`)해 그 목록을 남긴다. 그런데 `--ids <2건>` 으로 몇 건을 덧붙이면
+    `auto_redo` 가 그 2건 범위에서만 계산돼 파일이 **2건으로 덮어써졌다.** 앞서 편입된 14건이
+    면제에서 빠지고 `append` 가 전부 `스킵(이미처리)` 로 버린다 — **워커 비용은 다 쓰고
+    시트엔 2행만** 들어간다. `###APPEND### 총 N행` 을 세지 않으면 그대로 사라진다.
+
+    **소진분(`redo.json.done`)은 다시 넣지 않는다.** append 가 이미 행을 쓴 건이라
+    되살리면 같은 상품이 두 줄 들어간다. 면제는 1회용이라는 SKILL.md §prep 규칙 그대로다.
+    """
+    prev_path = os.path.join(run_dir, "redo.json")
+    prev = set(_load(prev_path)) if os.path.exists(prev_path) else set()
+    done_path = prev_path + ".done"
+    done = set(_load(done_path)) if os.path.exists(done_path) else set()
+    merged = sorted((set(exempt or ()) | prev) - done)
+    kept = len(merged) - len(set(exempt or ()) - done)
+    if kept > 0:
+        print(f"  기존 면제 {kept}건을 유지한 채 합쳤다 (redo.json 총 {len(merged)}건)")
+    return merged
+
+
 def _read_jk_map(sheet, tab=CATFIX_TAB):
     """카테고리교정 시트에서 productId별 J(실물판정)·K(썸네일URL)을 읽는다.
 
@@ -552,7 +609,7 @@ def cmd_prep(args):
         # 쓰고 시트에 0행**이 되고, 로그의 `###APPEND### 총 0행` 을 놓치면 조용히 사라진다
         # (3-2 재교정 11건 실측). SKILL.md 는 "면제는 1회용(append 가 redo.json 소진)"이라
         # 적혀 있었으니 문서가 맞고 코드가 틀렸다.
-        exempt = _redo_exempt(redo_hit, auto_redo)
+        exempt = _merge_exempt(run_dir, _redo_exempt(redo_hit, auto_redo))
         if exempt:
             _dump(os.path.join(run_dir, "redo.json"), exempt)
 
@@ -573,6 +630,7 @@ def cmd_prep(args):
     # 3) workdata — 현재 카테고리 + 썸네일 (대화 밖에서 소비)
     if os.path.exists(workdata_path) and not args.force:
         print(f"[3/6] workdata.json 재사용 ({workdata_path})")
+        _fill_workdata(run_dir, workdata_path, pending, py, args.sleep)
     else:
         print(f"[3/6] 카테고리·썸네일 조회 중 ({len(pending)}건, 시간 소요)...")
         # 조회는 공용 스냅샷을 먼저 본다(카테고리 교정이 이미 받아둔 그룹이면 MCP 0회).
@@ -689,9 +747,12 @@ def cmd_prep(args):
         pf_args += ["--parent-fallback"]
     _run(pf_args, "cat_prefilter.py")
 
+    # `--ids` 는 기존 run-dir 에 몇 건을 **덧붙이는** 애드혹 경로다 — 배치를 이어붙인다.
+    # (전량 prep·`--targets-json`·`--views-only` 는 종전대로 1번부터 새로 만든다.)
     _build_views_and_batches(run_dir, targets, thumb_map, args.no_parent, len(skipped),
                              wd_by_id=wd_by_id, jk_by_id=jk_by_id,
-                             nokw_mode=getattr(args, 'nokw_mode', False))
+                             nokw_mode=getattr(args, 'nokw_mode', False),
+                             append=bool(getattr(args, "ids", None)))
 
 
 def _shrink_thumbs(paths, max_px):
@@ -797,8 +858,20 @@ def _spec_view(pid, load=None):
     return out
 
 
+def _next_batch_no(run_dir):
+    """`batches/` 에 이미 있는 번호 다음 값 (없으면 1)."""
+    hi = 0
+    for bf in glob.glob(os.path.join(run_dir, "batches", "batch_[0-9][0-9][0-9].json")):
+        try:
+            hi = max(hi, int(os.path.basename(bf)[len("batch_"):-len(".json")]))
+        except ValueError:
+            continue
+    return hi + 1
+
+
 def _build_views_and_batches(run_dir, targets, thumb_map, no_parent, skipped_n=0,
-                             wd_by_id=None, jk_by_id=None, nokw_mode=False):
+                             wd_by_id=None, jk_by_id=None, nokw_mode=False,
+                             append=False):
     """카테고리 뷰(D) 생성 + 카테고리 단위 배치.
 
     후보 생성기(batch_candidates)를 더 이상 쓰지 않는다 — 그 필터가 카테고리 전용어를
@@ -907,13 +980,24 @@ def _build_views_and_batches(run_dir, targets, thumb_map, no_parent, skipped_n=0
             print(f"  무키워드: 뷰 없는 대상 {len(rest)}건을 배치에 실었다 "
                   f"(통다운에 그 카테고리 키워드가 0건)")
 
-    for i, b in enumerate(batches, 1):
+    # **번호를 이어붙인다** (2026-08-15 용쌤2-1 3회차 실측). 종전엔 항상 1부터 다시
+    # 매겨서, 배치 14개가 있는 run-dir 에 `prep --ids <1건>` 을 치면 batch_001 을
+    # 통째로 덮어썼다 — 거기 있던 2건이 조용히 사라진다. `###PREP### 배치 1개` 만
+    # 찍히고 기존 배치를 지웠다는 말은 어디에도 없다. 인덱스도 같이 이어붙인다.
+    start = _next_batch_no(run_dir) if append else 1
+    if append and start > 1:
+        print(f"  기존 배치 {start - 1}개를 보존하고 batch_{start:03d} 부터 이어붙인다.")
+    new_index = [{"batch": f"batch_{i:03d}.json", "카테고리": b["카테고리"],
+                  "상품수": len(b["products"]), "뷰": b["카테고리뷰"]}
+                 for i, b in enumerate(batches, start)]
+    for i, b in enumerate(batches, start):
         _dump(os.path.join(batches_dir, f"batch_{i:03d}.json"), b)
 
-    _dump(os.path.join(run_dir, "batches_index.json"),
-          [{"batch": f"batch_{i:03d}.json", "카테고리": b["카테고리"],
-            "상품수": len(b["products"]), "뷰": b["카테고리뷰"]}
-           for i, b in enumerate(batches, 1)])
+    index_path = os.path.join(run_dir, "batches_index.json")
+    if append and os.path.exists(index_path):
+        prev = _load(index_path)
+        new_index = (prev if isinstance(prev, list) else []) + new_index
+    _dump(index_path, new_index)
 
     covered = sum(len(b["products"]) for b in batches)
     print(f"\n###PREP### 배치 {len(batches)}개 / 대상 {len(targets)}건(배치 수록 {covered}건) / "

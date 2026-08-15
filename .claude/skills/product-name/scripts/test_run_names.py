@@ -1564,5 +1564,133 @@ class NokwViewlessBatchTest(unittest.TestCase):
         self.assertEqual(self._build(nokw=False), [])
 
 
+class PrepIdsPreservesRunDirTest(unittest.TestCase):
+    """`prep --ids` 가 run-dir 상태를 덮어쓰던 결함 3건 (2026-08-15 용쌤2-1 3회차 실측).
+
+    셋 다 **에러 없이 조용히 사라진다.** 로그 숫자를 직접 세야만 드러난다.
+    """
+
+    def setUp(self):
+        self.run_dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.run_dir, "batches"), exist_ok=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _write(self, name, obj):
+        with open(os.path.join(self.run_dir, name), "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False)
+
+    # --- ① 배치 번호 ------------------------------------------------------
+    def _build(self, targets, append):
+        self._write("manifest.json", {"categories": {}, "parents": {},
+                                      "not_found": [t["productId"] for t in targets]})
+        with mock.patch.object(run_names, "_same_price_options", return_value=False), \
+             mock.patch.object(run_names, "_spec_view", return_value={}), \
+             contextlib.redirect_stdout(io.StringIO()):
+            run_names._build_views_and_batches(
+                self.run_dir, targets, {}, no_parent=True, skipped_n=0,
+                wd_by_id={}, jk_by_id={}, nokw_mode=True, append=append)
+        return sorted(os.path.basename(p) for p in
+                      glob.glob(os.path.join(self.run_dir, "batches", "batch_*.json")))
+
+    def test_append면_기존_배치를_덮어쓰지_않는다(self):
+        # 실측: 배치 14개가 있는 run-dir 에 `--ids <1건>` 을 쳤더니 batch_001 을
+        # 덮어써서 거기 있던 2건(강의대·연단)이 사라졌다.
+        first = self._build([{"productId": "U01A", "상품명": "강의대",
+                              "카테고리": "가구>강의대"}], append=False)
+        self.assertEqual(first, ["batch_001.json"])
+        with open(os.path.join(self.run_dir, "batches", "batch_001.json"),
+                  encoding="utf-8") as f:
+            keep = json.load(f)
+
+        after = self._build([{"productId": "U01B", "상품명": "연단",
+                              "카테고리": "가구>연단"}], append=True)
+        self.assertEqual(after, ["batch_001.json", "batch_002.json"])
+        with open(os.path.join(self.run_dir, "batches", "batch_001.json"),
+                  encoding="utf-8") as f:
+            self.assertEqual(json.load(f), keep, "batch_001 이 덮어써졌다")
+
+    def test_append면_인덱스도_이어붙인다(self):
+        self._build([{"productId": "U01A", "상품명": "강의대", "카테고리": "가구>강의대"}],
+                    append=False)
+        self._build([{"productId": "U01B", "상품명": "연단", "카테고리": "가구>연단"}],
+                    append=True)
+        with open(os.path.join(self.run_dir, "batches_index.json"),
+                  encoding="utf-8") as f:
+            idx = json.load(f)
+        self.assertEqual([x["batch"] for x in idx],
+                         ["batch_001.json", "batch_002.json"])
+
+    def test_전량_prep_은_종전대로_1번부터_새로_만든다(self):
+        self._build([{"productId": "U01A", "상품명": "강의대", "카테고리": "가구>강의대"}],
+                    append=False)
+        after = self._build([{"productId": "U01B", "상품명": "연단",
+                              "카테고리": "가구>연단"}], append=False)
+        self.assertEqual(after, ["batch_001.json"])
+
+    def test_다음_배치번호는_최댓값_다음이다(self):
+        self.assertEqual(run_names._next_batch_no(self.run_dir), 1)
+        for n in (1, 2, 7):
+            open(os.path.join(self.run_dir, "batches",
+                              f"batch_{n:03d}.json"), "w").close()
+        self.assertEqual(run_names._next_batch_no(self.run_dir), 8)
+
+    # --- ② redo.json ------------------------------------------------------
+    def test_면제목록은_덮어쓰지_않고_합친다(self):
+        # 실측(제일 비싼 결함): `--ids <2건>` 이 redo.json 을 2건으로 덮어써서 앞서
+        # 편입된 14건이 면제에서 빠지고 append 가 전부 `스킵(이미처리)` 로 버렸다
+        # — 워커 비용은 다 쓰고 시트엔 2행.
+        self._write("redo.json", [f"P{i:02d}" for i in range(14)])
+        with contextlib.redirect_stdout(io.StringIO()):
+            got = run_names._merge_exempt(self.run_dir, ["NEW1", "NEW2"])
+        self.assertEqual(len(got), 16)
+        self.assertIn("P00", got)
+        self.assertIn("NEW1", got)
+
+    def test_이미_소진된_면제는_되살리지_않는다(self):
+        # 면제는 1회용(append 가 redo.json.done 으로 소진) — 되살리면 시트에 두 줄 들어간다
+        self._write("redo.json", ["A", "B"])
+        self._write("redo.json.done", ["A"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            got = run_names._merge_exempt(self.run_dir, ["C"])
+        self.assertEqual(got, ["B", "C"])
+
+    def test_기존_파일이_없으면_이번_회차분_그대로다(self):
+        self.assertEqual(run_names._merge_exempt(self.run_dir, ["X"]), ["X"])
+
+    # --- ③ workdata.json --------------------------------------------------
+    def test_캐시에_없는_대상만_조회해_덧붙인다(self):
+        # 실측: group.json 에 손으로 넣어도 workdata.json 이 캐시 재사용이라
+        # `[4/6] 대상 0건 / 카테고리미설정 스킵 1건` 으로 떨어져 멈췄다.
+        wd = os.path.join(self.run_dir, "workdata.json")
+        self._write("workdata.json", [{"productId": "A", "상품명": "가"}])
+        pending = [{"productId": "A"}, {"productId": "B"}]
+        seen = {}
+
+        def _fake_run(cmd, label):
+            with open(cmd[cmd.index("--input") + 1], encoding="utf-8") as f:
+                seen["input"] = json.load(f)
+            with open(cmd[cmd.index("--output") + 1], "w", encoding="utf-8") as f:
+                json.dump([{"productId": "B", "상품명": "나"}], f, ensure_ascii=False)
+
+        with mock.patch.object(run_names, "_run", _fake_run), \
+             contextlib.redirect_stdout(io.StringIO()):
+            run_names._fill_workdata(self.run_dir, wd, pending, "python", 0)
+
+        self.assertEqual([p["productId"] for p in seen["input"]], ["B"],
+                         "이미 있는 건까지 다시 조회하면 안 된다")
+        with open(wd, encoding="utf-8") as f:
+            self.assertEqual([w["productId"] for w in json.load(f)], ["A", "B"])
+
+    def test_전부_캐시에_있으면_조회하지_않는다(self):
+        wd = os.path.join(self.run_dir, "workdata.json")
+        self._write("workdata.json", [{"productId": "A"}])
+        with mock.patch.object(run_names, "_run") as m, \
+             contextlib.redirect_stdout(io.StringIO()):
+            run_names._fill_workdata(self.run_dir, wd, [{"productId": "A"}], "python", 0)
+        m.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

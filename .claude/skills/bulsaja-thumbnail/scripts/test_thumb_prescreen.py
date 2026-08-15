@@ -237,5 +237,57 @@ class PrescreenPartitionTest(unittest.TestCase):
         self.assertEqual((mixed, noproduct, single), ({}, {}, []))
 
 
+class ToOptionReasonTest(unittest.TestCase):
+    """옵션 열로 넘기는 사유에 **판정 낱말이 실려야** 왕복이 닫힌다.
+
+    2026-08-15 용쌤2-1 3회차: 옵션 쪽 종결 장치(`_close_roundtrip`)는 왕복 2회차를
+    판정 낱말로 알아보는데, 여기서 넘기던 값은 워커가 쓴 산문뿐이라 낱말이 한 글자도
+    안 갔다. 그래서 장치가 **한 번도 발화하지 못했고** 3바퀴를 돌아도 같은 24건이
+    되돌아왔다. 아래는 그 계약을 고정한다.
+    """
+
+    def test_판정_낱말이_맨_앞에_붙는다(self):
+        got = run_thumbs._to_option_reason(R.AUDIT_MAIN_SUSPECT, "대표옵션이 풀세트 구성")
+        self.assertTrue(got.startswith(R.AUDIT_MAIN_SUSPECT), got)
+        self.assertIn("풀세트", got)
+
+    def test_워커가_이미_썼으면_겹쳐_쓰지_않는다(self):
+        got = run_thumbs._to_option_reason(
+            R.VERDICT_NO_BASE, f"{R.VERDICT_NO_BASE} — 도면뿐이다")
+        self.assertEqual(got.count(R.VERDICT_NO_BASE), 1)
+
+    def test_사유가_비어도_낱말은_남는다(self):
+        self.assertEqual(run_thumbs._to_option_reason(R.VERDICT_NO_BASE, ""),
+                         R.VERDICT_NO_BASE)
+
+    def test_현황판_상한_80자를_넘지_않는다(self):
+        got = run_thumbs._to_option_reason(R.AUDIT_MAIN_SUSPECT, "가" * 200)
+        self.assertLessEqual(len(got), 80)
+
+    def test_옵션_스킬이_이_값을_왕복_2회차로_읽는다(self):
+        """**교차 계약** — 두 스킬이 같은 낱말을 봐야 왕복이 코드로 닫힌다.
+
+        이 테스트가 깨지면 종결 장치가 다시 침묵한다(에러 없이 무한 왕복).
+        """
+        opt_dir = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__)))),
+            "bulsaja-option-cleanup", "scripts")
+        if opt_dir not in sys.path:
+            sys.path.insert(0, opt_dir)
+        try:
+            import run_options
+        except Exception as e:  # noqa: BLE001
+            self.skipTest(f"옵션정리 스킬을 못 읽었다: {e}")
+        for verdict in R.TO_OPTION_VERDICTS:
+            with self.subTest(verdict=verdict):
+                reason = run_thumbs._to_option_reason(verdict, "워커가 쓴 산문")
+                # 현황판을 거치면 `재작업(썸네일: <사유>)` 로 적히고 배치엔 그 안쪽만 실린다
+                cell = matrix.redo_value(reason, from_task=run_thumbs.TASK)
+                self.assertTrue(
+                    run_options._close_roundtrip("대표를 새로 세웠다",
+                                                 matrix.redo_reason(cell)),
+                    f"옵션이 '{verdict}' 를 왕복 2회차로 못 알아본다")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

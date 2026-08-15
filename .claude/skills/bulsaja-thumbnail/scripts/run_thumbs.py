@@ -73,6 +73,27 @@ from eroomlib.matrix import _col_letter                # noqa: E402
 
 TASK = "썸네일"        # 현황판 열 이름
 TAB = "썸네일"         # 상세 로그 탭
+
+
+def _to_option_reason(verdict, why):
+    """옵션 열에 찍을 되돌림 사유 — **판정 낱말을 맨 앞에 박는다.**
+
+    **왜 필요한가** (2026-08-15 용쌤2-1 3회차 실측). 옵션 쪽 `_close_roundtrip` 은
+    왕복 2회차를 판정 낱말(`대표옵션의심`·`기준이미지없음`)로 알아본다 — 배치에 실려 온
+    `재작업사유` 에 그 낱말이 있으면 이번이 최소 2회차이므로 `실물기준없음` 을 붙여 왕복을
+    끝낸다. 그런데 여기서 넘기던 값은 **워커가 쓴 산문**뿐이었다("대표옵션은 프레임+걸이
+    기본형인데 기존대표는 풀세트 구성") — 판정 낱말은 썸네일 열의 `보류(...)` 에만 남고
+    옵션 열로는 한 글자도 안 갔다. 그래서 종결 장치가 **한 번도 발화하지 못했고**
+    3바퀴를 돌아도 같은 24건이 되돌아왔다(3회차 실측: 낱말이 붙은 건 1건뿐).
+
+    낱말을 앞에 두면 사람이 현황판에서 읽기도 낫다 — 산문보다 분류가 먼저 보인다.
+    """
+    v, w = str(verdict or "").strip(), str(why or "").strip()
+    if not v:
+        return w[:80]
+    if v in w:                      # 워커가 이미 낱말을 썼으면 겹쳐 쓰지 않는다
+        return w[:80]
+    return f"{v}: {w}"[:80] if w else v
 HEADER = ["상품id", "작업일", "상품명", "모드", "기존대표", "생성본",
           "판정", "사유", "크레딧", "상태"]
 
@@ -753,8 +774,11 @@ def _prescreen_commit(sheet, run_dir):
         n_hold = matrix.mark_many(sheet, TASK, vals, matrix=m) if vals else 0
         n_flag = matrix.flag_many(
             sheet, "옵션",
-            {pid: (why or "대표옵션 이미지가 비제품(도면·배너) — 실물 사진이 있는 "
-                          "값으로 대표를 다시 세울 것")[:80] for pid, why in live.items()},
+            {pid: _to_option_reason(
+                R.VERDICT_NO_BASE,
+                why or "대표옵션 이미지가 비제품(도면·배너) — 실물 사진이 있는 "
+                       "값으로 대표를 다시 세울 것")
+             for pid, why in live.items()},
             from_task=TASK, matrix=m) if live else 0
         _dump(os.path.join(run_dir, "prescreen_held.json"), to_hold)
 
@@ -968,7 +992,10 @@ def _audit_commit(sheet, run_dir):
         if rec and (rec.get(TASK) or "").strip() != matrix.NA:
             vals[pid] = "보류(대표옵션의심)"
     n = matrix.mark_many(sheet, TASK, vals, matrix=m) if vals else 0
-    k = matrix.flag_many(sheet, "옵션", main_suspect, from_task="썸네일",
+    k = matrix.flag_many(sheet, "옵션",
+                         {pid: _to_option_reason(R.AUDIT_MAIN_SUSPECT, why)
+                          for pid, why in main_suspect.items()},
+                         from_task="썸네일",
                          matrix=m) if main_suspect else 0
     print(f"\n###AUDIT### 불일치 {len(mismatch)}건(재작업 flag) / 일치 {len(match)}건 "
           f"/ 대조불가 {len(uncomparable)}건(flag 안 함·집계만) "
@@ -1452,11 +1479,11 @@ def _commit(sheet, run_dir, args):
                 hit = next((v for v in R.TO_OPTION_VERDICTS if v in str(verdict)), None)
                 if hit:
                     held[pid] = f"보류({hit})"
-                    main_suspect[pid] = (
-                        reason or ("대표옵션이 본품이 아님(부속 의심)"
-                                   if hit == R.AUDIT_MAIN_SUSPECT
-                                   else "대표옵션 이미지가 비제품(도면·배너) — 실물 사진이 "
-                                        "있는 값으로 대표를 다시 세울 것"))[:80]
+                    main_suspect[pid] = _to_option_reason(hit, reason or (
+                        "대표옵션이 본품이 아님(부속 의심)"
+                        if hit == R.AUDIT_MAIN_SUSPECT
+                        else "대표옵션 이미지가 비제품(도면·배너) — 실물 사진이 "
+                             "있는 값으로 대표를 다시 세울 것"))
                 else:
                     held[pid] = f"보류({verdict})"
                 sheet_rows.append((pid, g.get("상품명", ""), g["생성본"],

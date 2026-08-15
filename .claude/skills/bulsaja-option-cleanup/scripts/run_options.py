@@ -1369,6 +1369,7 @@ def _commit(sheet, rows, args):
 HANDOFF_ALWAYS = ("상품명",)
 
 
+TASK_THUMB = "썸네일"      # 현황판에서 되찍을 상대 열
 # 썸네일이 "대표옵션 쪽이 뿌리다"라며 되돌릴 때 쓰는 낱말 2종(`thumb_rules.TO_OPTION_VERDICTS`).
 FROM_THUMB_MARKS = ("기준이미지없음", "대표옵션의심")
 # 그 되돌림을 **끝내는** 낱말(`thumb_rules.NO_REAL_BASE`). 이게 붙어 가면 썸네일 prep 이
@@ -1396,6 +1397,56 @@ def _close_roundtrip(reason, redo_reason):
     if NO_REAL_BASE in str(reason or ""):
         return False
     return any(k in str(redo_reason or "") for k in FROM_THUMB_MARKS)
+
+
+def _prev_main(bp):
+    """배치에 실린 **저장 전 대표** 판매행 id (없으면 None)."""
+    for r in (bp or {}).get("판매행") or []:
+        if r.get("현재대표"):
+            return str(r.get("id"))
+    return None
+
+
+def _recover_orphans(rows, done, m, bprod, by_task):
+    """옵션이 저장했는데 **워커가 이관을 안 남긴** 건을 썸네일로 되돌려 보낸다.
+
+    **왜 필요한가 — 썸네일 보류는 미아가 된다** (2026-08-15 용쌤2-1 3회차 실측).
+    썸네일 `prep` 의 대상은 현황판 썸네일 열의 **빈칸 + 재작업**(`matrix.pending`)이라
+    `보류(...)` 는 안 집는다. 그런데 옵션정리는 워커가 `이관` 을 남길 때만 썸네일 열을
+    되찍는다 — 대표가 이미 맞다고 판단하면 아무것도 안 찍는다. 그 결과 옵션이 48건을
+    저장했는데 썸네일로 배턴이 간 건 20건뿐이고 **26건이 `보류` 인 채 어느 축도 안 집는
+    상태**로 남았다(옵션이 아예 안 건드린 보류까지 더해 51건). 에러도 경고도 없다.
+
+    여기서 되찍으면 `보류` 가 `재작업` 이 되어 다음 썸네일 `prep` 이 자동으로 집는다.
+
+    **두 갈래로 나눠 보낸다** — 안 나누면 왕복이 그대로 또 돈다:
+      · 대표가 **바뀌었다** → 그대로 재판단시킨다. 기준이 실제로 달라졌으니 썸네일이
+        새 대표옵션 이미지로 대조하면 풀릴 수 있다.
+      · 대표가 **그대로다** → 옵션 축은 이미 제 몫을 했고 기준은 한 글자도 안 변했다.
+        그냥 되돌리면 썸네일이 같은 이미지로 선기록하고 `prescreen` 이 같은 이유로 또
+        되돌린다 — 3바퀴를 돌고도 24건이 되돌아온 게 정확히 이 경로다. `실물기준없음`
+        을 붙여 **썸네일이 후보 이미지에서 직접 고르게** 해 왕복을 끝낸다.
+    """
+    fresh, closed = {}, {}
+    for pid, plan, _w, _st in rows:
+        if pid not in done or pid in by_task.get("썸네일", {}):
+            continue
+        cur = ((m.get(pid) or {}).get(TASK_THUMB) or "").strip()
+        if not cur.startswith("보류"):
+            continue          # 완료·빈칸·재작업은 이미 제 갈 길이 있다
+        mark = next((k for k in FROM_THUMB_MARKS if k in cur), None)
+        if not mark:
+            continue          # 보류(생성실패)·보류(주의) 등은 옵션이 풀 수 있는 게 아니다
+        prev, new = _prev_main(bprod.get(pid)), str((plan or {}).get("대표") or "")
+        if new and prev and new != prev:
+            fresh[pid] = f"대표 재지정 완료 — 재판단({mark})"
+        else:
+            closed[pid] = f"{NO_REAL_BASE}: 대표 확인 완료(변경 없음) — 재판단({mark})"
+    if fresh or closed:
+        by_task.setdefault("썸네일", {}).update({**fresh, **closed})
+        print(f"  [미아회수] 썸네일 보류 {len(fresh) + len(closed)}건을 되찍었다 — "
+              f"대표 바뀜 {len(fresh)}건(재판단) · 대표 그대로 {len(closed)}건"
+              f"('{NO_REAL_BASE}' 로 종결)")
 
 
 def _handoff(sheet, rows, done, m, run_dir=""):
@@ -1440,6 +1491,7 @@ def _handoff(sheet, rows, done, m, run_dir=""):
     if closed:
         print(f"  [왕복종결] 썸네일이 이미 되돌린 건 {len(closed)}건에 "
               f"'{NO_REAL_BASE}' 를 붙였다 — 썸네일이 후보에서 직접 고른다: {closed[:5]}")
+    _recover_orphans(rows, done, m, bprod, by_task)
     for task, items in by_task.items():
         k = matrix.flag_many(sheet, task, items, from_task=TASK, matrix=m)
         print(f"  {task} 재작업 표시: {k}건")
