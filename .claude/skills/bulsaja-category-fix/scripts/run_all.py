@@ -314,8 +314,12 @@ def cmd_finish(args):
         print("[skip-sellha] 카테고리 조회 생략 — sellha.json 에 이미 있는 건만 저장한다")
     else:
         # --sleep/--sleep-max 는 이전엔 파싱만 하고 안 넘겨 죽은 옵션이었다. 이제 실제로 넘긴다.
+        # --rest-every/--rest-secs 도 같은 상태였다(help 에 "현 엔진에선 미사용"이라 적혀
+        # 있었으나 엔진은 2026-08-06 부터 지원한다) — 2026-08-16 부터 넘긴다.
         sh(CAT_SCRIPT, "--input", keywords_for_sellha, "--output", sellha, "--resume",
-           "--sleep", args.sellha_sleep, "--sleep-max", args.sellha_sleep_max)
+           "--sleep", args.sellha_sleep, "--sleep-max", args.sellha_sleep_max,
+           "--rest-every", getattr(args, "sellha_rest_every", "0"),
+           "--rest-secs", getattr(args, "sellha_rest_secs", "120"))
 
     # 5) 병합 (products + keywords + sellha, productId 기준)
     with open(products, encoding="utf-8") as f:
@@ -642,7 +646,9 @@ def cmd_consensus(args):
         # 캡챠·차단이면 aside 가 비정상 종료 → sh 가 예외로 멈춘다(수동 해제 후 재실행,
         # --resume 이라 조회분은 보존된다).
         sh(CAT_SCRIPT, "--input", qpath, "--output", rpath, "--resume",
-           "--sleep", args.sellha_sleep, "--sleep-max", args.sellha_sleep_max)
+           "--sleep", args.sellha_sleep, "--sleep-max", args.sellha_sleep_max,
+           "--rest-every", getattr(args, "sellha_rest_every", "0"),
+           "--rest-secs", getattr(args, "sellha_rest_secs", "120"))
     rows = []
     if os.path.exists(rpath):
         with open(rpath, encoding="utf-8") as f:
@@ -840,6 +846,7 @@ def cmd_auto(args):
     a.sellha_sleep = args.sellha_sleep
     a.sellha_sleep_max = args.sellha_sleep_max
     a.sellha_rest_every = args.sellha_rest_every
+    a.sellha_rest_secs = args.sellha_rest_secs
     a.skip_sellha = getattr(args, "skip_sellha", False)
     a.overwrite_done = getattr(args, "overwrite_done", False)
     a.no_gate = getattr(args, "no_gate", False)
@@ -971,8 +978,12 @@ def main():
                    help="카테고리 조회 간 최소 대기(초). Aside 전환으로 3→1")
     f.add_argument("--sellha-sleep-max", default="3",
                    help="카테고리 조회 간 최대 대기(초). 실제는 최소~최대 난수")
-    f.add_argument("--sellha-rest-every", default="25",
-                   help="(현 엔진에선 미사용) 평균 N건마다 긴 휴식")
+    f.add_argument("--sellha-rest-every", default="0",
+                   help="N**청크**마다 긴 휴식(0=안 쉼). 캡챠는 간격이 아니라 누적 "
+                        "조회량에 반응한다 — 실측 권장 조합: --sellha-rest-every 2 "
+                        "--sellha-rest-secs 150 (25-2 3회차, 변형 86건 캡챠 0)")
+    f.add_argument("--sellha-rest-secs", default="120",
+                   help="휴식 길이(초). 기본 120")
     f.add_argument("--no-gate", action="store_true", help="제외카테고리 게이트를 끈다(검증·재현용). 기본은 켬")
     f.set_defaults(func=cmd_finish)
 
@@ -1018,8 +1029,10 @@ def main():
                    help="카테고리 조회 간 최소 대기(초). Aside 전환으로 3→1")
     au.add_argument("--sellha-sleep-max", default="3",
                    help="카테고리 조회 간 최대 대기(초). 실제는 최소~최대 난수")
-    au.add_argument("--sellha-rest-every", default="25",
-                   help="(현 엔진에선 미사용) 평균 N건마다 긴 휴식")
+    au.add_argument("--sellha-rest-every", default="0",
+                   help="N**청크**마다 긴 휴식(0=안 쉼). 실측 권장: 2 (+ --sellha-rest-secs 150)")
+    au.add_argument("--sellha-rest-secs", default="120",
+                   help="휴식 길이(초). 기본 120")
     au.add_argument("--no-gate", action="store_true", help="제외카테고리 게이트를 끈다(검증·재현용). 기본은 켬")
     au.add_argument("--no-autodelete", action="store_true",
                     help="게이트가 잡은 것을 실제로 지우지 않는다(`삭제대기` 로만 남김). 기본은 지움")
@@ -1040,6 +1053,12 @@ def main():
     cs.add_argument("--sleep", default="0.3", help="steer 저장 간격(초)")
     cs.add_argument("--sellha-sleep", default="1")
     cs.add_argument("--sellha-sleep-max", default="3")
+    # consensus 는 변형 조회라 원조회 직후에 누적 조회량이 이미 높다 — 휴식이 특히 중요하다.
+    # 종전엔 이 두 옵션이 없어 sleep 만 넘어갔고, 25-2 3회차에서 변형 86건 중 캡챠를 맞았다.
+    cs.add_argument("--sellha-rest-every", default="0",
+                    help="N**청크**마다 긴 휴식(0=안 쉼). 실측 권장: 2 (+ --sellha-rest-secs 150)")
+    cs.add_argument("--sellha-rest-secs", default="120",
+                    help="휴식 길이(초). 기본 120")
     cs.add_argument("--dry-run", action="store_true")
     cs.add_argument("--no-sheet", action="store_true")
     cs.add_argument("--no-gate", action="store_true", help="제외카테고리 게이트를 끈다(검증·재현용). 기본은 켬")

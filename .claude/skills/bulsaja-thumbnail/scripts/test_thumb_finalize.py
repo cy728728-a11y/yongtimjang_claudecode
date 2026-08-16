@@ -304,6 +304,30 @@ class ReferenceSourceTest(unittest.TestCase):
         p = {"기준이미지": True, "기존썸네일": ["a", "b"]}
         self.assertEqual(R.reference_source(p), R.REF_EXISTING)
 
+    def test_후보_밖_index_는_해석불가다(self):
+        """2026-08-17 용쌤2-1 실측 — 워커가 대표옵션 자리(9)를 골랐다.
+
+        종전엔 정수이기만 하면 `워커선택` 이라 찍혀 **미리보기가 정상처럼 보였는데**
+        `reference_url` 은 빈 문자열이었다. 그대로 태우면 불사자가 기준이 아니라
+        **현재 대표**를 배경교체한다 — 크레딧은 나가고 기준은 안 바뀐다.
+        `REF_EXISTING` 경고에도 안 잡혀 어느 눈에도 안 걸리는 사각이었다.
+        """
+        p = {"기준이미지": 9, "기존썸네일": ["a", "b"],
+             "후보이미지": [{"index": 1, "url": "b"}]}
+        self.assertEqual(R.reference_url(p), "")
+        self.assertEqual(R.reference_source(p), R.REF_BROKEN)
+
+    def test_후보에_있으면_해석불가가_아니다(self):
+        p = {"기준이미지": 3, "기존썸네일": ["a"],
+             "후보이미지": [{"index": 3, "url": "https://c3.jpg"}]}
+        self.assertEqual(R.reference_source(p), R.REF_WORKER)
+
+    def test_후보_url_이_비어도_해석불가다(self):
+        """index 는 맞는데 url 이 비면 태울 것이 없다 — 같은 사고 경로다."""
+        p = {"기준이미지": 3, "기존썸네일": [],
+             "후보이미지": [{"index": 3, "url": ""}]}
+        self.assertEqual(R.reference_source(p), R.REF_BROKEN)
+
 
 class IsFinalTest(unittest.TestCase):
     def test_원본대체는_종결이다(self):

@@ -89,7 +89,15 @@ python ... run_thumbs.py apply --run-dir <R> --commit
 `deletion_candidates.json` 기재)와 **대표옵션 이미지 404**(audit 이 `audit_delete_404.json`
 기재) 둘 다, 메인이 `bulsaja_market_delete`(scope ALL · MARKET_AND_SOURCE · 확인키 2단계)로
 **묻지 않고 즉시 삭제**한다(불사자는 휴지통이라 복구 가능).
-삭제 후 현황판 `해당없음` + 종합보고에 목록(상품id·상품명·사유) 필수.
+
+**삭제 직후 `mark-deleted` 를 부른다 — 생략 금지** (2026-08-16):
+```bash
+python … run_thumbs.py mark-deleted --group-name "…" --run-dir <R>   # → 해당없음 확정 + 보고용 목록
+```
+삭제는 메인이 MCP 로 하고 스크립트는 그 사실을 모른다. 확정을 빠뜨리면 현황판이
+`보류(…삭제대상)` 인 채 남고, **다음 회차 prep 이 이미 지운 상품을 또 삭제 대상으로 집는다**
+(실측: 25-2 후속 회차에서 5건 재등장 — 이중 삭제 직전까지 갔다). 멱등이라 여러 번 불러도
+안전하고, 출력이 곧 **종합보고에 붙일 목록**(상품id·상품명·사유)이다.
 
 ## run 실행 = Workflow 모드 (대량 기본, 2026-08-01)
 
@@ -462,7 +470,9 @@ python ... run_thumbs.py restore --run-dir <R> [--ids U01a U01b]
   `보류(주의)`(3축은 통과했으나 사람이 볼 것 — **반영 안 됨**, 아래 주) /
   `보류(저장실패)`(불사자 저장이 429 등으로 실패 — 재실행하면 회복된다. 멱등) /
   `보류(대표옵션의심)`(옵션 재작업 대기) / `보류(기준이미지없음)`(대표옵션 이미지가
-  비제품인데 맞는 후보도 없음 — 규칙 0 예외) / `보류(원본404·삭제대상)` —
+  비제품인데 맞는 후보도 없음 — 규칙 0 예외) / `보류(원본404·삭제대상)`(prep) /
+  `보류(대표옵션404·삭제대상)`(audit — 2026-08-16 추가) /
+  `해당없음(원본404·삭제)`(`mark-deleted` 가 삭제 확정 시 — 2026-08-16 추가) —
   현황판을 파싱하는 쪽은 이 목록을 기준으로 한다
 
   > **`주의` 는 반영하지 않는다** (2026-08-14 이룸님 확정 — 코드 쪽이 정본).
@@ -584,6 +594,6 @@ decisions.json 의 `사용가능` × generated.json 의 `생성본`  vs  workdat
 
 ```bash
 python .claude/skills/bulsaja-thumbnail/scripts/test_thumb_rules.py    # 65건 (recover·호스트판별 포함)
-python .claude/skills/bulsaja-thumbnail/scripts/test_thumb_prep.py     # 50건 (verdict 배치·수합·id복구·audit 미대조 포함)
+python .claude/skills/bulsaja-thumbnail/scripts/test_thumb_prep.py     # 55건 (verdict 배치·수합·id복구·audit 미대조·mark-deleted 포함)
 python .claude/skills/bulsaja-thumbnail/scripts/test_review_html.py    # 11건
 ```

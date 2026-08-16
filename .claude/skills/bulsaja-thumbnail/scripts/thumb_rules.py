@@ -148,6 +148,7 @@ def heal_pid(pid, valid):
 REF_WORKER = "워커선택"        # 워커가 후보에서 고른 것
 REF_MAIN_OPTION = "대표옵션"   # prep 선기록(규칙 0)
 REF_EXISTING = "기존대표"      # 아무것도 없어 기존 0번으로 떨어진 것 — **맹목 배경교체**
+REF_BROKEN = "해석불가"        # 워커가 준 index 를 어디서도 못 찾았다 — 태우면 안 된다
 
 
 def reference_source(product):
@@ -160,10 +161,16 @@ def reference_source(product):
 
     `REF_EXISTING` 은 그중에서도 위험하다: 워커 판단도 대표옵션도 없이 기존 대표로
     떨어진 것이라, 그 대표가 딴 물건이면 딴 물건이 그대로 예쁘게 재생성된다.
+
+    **`REF_BROKEN` — 워커가 준 index 를 어디서도 못 찾은 경우** (2026-08-17 용쌤2-1 실측).
+    종전엔 index 가 정수이기만 하면 `REF_WORKER` 를 돌려줬다. 그래서 워커가 후보 밖의
+    번호(실측: 대표옵션 자리인 9)를 주면 `reference_url` 은 빈 문자열인데 미리보기에는
+    **`워커선택` 이라 찍혀 정상처럼 보였고**, 실제로는 맹목 배경교체로 떨어졌다.
+    `REF_EXISTING` 경고에도 안 잡힌다 — 어느 눈에도 안 걸리는 사각이었다.
     """
     idx = product.get("기준이미지")
     if isinstance(idx, int) and not isinstance(idx, bool):
-        return REF_WORKER
+        return REF_WORKER if reference_url(product) else REF_BROKEN
     if str(product.get("대표옵션이미지") or "").strip():
         return REF_MAIN_OPTION
     return REF_EXISTING

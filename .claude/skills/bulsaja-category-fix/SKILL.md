@@ -174,6 +174,15 @@ PYTHONIOENCODING=utf-8 .venv/bin/python \
 - **`차단감지`·`캡챠감지`면 즉시 멈춘다.** 캡챠는 [`captcha-relay`](../captcha-relay/SKILL.md)
   스킬로 푼다 — **명령·검증 절차는 그 SKILL.md 가 정본**이다. 풀리면 `--resume`,
   `needs_human`·`timeout` 이면 재시도 없이 이룸님에게 보고.
+- **예방은 간격이 아니라 휴식 총량이다** — 캡챠는 조회 간격이 아니라 **누적 조회량**에
+  반응한다. `--sleep` 만 늘리면 또 만난다. `finish`·`auto`·`consensus` 세 서브커맨드
+  모두 아래를 받아 `aside_category.py` 로 넘긴다(2026-08-16 배선 — 그전엔 파싱만 하고
+  안 넘겨 죽은 옵션이었고 help 에도 "현 엔진에선 미사용"이라 잘못 적혀 있었다):
+  ```bash
+  --sellha-sleep 3 --sellha-sleep-max 9 --sellha-rest-every 2 --sellha-rest-secs 150
+  ```
+  **단위는 청크다**(건수 아님). 위 조합으로 25-2 3회차 변형 86건에서 캡챠 0.
+  기본값은 `--sellha-rest-every 0`(안 쉼) — 대량·변형 조회일 때 명시적으로 켠다.
 - 검색에 쓴 핵심어를 **Step 5 `검색어(사용)` 열에 반드시 기재**.
 - 애드혹 조회는 `--query "키워드1" "키워드2"` (productId 없이).
 

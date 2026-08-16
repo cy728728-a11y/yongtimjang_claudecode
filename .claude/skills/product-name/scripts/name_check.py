@@ -454,6 +454,27 @@ def check_one(product, max_terms=DEFAULT_MAX_TERMS, min_terms=DEFAULT_MIN_TERMS,
             violations.append(
                 f"R8 term분해의 마지막이 '{BASE_SUFFIX}'이 아니다(현재 '{terms[-1]}')")
 
+    # R12. 재작업 게이트 — 재작업사유를 처리했다는 흔적이 있는가 (2026-08-16)
+    #      재작업건은 "왜 틀렸는지"가 사유로 실려 온다. 그런데 워커가 사유를 무시하고
+    #      문제된 낱말을 그대로 두는 일이 반복됐다(2026-08-15 25-2 3회차 표본검수
+    #      의심 3건이 **전부** 이 패턴: '레드' 유지 · '임팩' 유지 · 품목 오지칭 미교정).
+    #      사유는 자연어라 "지목된 낱말"을 기계로 뽑는 건 불안정하다 — 대신 **게이트를
+    #      밟았다는 기록(`재작업반영`)이 있는지**를 본다. 이건 100% 판정 가능하다.
+    #      경고다(실패 아님): 재팬아웃 비용보다 표본검수 우선순위를 올리는 게 싸다.
+    redo_why = str(product.get("재작업사유") or "").strip()
+    if redo_why and not str(product.get("재작업반영") or "").strip():
+        warnings.append(
+            f"R12 재작업사유가 있는데 `재작업반영` 이 비었다 — 사유를 처리했다는 근거가 "
+            f"없다. **표본검수 우선 대상.** 사유: {redo_why[:80]}")
+        # 사유에 따옴표로 지목된 낱말이 새 상품명에 그대로 남아 있으면 더 강하게 찍는다.
+        quoted = re.findall(r"['‘’\"“”]([^'‘’\"“”]{1,12})"
+                            r"['‘’\"“”]", redo_why)
+        left = [q for q in quoted if q and nows(q) in nows(name)]
+        if left:
+            warnings.append(
+                f"R12 사유가 지목한 낱말 {left} 이 새 상품명에 그대로 남았다 — "
+                f"빼거나 원문·옵션 증거를 `재작업반영` 에 대라")
+
     # R6. 절차 — 관련어 목록과 반증 답변이 남았는가
     related = product.get("관련어") or []
     keep_note = str(product.get("원본유지사유") or "").strip()
@@ -576,7 +597,8 @@ def main():
                 b = bp.get(p.get("productId"))
                 if not b:
                     continue
-                for k in ("원문명", "옵션명", "옵션구성"):
+                # `재작업사유` 도 배치에만 있다 — R12 가 이걸 봐야 한다(2026-08-16).
+                for k in ("원문명", "옵션명", "옵션구성", "재작업사유"):
                     p.setdefault(k, b.get(k))
         except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
             # 근거 보강 실패가 검증을 죽이면 안 된다 — R10 은 경고일 뿐이다.

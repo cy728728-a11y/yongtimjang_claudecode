@@ -464,8 +464,22 @@ def cmd_prep(args):
     fixed_pids = {p["productId"] for p in fixed}
     vision = [p for p in products if p["productId"] not in fixed_pids]
     if sent_back:
+        # **규칙 0 트리거까지 떼어내야 왕복이 진짜로 닫힌다** (2026-08-17 용쌤2-1 실측).
+        # 비전 배치로 보내기만 하고 `대표옵션이미지경로` 를 남겨두면 배치가 **모순된 지시**
+        # 를 담는다 — 워커 프롬프트 규칙 0 이 "그 경로가 있으면 그게 기준이다, 고르지
+        # 마라"이기 때문이다. 실측 3건 전부 워커가 규칙 0 을 따라 대표옵션(idx 9)을 도로
+        # 집었고, 그 index 는 후보에도 기존썸네일 범위에도 없어 URL 해석이 실패해
+        # **맹목 배경교체**로 떨어졌다(크레딧은 나가고 기준은 한 글자도 안 바뀐다).
+        # 워커 잘못이 아니다 — 배치가 시킨 대로 한 것이다.
+        #
+        # `대표옵션명` 은 남긴다. 후보에서 "그 옵션과 같은 물건"을 고르려면 이름이 필요하고,
+        # 이름은 규칙 0 을 발동시키지 않는다.
+        for p in products:
+            if p["productId"] in sent_back:
+                p["대표옵션이미지경로"] = ""
+                p["대표옵션이미지"] = ""
         print(f"  옵션 되돌림({R.NO_REAL_BASE}) {len(sent_back)}건 — 선기록 대신 "
-              f"비전 배치로 보낸다(왕복 종결)")
+              f"비전 배치로 보낸다(왕복 종결 · 대표옵션 기준 제거)")
     if fixed:
         _dump(os.path.join(run_dir, "results", "result_000.json"),
               {"배치": 0, "선기록": True,
@@ -928,10 +942,22 @@ def cmd_audit(args):
         print(f"  대조불가 선기록 {len(uncomparable)}건(이미지 확보 실패)")
     if delete404:
         _dump(os.path.join(run_dir, "audit_delete_404.json"), delete404)
-        print(f"  ★ 대표옵션 404 삭제 대상 {len(delete404)}건 → audit_delete_404.json")
+        # 현황판에도 보류로 찍는다 — prep 의 원본404 처리와 대칭(2026-08-16).
+        # 안 찍으면 값이 빈칸으로 남아 **다음 prep 이 도로 집어가고** audit 이 또
+        # 같은 상품을 404 삭제 대상으로 분류한다(실측: 25-2 후속 회차에서 5건 재등장,
+        # 이중 삭제 직전까지 갔다). 보류값이면 pending 에서 빠져 루프가 끊긴다.
+        try:
+            matrix.mark_many(sheet, TASK,
+                             {pid: "보류(대표옵션404·삭제대상)" for pid in delete404})
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 삭제대상 현황판 기재 실패: {str(e)[:120]}", file=sys.stderr)
+        print(f"  ★ 대표옵션 404 삭제 대상 {len(delete404)}건 → audit_delete_404.json"
+              f" + 현황판 '{TASK}' 보류")
+        for pid, info in delete404.items():
+            print(f"    {pid}  {(info.get('상품명') or '')[:40]}")
         print(f"    다음: 메인이 bulsaja_market_delete(scope ALL, MARKET_AND_SOURCE, "
               f"확인키 2단계)로 자동 삭제(2026-08-06 이룸님 — 휴지통 복구 가능) → "
-              f"현황판 해당없음 + 종합보고 목록")
+              f"**삭제 뒤 `mark-deleted --run-dir <R>` 로 해당없음 확정** + 종합보고 목록")
 
     batches = [items[i:i + args.batch_size]
                for i in range(0, len(items), args.batch_size)]
@@ -1197,6 +1223,25 @@ def cmd_apply(args):
     if not items:
         print("생성 대상이 없다(전부 보류).")
         return
+
+    # **기준 URL 을 해석 못 한 건은 태우지 않는다** (2026-08-17 용쌤2-1 실측).
+    # 워커가 후보 밖 index 를 주면 `reference_url` 이 빈 문자열이 되고, 불사자는 넘겨준
+    # 이미지가 아니라 **그 상품의 현재 대표**를 배경교체한다(`mode` 기본값 `first`).
+    # 즉 크레딧은 그대로 나가고 기준은 한 글자도 안 바뀐다 — 재생성해도 같은 결과다.
+    # 종전엔 미리보기에 `워커선택` 으로 찍혀 정상처럼 보였다(§reference_source).
+    # 워커를 다시 돌리면 되므로 보류로 남기지 않고 **이번 회차 대상에서만** 뺀다.
+    broken = [p for p in items if R.reference_source(p) == R.REF_BROKEN]
+    if broken:
+        print(f"\n  [기준 해석불가 {len(broken)}건 — 생성 대상에서 제외]")
+        for p in broken:
+            print(f"    {p['productId']}: 기준이미지 {p.get('기준이미지')!r} 가 "
+                  f"후보{[c.get('index') for c in (p.get('후보이미지') or [])]} 에도 "
+                  f"기존썸네일(0~{len(p.get('기존썸네일') or []) - 1}) 에도 없다")
+        print("    → 그 배치의 result 를 지우고 pending → 재팬아웃 하면 다시 고른다.")
+        items = [p for p in items if R.reference_source(p) != R.REF_BROKEN]
+        if not items:
+            print("\n생성 대상이 없다(전부 기준 해석불가).")
+            return
 
     if args.commit:
         _commit(sheet, run_dir, args)
@@ -1869,6 +1914,62 @@ def cmd_recover(args):
         print(f"  실패: {list(failed)[:3]}", file=sys.stderr)
 
 
+def cmd_mark_deleted(args):
+    """404 로 삭제한 건을 현황판 `해당없음` 으로 확정한다 (2026-08-16).
+
+    삭제는 메인이 `bulsaja_market_delete` 로 하고 스크립트는 그 사실을 모른다.
+    확정 경로가 없으면 현황판이 `보류(...삭제대상)` 인 채로 남고, 사람이 손으로
+    찍기를 잊으면 다음 회차에서 **이미 지운 상품을 또 삭제 대상으로 집는다**
+    (실측: 25-2 후속 회차 5건). 그래서 삭제 직후 이 커맨드를 부르는 것을 규약으로 둔다.
+
+    대상은 run-dir 의 404 목록 두 개를 합친 것 — `--ids` 로 좁힐 수 있다.
+    멱등하다: 이미 `해당없음` 인 칸은 mark_many 가 건드리지 않는다.
+    """
+    sheet = _resolve_sheet(args)
+    run_dir = os.path.abspath(args.run_dir) if args.run_dir else ""
+    targets = {}
+    # 두 목록은 **각자 독립으로 있을 수도 없을 수도** 있다 — prep 이 원본404 를 하나도
+    # 못 만나면 `deletion_candidates.json` 자체가 안 생긴다(2-3 r5 실측). `_load` 는
+    # 없는 파일에 FileNotFoundError 를 던지므로 여기서 흡수하지 않으면 **audit 쪽
+    # 404 목록이 멀쩡히 있어도 확정이 통째로 죽는다**.
+    def _load_opt(name):
+        path = os.path.join(run_dir, name)
+        return (_load(path) or {}) if os.path.exists(path) else {}
+
+    if run_dir:
+        # 대표 원본 404 (prep) — {pid: 상품명}
+        for pid, name in _load_opt("deletion_candidates.json").items():
+            targets[pid] = {"상품명": name if isinstance(name, str) else "",
+                            "사유": "대표 원본 404"}
+        # 대표옵션 이미지 404 (audit) — {pid: {상품명, 대표옵션, 사유}}
+        for pid, info in _load_opt("audit_delete_404.json").items():
+            info = info if isinstance(info, dict) else {}
+            targets[pid] = {"상품명": info.get("상품명", ""),
+                            "사유": info.get("사유", "대표옵션 이미지 404")}
+    only = set(args.ids or ())
+    if only:
+        for pid in only:                      # 목록에 없는 id 도 명시했으면 받는다
+            targets.setdefault(pid, {"상품명": "", "사유": "메인 지정"})
+        targets = {p: v for p, v in targets.items() if p in only}
+    if not targets:
+        print("[중단] 확정할 대상이 없다 — run-dir 의 404 목록도 비었고 --ids 도 없다.\n"
+              "  · 삭제 목록은 deletion_candidates.json / audit_delete_404.json 이다",
+              file=sys.stderr)
+        sys.exit(2)
+
+    value = "해당없음(원본404·삭제)"
+    changed = 0
+    if not args.no_matrix:
+        try:
+            changed = matrix.mark_many(sheet, TASK, {p: value for p in targets})
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 현황판 기재 실패: {str(e)[:160]}", file=sys.stderr)
+    print(f"\n###MARK-DELETED### 확정 {len(targets)}건 / 현황판 {changed}칸 갱신")
+    print("  종합보고에 그대로 붙일 목록:")
+    for pid, info in targets.items():
+        print(f"    {pid}  {(info.get('상품명') or '')[:40]}  — {info.get('사유', '')}")
+
+
 def cmd_restore(args):
     run_dir = os.path.abspath(args.run_dir)
     path = os.path.join(run_dir, "before_generate.json")
@@ -2108,6 +2209,16 @@ def main():
     s.add_argument("--run-dir", required=True)
     s.add_argument("--ids", nargs="+", default=None)
     s.set_defaults(func=cmd_restore)
+
+    d = sub.add_parser("mark-deleted",
+                       help="404 로 삭제한 건을 현황판 해당없음 으로 확정(삭제 직후 필수)")
+    _common(d)
+    d.add_argument("--run-dir", default="",
+                   help="deletion_candidates.json + audit_delete_404.json 을 읽는다")
+    d.add_argument("--ids", nargs="+", default=None,
+                   help="이 상품만 확정. 목록에 없는 id 도 받는다")
+    d.add_argument("--no-matrix", action="store_true")
+    d.set_defaults(func=cmd_mark_deleted)
 
     f = sub.add_parser("fallback",
                        help="재생성 2회 실패건 → 대표옵션 원본을 대표로 저장(크레딧 0)")

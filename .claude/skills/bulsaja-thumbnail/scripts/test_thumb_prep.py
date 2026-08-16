@@ -795,6 +795,32 @@ class PrepNoRealBaseTest(unittest.TestCase):
         self.assertTrue(prerecorded)
         self.assertFalse(batched)
 
+    def _batch_product(self):
+        with open(os.path.join(self.run_dir, "batches", "batch_001.json"),
+                  encoding="utf-8") as f:
+            return json.load(f)["products"][0]
+
+    def test_비전_배치에_대표옵션_기준을_남기지_않는다(self):
+        """2026-08-17 용쌤2-1 실측 — 남기면 배치가 **모순된 지시**를 담는다.
+
+        워커 프롬프트 규칙 0 은 "`대표옵션이미지경로` 가 있으면 그게 기준이다, 고르지
+        마라"다. 비전 배치로 보내놓고 그 경로를 남기면 워커는 규칙대로 대표옵션을 도로
+        집는다(실측 3건 전부). 그 index 는 후보에 없어 URL 해석이 실패하고 **맹목
+        배경교체**로 떨어진다 — 크레딧은 나가고 기준은 한 글자도 안 바뀐다.
+        """
+        self._run("옵션: 실물기준없음: 모든 옵션 이미지가 비제품")
+        p = self._batch_product()
+        self.assertEqual(p.get("대표옵션이미지경로"), "")
+        self.assertEqual(p.get("대표옵션이미지"), "")
+
+    def test_대표옵션명은_남긴다(self):
+        """후보에서 '그 옵션과 같은 물건'을 고르려면 이름이 필요하다.
+
+        이름은 규칙 0 을 발동시키지 않으므로 지울 이유가 없다.
+        """
+        self._run("옵션: 실물기준없음: 모든 옵션 이미지가 비제품")
+        self.assertEqual(self._batch_product().get("대표옵션명"), "기본형")
+
 
 class NoRealBaseMarkerTest(unittest.TestCase):
     """마커 판별 — 옵션 워커가 사유 안에 낱말을 넣고, 썸네일이 그걸 읽는다."""
@@ -879,6 +905,72 @@ class HealTruncatedPidTest(unittest.TestCase):
             self.assertEqual(got, {self.FULL, "U01SECOND000000000000000BBB"})
         finally:
             shutil.rmtree(d, ignore_errors=True)
+
+
+class MarkDeletedTest(unittest.TestCase):
+    """mark-deleted — 404 로 지운 건을 현황판 `해당없음` 으로 확정한다 (2026-08-16).
+
+    404 목록은 **둘 다 있을 거라는 보장이 없다.** prep 이 대표 원본 404 를 하나도
+    안 만나면 `deletion_candidates.json` 이 아예 안 생기고, audit 만 404 를 잡는다
+    (2-3 r5 실측: audit 404 4건 · prep 404 0건). 없는 파일에 죽으면 **audit 쪽
+    404 목록이 멀쩡히 있어도 확정이 통째로 실패**해 현황판이 `보류(...삭제대상)` 로
+    남고, 다음 회차가 이미 지운 상품을 또 삭제 대상으로 집는다.
+    """
+
+    def setUp(self):
+        self.run_dir = tempfile.mkdtemp()
+        self.marked = {}
+        self._orig = matrix.mark_many
+        matrix.mark_many = (lambda sheet, task, d, tab=matrix.TAB, matrix=None:
+                            (self.marked.update(d), len(d))[1])
+
+    def tearDown(self):
+        matrix.mark_many = self._orig
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _write(self, name, obj):
+        with open(os.path.join(self.run_dir, name), "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False)
+
+    def _run(self, ids=None):
+        args = argparse.Namespace(sheet="SHEET", group_name="", run_dir=self.run_dir,
+                                  ids=ids, no_matrix=False)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            run_thumbs.cmd_mark_deleted(args)
+        return out.getvalue()
+
+    def test_audit_목록만_있어도_확정된다(self):
+        # deletion_candidates.json 은 만들지 않는다 — 실측에서 자주 없는 쪽이다
+        self._write("audit_delete_404.json",
+                    {"U01a": {"상품명": "종이전시대", "사유": "대표옵션 이미지 404"}})
+        log = self._run()
+        self.assertEqual(self.marked, {"U01a": "해당없음(원본404·삭제)"})
+        self.assertIn("확정 1건", log)
+
+    def test_prep_목록만_있어도_확정된다(self):
+        self._write("deletion_candidates.json", {"U01b": "임팩트렌치"})
+        self._run()
+        self.assertEqual(self.marked, {"U01b": "해당없음(원본404·삭제)"})
+
+    def test_두_목록을_합친다(self):
+        self._write("deletion_candidates.json", {"U01b": "임팩트렌치"})
+        self._write("audit_delete_404.json", {"U01a": {"상품명": "종이전시대"}})
+        self._run()
+        self.assertEqual(set(self.marked), {"U01a", "U01b"})
+
+    def test_목록이_하나도_없으면_exit_2_로_멈춘다(self):
+        """조용히 0건으로 끝나면 '확정했다'로 오독된다."""
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(io.StringIO()):
+            self._run()
+        self.assertEqual(cm.exception.code, 2)
+        self.assertEqual(self.marked, {})
+
+    def test_ids_는_목록에_없는_id_도_받고_나머지는_좁힌다(self):
+        self._write("audit_delete_404.json", {"U01a": {"상품명": "종이전시대"},
+                                              "U01skip": {"상품명": "안 지운 것"}})
+        self._run(ids=["U01a", "U01manual"])
+        self.assertEqual(set(self.marked), {"U01a", "U01manual"})
 
 
 if __name__ == "__main__":
