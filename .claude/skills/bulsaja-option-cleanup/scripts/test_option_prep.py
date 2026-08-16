@@ -559,14 +559,25 @@ class OrphanRecoveryTest(unittest.TestCase):
         thumb = [c for c in self.calls if c[0] == "썸네일"]
         return thumb[0][1].get("P1") if thumb else None
 
-    def test_대표가_그대로면_실물기준없음으로_종결한다(self):
-        # 기준이 한 글자도 안 변했다 — 되돌려봐야 썸네일이 같은 이유로 또 되돌린다
-        for mark in run_options.FROM_THUMB_MARKS:
-            with self.subTest(mark=mark):
-                self.calls.clear()
-                got = self._run(f"보류({mark})", new_main="r1", prev_main="r1")
-                self.assertTrue(got.startswith(run_options.NO_REAL_BASE), got)
-                self.assertIn(mark, got, "원래 보류 사유가 사라졌다")
+    def test_기준이미지없음은_대표가_그대로면_실물기준없음으로_종결한다(self):
+        # 대표옵션 이미지가 비제품인데 옵션이 못 고쳤다 = 기준이 아예 없다
+        got = self._run(f"보류({run_options.NO_BASE_IMAGE})",
+                        new_main="r1", prev_main="r1")
+        self.assertTrue(got.startswith(run_options.NO_REAL_BASE), got)
+        self.assertIn(run_options.NO_BASE_IMAGE, got, "원래 보류 사유가 사라졌다")
+
+    def test_대표옵션의심은_대표가_그대로여도_실물기준없음을_붙이지_않는다(self):
+        """2026-08-17 실내분수 실측 — 붙이면 **멀쩡한 기준을 버린다.**
+
+        `대표옵션의심` 의 쟁점은 "대표옵션이 본품이냐"이고 그 이미지는 실물이다.
+        옵션이 "본품 맞다"고 확인했으면 썸네일은 **그 이미지를 기준으로** 대조해야 한다.
+        실물기준없음을 붙이면 prep 이 기준에서 빼버려 워커가 후보에서 고르는데,
+        후보가 전부 딴 색이면 원래 문제가 그대로 남고 크레딧만 나간다.
+        """
+        got = self._run(f"보류({run_options.MAIN_SUSPECT})",
+                        new_main="r1", prev_main="r1")
+        self.assertNotIn(run_options.NO_REAL_BASE, got)
+        self.assertIn(run_options.MAIN_SUSPECT, got)
 
     def test_대표가_바뀌었으면_재판단으로_되돌린다(self):
         got = self._run("보류(대표옵션의심)", new_main="r2", prev_main="r1")

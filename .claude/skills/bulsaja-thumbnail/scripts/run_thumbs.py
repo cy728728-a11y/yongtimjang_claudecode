@@ -472,12 +472,15 @@ def cmd_prep(args):
         # **맹목 배경교체**로 떨어졌다(크레딧은 나가고 기준은 한 글자도 안 바뀐다).
         # 워커 잘못이 아니다 — 배치가 시킨 대로 한 것이다.
         #
-        # `대표옵션명` 은 남긴다. 후보에서 "그 옵션과 같은 물건"을 고르려면 이름이 필요하고,
-        # 이름은 규칙 0 을 발동시키지 않는다.
+        # **비우는 건 로컬 경로 하나뿐이다.** 규칙 0 을 발동시키는 것도, 워커가 Read 할 수
+        # 있는 것도 그 경로다. `대표옵션이미지`(URL)와 `대표옵션명` 은 남긴다 —
+        #   · URL 은 `verdict` 의 **대조 축**이다. 3축 ①제품 정확성이 "생성본이 대표옵션과
+        #     같은 물건인가"라서, 이걸 지우면 판정 기준 자체가 사라진다(2026-08-17 실측:
+        #     지웠더니 그 3건만 대표옵션 칸이 빈 채로 검수에 올라왔다).
+        #   · 이름은 후보에서 "그 옵션과 같은 물건"을 고르는 데 필요하고 규칙 0 을 안 건다.
         for p in products:
             if p["productId"] in sent_back:
                 p["대표옵션이미지경로"] = ""
-                p["대표옵션이미지"] = ""
         print(f"  옵션 되돌림({R.NO_REAL_BASE}) {len(sent_back)}건 — 선기록 대신 "
               f"비전 배치로 보낸다(왕복 종결 · 대표옵션 기준 제거)")
     if fixed:
@@ -1214,9 +1217,28 @@ def cmd_apply(args):
         # 이미 판단한 것이라 현황판에 값이 있으면 pending 에서 빠진다.
         if not getattr(args, "no_matrix", False):
             try:
+                m = matrix.read(sheet)
                 n = matrix.mark_many(sheet, TASK,
-                                     {p["productId"]: str(p.get("상태")) for p in held})
+                                     {p["productId"]: str(p.get("상태")) for p in held},
+                                     matrix=m)
                 print(f"    → 현황판 '{TASK}' {n}칸에 보류 기록")
+                # **옵션으로 넘겨야 하는 보류는 여기서도 넘긴다** (2026-08-17 실측).
+                # `prescreen` 과 `verdict` 는 같은 사유에 옵션 flag 를 찍는데 **run 워커가
+                # 낸 보류만 안 찍었다.** 그러면 썸네일 열이 `보류(...)` 라 `prep` 이 안 집고
+                # (`matrix.pending`), 옵션 열은 `완료` 라 옵션도 안 집는다 — 어느 축도 안
+                # 집는 미아다(조립식창고 실측). 뿌리가 대표옵션인 건 경로가 셋이든 하나든
+                # 같은 곳으로 가야 한다.
+                back = {}
+                for p in held:
+                    hit = next((v for v in R.TO_OPTION_VERDICTS
+                                if v in str(p.get("상태") or "")), None)
+                    if hit:
+                        back[p["productId"]] = _to_option_reason(
+                            hit, p.get("사유") or "후보 중에 대표옵션과 맞는 실물이 없다")
+                if back:
+                    k = matrix.flag_many(sheet, "옵션", back, from_task=TASK, matrix=m)
+                    print(f"    → 옵션 열 재작업 flag {k}칸 — 대표옵션을 실물 사진이 "
+                          f"있는 값으로 다시 세워야 풀린다")
             except Exception as e:  # noqa: BLE001
                 print(f"    [경고] 보류 현황판 기재 실패: {str(e)[:120]}", file=sys.stderr)
         items = [p for p in items if not str(p.get("상태", "")).startswith("보류")]

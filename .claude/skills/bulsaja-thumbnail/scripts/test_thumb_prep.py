@@ -809,17 +809,20 @@ class PrepNoRealBaseTest(unittest.TestCase):
         배경교체**로 떨어진다 — 크레딧은 나가고 기준은 한 글자도 안 바뀐다.
         """
         self._run("옵션: 실물기준없음: 모든 옵션 이미지가 비제품")
-        p = self._batch_product()
-        self.assertEqual(p.get("대표옵션이미지경로"), "")
-        self.assertEqual(p.get("대표옵션이미지"), "")
+        self.assertEqual(self._batch_product().get("대표옵션이미지경로"), "")
 
-    def test_대표옵션명은_남긴다(self):
-        """후보에서 '그 옵션과 같은 물건'을 고르려면 이름이 필요하다.
+    def test_대표옵션_URL과_이름은_남긴다(self):
+        """비우는 건 **로컬 경로 하나뿐**이다 (2026-08-17 실측으로 좁혔다).
 
-        이름은 규칙 0 을 발동시키지 않으므로 지울 이유가 없다.
+        URL 은 `verdict` 의 대조 축이다 — 3축 ①제품 정확성이 "생성본이 대표옵션과 같은
+        물건인가"라, 지우면 판정 기준 자체가 사라진다(처음 고칠 때 URL 까지 비웠더니
+        그 3건만 검수에 대표옵션 칸이 빈 채로 올라왔다).
+        이름은 후보에서 같은 물건을 고르는 데 필요하고, 둘 다 규칙 0 을 발동시키지 않는다.
         """
         self._run("옵션: 실물기준없음: 모든 옵션 이미지가 비제품")
-        self.assertEqual(self._batch_product().get("대표옵션명"), "기본형")
+        p = self._batch_product()
+        self.assertTrue(p.get("대표옵션이미지"), "verdict 대조 축이 사라진다")
+        self.assertEqual(p.get("대표옵션명"), "기본형")
 
 
 class NoRealBaseMarkerTest(unittest.TestCase):
