@@ -57,13 +57,21 @@ HEADER = ["상품id", "작업일", "상품명", "메인상품", "옵션수", "�
           "대표옵션", "기준가", "상한", "순서", "상태", "메모", "옵션명변경"]
 
 # 옵션 축(선택 항목) 이름 원장 — 규칙 18(2026-08-04 이룸님).
-# **축 이름은 MCP 로 못 바꾼다**(renameValues 는 값 전용). 불사자 앱 UI 에서 수동으로만
-# 가능하고, MCP 추가는 요청해둔 상태다. 그래서 여기 '반영 대기'로 쌓아두고 나중에 태운다.
-# `상태` 를 이룸님이 `반영`·`무시` 로 바꾸면 재실행이 그 행을 **덮지 않는다**.
+#
+# **2026-08-17부터 저장한다.** MCP 에 `renameGroups`(`[{groupIndex, name}]`)가 생겼다.
+# 그전까지 이 탭은 '앱에서 수동 반영할 목록'이었고, 이제는 **무엇을 왜 바꿨나의 원장**이다.
+#   `반영`      — 이번 회차가 MCP 로 저장했다
+#   `대기`      — 기계 신호만 있고 워커 제안이 없다. 대체 이름은 사람만 지을 수 있다
+#   `보류(사유)` — 제안이 있었지만 안 보냈거나 저장이 거부됐다
+# `상태` 를 이룸님이 `반영`·`무시` 로 바꾼 행은 재실행이 **덮지 않는다**.
 AXIS_TAB = "옵션축"
 AXIS_HEADER = ["상품id", "기록일", "상품명", "차원", "원문축명", "현재축명",
                "제안축명", "사유", "값예시", "신호", "상태"]
 AXIS_PENDING = "대기"
+AXIS_APPLIED = "반영"
+# 제안이 없어 **지금 이름을 그대로 둔** 축. `무시` 와 같은 뜻(= 다시 안 잡는다)이지만
+# 사람이 판단한 `무시` 와 구분해 적는다 — 원장을 읽을 때 누가 정했는지가 보여야 한다.
+AXIS_KEEP = "무시(제안 없음 — 현재 이름 유지)"
 
 # **부분저장** — 이름 규칙만 어긴 상태는 ②(판매·대표·순서)를 저장한다 (2026-08-06 이룸님).
 #
@@ -146,6 +154,13 @@ class OptionMCP(snapshot.ProductMCP):
         """
         if kw.get("renameValues") and (kw.get("sortOrder") or kw.get("skuOrder")):
             raise ValueError("이름 변경과 순서 변경은 같은 호출에 넣을 수 없다")
+        # 축 이름(`renameGroups`)은 순서와 같은 호출에 넣어도 되지만 **넣지 않는다**.
+        # 축 이름이 하나라도 거부되면 그 호출이 통째로 실패해서, 표기 문제 하나가
+        # **무엇을 파느냐**(포함/제외·대표)까지 같이 막는다 — 3-1 워터건에서 `기본형`
+        # 마커가 그랬던 것과 똑같은 구조다(→ SKILL.md §부분저장). 그래서 축은 항상 단독이다.
+        if kw.get("renameGroups") and len(
+                [k for k, v in kw.items() if v not in (None, [], "")]) > 1:
+            raise ValueError("축 이름 변경은 단독 호출로만 보낸다")
         payload = {"productId": product_id}
         payload.update({k: v for k, v in kw.items() if v not in (None, [], "")})
 
@@ -670,8 +685,9 @@ def _plans(run_dir, spec_main=None):
         plan["이름변경"] = R.name_changes(rec["옵션"], names)
         plan["가격"] = {str(r["id"]): r.get("sale_price")
                       for r in (rec["옵션"].get("판매행") or [])}
-        # 축 이름 감사(규칙 18) — **저장 대상이 아니다.** MCP 에 축 이름 변경이 없어서
-        # 시트 원장에만 남기고, 상태에도 영향을 주지 않는다(축 때문에 옵션 저장을 막지 않는다).
+        # 축 이름 감사(규칙 18). 워커 제안이 있는 축은 `_commit` 이 `renameGroups` 로
+        # 저장하고(2026-08-17), 제안 없이 기계 신호만 있는 축은 원장에 `대기` 로 남는다.
+        # **상태에는 영향을 주지 않는다** — 축은 표기고, 축 때문에 옵션 저장을 막지 않는다.
         plan["축감사"] = R.axis_audit(rec["옵션"], p.get("축교정"))
         # (2026-08-05 이룸님) 마지막 차원 값이 1개인 경우를 '수동 판단'으로 멈추던 자리다.
         # 기준이 정해져서 `main_value_key` 가 **값 2개 이상인 마지막 차원**을 고르게 됐고,
@@ -949,15 +965,18 @@ def cmd_apply(args):
                            or {}).get("누락")),
             "기본형오부착": list((((plan or {}).get("이름검사") or {}).get("마커")
                              or {}).get("오부착") or []),
-            # 축 이름(규칙 18) — 이번 저장 대상이 아니고 시트 원장으로만 간다.
-            # 세로 러너 게이트가 "이 상품은 축도 손봐야 한다"를 사람에게 보여주는 재료.
+            # 축 이름(규칙 18) — 제안이 있는 축은 이번 저장에 함께 나간다(2026-08-17).
+            # 세로 러너 게이트가 "이 상품은 축도 바뀐다"를 사람에게 보여주는 재료.
             "축감사": list((plan or {}).get("축감사") or []),
         } for pid, plan, w, st in rows])
         print(f"  계획 요약: {args.emit}")
 
     if not args.no_sheet:
         _log_sheet(sheet, rows)
-        _log_axis_sheet(sheet, rows)
+        # 저장까지 가는 회차면 여기서 안 쓴다 — `_commit` 이 **실제 결과**로 한 번에 쓴다.
+        # 두 번 쓰면 원장이 `대기` → `반영` 으로 두 번 왕복해 쿼터만 먹는다.
+        if not args.commit:
+            _log_axis_sheet(sheet, rows)
 
     # 현황판은 **`--no-sheet` 와 무관하게** 쓴다 (2026-08-14, 2-2 에서 밟았다).
     # 원장 탭 쓰기(느리다·쿼터를 먹는다)를 끄려고 `--no-sheet` 를 붙이면 현황판까지
@@ -1103,16 +1122,21 @@ def _log_sheet(sheet, rows):
         print(f"  시트 기록: {len(add)}행 → '{TAB}'")
 
 
-def _log_axis_sheet(sheet, rows):
-    """옵션 축 이름 원장(`옵션축` 탭) — 규칙 18. **저장하지 않고 기록만 한다.**
+def _log_axis_sheet(sheet, rows, status=None):
+    """옵션 축 이름 원장(`옵션축` 탭) — 규칙 18.
 
-    축 이름(`prop_name`)은 불사자 MCP 로 못 바꾼다(`renameValues` 는 값 전용). 앱 UI 에서
-    수동으로만 되고 MCP 추가는 요청해둔 상태라, 여기 '대기'로 쌓아 나중에 한꺼번에 태운다.
+    `status` = {(상품id, 차원문자열): 상태}. `_commit` 이 실제 저장 결과를 넘긴다
+    (`반영` / `보류(사유)`). 안 넘기면 전부 `대기` 로 쌓인다(= 미리보기 회차).
+
+    **2026-08-17부터 이 탭은 '수동 반영 목록'이 아니라 '무엇을 왜 바꿨나의 원장'이다.**
+    MCP 에 `renameGroups` 가 생겨 축 이름을 코드가 직접 저장한다. 워커 제안이 없어
+    코드가 이름을 지어낼 수 없는 축만 종전대로 `대기` 로 남아 사람 몫이 된다.
 
     키는 (상품id, 차원 index) — 상품 하나에 축이 여럿이라 상품id 만으로는 못 찍는다.
     **상태가 `대기` 가 아닌 행은 건드리지 않는다** — 이룸님이 `반영`·`무시` 로 바꿔둔 판단을
     재실행이 되돌리면 원장이 거짓이 된다(카테고리 finish 가 밟았던 덮어쓰기 결함과 같은 함정).
     """
+    status = status or {}
     entries = [(pid, w, a) for pid, plan, w, _st in rows
                for a in ((plan or {}).get("축감사") or [])]
     if not entries:
@@ -1136,13 +1160,23 @@ def _log_axis_sheet(sheet, rows):
     add, upd, kept = [], [], 0
     for pid, w, a in entries:
         key = (pid, str(a["차원"]))
+        # **`대기` 는 이제 거의 안 쓴다** (2026-08-17 이룸님 — 사람 손 최소화).
+        # 제안이 없는 축은 둘 중 하나로 닫는다: 이름이 객관적으로 깨졌으면 코드가 지어
+        # 저장했고(`axis_fallback`), 휴리스틱 신호뿐이면 지금 이름을 유지한다.
+        # 어느 쪽도 사람이 할 일이 아니라, 원장에 할 일로 쌓아두면 그게 거짓이 된다.
+        기본 = AXIS_PENDING if a["제안"] else AXIS_KEEP
         vals = [pid, _today(), w.get("상품명", ""), str(a["차원"]),
                 a["원문"], a["현재"], a["제안"], a["사유"][:400],
                 " / ".join(v for v in a["값예시"] if v)[:300],
-                "; ".join(a["신호"])[:200], AXIS_PENDING]
+                "; ".join(a["신호"])[:200], status.get(key, 기본)]
         r = at.get(key)
         if r is None:
             add.append(vals)
+        elif key in status:
+            # 이번 회차가 **실제로 손댄 축**이다 — 원장은 실제와 같아야 한다.
+            # (`무시` 로 판단된 축은 `_axis_ignored` 가 제안 단계에서 걸러내므로
+            #  여기 `status` 에 아예 안 들어온다. 그래서 이 분기가 판단을 덮지 않는다.)
+            upd.append((r, vals))
         elif state.get(key, AXIS_PENDING) not in ("", AXIS_PENDING):
             kept += 1                      # 사람이 판단한 행 — 그대로 둔다
         else:
@@ -1154,8 +1188,197 @@ def _log_axis_sheet(sheet, rows):
     if add:
         for _, part in chunk_by_size(add, budget=_ARG_BUDGET):
             append_rows(sheet, AXIS_TAB, part)
+    n_ap = sum(1 for v in status.values() if v == AXIS_APPLIED)
     print(f"  옵션 축: 신규 {len(add)} / 갱신 {len(upd)} / 판단완료 유지 {kept} "
-          f"→ '{AXIS_TAB}' (저장 안 함 — 앱에서 수동 반영)")
+          f"→ '{AXIS_TAB}'"
+          + (f" (반영 {n_ap}축)" if status else " (대기 — 제안이 있으면 저장 회차가 태운다)"))
+
+
+def _axis_ignored(sheet):
+    """이룸님이 `옵션축` 탭에서 `무시`·`반영` 으로 판단해둔 (상품id, 차원) 집합.
+
+    **저장 전에 제안에서 걸러낸다.** 이 탭은 원래 '앱에서 수동 반영할 목록'이었고
+    `무시` 는 "이 축은 지금 이름이 맞다"는 판단이다. 코드가 축을 저장하게 된 뒤에도
+    그 판단이 이겨야 한다 — 안 그러면 재실행이 사람이 내린 결론을 매번 되돌린다.
+    `반영` 도 같이 뺀다(앱에서 이미 손으로 고친 축을 워커 제안으로 다시 덮지 않는다).
+    """
+    try:
+        cur = sheets_get(sheet, f"'{AXIS_TAB}'!A2:{_col_letter(len(AXIS_HEADER))}")
+    except Exception:
+        return set()                        # 탭이 아직 없다 = 판단도 없다
+    out = set()
+    for r in cur or []:
+        pid = str(r[0]).strip() if r else ""
+        st = str(r[10]).strip() if len(r) > 10 else ""
+        if pid and st and st not in (AXIS_PENDING,) and not st.startswith("보류"):
+            out.add((pid, str(r[3]).strip() if len(r) > 3 else ""))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# axis — 원장에 쌓인 `대기` 축을 태운다
+# ---------------------------------------------------------------------------
+
+def cmd_axis(args):
+    """`옵션축` 탭의 `대기` 행을 읽어 실제로 `renameGroups` 로 저장한다.
+
+    **왜 별도 명령인가.** `_commit` 이 축을 저장하는 건 **이번 run 에 든 상품**뿐이다.
+    그런데 원장에 쌓인 축들은 전부 **이미 옵션이 `완료` 인 상품**의 것이라 현황판
+    `pending` 에 안 잡힌다 — MCP 에 축 필드가 없던 시절에 판정만 해서 쌓아둔 것이기
+    때문이다. 이 명령이 없으면 `_commit` 을 고쳐도 그 backlog 는 영영 안 나간다
+    (1-2 실측 278행 중 제안이 있는 200행). 옵션을 통째로 다시 돌릴 이유는 없다 —
+    바뀌는 건 축 **표기 하나**고, 무엇을 파느냐는 이미 정해져 있다.
+
+    **원장이 현재 상태와 어긋나면 보내지 않는다.** 제안은 그때의 축 이름을 보고 지은
+    것이라, 그 사이 축이 달라졌으면 제안의 근거가 사라진 것이다. 세 갈래로 가른다:
+      · 현재 축 == 제안        → `반영`  (이미 그렇게 돼 있다. 호출하지 않는다)
+      · 현재 축 != 원장의 현재축명 → `보류(축이 바뀌었다…)`  (사람이 다시 본다)
+      · 그 밖                  → 저장 대상
+
+    저장 자체의 검증(금지문자·축끼리 겹침·결함)은 `axis_saveable` 이, 반영 확인은
+    `axis_verify` 가 한다 — `_commit` 과 **같은 함수**다. 경로가 둘이어도 판정은 하나다.
+    """
+    sheet = _resolve_sheet(args)
+    print(f"  시트: {sheet}")
+    rows = sheets_get(sheet, f"'{AXIS_TAB}'!A2:{_col_letter(len(AXIS_HEADER))}") or []
+
+    # 1) 대상 — 제안이 있고 상태가 `대기` 이거나 `보류(…)` 인 행.
+    #    행 번호를 같이 들고 다닌다 — 결과를 그 행의 `상태` 칸에 되써야 한다.
+    #
+    #    **`보류` 를 같이 집는 이유**: 그건 사람의 판단이 아니라 **코드가 못 한 것**이다
+    #    (금지문자·이름 겹침·저장 거부·검증 실패). 안 집으면 한 번 막힌 축은 영영 재시도
+    #    되지 않는다 — 실제로 `/` 하나 때문에 25축이 그 상태로 남았다(1-2, 2026-08-17).
+    #    사람이 내린 판단(`무시`·`반영`)만 건드리지 않는다. `_axis_ignored` 가 `보류` 를
+    #    빼는 것과 **같은 기준**이다 — 두 자리가 어긋나면 한쪽이 반드시 거짓말을 한다.
+    #    (제안 없는 행 = 사람 몫이라 그대로 둔다)
+    todo = {}                                   # pid → [(행번호, 차원, 현재축명, 제안)]
+    repaired = []                               # [(행번호, 고친 제안)] — G열에 되쓴다
+    n_noprop = 0
+    for i, r in enumerate(rows, start=2):
+        def _c(j):
+            return str(r[j]).strip() if len(r) > j else ""
+        pid, st, prop = _c(0), _c(10), _c(6)
+        if not pid or not (st == AXIS_PENDING or st.startswith("보류")):
+            continue
+        if not prop:
+            n_noprop += 1
+            continue
+        try:
+            gi = int(_c(3))
+        except ValueError:
+            continue
+        # 구분자 `/` 만 `·` 로 고친다 — 축 저장이 없던 시절에 지은 제안이라 금지문자
+        # 규칙을 몰랐다(1-2 실측 200축 중 25축). 고친 값은 원장 G열에도 되써서
+        # **원장에 적힌 제안과 실제로 보낸 값이 같게** 한다.
+        fixed = R.axis_repair(prop)
+        if fixed != prop:
+            repaired.append((i, fixed))
+            prop = fixed
+        todo.setdefault(pid, []).append((i, gi, _c(5), prop))
+    if args.ids:
+        want = set(args.ids)
+        todo = {p: v for p, v in todo.items() if p in want}
+        keep = {i for v in todo.values() for i, *_ in v}
+        repaired = [(i, v) for i, v in repaired if i in keep]
+    print(f"[1/3] 원장 {len(rows)}행 → 대상 {sum(len(v) for v in todo.values())}축 "
+          f"/ {len(todo)}상품 (제안 없어 사람 몫 {n_noprop}축)")
+    if repaired:
+        print(f"  구분자 교정 {len(repaired)}축: `/` → `·` (원장에도 되쓴다)")
+    if args.limit:
+        todo = dict(list(todo.items())[:args.limit])
+        print(f"  --limit {args.limit} 적용 → {len(todo)}상품")
+    if not todo:
+        print("처리할 축이 없다.")
+        return
+
+    # 2) 상품별로 현재 축 이름을 확인하고 저장한다.
+    mcp = OptionMCP()
+    mcp.open()
+    updates, n_ok, n_skip, n_bad = [], 0, 0, 0
+    try:
+        for k, (pid, items) in enumerate(sorted(todo.items()), start=1):
+            try:
+                before = mcp.workdata(pid).get("옵션") or {}
+            except Exception as e:  # noqa: BLE001
+                for row, gi, _cur, _new in items:
+                    updates.append((row, f"보류(조회실패: {str(e)[:100]})"))
+                    n_bad += 1
+                print(f"  [{k}/{len(todo)}] {pid} 조회 실패: {str(e)[:80]}", file=sys.stderr)
+                continue
+            dims = before.get("차원") or []
+            audit, row_of = [], {}
+            for row, gi, cur, new in items:
+                live = str(dims[gi].get("이름") or "") if gi < len(dims) else ""
+                if not (0 <= gi < len(dims)):
+                    updates.append((row, f"보류(차원 {gi} 이 이 상품에 없다)"))
+                    n_bad += 1
+                elif R.axis_norm(live) == R.axis_norm(new):
+                    updates.append((row, AXIS_APPLIED))   # 이미 그 이름이다
+                    n_skip += 1
+                elif cur and R.axis_norm(live) != R.axis_norm(cur):
+                    updates.append((row, f"보류(축이 바뀌었다: 원장 '{cur}' → 현재 '{live}')"[:200]))
+                    n_bad += 1
+                else:
+                    audit.append({"차원": gi, "제안": new})
+                    row_of[gi] = row
+            if not audit:
+                continue
+
+            send, rejects = R.axis_saveable(before, audit)
+            for rj in rejects:
+                row = row_of.get(rj["차원"])
+                if row:
+                    updates.append((row, f"보류({rj['사유']})"[:200]))
+                    n_bad += 1
+            if not send:
+                continue
+            names = " · ".join(f"{dims[i['groupIndex']].get('이름')}→{i['name']}" for i in send)
+            if not args.commit:
+                print(f"  [{k}/{len(todo)}] {pid} (미리보기) {names}")
+                continue
+            try:
+                mcp.option_update(pid, renameGroups=send)
+                time.sleep(args.sleep)
+            except Exception as e:  # noqa: BLE001
+                for it in send:
+                    updates.append((row_of[it["groupIndex"]],
+                                    f"보류(저장실패: {str(e)[:120]})"[:200]))
+                    n_bad += 1
+                print(f"  [{k}/{len(todo)}] {pid} 저장 실패: {str(e)[:80]}", file=sys.stderr)
+                continue
+
+            # 3) 재조회 검증 — 보냈다고 박힌 게 아니다. 검증분만 `반영` 으로 적는다.
+            after = mcp.workdata(pid).get("옵션") or {}
+            fails = {f["차원"] for f in R.axis_verify(after, send)}
+            for f in R.axis_verify(after, send):
+                updates.append((row_of[f["차원"]], f"보류(검증실패: {f['사유']})"[:200]))
+                n_bad += 1
+            for it in send:
+                if it["groupIndex"] not in fails:
+                    updates.append((row_of[it["groupIndex"]], AXIS_APPLIED))
+                    n_ok += 1
+            # 스냅샷도 새 축 이름으로 되쓴다 — 안 하면 다음 회차 워커가 옛 축을 보고
+            # 같은 제안을 또 낸다(= 이 원장이 다시 부푼다).
+            snapshot.update(pid, 옵션=after)
+            print(f"  [{k}/{len(todo)}] {pid} 반영 {len(send) - len(fails)}축: {names}")
+    finally:
+        mcp.close()
+
+    # 4) 원장 되쓰기 — 연속 구간으로 묶어 batchUpdate 한 호출에 싣는다.
+    #    행마다 update 하면 쓰기 호출이 행수만큼 나가 분당 쿼터(60)에 즉사한다.
+    #    **미리보기 회차는 안 쓴다** — 원장은 실제로 한 일의 기록이지 예정표가 아니다.
+    if (updates or repaired) and args.commit:
+        ranges = []
+        for name, cells in (("상태", updates), ("제안축명", repaired)):
+            col = _col_letter(AXIS_HEADER.index(name) + 1)
+            ranges += [(f"'{AXIS_TAB}'!{col}{start}:{col}{start + len(block) - 1}", block)
+                       for start, block in _row_runs(sorted((r, [v]) for r, v in cells))]
+        for _, part in chunk_by_size(ranges, budget=_ARG_BUDGET):
+            sheets_batch_update(sheet, part, value_input="USER_ENTERED")
+        print(f"  원장 갱신: 상태 {len(updates)}행 · 제안 {len(repaired)}행 "
+              f"/ 구간 {len(ranges)}개 → '{AXIS_TAB}'")
+    print(f"\n###AXIS### 반영 {n_ok}축 / 이미반영 {n_skip}축 / 보류 {n_bad}축"
+          + ("" if args.commit else "  (미리보기 — 저장하려면 --commit)"))
 
 
 def _commit(sheet, rows, args):
@@ -1214,6 +1437,16 @@ def _commit(sheet, rows, args):
     mcp = OptionMCP()
     mcp.open()
     done, failed, partial_ids = {}, {}, []
+    axis_status, axis_n = {}, 0        # (pid, 차원) → 원장 상태 · 반영 축 수
+    # 사람이 `무시`·`반영` 으로 판단해둔 축은 제안에서 뺀다(원장 조회 1회).
+    try:
+        axis_skip = _axis_ignored(sheet)
+    except Exception as e:  # noqa: BLE001
+        axis_skip = set()
+        print(f"  [경고] 옵션축 판단 조회 실패 — 전 축을 후보로 본다: {str(e)[:120]}",
+              file=sys.stderr)
+    if axis_skip:
+        print(f"  옵션축: 사람이 판단해둔 {len(axis_skip)}축은 건드리지 않는다")
     try:
         for pid, plan, w, st in targets:
             before = backup.get(pid) or {}
@@ -1297,7 +1530,38 @@ def _commit(sheet, rows, args):
                                   mainSkuId=plan["대표"], skuOrder=plan["순서"])
                 time.sleep(args.sleep)
 
+                # ③ 축(선택 항목) 이름 — 규칙 18. **단독 호출 · 실패해도 상품을 안 죽인다.**
+                # 고객이 보는 건 `색상: 블랙` 처럼 축+값이라 값만 고치면 절반만 고친 것이다.
+                # 다만 축은 표기고 ②는 무엇을 파느냐라, 축이 거부돼도 ②는 이미 저장됐고
+                # 상품은 `완료` 다 — 축만 원장에 `보류(…)` 로 남아 다음에 사람이 본다.
+                # 재조회 **앞**에 둔다: 아래 `after` 한 번으로 검증까지 끝난다(추가 조회 0).
+                ax_audit = [a for a in (plan.get("축감사") or [])
+                            if (pid, str(a.get("차원"))) not in axis_skip]
+                ax_items, ax_rej = R.axis_saveable(before, ax_audit)
+                for r in ax_rej:
+                    axis_status[(pid, str(r["차원"]))] = f"보류({r['사유']})"[:200]
+                if ax_items:
+                    try:
+                        mcp.option_update(pid, renameGroups=ax_items)
+                        time.sleep(args.sleep)
+                    except Exception as e:  # noqa: BLE001
+                        why = f"보류(저장실패: {str(e)[:120]})"
+                        for it in ax_items:
+                            axis_status[(pid, str(it["groupIndex"]))] = why
+                        ax_items = []
+                        print(f"    (축 이름 저장 실패 — 옵션은 저장됨: {str(e)[:100]})",
+                              file=sys.stderr)
+
                 after = mcp.workdata(pid).get("옵션") or {}
+                for f in R.axis_verify(after, ax_items):
+                    # 보냈는데 안 박힌 축 — 조용히 '반영'으로 적으면 원장이 거짓이 된다.
+                    gi = str(f["차원"])
+                    axis_status[(pid, gi)] = f"보류(검증실패: {f['사유']})"[:200]
+                    ax_items = [i for i in ax_items if str(i["groupIndex"]) != gi]
+                    print(f"    (축 검증 실패: 차원 {gi} — {f['사유']})", file=sys.stderr)
+                for it in ax_items:
+                    axis_status[(pid, str(it["groupIndex"]))] = AXIS_APPLIED
+                    axis_n += 1
                 fails = R.verify(before, after, plan, names=names or None)
                 if fails:
                     raise RuntimeError("; ".join(fails)[:300])
@@ -1344,6 +1608,17 @@ def _commit(sheet, rows, args):
     print(f"\n###OPTIONS### 반영 {len(done)}건 / 부분저장 {len(partial_ids)}건 "
           f"/ 실패 {len(failed)}건"
           + (f" (재개분 포함 누적 {len(saved)}건)" if len(saved) != len(done) else ""))
+    ax_bad = sum(1 for v in axis_status.values() if v != AXIS_APPLIED)
+    if axis_status:
+        print(f"  옵션 축 이름(규칙 18): 반영 {axis_n}축 / 보류 {ax_bad}축")
+    # 축 원장은 **`--no-sheet` 와 무관하게** 쓴다 — 현황판과 같은 이유다.
+    # 실제로 바꿔놓고 원장에 `대기` 로 남기면, 이미 반영된 축을 앱에서 또 손보게 된다.
+    # (`--no-sheet` 가 막는 건 미리보기 회차의 원장 쓰기다 — 그건 아래 cmd_apply 에서 건다.)
+    if not args.no_matrix:
+        try:
+            _log_axis_sheet(sheet, rows, status=axis_status)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 옵션축 원장 기록 실패: {str(e)[:120]}", file=sys.stderr)
     if partial_ids:
         print(f"  부분저장(옵션명 미저장, 현황판 {TASK} 열 재작업): "
               f"{', '.join(partial_ids[:5])}{' 외 %d건' % (len(partial_ids) - 5) if len(partial_ids) > 5 else ''}")
@@ -1548,6 +1823,21 @@ def cmd_restore(args):
                                   mainSkuId=main_id,
                                   skuOrder=[r["id"] for r in rows])
                 time.sleep(args.sleep)
+                # 축(선택 항목) 이름도 되돌린다 (2026-08-17 — 축 저장이 생기면서 같이 들어왔다).
+                # 이게 없으면 값·판매구성만 옛것으로 가고 축 이름만 새것으로 남아,
+                # 되돌렸다고 믿는 상품이 실제로는 어느 회차와도 다른 상태가 된다.
+                groups = [{"groupIndex": gi, "name": str(d.get("이름") or "").strip()}
+                          for gi, d in enumerate(before.get("차원") or [])
+                          if str(d.get("이름") or "").strip()]
+                if groups:
+                    try:
+                        mcp.option_update(pid, renameGroups=groups)
+                        time.sleep(args.sleep)
+                    except Exception as e:  # noqa: BLE001
+                        # 축 복구 실패로 상품 복구 전체를 실패로 적지 않는다 —
+                        # 판매 구성은 이미 되돌아갔고, 남은 건 표기뿐이다.
+                        print(f"    (축 이름 복구 실패 — 옵션은 복구됨: {str(e)[:100]})",
+                              file=sys.stderr)
                 snapshot.update(pid, 옵션=mcp.workdata(pid).get("옵션") or {})
                 ok += 1
                 print(f"  [복구] {pid}")
@@ -1608,6 +1898,14 @@ def main():
                    help="검수표(옵션명 대조·순서·제외)를 찍지 않는다")
     a.add_argument("--sleep", type=float, default=0.5)
     a.set_defaults(func=cmd_apply)
+
+    x = sub.add_parser("axis", help="`옵션축` 탭의 대기 축을 실제로 저장한다(규칙 18)")
+    _common(x)
+    x.add_argument("--ids", nargs="+", default=None, help="이 상품들만")
+    x.add_argument("--limit", type=int, default=0, help="상품 N건만(파일럿용)")
+    x.add_argument("--commit", action="store_true", help="실제 저장(없으면 미리보기)")
+    x.add_argument("--sleep", type=float, default=0.5)
+    x.set_defaults(func=cmd_axis)
 
     s = sub.add_parser("restore", help="저장 전 상태로 되돌린다(before_commit.json 필요)")
     _common(s)

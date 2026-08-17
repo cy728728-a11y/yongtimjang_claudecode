@@ -104,10 +104,14 @@ def check_names(names, groups=None):
 # ---------------------------------------------------------------------------
 # 옵션 축(선택 항목) 이름 — 규칙 18 (2026-08-04 이룸님)
 #
-# 축 이름(`prop_name`)은 **불사자 MCP 로 바꿀 수 없다** — `renameValues` 는 값 전용이고
-# 축을 가리키는 필드 자체가 없다(불사자 앱 UI 에서 수동으로만 가능. MCP 추가 요청함).
-# 그래서 여기서는 **판정만** 하고 저장은 하지 않는다. 결과는 시트 `옵션축` 탭에
-# '반영 대기' 원장으로 쌓이고, MCP 가 생기면 그 원장을 그대로 태운다.
+# **2026-08-17부터 저장한다.** `bulsaja_option_update` 에 `renameGroups`
+# (`[{groupIndex, name}]`)가 생겨서 축 이름을 MCP 로 바꿀 수 있게 됐다.
+# 그전까지는 `renameValues` 가 값 전용이라 판정만 하고 시트 `옵션축` 탭에 '대기'로
+# 쌓아 앱에서 수동 반영했다 — 그 원장을 이제 코드가 직접 태운다.
+#
+# 여기(`axis_audit`)는 종전대로 **판정**이고, `axis_saveable` 이 그중 실제로 보낼 것만
+# 골라낸다. 둘을 나눈 이유: 기계 신호만 있고 워커 제안이 없는 축(번역 잔재 등)은
+# 대체 이름을 지어낼 수 없어 **여전히 사람 몫**이라 원장에 남아야 한다.
 #
 # 왜 필요한가(용쌤1-2 실측, 681상품·881축):
 #   · 축 이름 번역 잔재 25건 — "색상별로 정렬하십시오" / "용량별 정렬" / "제품명"
@@ -165,6 +169,67 @@ def axis_color_mismatch(dim):
     return not any(_COLOR_WORDS.search(v) for v in vals)
 
 
+# 워커가 "두 속성이 섞였다"를 적을 때 쓰는 구분자. `/` 는 축 이름 금지문자라 그대로면
+# 저장이 거부된다 — 뜻은 그대로 두고 문자만 바꾼다.
+_AXIS_SLASH = re.compile(r"\s*[/]\s*")
+
+
+def axis_repair(name):
+    """축 이름 제안에서 **구분자 `/` 만** `·` 로 바꾼다 (2026-08-17 이룸님).
+
+    `/` 는 금지문자 중 유일하게 **뜻이 확실한** 것이다 — 워커가 `색상/마감` 이라 쓸 때
+    그건 "이 축엔 색상과 마감이 섞였다"는 말이고, `·` 로 바꿔도 뜻이 그대로다.
+    나머지 금지문자(`(세트)` 의 괄호 등)는 무엇으로 바꿔야 할지 기계가 모르니 손대지
+    않는다 — 그건 `axis_saveable` 이 거부해서 사람에게 남긴다.
+
+    **왜 여기서 고치나**: 축을 저장할 수 있게 된 2026-08-17 이전에 지은 제안 200개 중
+    25개가 `/` 때문에 통째로 막혔다(1-2 실측). 규칙이 없던 시절에 지은 것이라 워커
+    탓이 아니고, 사람이 25번 고쳐 앉을 일도 아니다. 제안이 들어오는 자리에서 한 번
+    고치면 원장에 적히는 값과 실제로 보내는 값이 같아진다.
+    """
+    n = _AXIS_SLASH.sub("·", str(name or "").strip())
+    return re.sub(r"·{2,}", "·", n).strip("·").strip()
+
+
+# 축 이름에서 번역 잔재를 벗겨내는 패턴 — `색상별로 정렬하십시오` → `색상`.
+_AXIS_STRIP = re.compile(r"\s*(별로|별)?\s*(정렬|선택)(하십시오|하세요|하시오|해주세요)?\s*$")
+
+# 마지막 수단 축 이름. 타오바오 범용 SKU 축(`颜色分类`)에 늘 참인 말이라 틀릴 수가 없다.
+# (`_AXIS_VAGUE` 에 없다 — '종류'·'유형'은 실제로 쓸 만한 축 이름이다)
+AXIS_LAST_RESORT = "종류"
+
+
+def axis_fallback(name):
+    """워커 제안이 없을 때 **코드가 대신 짓는** 축 이름 (2026-08-17 이룸님).
+
+    "대체 이름을 못 지어도 진행해라. 축 이름은 정확하면 좋지만 틀려도 치명적이지 않다."
+    — 전에는 제안이 없으면 원장에 `대기` 로 쌓아 사람에게 넘겼는데, **그게 사람 큐를
+    만드는 유일한 원인**이었다(1-2 실측 83축). 사람 손을 최소로 두는 게 목적이라
+    큐를 만들지 않는다.
+
+    두 단계:
+      ① **번역 잔재를 벗겨본다** — `색상별로 정렬하십시오` → `색상`. 이건 추측이 아니라
+        기계번역이 덧붙인 꼬리를 떼는 것이라 원뜻이 그대로 남는다. 벗긴 결과가 멀쩡한
+        축 이름이면 그걸 쓴다.
+      ② 안 되면 `종류` — 값이 무엇이든 참인 말이다. 틀린 정보를 주지 않는다.
+    """
+    cur = str(name or "").strip()
+    stripped = _AXIS_STRIP.sub("", cur).strip()
+    if stripped and stripped != cur and not axis_problems(stripped):
+        return stripped
+    return AXIS_LAST_RESORT
+
+
+# 축 이름 자체가 **객관적으로 깨진** 신호 — 값이 뭐든 지금 이름을 그대로 둘 수 없다.
+# (`색상 축인데 값에 색이 없다` 는 여기 없다 — 그건 휴리스틱이라 헛신호가 난다)
+_AXIS_HARD = ("번역 잔재", "중국어 잔존", "의미 없는 축 이름", "상한")
+
+
+def axis_broken(signals):
+    """신호 목록에 **객관적 결함**이 있는가 — 있으면 제안이 없어도 코드가 고친다."""
+    return any(h in s for s in (signals or ()) for h in _AXIS_HARD)
+
+
 def axis_audit(option, proposals=None):
     """축 이름 감사 — [{차원, 현재, 원문, 값예시, 신호[], 제안, 사유}].
 
@@ -182,7 +247,7 @@ def axis_audit(option, proposals=None):
             gi = int(p.get("차원"))
         except (TypeError, ValueError):
             continue
-        prop[gi] = {"제안": str(p.get("제안") or "").strip(),
+        prop[gi] = {"제안": axis_repair(p.get("제안")),
                     "사유": str(p.get("사유") or "").strip()}
 
     out = []
@@ -193,13 +258,21 @@ def axis_audit(option, proposals=None):
             sig.append("색상 축인데 값에 색이 없다")
         pr = prop.get(gi) or {}
         new = pr.get("제안", "")
-        if new:
-            if new == cur:
-                new = ""                       # 같은 이름이면 제안이 아니다
-            else:
-                sig += [f"제안 축 이름 {p}" for p in axis_problems(new)]
+        # 워커가 "지금 이름이 맞다"고 판정한 것 — 제안이 아니라 **확인**이다.
+        확인 = new in ("유지", cur)
+        if 확인:
+            new = ""
+        elif new:
+            sig += [f"제안 축 이름 {p}" for p in axis_problems(new)]
         if not sig and not new:
             continue
+        # **제안이 없어도 큐를 만들지 않는다** (2026-08-17 이룸님 — 사람 손 최소화).
+        # 이름 자체가 객관적으로 깨졌으면(번역 잔재·중국어·무의미·길이) 코드가 짓는다.
+        # 휴리스틱 신호(색상 함정)만 있는데 아무도 제안을 안 냈으면 지금 이름을 유지한다
+        # — 그건 "고칠 게 있다"가 확정된 상태가 아니라, 사람 큐로 넘길 일이 아니다.
+        자동 = False
+        if not new and not 확인 and axis_broken(sig):
+            new, 자동 = axis_fallback(cur), True
         out.append({
             "차원": gi,
             "현재": cur,
@@ -207,9 +280,96 @@ def axis_audit(option, proposals=None):
             "값예시": [str(v.get("name") or "") for v in (d.get("values") or [])[:4]],
             "신호": sig,
             "제안": new,
-            "사유": pr.get("사유", ""),
+            "사유": pr.get("사유", "") or ("코드가 지은 이름 — 워커 제안 없음" if 자동 else ""),
+            "자동": 자동,
+            "확인": 확인,
         })
     return out
+
+
+# 축 이름에 쓸 수 없는 문자 — MCP 제약. 값 이름에는 없는 제한이라 따로 잡는다.
+_AXIS_BAD_CHARS = re.compile(r"[,\[\]/{}()*?\\^$|]")
+
+
+def axis_norm(name):
+    """축 이름 겹침 판정용 정규화 — **MCP 와 같은 방식**이어야 한다.
+
+    앞뒤 공백을 없애고 연속 공백을 한 칸으로 줄인 뒤 대소문자를 무시한다.
+    (값 이름의 쿠팡 규칙처럼 순번 접두어까지 벗기지는 않는다 — 축은 그 규칙이 아니다.)
+    """
+    return re.sub(r"\s+", " ", str(name or "").strip()).lower()
+
+
+def axis_saveable(option, audit):
+    """`axis_audit` 결과 중 **실제로 `renameGroups` 로 보낼 것**만 골라낸다.
+
+    반환 `(items, rejects)`
+      items   = [{"groupIndex": int, "name": str}] — 그대로 MCP 에 실으면 된다
+      rejects = [{"차원", "제안", "사유"}] — 보내지 않은 제안과 그 이유
+
+    **제안이 없는 축은 어느 쪽에도 안 들어간다.** 기계 신호만 있는 축(번역 잔재 등)은
+    대체 이름을 지어낼 수 없으니 원장에 `대기` 로 남아 사람이 판단한다. 거부로 분류하면
+    "판단해서 뺐다"로 읽혀 그 축이 영영 안 잡힌다.
+
+    보내기 전에 거르는 이유: 축 이름이 하나라도 거부되면 **그 호출이 통째로** 실패한다.
+    """
+    dims = option.get("차원") or []
+    # 최종 상태를 만들어 놓고 겹침을 본다 — 두 축이 이름을 맞바꾸는 건 정상이고,
+    # 안 바꾸는 축과 겹치는 것만 거부해야 한다.
+    final = [str(d.get("이름") or "") for d in dims]
+    cand, rejects = [], []
+    for a in (audit or ()):
+        new = str(a.get("제안") or "").strip()
+        if not new:
+            continue                     # 제안 없음 = 사람 몫. 원장에 남는다
+        gi = a.get("차원")
+        try:
+            gi = int(gi)
+        except (TypeError, ValueError):
+            gi = -1
+        if not (0 <= gi < len(dims)):
+            rejects.append({"차원": a.get("차원"), "제안": new,
+                            "사유": f"차원 {a.get('차원')} 이 이 상품에 없다"})
+            continue
+        probs = axis_problems(new)
+        if _AXIS_BAD_CHARS.search(new):
+            probs.append("금지문자 , [ ] / { } ( ) * ? \\ ^ $ | 포함")
+        if probs:
+            rejects.append({"차원": gi, "제안": new,
+                            "사유": "제안 축 이름 결함: " + "; ".join(probs)})
+            continue
+        final[gi] = new
+        cand.append((gi, new))
+
+    # 겹침은 **최종 상태 전체**를 놓고 본다. 겹친 축은 전부 되돌린다 —
+    # 한쪽만 살리면 어느 쪽을 살릴지가 자의적이고, 그 판단은 사람 몫이다.
+    seen = {}
+    for i, n in enumerate(final):
+        seen.setdefault(axis_norm(n), []).append(i)
+    dup = {i for idxs in seen.values() if len(idxs) > 1 for i in idxs}
+    items = []
+    for gi, new in cand:
+        if gi in dup:
+            other = [str(final[i]) for i in seen[axis_norm(new)] if i != gi]
+            rejects.append({"차원": gi, "제안": new,
+                            "사유": f"다른 축과 이름이 겹친다: {', '.join(other)}"})
+        else:
+            items.append({"groupIndex": gi, "name": new})
+    items.sort(key=lambda x: x["groupIndex"])
+    return items, rejects
+
+
+def axis_verify(after, items):
+    """저장 후 재조회한 옵션의 축 이름이 보낸 대로인가 — [{차원, 사유}]. 비면 통과."""
+    dims = after.get("차원") or []
+    fails = []
+    for it in (items or ()):
+        gi = it["groupIndex"]
+        got = str(dims[gi].get("이름") or "") if gi < len(dims) else "(차원 없음)"
+        if axis_norm(got) != axis_norm(it["name"]):
+            fails.append({"차원": gi,
+                          "사유": f"축 이름이 '{it['name']}' 이 아니라 '{got}' 이다"})
+    return fails
 
 
 def dim_of(option):

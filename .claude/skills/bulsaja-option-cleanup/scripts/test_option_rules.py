@@ -858,16 +858,179 @@ class AxisTest(unittest.TestCase):
              "판매행": [], "vid고유": True}
         got = R.axis_audit(o, [{"제안": "모델"}, "쓰레기", {"차원": "x"}])
         self.assertEqual(len(got), 1)
-        self.assertEqual(got[0]["제안"], "", "차원 없는 제안을 붙였다")
+        self.assertNotEqual(got[0]["제안"], "모델", "차원 없는 제안을 붙였다")
+        # 제안은 못 받았지만 이름이 객관적으로 깨졌으니 코드가 짓는다(2026-08-17).
+        self.assertEqual(got[0]["제안"], "색상")
+        self.assertTrue(got[0]["자동"])
 
-    def test_축_이름은_저장_대상이_아니다(self):
+    def test_축_이름은_값_저장에_섞이지_않는다(self):
         # rename_targets 는 값만 만든다 — 축이 섞여 나가면 엉뚱한 값이 바뀐다.
+        # 축은 `renameGroups`(axis_saveable)라는 **별도 경로**로만 나간다.
         o = opt([row(1, 10000)])
         items, missing = R.rename_targets(o, {"1": "블랙 기본형"})
         self.assertEqual(missing, [])
         for it in items:
             self.assertNotIn("groupName", it)
             self.assertNotIn("propName", it)
+
+
+class AxisSaveTest(unittest.TestCase):
+    """규칙 18 저장부 — `renameGroups` 로 나갈 축만 골라낸다 (2026-08-17).
+
+    보내기 전에 걸러야 하는 이유: 축 이름이 거부되면 그 호출이 통째로 실패한다.
+    ②(판매·대표·순서)와 분리해서 보내지만, 헛호출은 그것대로 낭비고 원인이 안 보인다.
+    """
+
+    def dim(self, name, vals=("가", "나"), ori=""):
+        return {"이름": name, "원문이름": ori,
+                "values": [{"vid": i + 1, "name": v} for i, v in enumerate(vals)]}
+
+    def opt2(self, *names):
+        return {"차원": [self.dim(n) for n in names], "판매행": [], "vid고유": True}
+
+    def audit(self, o, proposals):
+        return R.axis_audit(o, proposals)
+
+    def test_멀쩡한_제안은_그대로_나간다(self):
+        o = self.opt2("색상")
+        items, rej = R.axis_saveable(o, self.audit(o, [{"차원": 0, "제안": "모델"}]))
+        self.assertEqual(items, [{"groupIndex": 0, "name": "모델"}])
+        self.assertEqual(rej, [])
+
+    def test_제안이_없어도_깨진_이름은_코드가_고쳐_보낸다(self):
+        # 2026-08-17 이룸님: "대체 이름 못 지어도 진행해라." 전에는 `대기` 로 쌓아
+        # 사람에게 넘겼는데 그게 사람 큐를 만드는 유일한 원인이었다(1-2 실측 83축).
+        # 번역 잔재는 **꼬리만 떼면** 원뜻이 남는다 — 추측이 아니다.
+        o = self.opt2("색상별로 정렬하십시오")
+        a = self.audit(o, None)
+        self.assertEqual(len(a), 1, "감사가 신호를 냈어야 한다")
+        items, rej = R.axis_saveable(o, a)
+        self.assertEqual(items, [{"groupIndex": 0, "name": "색상"}])
+        self.assertEqual(rej, [])
+
+    def test_꼬리를_못_떼면_종류로_간다(self):
+        # 중국어 잔존·무의미어는 벗겨낼 꼬리가 없다. `종류` 는 값이 뭐든 참이라 틀리지 않는다.
+        for cur in ("颜色分类", "제품명"):
+            o = self.opt2(cur)
+            items, _ = R.axis_saveable(o, self.audit(o, None))
+            self.assertEqual(items, [{"groupIndex": 0, "name": R.AXIS_LAST_RESORT}])
+
+    def test_휴리스틱_신호만_있으면_이름을_안_바꾼다(self):
+        # '색상 축인데 값에 색이 없다'는 헛신호가 난다(사전에 없는 색). 아무도 제안을
+        # 안 냈으면 지금 이름이 맞을 수 있다 — 코드가 `종류` 로 덮으면 개악이다.
+        o = self.opt2("색상")
+        o["차원"][0]["values"] = [{"vid": 1, "name": "카멜"}, {"vid": 2, "name": "라벤더"}]
+        a = self.audit(o, None)
+        self.assertEqual(len(a), 1, "휴리스틱 신호는 나야 한다(기록용)")
+        self.assertEqual(a[0]["제안"], "", "휴리스틱만 보고 이름을 바꿨다")
+        self.assertEqual(R.axis_saveable(o, a), ([], []))
+
+    def test_워커가_유지라고_하면_확인으로_닫는다(self):
+        # "지금 이름이 맞다"는 판정이다. 제안이 아니라 확인이라 다시 잡히면 안 된다.
+        o = self.opt2("색상별로 정렬하십시오")
+        a = self.audit(o, [{"차원": 0, "제안": "유지"}])
+        self.assertTrue(a[0]["확인"])
+        self.assertEqual(a[0]["제안"], "", "확인인데 이름을 바꾸려 했다")
+
+    def test_금지문자가_든_제안은_거부한다(self):
+        # MCP 축 이름 제약: , [ ] / { } ( ) * ? \ ^ $ |
+        # **`/` 는 여기 없다** — 구분자라 뜻이 확실해서 `·` 로 고쳐 보낸다
+        # (아래 test_구분자_슬래시는_가운뎃점으로_고쳐_보낸다).
+        for bad in ("구성(세트)", "모델*", "용량[L]", "종류|타입", "색상,사이즈"):
+            o = self.opt2("색상")
+            items, rej = R.axis_saveable(o, self.audit(o, [{"차원": 0, "제안": bad}]))
+            self.assertEqual(items, [], f"금지문자 '{bad}' 가 그대로 나갔다")
+            self.assertEqual(len(rej), 1)
+            self.assertIn("금지문자", rej[0]["사유"])
+
+    def test_결함있는_제안은_거부한다(self):
+        for bad, why in (("颜色分类", "중국어"), ("색상별로 정렬하십시오", "번역"),
+                         ("분류", "의미"), ("가" * 21, "상한")):
+            o = self.opt2("색상")
+            items, rej = R.axis_saveable(o, self.audit(o, [{"차원": 0, "제안": bad}]))
+            self.assertEqual(items, [], f"'{bad}' 가 그대로 나갔다 ({why})")
+            self.assertEqual(len(rej), 1)
+
+    def test_다른_축과_이름이_겹치면_거부한다(self):
+        # 같은 상품 안에서 축끼리 같은 이름을 쓸 수 없다(MCP 거부).
+        o = self.opt2("색상", "크기")
+        items, rej = R.axis_saveable(o, self.audit(o, [{"차원": 0, "제안": "크기"}]))
+        self.assertEqual(items, [], "안 바꾸는 축과 겹치는 이름을 보냈다")
+        self.assertIn("겹친다", rej[0]["사유"])
+
+    def test_겹침은_공백과_대소문자를_무시하고_본다(self):
+        # MCP 는 앞뒤 공백 제거·연속 공백 1칸·대소문자 무시로 비교한다.
+        o = self.opt2("색상", "Size")
+        items, rej = R.axis_saveable(o, self.audit(o, [{"차원": 0, "제안": " size "}]))
+        self.assertEqual(items, [], "정규화하면 겹치는 이름을 보냈다")
+        self.assertIn("겹친다", rej[0]["사유"])
+
+    def test_두_축이_같은_이름을_제안하면_둘_다_거부한다(self):
+        o = self.opt2("색상", "색상 분류")
+        items, rej = R.axis_saveable(o, self.audit(
+            o, [{"차원": 0, "제안": "종류"}, {"차원": 1, "제안": "종류"}]))
+        self.assertEqual(items, [], "서로 겹치는 제안 둘을 다 보냈다")
+        self.assertEqual(len(rej), 2)
+
+    def test_바꾸는_축끼리_자리를_맞바꾸는_건_통과한다(self):
+        # 축0='크기'→'색상', 축1='색상'→'크기'. 최종 상태는 안 겹친다.
+        o = self.opt2("크기", "색상")
+        items, rej = R.axis_saveable(o, self.audit(
+            o, [{"차원": 0, "제안": "색상"}, {"차원": 1, "제안": "크기"}]))
+        self.assertEqual(rej, [], "최종 상태가 멀쩡한데 거부했다")
+        self.assertEqual(sorted(i["groupIndex"] for i in items), [0, 1])
+
+    def test_차원_범위_밖_제안은_거부한다(self):
+        o = self.opt2("색상")
+        a = [{"차원": 5, "현재": "", "원문": "", "값예시": [], "신호": [],
+              "제안": "모델", "사유": ""}]
+        items, rej = R.axis_saveable(o, a)
+        self.assertEqual(items, [])
+        self.assertIn("차원", rej[0]["사유"])
+
+    def test_여러_축을_한_번에_보낸다(self):
+        o = self.opt2("색상", "색상별로 정렬")
+        items, rej = R.axis_saveable(o, self.audit(
+            o, [{"차원": 0, "제안": "모델"}, {"차원": 1, "제안": "길이"}]))
+        self.assertEqual(rej, [])
+        self.assertEqual(items, [{"groupIndex": 0, "name": "모델"},
+                                 {"groupIndex": 1, "name": "길이"}])
+
+    def test_저장된_축_이름을_재조회로_검증한다(self):
+        after = self.opt2("모델", "길이")
+        items = [{"groupIndex": 0, "name": "모델"}, {"groupIndex": 1, "name": "길이"}]
+        self.assertEqual(R.axis_verify(after, items), [])
+
+    def test_구분자_슬래시는_가운뎃점으로_고쳐_보낸다(self):
+        # 워커가 "두 속성이 섞였다"를 `/` 로 적는데 그건 축 이름 금지문자다.
+        # 뜻은 그대로고 문자만 문제라 거부하지 않고 고친다 (2026-08-17 이룸님).
+        for bad, want in (("색상/마감", "색상·마감"), ("모델 / 용량", "모델·용량"),
+                          ("브랜드/용량/구성", "브랜드·용량·구성")):
+            o = self.opt2("색상")
+            items, rej = R.axis_saveable(o, self.audit(o, [{"차원": 0, "제안": bad}]))
+            self.assertEqual(rej, [], f"'{bad}' 를 고치지 않고 거부했다")
+            self.assertEqual(items, [{"groupIndex": 0, "name": want}])
+
+    def test_뜻을_모르는_금지문자는_고치지_않고_거부한다(self):
+        # `/` 만 뜻이 확실하다. 괄호를 무엇으로 바꿔야 할지는 기계가 모른다 — 사람 몫.
+        o = self.opt2("색상")
+        items, rej = R.axis_saveable(o, self.audit(o, [{"차원": 0, "제안": "구성(세트)"}]))
+        self.assertEqual(items, [])
+        self.assertIn("금지문자", rej[0]["사유"])
+
+    def test_고친_제안이_현재_이름과_같아지면_제안이_아니다(self):
+        # `색상/` → `색상`. 바꿀 게 없는데 호출하면 헛일이다.
+        o = self.opt2("색상")
+        self.assertEqual([a["제안"] for a in self.audit(o, [{"차원": 0, "제안": "색상/"}])],
+                         [""])
+
+    def test_반영_안_된_축은_검증이_잡는다(self):
+        after = self.opt2("색상", "길이")      # 축0 이 안 바뀌었다
+        items = [{"groupIndex": 0, "name": "모델"}, {"groupIndex": 1, "name": "길이"}]
+        fails = R.axis_verify(after, items)
+        self.assertEqual(len(fails), 1)
+        self.assertEqual(fails[0]["차원"], 0)
+        self.assertIn("모델", fails[0]["사유"])
 
 
 if __name__ == "__main__":

@@ -704,10 +704,13 @@ class CommitResumeAndMatrixTest(unittest.TestCase):
             "load": snapshot.load,
             "_log_sheet": run_options._log_sheet,
             "_log_axis_sheet": run_options._log_axis_sheet,
+            # 안 막으면 `_commit` 이 실제 구글시트를 친다 — 테스트가 네트워크에 매달린다.
+            "_axis_ignored": run_options._axis_ignored,
             "_handoff": run_options._handoff,
             "OptionMCP": run_options.OptionMCP,
         }
         self._orig_verify = run_options.R.verify
+        run_options._axis_ignored = lambda sheet: set()
         matrix.read = lambda sheet: {}
         matrix.mark_many = lambda sheet, task, d, matrix=None: (
             self.marks.append(dict(d)) or len(d))
@@ -832,6 +835,360 @@ class CommitResumeAndMatrixTest(unittest.TestCase):
         self._run(["P1", "P2", "P3"])
         with open(os.path.join(self.run_dir, "before_commit.json"), encoding="utf-8") as f:
             self.assertEqual(set(json.load(f)), {"P1", "P2", "P3"})
+
+
+class OptionUpdateGuardTest(unittest.TestCase):
+    """`OptionMCP.option_update` 의 금지 조합 가드 — 호출 한 줄이 실수하면 여기서 막힌다."""
+
+    def setUp(self):
+        self.mcp = run_options.OptionMCP.__new__(run_options.OptionMCP)
+
+    def test_이름과_순서는_같은_호출에_못_넣는다(self):
+        # 쿠팡 기존 옵션 연결 보호 — 불사자가 거부한다.
+        with self.assertRaises(ValueError):
+            self.mcp.option_update("P1", renameValues=[{}], skuOrder=["1"])
+
+    def test_축_이름은_단독_호출이어야_한다(self):
+        # 축이 거부되면 그 호출이 통째로 실패한다 — 얹으면 판매 구성까지 되돌아간다.
+        for kw in ({"includeSkuIds": ["1"]}, {"mainSkuId": "1"}, {"skuOrder": ["1"]},
+                   {"renameValues": [{}]}):
+            with self.assertRaises(ValueError, msg=f"{kw} 를 축과 함께 허용했다"):
+                self.mcp.option_update(
+                    "P1", renameGroups=[{"groupIndex": 0, "name": "모델"}], **kw)
+
+    def test_빈_값은_동반으로_치지_않는다(self):
+        # `option_update(pid, renameGroups=[...], excludeSkuIds=[])` 처럼 빈 인자가
+        # 딸려 오는 건 정상 호출이다 — payload 에서 어차피 빠진다.
+        seen = []
+
+        def call_tool(name, p):
+            seen.append(dict(p))
+            return ({"success": True} if p.get("confirm")
+                    else {"confirmationToken": "t" * 20})
+
+        self.mcp.call_tool = call_tool
+        self.mcp.option_update("P1", renameGroups=[{"groupIndex": 0, "name": "모델"}],
+                               excludeSkuIds=[], mainSkuId=None)
+        self.assertEqual(set(seen[0]), {"productId", "renameGroups"})
+
+
+class AxisCommitTest(unittest.TestCase):
+    """축(선택 항목) 이름 저장 — 규칙 18 (2026-08-17, MCP `renameGroups` 도입).
+
+    지키는 것 둘:
+      ① 축은 **단독 호출**이다. ②(포함/제외·대표·순서)에 얹으면 표기 문제 하나가
+        무엇을 파느냐까지 막는다 — 3-1 워터건 부분저장 사고와 같은 구조.
+      ② 축이 실패해도 상품은 `완료` 다. 판매 구성은 이미 저장됐다.
+    """
+
+    DIMS = [{"이름": "색상 분류", "원문이름": "颜色分类",
+             "values": [{"vid": 1, "name": "가"}, {"vid": 2, "name": "나"}]}]
+
+    def setUp(self):
+        from eroomlib import matrix
+        self.matrix = matrix
+        self.run_dir = tempfile.mkdtemp()
+        self.axis_logged = []
+        self._orig = {
+            "read": matrix.read, "mark_many": matrix.mark_many, "load": snapshot.load,
+            "_log_sheet": run_options._log_sheet,
+            "_log_axis_sheet": run_options._log_axis_sheet,
+            "_axis_ignored": run_options._axis_ignored,
+            "_handoff": run_options._handoff, "OptionMCP": run_options.OptionMCP,
+        }
+        self._orig_verify = run_options.R.verify
+        self._orig_update = snapshot.update
+        matrix.read = lambda sheet: {}
+        matrix.mark_many = lambda sheet, task, d, matrix=None: len(d)
+        snapshot.load = lambda pid: {"옵션": {"판매행": [{"id": "1"}], "차원": self.DIMS}}
+        snapshot.update = lambda pid, **k: None
+        run_options._log_sheet = lambda *a, **k: None
+        run_options._handoff = lambda *a, **k: None
+        run_options._log_axis_sheet = (
+            lambda sheet, rows, status=None: self.axis_logged.append(dict(status or {})))
+        run_options._axis_ignored = lambda sheet: self.ignored
+        run_options.R.verify = lambda *a, **k: []
+        self.ignored = set()
+
+    def tearDown(self):
+        for k, v in self._orig.items():
+            setattr(self.matrix if k in ("read", "mark_many") else
+                    (snapshot if k == "load" else run_options), k, v)
+        run_options.R.verify = self._orig_verify
+        snapshot.update = self._orig_update
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _args(self, **kw):
+        import argparse
+        base = dict(run_dir=self.run_dir, commit=True, sleep=0,
+                    no_sheet=False, no_matrix=False, ignore_committed=False)
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    def _rows(self, 제안="모델", after_name=None):
+        audit = run_options.R.axis_audit(
+            {"차원": self.DIMS}, [{"차원": 0, "제안": 제안, "사유": "값이 전부 모델"}]
+            if 제안 else None)
+        self.after_name = after_name if after_name is not None else 제안
+        return [("P1", {"대표": "1", "유지": ["1"], "제외": [], "순서": ["1"],
+                        "축감사": audit}, {"이름": {}}, "정리대상")]
+
+    def _run(self, rows, axis_fails=False):
+        outer = self
+        self.calls = []
+
+        class _M:
+            def open(self): pass
+
+            def close(self): pass
+
+            def option_update(self, pid, **kw):
+                outer.calls.append(kw)
+                if axis_fails and kw.get("renameGroups"):
+                    raise RuntimeError("축 이름 거부")
+
+            def workdata(self, pid):
+                dims = [dict(d) for d in outer.DIMS]
+                dims[0]["이름"] = outer.after_name or dims[0]["이름"]
+                return {"옵션": {"판매행": [{"id": "1"}], "차원": dims}}
+
+        run_options.OptionMCP = _M
+        run_options._commit("SHEET", rows, self._args())
+
+    def _axis_calls(self):
+        return [c for c in self.calls if c.get("renameGroups")]
+
+    def test_제안이_있으면_축_이름이_저장된다(self):
+        self._run(self._rows())
+        self.assertEqual(self._axis_calls(),
+                         [{"renameGroups": [{"groupIndex": 0, "name": "모델"}]}])
+
+    def test_축은_판매구성과_같은_호출에_실리지_않는다(self):
+        # 얹으면 축 거부 하나가 포함/제외·대표까지 되돌린다.
+        self._run(self._rows())
+        for c in self._axis_calls():
+            self.assertEqual(set(c), {"renameGroups"}, f"축에 다른 걸 얹었다: {c}")
+
+    def test_제안이_없으면_축_호출을_안_한다(self):
+        # 기계 신호(번역 잔재)만 있는 축 — 대체 이름은 사람만 지을 수 있다.
+        self._run(self._rows(제안=""))
+        self.assertEqual(self._axis_calls(), [])
+        self.assertEqual(self.axis_logged[-1], {}, "제안 없는 축을 원장 상태로 적었다")
+
+    def test_축_저장이_실패해도_상품은_완료다(self):
+        self._run(self._rows(), axis_fails=True)
+        committed = json.load(open(os.path.join(self.run_dir, "committed.json"),
+                                   encoding="utf-8"))
+        self.assertEqual(committed, {"P1": "완료"}, "축 때문에 상품을 실패로 적었다")
+        self.assertTrue(self.axis_logged[-1][("P1", "0")].startswith("보류("))
+
+    def test_반영된_축은_원장에_반영으로_남는다(self):
+        self._run(self._rows())
+        self.assertEqual(self.axis_logged[-1], {("P1", "0"): "반영"})
+
+    def test_안_박힌_축은_반영으로_적지_않는다(self):
+        # 저장은 성공했다는데 재조회하니 옛 이름 그대로 — 원장이 거짓이 되면 안 된다.
+        self._run(self._rows(제안="모델", after_name="색상 분류"))
+        self.assertTrue(self.axis_logged[-1][("P1", "0")].startswith("보류(검증실패"))
+
+    def test_사람이_판단해둔_축은_건드리지_않는다(self):
+        # `옵션축` 탭에서 `무시`·`반영` 으로 결론 낸 축을 재실행이 되돌리면 안 된다.
+        self.ignored = {("P1", "0")}
+        self._run(self._rows())
+        self.assertEqual(self._axis_calls(), [])
+        self.assertEqual(self.axis_logged[-1], {})
+
+    def test_no_sheet_여도_축_원장은_나간다(self):
+        # 실제로 바꿔놓고 원장에 `대기` 로 남기면 이미 반영된 축을 앱에서 또 손본다.
+        rows = self._rows()
+        outer, self.calls = self, []
+
+        class _M:
+            def open(self): pass
+
+            def close(self): pass
+
+            def option_update(self, pid, **kw): outer.calls.append(kw)
+
+            def workdata(self, pid):
+                d = [dict(x) for x in outer.DIMS]
+                d[0]["이름"] = "모델"
+                return {"옵션": {"판매행": [{"id": "1"}], "차원": d}}
+
+        run_options.OptionMCP = _M
+        run_options._commit("SHEET", rows, self._args(no_sheet=True))
+        self.assertEqual(self.axis_logged[-1], {("P1", "0"): "반영"})
+
+
+class AxisLedgerReplayTest(unittest.TestCase):
+    """`axis` — 원장에 쌓인 `대기` 축을 태운다 (2026-08-17).
+
+    **왜 별도 경로가 필요한가**: `_commit` 이 축을 저장하는 건 이번 run 에 든 상품뿐인데,
+    `옵션축` 탭에 쌓인 축은 전부 **옵션이 이미 `완료` 인 상품**의 것이라 현황판 pending 에
+    안 잡힌다(MCP 에 축 필드가 없던 시절에 판정만 해둔 것). `_commit` 만 고치면 그
+    backlog 는 영영 안 나간다 — 1-2 실측 278행 중 제안이 있는 200행이 그 상태였다.
+
+    여기서 지키는 건 **보내기 전에 원장과 현재 상태를 대조한다**는 것이다. 제안은 그때의
+    축 이름을 보고 지은 것이라, 그 사이 축이 달라졌으면 근거가 사라진 것이다.
+    """
+
+    HDR = run_options.AXIS_HEADER
+
+    def _row(self, pid="P1", 차원="0", 현재="색상", 제안="모델", 상태="대기"):
+        # A상품id B기록일 C상품명 D차원 E원문축명 F현재축명 G제안축명 H사유 I값예시 J신호 K상태
+        return [pid, "2026-08-06", "상품", 차원, "颜色分类", 현재, 제안, "사유", "가/나",
+                "신호", 상태]
+
+    def setUp(self):
+        self.written, self.calls, self.snap = [], [], []
+        self._orig = {k: getattr(run_options, k) for k in
+                      ("sheets_get", "sheets_batch_update", "OptionMCP")}
+        self._orig_snap = snapshot.update
+        snapshot.update = lambda pid, **k: self.snap.append(pid)
+        run_options.sheets_batch_update = (
+            lambda sheet, data, **k: self.written.extend(data))
+        self.live = "색상"                       # 현재 불사자에 박혀 있는 축 이름
+
+        outer = self
+
+        class _M:
+            def open(self): pass
+
+            def close(self): pass
+
+            def option_update(self, pid, **kw):
+                outer.calls.append(kw)
+                if outer.reject:
+                    raise RuntimeError("축 이름 거부")
+                outer.live = kw["renameGroups"][0]["name"]
+
+            def workdata(self, pid):
+                return {"옵션": {"차원": [{"이름": outer.live, "원문이름": "颜色分类",
+                                        "values": [{"vid": 1, "name": "가"}]}]}}
+
+        self.reject = False
+        run_options.OptionMCP = _M
+
+    def tearDown(self):
+        for k, v in self._orig.items():
+            setattr(run_options, k, v)
+        snapshot.update = self._orig_snap
+
+    def _run(self, rows, commit=True, **kw):
+        import argparse
+        run_options.sheets_get = lambda sheet, rng: rows
+        base = dict(sheet="SHEET", group_name="", ids=None, limit=0,
+                    commit=commit, sleep=0)
+        base.update(kw)
+        run_options.cmd_axis(argparse.Namespace(**base))
+
+    def _status(self):
+        """되쓴 상태값만 뽑는다 — [(range, [[값]]), ...] → [값...]."""
+        return [v[0][0] for _rng, v in self.written]
+
+    def test_제안이_있는_대기_행을_저장한다(self):
+        self._run([self._row()])
+        self.assertEqual(self.calls,
+                         [{"renameGroups": [{"groupIndex": 0, "name": "모델"}]}])
+        self.assertEqual(self._status(), [run_options.AXIS_APPLIED])
+        self.assertEqual(self.snap, ["P1"], "저장했는데 스냅샷을 안 되썼다")
+
+    def test_제안이_없으면_대상이_아니다(self):
+        # 기계 신호만 있는 축 — 대체 이름은 사람만 지을 수 있다. `대기` 로 남아야 한다.
+        self._run([self._row(제안="")])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.written, [], "사람 몫인 행의 상태를 덮었다")
+
+    def test_사람이_판단한_행은_건드리지_않는다(self):
+        # `무시`·`반영` 은 사람이 내린 결론이다. 재실행이 되돌리면 원장이 거짓이 된다.
+        for st in ("무시", "반영"):
+            with self.subTest(st=st):
+                self.calls, self.written = [], []
+                self._run([self._row(상태=st)])
+                self.assertEqual(self.calls, [])
+                self.assertEqual(self.written, [])
+
+    def test_보류는_다시_집는다(self):
+        # `보류` 는 사람의 판단이 아니라 **코드가 못 한 것**이다. 안 집으면 한 번 막힌
+        # 축이 영영 재시도되지 않는다 — `/` 하나로 25축이 그 상태였다(1-2, 2026-08-17).
+        # `_axis_ignored` 가 `보류` 를 빼는 것과 같은 기준이어야 한다.
+        for st in ("보류(저장실패: 어쩌고)", "보류(제안 축 이름 결함: 금지문자)"):
+            with self.subTest(st=st):
+                self.calls, self.written, self.live = [], [], "색상"
+                self._run([self._row(상태=st)])
+                self.assertEqual(self.calls,
+                                 [{"renameGroups": [{"groupIndex": 0, "name": "모델"}]}])
+
+    def test_보류_판정_기준이_두_자리에서_같다(self):
+        # `cmd_axis` 가 집는 상태와 `_axis_ignored` 가 빼는 상태가 어긋나면 한쪽이
+        # 반드시 거짓말을 한다(집어놓고 제안에서 빼거나, 그 반대).
+        run_options.sheets_get = lambda sheet, rng: [
+            self._row(pid="P1", 상태="보류(저장실패)"), self._row(pid="P2", 상태="무시")]
+        self.assertEqual(run_options._axis_ignored("SHEET"), {("P2", "0")})
+
+    def test_이미_그_이름이면_호출하지_않고_반영으로_적는다(self):
+        self.live = "모델"
+        self._run([self._row(제안="모델")])
+        self.assertEqual(self.calls, [], "이미 반영된 축에 헛호출을 했다")
+        self.assertEqual(self._status(), [run_options.AXIS_APPLIED])
+
+    def test_축이_그새_바뀌었으면_보내지_않는다(self):
+        # 제안은 원장의 `현재축명` 을 보고 지은 것이다. 그게 달라졌으면 근거가 사라졌다.
+        self.live = "재질"
+        self._run([self._row(현재="색상", 제안="모델")])
+        self.assertEqual(self.calls, [])
+        self.assertTrue(self._status()[0].startswith("보류(축이 바뀌었다"))
+
+    def test_보낼_수_없는_제안은_거르고_사유를_남긴다(self):
+        # 금지문자가 든 제안 하나가 그 호출을 통째로 죽인다 — 보내기 전에 뺀다.
+        self._run([self._row(제안="구성(세트)")])
+        self.assertEqual(self.calls, [])
+        self.assertIn("금지문자", self._status()[0])
+
+    def test_구분자_슬래시는_고쳐_보내고_원장에도_되쓴다(self):
+        # 축 저장이 없던 시절에 지은 제안이라 금지문자 규칙을 몰랐다(1-2 실측 25축).
+        # 고친 값을 원장 `제안축명` 에도 되써야 **원장과 실제로 보낸 값이 같아진다**.
+        self._run([self._row(제안="색상/마감")])
+        self.assertEqual(self.calls,
+                         [{"renameGroups": [{"groupIndex": 0, "name": "색상·마감"}]}])
+        wrote = {rng.split("!")[1][0]: v[0][0] for rng, v in self.written}
+        self.assertEqual(wrote["G"], "색상·마감", "원장 제안축명을 안 고쳤다")
+        self.assertEqual(wrote["K"], run_options.AXIS_APPLIED)
+
+    def test_저장이_거부되면_보류로_남고_다음_상품으로_간다(self):
+        self.reject = True
+        self._run([self._row(pid="P1"), self._row(pid="P2")])
+        self.assertEqual(len(self.calls), 2, "한 상품이 죽자 나머지를 버렸다")
+        self.assertTrue(all(s.startswith("보류(저장실패") for s in self._status()))
+        self.assertEqual(self.snap, [], "저장 실패인데 스냅샷을 되썼다")
+
+    def test_안_박힌_축은_반영으로_적지_않는다(self):
+        # 저장은 성공했다는데 재조회하니 옛 이름 그대로 — 원장이 거짓이 되면 안 된다.
+        outer = self
+
+        class _M(run_options.OptionMCP):
+            def option_update(self, pid, **kw):
+                outer.calls.append(kw)          # 받기만 하고 안 바꾼다
+
+        run_options.OptionMCP = _M
+        self._run([self._row()])
+        self.assertTrue(self._status()[0].startswith("보류(검증실패"))
+
+    def test_미리보기는_원장을_쓰지_않는다(self):
+        # 원장은 실제로 한 일의 기록이지 예정표가 아니다.
+        self._run([self._row()], commit=False)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.written, [])
+
+    def test_축은_단독_호출로_나간다(self):
+        # 얹으면 축 거부 하나가 포함/제외·대표까지 되돌린다(§부분저장과 같은 구조).
+        self._run([self._row()])
+        for c in self.calls:
+            self.assertEqual(set(c), {"renameGroups"}, f"축에 다른 걸 얹었다: {c}")
+
+    def test_ids_로_상품을_좁힐_수_있다(self):
+        self._run([self._row(pid="P1"), self._row(pid="P2")], ids=["P2"])
+        self.assertEqual(len(self.calls), 1)
 
 
 if __name__ == "__main__":
