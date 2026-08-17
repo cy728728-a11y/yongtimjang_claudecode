@@ -114,6 +114,30 @@ def is_final(verdict):
     return any(v in str(verdict or "") for v in FINAL_VERDICTS)
 
 
+# 제품에 박힌 글자(브랜드·각인)가 생성에서 변조된 것. 판정기준(`검수-판정기준.md`)은
+# **재생성하지 않고 종결(기존 대표 유지)** 이다 — 다시 태워도 같은 유형으로 또 틀린다.
+#
+# **왜 상수가 필요한가** (2026-08-17 용쌤2-1 6회차): `_commit` 이 `사용가능` 이 아닌
+# 판정을 전부 `보류(...)` 로 떨어뜨려 이 종결이 **`보류(제외(글자변조))` 로 남았다.**
+# 썸네일 `prep` 은 빈칸·재작업만 집으므로(`matrix.pending`) 보류는 어느 축도 안 집는다
+# = 미아다. 5회차 풍속계·6회차 전기타카가 같은 자리에서 두 번 났고 둘 다 손으로
+# `완료(기존 대표 유지)` 로 내렸다. **두 번 밟았으니 운영 수칙이 아니라 코드로 막는다.**
+#
+# `FINAL_VERDICTS`(원본대체)와 다른 점: 저쪽은 `fallback` 이 현황판을 **이미 써놨으니**
+# 커밋이 손대면 안 되는 것이고, 이쪽은 커밋이 **직접 종결값을 써야** 하는 것이다.
+VERDICT_TEXT_TAMPER = "글자변조"
+KEEP_EXISTING_VERDICTS = (VERDICT_TEXT_TAMPER,)
+MATRIX_KEEP_EXISTING = "완료(기존 대표 유지)"
+
+
+def keeps_existing(verdict):
+    """기존 대표를 그대로 두고 **종결**하는 판정인가.
+
+    보류로 남기면 미아가 되는 부류다 — 재생성·옵션 되돌림 어느 경로도 교정이 아니다.
+    """
+    return any(v in str(verdict or "") for v in KEEP_EXISTING_VERDICTS)
+
+
 def heal_pid(pid, valid):
     """워커가 **이미지 파일명에서 베낀** 상품코드를 정본으로 되돌린다. 못 고치면 None.
 

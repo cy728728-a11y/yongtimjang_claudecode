@@ -163,6 +163,79 @@ class FallbackFinalizeTest(_MCPPatch, unittest.TestCase):
         self.assertIn("decisions.json 을 못 고쳤다", log)
 
 
+class TextTamperFinalizeTest(_MCPPatch, unittest.TestCase):
+    """2026-08-17 6회차 — `제외(글자변조)` 종결이 `보류` 로 남아 미아가 되던 결함.
+
+    판정기준은 "재생성하지 않고 종결(기존 대표 유지)" 인데 `_commit` 이 사용가능이 아닌
+    판정을 전부 보류로 떨어뜨렸다. 썸네일 `prep` 은 빈칸·재작업만 집으므로 그 건은
+    **어느 축도 다시 안 집는다.** 5회차 풍속계·6회차 전기타카가 같은 자리에서 두 번 났다.
+    """
+
+    PID = "U01KREA821PTMDYQBD6W8B8FN5G"      # 6회차 전기타카
+    OTHER = "U01KREA81YCV89Y2JPYYEBBS1JR"    # 같은 회차 아치돔 — 종전대로 보류여야 한다
+    OLD = "https://cdn.bulsaja.com/old.jpg"
+    GENERATED = "https://cdn.bulsaja.com/generated.jpg"
+
+    def setUp(self):
+        self.run_dir = tempfile.mkdtemp()
+        self._patch({self.PID: [self.OLD], self.OTHER: [self.OLD]})
+        self.rows = []
+        run_thumbs._log_sheet = lambda sheet, rows: self.rows.extend(rows)
+        self._dump("generated.json", {
+            self.PID: {"상품명": "전기타카", "생성본": self.GENERATED,
+                       "기존대표": self.OLD, "후보": [], "크레딧": 5},
+            self.OTHER: {"상품명": "아치돔", "생성본": self.GENERATED,
+                         "기존대표": self.OLD, "후보": [], "크레딧": 5}})
+        self._dump("decisions.json", {
+            self.PID: {"판정": f"제외({R.VERDICT_TEXT_TAMPER})",
+                       "사유": "CORDLESS NAILER → COARLESS NALER"},
+            self.OTHER: {"판정": "제외", "사유": "기둥 장식이 통째로 사라졌다"}})
+
+    def tearDown(self):
+        self._unpatch()
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _dump(self, name, obj):
+        with open(os.path.join(self.run_dir, name), "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False)
+
+    def _commit(self):
+        args = argparse.Namespace(run_dir=self.run_dir, sheet="SHEET",
+                                  group_name=None, no_sheet=False, no_matrix=False,
+                                  sleep=0)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            run_thumbs._commit("SHEET", self.run_dir, args)
+        return out.getvalue()
+
+    def test_글자변조는_현황판에_완료_기존대표유지로_나간다(self):
+        self._commit()
+        self.assertEqual(self.marked[self.PID], R.MATRIX_KEEP_EXISTING)
+
+    def test_글자변조는_보류가_아니다_미아가_되지_않는다(self):
+        """보류면 prep 의 pending(빈칸+재작업)에 영영 안 잡힌다 = 미아."""
+        self._commit()
+        m = {self.PID: {"row": 2, "상품": "전기타카", "썸네일": self.marked[self.PID]}}
+        self.assertNotIn(self.PID, matrix.pending(m, "썸네일"),
+                         "종결건이 다음 회차 대상으로 다시 잡힌다")
+        self.assertFalse(self.marked[self.PID].startswith("보류"))
+
+    def test_글자변조는_생성본을_반영하지_않는다(self):
+        """종결의 뜻은 '기존 대표 유지' — 변조된 생성본을 올리면 안 된다."""
+        self._commit()
+        self.assertEqual(self.mcp.thumbs[self.PID], [self.OLD])
+
+    def test_시트_상태열도_같은_값으로_나간다(self):
+        self._commit()
+        status = {r[0]: r[-1] for r in self.rows}
+        self.assertEqual(status[self.PID], R.MATRIX_KEEP_EXISTING)
+
+    def test_그냥_제외는_종전대로_보류다(self):
+        """재생성·원본대체로 갈 건까지 종결시키면 안 된다."""
+        log = self._commit()
+        self.assertEqual(self.marked[self.OTHER], "보류(제외)")
+        self.assertIn("기존대표 유지로 종결 1건", log)
+
+
 class HealPidTest(unittest.TestCase):
     """§6 — 워커가 이미지 파일명에서 베낀 상품코드 복구(접미까지)."""
 

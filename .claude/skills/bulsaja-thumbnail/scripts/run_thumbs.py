@@ -1517,7 +1517,7 @@ def _commit(sheet, run_dir, args):
 
     mcp = ThumbMCP()
     mcp.open()
-    done, held, main_suspect = {}, {}, {}
+    done, held, main_suspect, kept = {}, {}, {}, {}
     sheet_rows, finalized = [], []
     try:
         for pid, g in generated.items():
@@ -1551,10 +1551,16 @@ def _commit(sheet, run_dir, args):
                         if hit == R.AUDIT_MAIN_SUSPECT
                         else "대표옵션 이미지가 비제품(도면·배너) — 실물 사진이 "
                              "있는 값으로 대표를 다시 세울 것"))
+                elif R.keeps_existing(verdict):
+                    # 글자변조 — 재생성하지 않고 **기존 대표 유지로 종결**한다
+                    # (`검수-판정기준.md`). 보류로 두면 `prep` 이 안 집어 미아가 된다
+                    # (5회차 풍속계 · 6회차 전기타카가 같은 자리에서 두 번).
+                    kept[pid] = R.MATRIX_KEEP_EXISTING
                 else:
                     held[pid] = f"보류({verdict})"
+                status = held.get(pid) or kept[pid]
                 sheet_rows.append((pid, g.get("상품명", ""), g["생성본"],
-                                  verdict, reason, 0, held[pid]))
+                                  verdict, reason, 0, status))
                 continue
             try:
                 final = [g["생성본"]] + list(g.get("후보") or [])
@@ -1577,6 +1583,7 @@ def _commit(sheet, run_dir, args):
         mcp.close()
 
     print(f"\n###COMMIT### 반영 {len(done)}건 / 보류·실패 {len(held)}건"
+          + (f" / 기존대표 유지로 종결 {len(kept)}건" if kept else "")
           + (f" (그중 대표옵션의심 {len(main_suspect)}건 → 옵션 재작업)" if main_suspect else "")
           + (f" / fallback 종결 {len(finalized)}건 건너뜀" if finalized else ""))
     if not args.no_sheet:
@@ -1594,6 +1601,7 @@ def _commit(sheet, run_dir, args):
                   f"(불사자 반영·현황판은 멱등)", file=sys.stderr)
     if not args.no_matrix:
         vals = dict(done)
+        vals.update(kept)
         vals.update(held)
         m = matrix.read(sheet)
         n = matrix.mark_many(sheet, TASK, vals, matrix=m)
