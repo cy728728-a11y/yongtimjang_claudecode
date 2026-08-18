@@ -293,6 +293,11 @@
   - due: 2026-08-20
   - priority: normal
 
+- [ ] 줌 오픈: 용감한용팀장 2기 (19:30 접속 → start_url로 열기)
+  - added: 2026-08-13
+  - due: 2026-08-19
+  - priority: normal
+
 ## This Week
 
 - [ ]

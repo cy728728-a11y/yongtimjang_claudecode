@@ -44,15 +44,19 @@ def word_terms(words, terms):
     return out if i == len(terms) else None
 
 
-def rearrange(name, keywords, terms):
-    """`a 1 b 2 c` 로 재배열한 (새이름, 새term분해). 못 고치면 None."""
+def rearrange(name, keywords, terms, require_marker=True):
+    """`a 1 b 2 c` 로 재배열한 (새이름, 새term분해). 못 고치면 None.
+
+    require_marker=False(용팀장 계정, name_check profile=yongteam)면 `기본형` 을 붙이지
+    않는다 — 그 계정은 대표옵션 마커를 아예 안 쓴다(product-name/SKILL.md §계정 프로파일).
+    """
     exact = [k for k in keywords if is_exact_in_name(k, name)]
     if not exact:
         return None
     words, blocks = keyword_blocks(name, exact)
     if not blocks:
         return None
-    # term분해에서 마커를 떼고 어절 매핑
+    # term분해에서 마커를 떼고 어절 매핑 (마커가 없으면 no-op)
     terms_wo = list(terms)
     if terms_wo and terms_wo[-1] == BASE_SUFFIX:
         terms_wo = terms_wo[:-1]
@@ -80,12 +84,17 @@ def rearrange(name, keywords, terms):
         for idx in unit:
             new_words.append(words[idx])
             new_terms.extend(wt[idx])
-    new_name = " ".join(new_words + [BASE_SUFFIX])
-    return new_name, new_terms + [BASE_SUFFIX]
+    if require_marker:
+        new_words = new_words + [BASE_SUFFIX]
+        new_terms = new_terms + [BASE_SUFFIX]
+    return " ".join(new_words), new_terms
 
 
-def run(run_dir, commit=False):
-    """R9 단독 실패 건을 재배열해 named_*.json 을 제자리 수정. (fixed, skipped) 반환."""
+def run(run_dir, commit=False, require_marker=True):
+    """R9 단독 실패 건을 재배열해 named_*.json 을 제자리 수정. (fixed, skipped) 반환.
+
+    require_marker=False = 용팀장 계정(--account yongteam) — 재배열해도 `기본형` 을 안 붙인다.
+    """
     run_dir = os.path.expanduser(run_dir)
     # 1) R9 단독 실패 pid 수집 — chal/draft 는 run_names 와 같은 이유로 배제
     targets = {}
@@ -112,7 +121,8 @@ def run(run_dir, commit=False):
                 continue
             kws = [it.get(f"키워드{i}") for i in range(1, 6)]
             kws = [k for k in kws if k]
-            r = rearrange(it.get("새상품명", ""), kws, it.get("term분해") or [])
+            r = rearrange(it.get("새상품명", ""), kws, it.get("term분해") or [],
+                         require_marker=require_marker)
             if not r:
                 skipped += 1
                 continue
@@ -135,6 +145,8 @@ if __name__ == "__main__":
     except Exception:
         pass
     if len(sys.argv) < 2 or sys.argv[1].startswith("--"):
-        print("사용법: fix_r9.py <run-dir> [--commit]")
+        print("사용법: fix_r9.py <run-dir> [--commit] [--account yongteam]")
         sys.exit(2)
-    run(sys.argv[1], commit="--commit" in sys.argv)
+    run(sys.argv[1], commit="--commit" in sys.argv,
+        require_marker="--account" not in sys.argv
+                        or sys.argv[sys.argv.index("--account") + 1] != "yongteam")
