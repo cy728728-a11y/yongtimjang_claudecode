@@ -42,7 +42,7 @@ def find_env() -> Path:
     return Path(__file__).resolve().parents[2] / ".env"
 
 
-def process_inbox(api_key: str, sheet_id: str, dry_run: bool, max_count: int = 50) -> dict:
+def process_inbox(api_key: str, sheet_id: str | None, dry_run: bool, max_count: int = 50) -> dict:
     """받은편지함 안읽은 메일을 훑어 분류·처리한다. 결과 요약 dict를 반환한다."""
     summary = {"trashed": [], "forwarded": [], "errors": []}
 
@@ -53,8 +53,8 @@ def process_inbox(api_key: str, sheet_id: str, dry_run: bool, max_count: int = 5
         return summary
 
     for msg in messages:
-        message_id = msg["id"]
         try:
+            message_id = msg["id"]
             detail = gws_client.read_message(message_id)
             subject = detail.get("subject", "")
             sender = detail.get("from", {}).get("email", "")
@@ -87,7 +87,7 @@ def process_inbox(api_key: str, sheet_id: str, dry_run: bool, max_count: int = 5
                     action,
                 ])
         except Exception as e:
-            summary["errors"].append(f"{message_id} 처리 실패: {e}")
+            summary["errors"].append(f"{msg.get('id', '?')} 처리 실패: {e}")
 
     if not dry_run and not summary["errors"]:
         state.record_success(datetime.now(timezone.utc).isoformat())

@@ -91,7 +91,11 @@ def test_process_inbox_records_error_and_continues(monkeypatch):
     )
     monkeypatch.setattr(gws_client, "forward_message", lambda mid, to: None)
     monkeypatch.setattr(gws_client, "mark_read", lambda mid: None)
-    monkeypatch.setattr(state, "record_success", lambda ts: None)
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("errors가 있으면 record_success가 호출되면 안 됨")
+
+    monkeypatch.setattr(state, "record_success", fail_if_called)
 
     summary = email_triage.process_inbox(api_key="fake-key", sheet_id=None, dry_run=False)
 
