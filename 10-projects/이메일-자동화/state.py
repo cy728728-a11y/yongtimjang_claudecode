@@ -20,7 +20,7 @@ def record_success(timestamp: str) -> None:
         pass  # 상태 기록 실패는 본 처리 결과에 영향을 주지 않음
 
 
-def read_last_success() -> str:
+def read_last_success() -> str | None:
     """마지막 성공 실행시각을 반환한다. 기록이 없으면 None."""
     if not LAST_SUCCESS_FILE.exists():
         return None
