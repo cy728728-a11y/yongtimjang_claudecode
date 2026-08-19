@@ -1882,5 +1882,126 @@ class PrepIdsPreservesRunDirTest(unittest.TestCase):
         m.assert_not_called()
 
 
+
+class AppendRerunIdempotencyTest(unittest.TestCase):
+    """append 를 중단 후 다시 돌려도 같은 행이 두 번 들어가지 않는다 (2026-08-19 25-2 사고).
+
+    **재현한 결함**: 재작업 회차는 `done_ids - redo_ids` 로 A열 이중실행 방어를 일부러
+    뚫는다(재작업 = 새 행 추가). 그런데 그 면제가 *이번 run 이 방금 넣은 행*에도 걸려서,
+    append 가 중간에 죽으면 재실행이 앞서 넣은 행을 통째로 다시 넣었다. 소진
+    (`redo.json` → `.done`)은 **완주해야** 일어나므로 중단 경로에선 아무 방어도 없었다.
+
+    실측: 178행 append 가 2분 타임아웃에 끊긴 뒤 재실행되어 71행이 127행 간격으로 재삽입.
+    """
+
+    def setUp(self):
+        self.run_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.run_dir, True)
+        os.makedirs(os.path.join(self.run_dir, "named"))
+        os.makedirs(os.path.join(self.run_dir, "checked"))
+        # 과거 회차에 P1·P2 가 이미 시트에 있고, 이번엔 둘 다 재작업 면제 대상이다.
+        self.sheet_ids = {"P1", "P2"}
+        self.appended_rows = []
+
+        for n, pid in (("001", "P1"), ("002", "P2")):
+            with open(os.path.join(self.run_dir, "named", f"named_{n}.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"products": [{"productId": pid}]}, f)
+            with open(os.path.join(self.run_dir, "checked", f"checked_{n}.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"products": [{"productId": pid, "새상품명": f"이름{pid}",
+                                         "상태": "생성완료"}]}, f)
+        with open(os.path.join(self.run_dir, "redo.json"), "w", encoding="utf-8") as f:
+            json.dump(sorted(self.sheet_ids), f)
+
+    def _args(self):
+        return argparse.Namespace(
+            run_dir=self.run_dir, sheet="SHEET", tab=run_names.NAME_TAB,
+            group_name="G", dry_run=False, no_related=True, sheet_map=None,
+            allow_missing=True)
+
+    def _append(self, fail_on=None):
+        """cmd_append 실행. fail_on 이 주어지면 그 pid 배치의 append 에서 터뜨린다."""
+        def _fake_append(sheet, tab, rows):
+            pids = [r[0] for r in rows]
+            if fail_on and fail_on in pids:
+                raise RuntimeError("타임아웃 흉내")
+            self.appended_rows.extend(pids)
+            self.sheet_ids.update(pids)
+            return len(rows)
+
+        with mock.patch.object(run_names, "_run"), \
+             mock.patch.object(run_names, "_audit_named", return_value=([], False, 0)), \
+             mock.patch.object(run_names, "_done_ids",
+                               side_effect=lambda *a, **k: set(self.sheet_ids)), \
+             mock.patch.object(run_names, "_mark_matrix"), \
+             mock.patch.object(run_names, "_retire_stale_rows"), \
+             mock.patch.object(run_names, "_handoff_flip_suspect"), \
+             mock.patch.object(run_names.sheet_io, "ensure_tab", return_value=False), \
+             mock.patch.object(run_names, "_extend_header"), \
+             mock.patch.object(run_names.sheet_io, "append_rows", _fake_append), \
+             contextlib.redirect_stdout(io.StringIO()) as buf:
+            try:
+                run_names.cmd_append(self._args())
+            except RuntimeError:
+                pass  # 중단 흉내 — redo.json 은 소진되지 않은 채 남는다
+        return buf.getvalue()
+
+    def test_중단_후_재실행이_같은_행을_또_넣지_않는다(self):
+        self._append(fail_on="P2")            # P1 만 들어가고 P2 에서 죽는다
+        self.assertEqual(self.appended_rows, ["P1"])
+        self.assertTrue(os.path.exists(os.path.join(self.run_dir, "redo.json")),
+                        "중단이면 면제가 남는다 — 이게 결함의 전제조건이다")
+
+        self._append()                        # 재실행
+        self.assertEqual(self.appended_rows, ["P1", "P2"],
+                         "P1 이 다시 들어가면 중복 행이 생긴 것이다")
+
+    def test_이번_run_이_넣은_id_를_appended_json_에_남긴다(self):
+        self._append(fail_on="P2")
+        path = os.path.join(self.run_dir, "appended.json")
+        self.assertTrue(os.path.exists(path), "중단 지점 전까지의 성공분이 남아야 한다")
+        with open(path, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"SHEET": ["P1"]})
+
+    def test_과거_회차_행에_대한_재작업_면제는_그대로다(self):
+        # appended.json 이 없는 첫 실행에서는 A열에 P1·P2 가 있어도 둘 다 append 된다.
+        self._append()
+        self.assertEqual(self.appended_rows, ["P1", "P2"],
+                         "재작업 면제가 과대차단되면 워커 비용만 쓰고 시트 0행이 된다")
+
+
+class AppendedLedgerTest(unittest.TestCase):
+    """`appended.json` 원장 — 시트별로 나눠 담고, 깨져도 append 를 막지 않는다."""
+
+    def setUp(self):
+        self.run_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.run_dir, True)
+
+    def test_시트별로_분리해_담는다(self):
+        run_names._appended_add(self.run_dir, "S1", ["P1", "P2"])
+        run_names._appended_add(self.run_dir, "S2", ["P3"])
+        self.assertEqual(run_names._appended_load(self.run_dir, "S1"), {"P1", "P2"})
+        self.assertEqual(run_names._appended_load(self.run_dir, "S2"), {"P3"})
+
+    def test_같은_시트에_누적하고_중복은_합친다(self):
+        run_names._appended_add(self.run_dir, "S1", ["P1"])
+        run_names._appended_add(self.run_dir, "S1", ["P1", "P2"])
+        self.assertEqual(run_names._appended_load(self.run_dir, "S1"), {"P1", "P2"})
+
+    def test_파일이_없으면_빈_집합(self):
+        self.assertEqual(run_names._appended_load(self.run_dir, "S1"), set())
+
+    def test_빈_목록은_파일을_만들지_않는다(self):
+        run_names._appended_add(self.run_dir, "S1", [])
+        self.assertFalse(os.path.exists(run_names._appended_path(self.run_dir)))
+
+    def test_깨진_파일은_경고만_하고_빈_집합(self):
+        with open(run_names._appended_path(self.run_dir), "w", encoding="utf-8") as f:
+            f.write("{이건 JSON 이 아니다")
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(run_names._appended_load(self.run_dir, "S1"), set())
+        self.assertIn("appended.json", err.getvalue())
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

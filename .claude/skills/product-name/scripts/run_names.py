@@ -328,6 +328,60 @@ def _done_ids(sheet, tab=None):
         return set()
 
 
+def _appended_path(run_dir):
+    return os.path.join(run_dir, "appended.json")
+
+
+def _appended_load(run_dir, sheet):
+    """이번 run 이 **이미 시트에 넣은** 상품id 집합 (2026-08-19 25-2 실측 사고).
+
+    **왜 필요한가**. append 의 이중실행 방어는 시트 A열(`_done_ids`)인데, 재작업 회차는
+    `done_ids - redo_ids` 로 그 방어를 **일부러 뚫는다** — 재작업은 새 행을 얹는 게 맞다.
+    문제는 그 면제가 *과거 회차 행* 뿐 아니라 **이번 run 이 방금 넣은 행에도 걸린다**는
+    것이다. 소진(`redo.json` → `.done`)은 루프를 **완주해야** 일어나므로, append 가 중간에
+    죽으면 면제가 그대로 살아남고 재실행이 앞서 넣은 행을 통째로 다시 넣는다.
+
+    25-2 6회차 실측: 178행 append 가 2분 타임아웃에 끊긴 뒤 백그라운드로 재실행되어
+    **71행이 정확히 127행 간격으로 재삽입**됐다(같은 상품id·같은 작업일·같은 새상품명).
+    로그는 `###APPEND### 총 178행` 하나뿐이라 화면만 봐서는 사고를 알 수 없다.
+
+    그래서 면제를 **"과거 회차에만"** 으로 좁힌다: 이번 run 이 넣은 id 는 배치마다 즉시
+    이 파일에 적고, 재실행은 그걸 done 으로 되읽는다. 중단 지점과 무관하게 멱등이다.
+    시트별로 나눠 담는다 — `--sheet-map` 라우팅이 한 run 에서 여러 시트를 쓴다.
+    """
+    path = _appended_path(run_dir)
+    if not os.path.exists(path):
+        return set()
+    try:
+        return set((_load(path) or {}).get(sheet or "", []))
+    except Exception as e:  # noqa: BLE001  깨진 파일이 append 를 막지는 않는다
+        print(f"  [경고] appended.json 읽기 실패 — 중복 방어가 A열만 남는다: {str(e)[:100]}",
+              file=sys.stderr)
+        return set()
+
+
+def _appended_add(run_dir, sheet, pids):
+    """append 성공분을 즉시 기록한다 — **배치마다 flush 해야** 중단에도 남는다."""
+    pids = [p for p in pids if p]
+    if not pids:
+        return
+    path = _appended_path(run_dir)
+    try:
+        data = _load(path) if os.path.exists(path) else {}
+        if not isinstance(data, dict):
+            data = {}
+    except Exception:  # noqa: BLE001
+        data = {}
+    cur = set(data.get(sheet or "", []))
+    cur.update(pids)
+    data[sheet or ""] = sorted(cur)
+    try:
+        _dump(path, data)
+    except OSError as e:
+        print(f"  [경고] appended.json 기록 실패 — 재실행 시 중복이 생길 수 있다: {e}",
+              file=sys.stderr)
+
+
 def _redo_exempt(redo_hit, auto_redo):
     """prep 이 `redo.json` 으로 append 에 넘길 **A열 중복 면제** 목록.
 
@@ -1601,8 +1655,11 @@ def _cmd_append_pooled(args, run_dir, checked_dir):
             if not args.no_related and sheet_io.ensure_tab(sid, REL_TAB, REL_HEADER):
                 print(f"  탭 신설: {REL_TAB} ({sid})")
 
-        done_ids = (_done_ids(sid, args.tab) - redo_ids) if not args.dry_run else set()
-        rows_final, rel_rows_final = [], []
+        # 재작업 면제는 과거 회차 행에만 — 이번 run 이 넣은 건 done 으로 되돌린다
+        # (`_appended_load` 주석: 중단 후 재실행이 전건을 재삽입하던 결함).
+        done_ids = ((_done_ids(sid, args.tab) - redo_ids) | _appended_load(run_dir, sid)
+                    if not args.dry_run else set())
+        rows_final, rel_rows_final, pids_final = [], [], []
         for pid in pids_here:
             if pid in done_ids:
                 print(f"  스킵(이미처리): {pid}")
@@ -1612,6 +1669,7 @@ def _cmd_append_pooled(args, run_dir, checked_dir):
                 backfill_by_sheet.setdefault(sid, {})[pid] = e["ident"]
             rows_final.append(e["row"])
             rel_rows_final += e["rel_rows"]
+            pids_final.append(pid)
             matrix_by_sheet.setdefault(sid, {})[pid] = e["상태"]
 
         if not rows_final:
@@ -1622,6 +1680,7 @@ def _cmd_append_pooled(args, run_dir, checked_dir):
                 print(json.dumps(r, ensure_ascii=False))
         else:
             total += sheet_io.append_rows(sid, args.tab, rows_final)
+            _appended_add(run_dir, sid, pids_final)  # 관련어보다 먼저 — 본행 중복 우선 차단
             if rel_rows_final and not args.no_related:
                 rel_total += sheet_io.append_rows(sid, REL_TAB, rel_rows_final)
             print(f"  시트 {sid}: {len(rows_final)}행 (관련어 {len(rel_rows_final)}행)")
@@ -1714,8 +1773,11 @@ def cmd_append(args):
     print("[2/2] 시트 append...")
     for cf in _checked_files(checked_dir):
         data = _load(cf)
-        done_ids = _done_ids(args.sheet, args.tab) - redo_ids  # 직전 재조회(이중실행 방어)
+        # 직전 재조회(이중실행 방어). 재작업 면제(`- redo_ids`)는 **과거 회차 행에만**
+        # 걸려야 한다 — 이번 run 이 이미 넣은 건 다시 done 으로 올린다(`_appended_load`).
+        done_ids = (_done_ids(args.sheet, args.tab) - redo_ids) | _appended_load(run_dir, args.sheet)
         rows, rel_rows = [], []
+        batch_pids = []
         for p in data.get("products", []):
             pid = p.get("productId", "")
             if pid in done_ids:
@@ -1727,6 +1789,7 @@ def cmd_append(args):
                 backfill[pid] = ident
             rows.append(_build_row(p, group_name))
             rel_rows += _build_rel_rows(p)
+            batch_pids.append(pid)
         if not rows:
             continue
         if args.dry_run:
@@ -1735,6 +1798,8 @@ def cmd_append(args):
                 print(json.dumps(r, ensure_ascii=False))
         else:
             total += sheet_io.append_rows(args.sheet, args.tab, rows)
+            # 관련어보다 **먼저** 적는다 — 여기서 죽어도 본행 중복은 막아야 한다.
+            _appended_add(run_dir, args.sheet, batch_pids)
             if rel_rows and not args.no_related:
                 rel_total += sheet_io.append_rows(args.sheet, REL_TAB, rel_rows)
             print(f"  {os.path.basename(cf)}: {len(rows)}행 (관련어 {len(rel_rows)}행)")
