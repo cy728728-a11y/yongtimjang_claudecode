@@ -18,6 +18,7 @@ import classifier
 import state
 
 FORWARD_TO = "cy728@daum.net"
+FORWARD_FAILURE_THRESHOLD = 3  # 전달(forward) 연속 실패 허용치 — 이 이상 연속 실패 시 실행을 중단한다(회로차단기)
 
 
 def load_env(env_path: Path) -> dict:
@@ -43,16 +44,30 @@ def find_env() -> Path:
 
 
 def process_inbox(api_key: str, sheet_id: str | None, dry_run: bool, max_count: int = 50) -> dict:
-    """받은편지함 안읽은 메일을 훑어 분류·처리한다. 결과 요약 dict를 반환한다."""
-    summary = {"trashed": [], "forwarded": [], "errors": []}
+    """받은편지함 안읽은 메일을 훑어 분류·처리한다. 결과 요약 dict를 반환한다.
+
+    summary 필드:
+      trashed/forwarded: 처리 완료 목록
+      errors: 실제 메일 처리(분류/휴지통/전달) 실패 — record_success를 막는 진짜 실패
+      log_errors: 시트 로그 기록 실패 — 메일 처리 자체는 성공했으므로 errors와 분리
+      warnings: 처리 자체는 실패가 아니지만 사람이 알아야 할 신호(안읽은 메일 상한 도달 등)
+    """
+    summary = {"trashed": [], "forwarded": [], "errors": [], "log_errors": [], "warnings": []}
+    consecutive_forward_failures = 0
 
     try:
         messages = gws_client.list_unread_messages(max_count=max_count)
     except gws_client.GwsError as e:
         summary["errors"].append(f"목록 조회 실패: {e}")
-        return summary
+        messages = []
+
+    if messages and len(messages) == max_count:
+        summary["warnings"].append(
+            f"안읽은 메일이 {max_count}건 이상일 수 있음 — 이번 실행에서 다 처리되지 않았을 수 있음"
+        )
 
     for msg in messages:
+        message_id = msg.get("id", "?")
         try:
             message_id = msg["id"]
             detail = gws_client.read_message(message_id)
@@ -73,24 +88,57 @@ def process_inbox(api_key: str, sheet_id: str | None, dry_run: bool, max_count: 
                 summary["trashed"].append({"id": message_id, "subject": subject})
                 action = "휴지통"
             else:
-                gws_client.forward_message(message_id, FORWARD_TO)
+                # 전달(gmail.send)은 별도 try로 감싸 연속 실패 횟수를 추적한다.
+                # gmail.send 스코프가 빠진 경우처럼 "전달만 계속 실패"하는 상황에서
+                # 휴지통(파괴적 동작)만 계속 돌아가는 것을 막기 위한 회로차단기.
+                try:
+                    gws_client.forward_message(message_id, FORWARD_TO)
+                except Exception as e:
+                    consecutive_forward_failures += 1
+                    summary["errors"].append(f"{message_id} 처리 실패: {e}")
+                    if consecutive_forward_failures >= FORWARD_FAILURE_THRESHOLD:
+                        summary["errors"].append(
+                            f"연속 {FORWARD_FAILURE_THRESHOLD}회 전달 실패로 실행 중단 — gmail.send 스코프 확인 필요"
+                        )
+                        break
+                    continue
+                consecutive_forward_failures = 0
                 gws_client.mark_read(message_id)
                 summary["forwarded"].append({"id": message_id, "subject": subject})
                 action = "전달"
 
-            if sheet_id:
-                gws_client.append_log_row(sheet_id, [
-                    datetime.now(timezone.utc).isoformat(),
-                    sender,
-                    subject,
-                    category,
-                    action,
-                ])
+            # 시트 로그 기록은 별도 try로 분리 — 로그 실패가 이미 성공한 메일 처리를
+            # 실패로 오귀속시키거나 record_success를 막지 않게 한다.
+            try:
+                if sheet_id:
+                    gws_client.append_log_row(sheet_id, [
+                        datetime.now(timezone.utc).isoformat(),
+                        sender,
+                        subject,
+                        category,
+                        action,
+                    ])
+            except Exception as e:
+                summary["log_errors"].append(f"{message_id} 로그 기록 실패: {e}")
         except Exception as e:
-            summary["errors"].append(f"{msg.get('id', '?')} 처리 실패: {e}")
+            summary["errors"].append(f"{message_id} 처리 실패: {e}")
 
     if not dry_run and not summary["errors"]:
         state.record_success(datetime.now(timezone.utc).isoformat())
+
+    # 실제 처리 실패가 있었으면, Task Scheduler 무인 실행에서도 사람이 시트만 보고
+    # 알아챌 수 있도록 요약 오류 행을 최선 노력으로 기록한다(실패해도 main()은 안 죽음).
+    if not dry_run and summary["errors"] and sheet_id:
+        try:
+            gws_client.append_log_row(sheet_id, [
+                datetime.now(timezone.utc).isoformat(),
+                "SYSTEM",
+                "실행 오류 요약",
+                "error_summary",
+                f"오류 {len(summary['errors'])}건: " + " | ".join(summary["errors"][:5]),
+            ])
+        except Exception:
+            pass  # 요약 로그 기록 실패는 무시(최선 노력)
 
     return summary
 
@@ -114,6 +162,10 @@ def main():
     print(f"[결과] 휴지통 {len(summary['trashed'])}건 / 전달 {len(summary['forwarded'])}건 / 오류 {len(summary['errors'])}건")
     for err in summary["errors"]:
         print(f"  [오류] {err}", file=sys.stderr)
+    for warn in summary.get("warnings", []):
+        print(f"  [경고] {warn}", file=sys.stderr)
+    for log_err in summary.get("log_errors", []):
+        print(f"  [로그오류] {log_err}", file=sys.stderr)
 
 
 if __name__ == "__main__":
