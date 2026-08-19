@@ -72,6 +72,7 @@ from eroomlib.gsheets import (append_rows, ensure_tab,  # noqa: E402
 from eroomlib.matrix import _col_letter                # noqa: E402
 
 TASK = "썸네일"        # 현황판 열 이름
+OPT_TASK = "옵션"      # 이 스킬이 되돌리는 상대 단계(대표옵션의심·기준이미지없음)
 TAB = "썸네일"         # 상세 로그 탭
 
 
@@ -1582,9 +1583,30 @@ def _commit(sheet, run_dir, args):
     finally:
         mcp.close()
 
+    # 왕복 종결 — 옵션이 이미 `실물기준없음` 이라고 답한 건은 되돌리지 않는다
+    # (`R.close_roundtrip` 주석 참조). **시트 기록보다 먼저** 갈라야 시트 본문과
+    # 현황판이 같은 값을 갖는다.
+    closed = set()
+    if main_suspect and not args.no_matrix:
+        try:
+            _m0 = matrix.read(sheet)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 현황판을 못 읽어 왕복 종결 판정을 건너뛴다: {str(e)[:100]}",
+                  file=sys.stderr)
+            _m0 = {}
+        closed = R.close_roundtrip(main_suspect, _m0)
+        for pid in closed:
+            main_suspect.pop(pid, None)
+            held[pid] = R.MATRIX_ROUNDTRIP_CLOSED
+            for i, row in enumerate(sheet_rows):
+                if row[0] == pid:
+                    sheet_rows[i] = row[:6] + (R.MATRIX_ROUNDTRIP_CLOSED,)
+                    break
+
     print(f"\n###COMMIT### 반영 {len(done)}건 / 보류·실패 {len(held)}건"
           + (f" / 기존대표 유지로 종결 {len(kept)}건" if kept else "")
           + (f" (그중 대표옵션의심 {len(main_suspect)}건 → 옵션 재작업)" if main_suspect else "")
+          + (f" / 왕복종결 {len(closed)}건(옵션이 이미 실물기준없음으로 답함)" if closed else "")
           + (f" / fallback 종결 {len(finalized)}건 건너뜀" if finalized else ""))
     if not args.no_sheet:
         # **시트 실패가 현황판을 막지 않게 한다** (2026-08-15 용쌤2-1 §3 실측):
@@ -2134,6 +2156,28 @@ def cmd_fallback(args):
     if done and not args.no_matrix:
         matrix.mark_many(sheet, TASK, done)
         print(f"  현황판 '{TASK}': {len(done)}칸 갱신")
+        # **옵션 열에 남은 재작업 flag 를 걷는다** (2026-08-18 1-2 실측).
+        #
+        # `apply --commit` 은 `제외(대표옵션의심)`·`제외(기준이미지없음)` 을 썸네일 보류 +
+        # **옵션 열 재작업** 으로 찍는다. 원본대체는 그 판정을 뒤집어 썸네일을 종결시키는데,
+        # 옵션 열 flag 는 그대로 남아 있었다 — 그러면 다음 옵션 회차가 그 상품을 다시 집고,
+        # 옵션은 또 썸네일로 넘긴다. **고리가 끊기는 게 아니라 한 칸 뒤로 밀릴 뿐이다.**
+        # 실측: 1-2 2회차에서 16건이 이 상태로 남아 옵션 pending 이 14→30 으로 부풀었다.
+        #
+        # 원본대체 = "이 상품은 실물 원본으로 종결했다" 이므로 옵션이 더 할 일이 없다.
+        # **썸네일이 찍은 flag 만 걷는다** — 다른 단계(상품명 등)가 넘긴 재작업은 남긴다.
+        try:
+            m = matrix.read(sheet)
+            stale = {pid: matrix.DONE for pid in done
+                     if matrix.is_redo((m.get(pid) or {}).get(OPT_TASK, ""))
+                     and TASK in matrix.redo_reason((m.get(pid) or {}).get(OPT_TASK, ""))}
+            if stale:
+                matrix.mark_many(sheet, OPT_TASK, stale, matrix=m)
+                print(f"  현황판 '{OPT_TASK}': 재작업 flag {len(stale)}칸 회수 "
+                      f"— 원본대체로 종결했으니 옵션이 다시 집지 않는다")
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 옵션 열 flag 회수 실패 — 다음 옵션 회차가 이 건들을 "
+                  f"다시 집는다: {str(e)[:120]}", file=sys.stderr)
     print(f"\n###FALLBACK### 원본대체 {len(done)}건 / 실패 {len(bad)}건")
 
 

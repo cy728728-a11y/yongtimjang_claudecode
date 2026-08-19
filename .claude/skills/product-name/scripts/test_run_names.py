@@ -801,21 +801,176 @@ class DropGoneTest(unittest.TestCase):
         kept, gone = run_names._drop_gone(
             self._pend("GONE1", "LIVE", "GONE2", "REDO"), self.M)
         self.assertEqual([g["productId"] for g in kept], ["LIVE", "REDO"])
-        self.assertEqual(gone, 2)
+        self.assertEqual(gone, ["GONE1", "GONE2"])
 
     def test_현황판에_없는_상품은_남긴다(self):
         # 신규 수집분은 아직 현황판에 행이 없다 — 게이트가 이걸 지우면 안 된다.
         kept, gone = run_names._drop_gone(self._pend("NEW"), self.M)
         self.assertEqual([g["productId"] for g in kept], ["NEW"])
-        self.assertEqual(gone, 0)
+        self.assertEqual(gone, [])
 
     def test_현황판을_못_읽으면_경고하고_아무것도_안_뺀다(self):
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
             kept, gone = run_names._drop_gone(self._pend("GONE1", "LIVE"), {})
         self.assertEqual(len(kept), 2)
-        self.assertEqual(gone, 0)
+        self.assertEqual(gone, [])
         self.assertIn("게이트를 걸지 못했습니다", buf.getvalue())
+
+
+class MarkGoneColumnTest(unittest.TestCase):
+    """`_drop_gone` 이 뺀 건의 `상품명` 열 되찍기 (2026-08-17 25-2 실측).
+
+    게이트는 워커 비용을 막아주지만 현황판 pending 은 안 비워준다 — 25-2 에서
+    pending 54건 중 18건이 "이미 삭제됐는데 상품명 열만 안 찍힌" 건이었고,
+    회차마다 남은 일감으로 다시 세어져 인계문서가 실제 작업량을 잘못 적었다.
+    """
+
+    M = {
+        # 상품명 열이 빈칸 + 다른 열은 삭제 → 그 값을 그대로 복사해 찍는다
+        "G1": {"row": 2, "상품명": "", "옵션": "상품삭제(제외카테고리·자동)",
+               "썸네일": "상품삭제(제외카테고리·자동)"},
+        # 재작업이 찍혀 있어도 실물이 없으면 마킹 대상이다
+        "G2": {"row": 3, "상품명": "재작업(카테고리: 카테고리 변경)",
+               "옵션": "상품삭제(옵션: 품목불일치·자동)"},
+        # 이미 삭제 표시가 있다 → 건드리지 않는다
+        "G3": {"row": 4, "상품명": "상품삭제(이룸님)", "옵션": "해당없음"},
+        # 작업이 진행 중인 값이 들어 있다 → 덮어쓰지 않는다
+        "G4": {"row": 5, "상품명": "진행중(미반영)", "옵션": "삭제대기(제외카테고리)"},
+    }
+
+    def _run(self, ids):
+        seen = {}
+
+        def _mark(sheet, col, tgt):
+            seen.update({"sheet": sheet, "col": col, "tgt": dict(tgt)})
+
+        n = run_names._mark_gone_column("SHEET", self.M, ids, mark=_mark)
+        return n, seen
+
+    def test_빈칸이면_다른_열의_삭제사유를_그대로_복사한다(self):
+        n, seen = self._run(["G1"])
+        self.assertEqual(n, 1)
+        self.assertEqual(seen["col"], "상품명")
+        self.assertEqual(seen["tgt"], {"G1": "상품삭제(제외카테고리·자동)"})
+
+    def test_재작업이_찍혀_있어도_마킹한다(self):
+        n, seen = self._run(["G2"])
+        self.assertEqual(seen["tgt"], {"G2": "상품삭제(옵션: 품목불일치·자동)"})
+
+    def test_이미_삭제표시가_있으면_건드리지_않는다(self):
+        n, seen = self._run(["G3"])
+        self.assertEqual(n, 0)
+        self.assertEqual(seen, {})
+
+    def test_진행중_같은_값은_덮어쓰지_않는다(self):
+        # 사람이나 다른 단계가 쓴 값을 게이트가 지우면 안 된다.
+        n, _ = self._run(["G4"])
+        self.assertEqual(n, 0)
+
+    def test_시트가_없으면_아무것도_안_한다(self):
+        self.assertEqual(run_names._mark_gone_column("", self.M, ["G1"]), 0)
+
+
+class DropStaleJkTest(unittest.TestCase):
+    """상품id 재할당으로 다른 상품 것이 된 J열 격리 (2026-08-17 25-2 실측).
+
+    카테고리교정 시트의 상품명과 현황판 상품명이 완전히 다른 행이 162건 있었고,
+    그대로 믿으면 모니터 받침대에 소파 이름이 붙는다.
+    """
+
+    M = {
+        "OK1": {"row": 2, "상품": "스탠딩 모니터 받침대 높이조절"},
+        "BAD": {"row": 3, "상품": "스탠딩 모니터 받침대 높이조절"},
+        "SPACE": {"row": 4, "상품": "곰돌이전신거울 미용실"},
+        "NOROW": {"row": 5, "상품": ""},
+    }
+
+    def _jk(self):
+        return {
+            "OK1": {"실물판정": "모니터 받침대", "썸네일URL": "u1",
+                    "시트상품명": "모니터 받침대 높이조절 스탠드"},
+            # 같은 id 인데 시트는 소파라고 한다 = 재할당
+            "BAD": {"실물판정": "2인용 패브릭 소파", "썸네일URL": "u2",
+                    "시트상품명": "2인용 인테리어 쇼파 패브릭 클라우드"},
+            # 띄어쓰기만 다른 같은 물건 — 버리면 안 된다
+            "SPACE": {"실물판정": "곰돌이 전신거울", "썸네일URL": "u3",
+                      "시트상품명": "곰돌이 전신거울 피팅 드레스룸"},
+            # 현황판 상품명이 비어 판정 불가 — 그대로 둔다
+            "NOROW": {"실물판정": "무언가", "썸네일URL": "u4", "시트상품명": "다른 무언가"},
+        }
+
+    def test_다른_상품_것이면_J와_K를_모두_버린다(self):
+        jk, stale = run_names._drop_stale_jk(self._jk(), self.M)
+        self.assertEqual([p for p, _, _ in stale], ["BAD"])
+        self.assertEqual(jk["BAD"]["실물판정"], "")
+        self.assertEqual(jk["BAD"]["썸네일URL"], "")   # 행 자체가 남의 것이라 K도 못 믿는다
+        self.assertTrue(jk["BAD"]["대조불일치"])
+
+    def test_같은_물건이면_유지한다(self):
+        jk, stale = run_names._drop_stale_jk(self._jk(), self.M)
+        self.assertEqual(jk["OK1"]["실물판정"], "모니터 받침대")
+        self.assertEqual(jk["SPACE"]["실물판정"], "곰돌이 전신거울")
+        self.assertNotIn("SPACE", [p for p, _, _ in stale])
+
+    def test_한쪽이_비면_판정하지_않는다(self):
+        jk, stale = run_names._drop_stale_jk(self._jk(), self.M)
+        self.assertEqual(jk["NOROW"]["실물판정"], "무언가")
+
+    def test_현황판에_행이_없으면_그대로_둔다(self):
+        jk, stale = run_names._drop_stale_jk(self._jk(), {})
+        self.assertEqual(stale, [])
+        self.assertEqual(jk["BAD"]["실물판정"], "2인용 패브릭 소파")
+
+    def test_J와_K가_둘_다_비면_대조하지_않는다(self):
+        jk, stale = run_names._drop_stale_jk(
+            {"BAD": {"실물판정": "", "썸네일URL": "", "시트상품명": "전혀 다른 물건"}},
+            self.M)
+        self.assertEqual(stale, [])
+
+
+class RecoverGroupOrphansTest(unittest.TestCase):
+    """그룹 목록이 빠뜨린 미아 편입 (2026-08-17 25-2 실측).
+
+    불사자 그룹 목록 API 가 살아 있는 상품을 빠뜨려 13건이 어느 회차도 안 집혔다.
+    옵션정리엔 같은 장치가 있는데 이 축에만 없었다.
+    """
+
+    M = {
+        "IN": {"row": 2, "상품": "그룹에 있는 상품", "상품명": "", "옵션": "완료"},
+        "ORPH": {"row": 3, "상품": "미아 상품", "상품명": "", "옵션": "완료",
+                 "썸네일": "완료"},
+        "ORPH2": {"row": 4, "상품": "미아 재작업", "상품명": "재작업(옵션: 뒤집힘)",
+                  "옵션": "완료"},
+        "DONE": {"row": 5, "상품": "이미 끝난 상품", "상품명": "완료", "옵션": "완료"},
+        "DEAD": {"row": 6, "상품": "삭제된 미아", "상품명": "",
+                 "옵션": "상품삭제(제외카테고리·자동)"},
+    }
+    GROUP = [{"productId": "IN"}]
+
+    def test_그룹에_없고_pending_이면_편입한다(self):
+        out = run_names._recover_group_orphans(self.GROUP, self.M)
+        self.assertEqual({o["productId"] for o in out}, {"ORPH", "ORPH2"})
+        self.assertTrue(all(o["미아편입"] for o in out))
+        # 현황판 `상품` 열의 이름을 실어 보낸다(로그·배치에서 사람이 알아볼 수 있게)
+        self.assertEqual(
+            next(o for o in out if o["productId"] == "ORPH")["상품명"], "미아 상품")
+
+    def test_삭제된_미아는_편입하지_않는다(self):
+        out = run_names._recover_group_orphans(self.GROUP, self.M)
+        self.assertNotIn("DEAD", {o["productId"] for o in out})
+
+    def test_ids_를_주면_그_안의_것만(self):
+        out = run_names._recover_group_orphans(self.GROUP, self.M, want={"ORPH2"})
+        self.assertEqual([o["productId"] for o in out], ["ORPH2"])
+
+    def test_상품명탭에_이미_있는_건은_빼고_redo_에_맡긴다(self):
+        out = run_names._recover_group_orphans(
+            self.GROUP, self.M, done_ids={"ORPH"})
+        self.assertEqual([o["productId"] for o in out], ["ORPH2"])
+
+    def test_현황판을_못_읽으면_빈_리스트(self):
+        self.assertEqual(run_names._recover_group_orphans(self.GROUP, {}), [])
 
 
 class RetireStaleRowsTest(unittest.TestCase):
@@ -1201,6 +1356,13 @@ class MarkTest(unittest.TestCase):
         g.sheets_update = lambda s, r, v: self.updates.append((s, r, v)) or {}
         self.addCleanup(lambda: (setattr(g, "sheets_get", self._orig_get),
                                  setattr(g, "sheets_update", self._orig_upd)))
+        # cmd_mark 는 현황판도 갱신한다(2026-08-19) — 실제 시트를 치지 않게 가로챈다.
+        from eroomlib import matrix as _mx
+        self.matrix_calls = []
+        self._orig_mark = _mx.mark_many
+        _mx.mark_many = lambda s, col, tgt, **kw: (
+            self.matrix_calls.append((s, col, dict(tgt))) or len(tgt))
+        self.addCleanup(lambda: setattr(_mx, "mark_many", self._orig_mark))
 
     def _rows(self):
         h = run_names.NAME_HEADER
@@ -1220,7 +1382,8 @@ class MarkTest(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             run_names.cmd_mark(argparse.Namespace(
                 sheet="SHEET", tab=run_names.NAME_TAB,
-                ids=ids, status=status, note=note))
+                ids=ids, status=status, note=note,
+                no_matrix=getattr(self, "no_matrix", False)))
         return buf.getvalue()
 
     def test_마지막_행만_바꾸고_다른_행은_보존한다(self):
@@ -1240,6 +1403,33 @@ class MarkTest(unittest.TestCase):
         _, _, memo_values = self.updates[1]
         self.assertEqual(memo_values[1], ["기존메모 | 표본검수 — 실물 불일치 의심"])
         self.assertEqual(memo_values[0], [""])  # 대상 아닌 행 메모는 그대로
+
+    def test_현황판도_같이_찍는다(self):
+        # 종전엔 상품명 탭만 고쳐 두 저장소가 갈렸다 — 표본검수로 뺀 건이 탭에는
+        # `보류(표본의심)` 인데 현황판에는 `진행중(미반영)` 로 남아 영영 굳었다.
+        self._run(["P001"], "보류(표본의심)")
+        self.assertEqual(len(self.matrix_calls), 1)
+        _, col, tgt = self.matrix_calls[0]
+        self.assertEqual(col, "상품명")
+        self.assertEqual(tgt, {"P001": "보류(표본의심)"})
+
+    def test_no_matrix면_현황판을_건드리지_않는다(self):
+        self.no_matrix = True
+        self._run(["P001"], "보류(표본의심)")
+        self.assertEqual(self.matrix_calls, [])
+
+    def test_현황판_실패해도_상품명탭_반영은_유지된다(self):
+        # 시트 쓰기는 이미 끝난 뒤라 여기서 예외가 나가면 성공한 작업이 실패로 보인다.
+        from eroomlib import matrix as _mx
+
+        def _boom(*a, **k):
+            raise RuntimeError("429")
+        _mx.mark_many = _boom
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            out = self._run(["P001"], "보류(표본의심)")
+        self.assertIn("###MARK### 1건", out)
+        self.assertIn("현황판 갱신 실패", buf.getvalue())
 
     def test_시트에_없는_pid는_경고만_찍고_있는_것만_처리한다(self):
         out = self._run(["P003", "P999"], "보류(표본의심)")

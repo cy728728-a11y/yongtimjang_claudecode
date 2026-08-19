@@ -426,5 +426,42 @@ class ToOptionVerdictTest(unittest.TestCase):
                     next((v for v in R.TO_OPTION_VERDICTS if v in verdict), None))
 
 
+class CloseRoundtripTest(unittest.TestCase):
+    """옵션↔썸네일 무한 왕복 끊기 (2026-08-17 — 5회차 §3① 이 남긴 숙제).
+
+    종결 장치가 `prep` 경로에만 있어서 `verdict` 가 다시 옵션으로 되돌렸다.
+    25-2 실측: 썸네일 108 → 옵션 58 → 51 → 30 → 24 → 26 에서 안 줄어 사람이 끊었다.
+    """
+
+    M = {
+        # 옵션이 이미 "실물 이미지가 있는 옵션이 하나도 없다"고 답했다 → 종결
+        "CLOSED": {"row": 2, "옵션": "이관(썸네일): 실물기준없음 — 후보 전부 도면"},
+        # 옵션이 정상 처리했다 → 되돌릴 수 있다(1바퀴째)
+        "FIRST": {"row": 3, "옵션": "완료"},
+        # 옵션 열이 비었다 → 아직 안 돈 것
+        "EMPTY": {"row": 4, "옵션": ""},
+    }
+
+    def test_옵션이_이미_실물기준없음이면_종결한다(self):
+        closed = R.close_roundtrip(
+            {"CLOSED": "사유", "FIRST": "사유", "EMPTY": "사유"}, self.M)
+        self.assertEqual(closed, {"CLOSED"})
+
+    def test_1바퀴째는_되돌린다(self):
+        self.assertEqual(R.close_roundtrip({"FIRST": "사유"}, self.M), set())
+
+    def test_현황판을_못_읽으면_아무것도_종결하지_않는다(self):
+        # 판정 근거가 없으면 종전 동작(되돌리기)을 유지한다 — 조용히 끝내면 안 된다.
+        self.assertEqual(R.close_roundtrip({"CLOSED": "사유"}, {}), set())
+
+    def test_되돌릴_게_없으면_빈_집합(self):
+        self.assertEqual(R.close_roundtrip({}, self.M), set())
+
+    def test_종결값은_보류라서_다음_prep_이_안_집는다(self):
+        # `보류(...)` 가 아니면 `matrix.pending` 이 도로 집어 그게 다음 바퀴가 된다.
+        self.assertTrue(R.MATRIX_ROUNDTRIP_CLOSED.startswith("보류("))
+        self.assertIn(R.NO_REAL_BASE, R.MATRIX_ROUNDTRIP_CLOSED)
+
+
 if __name__ == "__main__":
     unittest.main()

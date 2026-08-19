@@ -9,6 +9,16 @@
 const ITEMS = __ITEMS__;
 const OPTS = __OPTS__;
 
+// ── 캡챠 정착 대기 (2026-08-18 실측) ──────────────────────────────────────────
+// 네이버 '보안 확인을 완료해 주세요' 화면은 **스스로 통과되는 중간 화면**일 때가 있다.
+// 같은 URL 을 시점별로 찍은 실측: 1.2초엔 캡챠 입력창 2개(rcpt_answer/vcpt_answer),
+// 5.2초엔 캡챠 흔적 0개 + 정상 검색결과. goto 직후 한 번만 보고 끊으면 멀쩡한 조회가
+// 전건 `캡챠감지` 로 죽는다(1-3 그룹에서 15건이 이틀 동안 이것 때문에 못 넘어갔다).
+// 그래서 캡챠로 보이면 즉시 중단하지 않고 아래 동안 다시 본다.
+// 진짜 캡챠는 사람이 풀기 전엔 안 사라지므로 이 대기로 오판이 생기지 않는다.
+const CAPTCHA_SETTLE_TRIES = 5;
+const CAPTCHA_SETTLE_MS = 2000;   // 최대 10초 추가 대기
+
 // ── 확장 패널(shadow DOM) 에서 '추출된 카테고리' 블록 텍스트를 꺼낸다 ────────────
 // 불사자 확장은 Plasmo(PLASMO-CSUI) 라 shadow root 안에 있다. document.body.innerText
 // 로는 절대 안 잡힌다 — shadow root 를 직접 훑어야 한다.
@@ -115,7 +125,15 @@ for (let i = 0; i < items.length; i++) {
     await sleep(1200);
 
     // 차단·캡챠는 계속 두드릴수록 악화된다. 남은 건은 손대지 않고 즉시 멈춘다.
-    const st0 = await page.evaluate(PAGESTATE);
+    // 단, 캡챠는 스스로 통과되는 중간 화면일 수 있어 정착을 기다린다(위 상수 주석).
+    let st0 = await page.evaluate(PAGESTATE);
+    if (st0 === "캡챠") {
+      for (let k = 0; k < CAPTCHA_SETTLE_TRIES; k++) {
+        await sleep(CAPTCHA_SETTLE_MS);
+        st0 = await page.evaluate(PAGESTATE);
+        if (st0 !== "캡챠") break;
+      }
+    }
     if (st0 === "차단" || st0 === "캡챠") {
       r.상태 = st0 === "캡챠" ? "캡챠감지" : "차단감지";
       r.error = st0 === "캡챠"

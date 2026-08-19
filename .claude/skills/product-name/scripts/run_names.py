@@ -26,6 +26,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -416,8 +417,84 @@ def _read_jk_map(sheet, tab=CATFIX_TAB):
         pid = str(r[0]).strip()
         if not pid:
             continue
-        m[pid] = {"실물판정": str(r[9]).strip(), "썸네일URL": str(r[10]).strip()}
+        # B열(교정 당시 상품명)도 함께 담는다 — `_drop_stale_jk` 가 이걸로 J열이
+        # 이 상품 것이 맞는지 대조한다(2026-08-17).
+        m[pid] = {"실물판정": str(r[9]).strip(), "썸네일URL": str(r[10]).strip(),
+                  "시트상품명": str(r[1]).strip()}
     return m
+
+
+def _bigram(s):
+    """한글·영숫자만 남긴 뒤 인접 2글자 집합. 띄어쓰기·조사 차이를 흡수한다."""
+    s = re.sub(r"[^가-힣A-Za-z0-9]", "", str(s or ""))
+    return {s[i:i + 2] for i in range(len(s) - 1)}
+
+
+def _name_overlap(a, b):
+    """두 상품명의 bigram 자카드 유사도(0~1). 한쪽이 비면 None(판정 불가)."""
+    A, B = _bigram(a), _bigram(b)
+    if not A or not B:
+        return None
+    return len(A & B) / len(A | B)
+
+
+# J열을 버리는 임계. 아래로 잡을수록 "확실히 다른 것"만 버린다.
+# 실측(25-2, 2294건 대조)에서 0.08 미만이 162건이었고 그 구간에 진짜 오염이 몰려 있었다.
+# 0.10 은 그보다 살짝 넉넉하다 — **비대칭을 의도한 값이다**: 멀쩡한 J를 버려도
+# 워커가 증거 4종으로 직접 판정하면 그만이지만(구버전 그룹이 원래 그 경로다),
+# 오염된 J를 믿으면 **완전히 다른 물건의 이름**이 나간다.
+JK_STALE_THRESHOLD = 0.10
+
+
+def _drop_stale_jk(jk_by_id, m, threshold=JK_STALE_THRESHOLD):
+    """카테고리교정 시트 J열이 **다른 상품 것**이면 버린다 (2026-08-17 25-2 실측).
+
+    **무슨 일이 있었나.** 상품명 워커 3명이 각각 독립적으로 "J열 실물판정이 원문명·
+    옵션명과 전면 상충한다"고 보고했다. 전수 대조해 보니 카테고리교정 시트의 상품명(B열)과
+    현황판의 상품명이 **완전히 다른 물건**인 행이 162건이었다:
+
+    | 상품id | 불사자 현재 | 카테고리시트 J열 |
+    |---|---|---|
+    | …FW9848P2C… | 모니터 받침대 | 2인용 패브릭 소파 |
+    | …FW7M2BEE… | 캠핑카 테이블 다리 | 로보락 직배수 키트 |
+    | …FW7BXR9B… | 접이식 사다리 | 지하수위 측정기 |
+
+    전부 `U01KN93FW…` 대역에 몰려 있어 **상품id 재할당**으로 보인다(옛 상품이 지워지고
+    그 id 가 새 상품에 다시 붙었는데, 카테고리교정 시트는 옛 기록을 그대로 들고 있다).
+
+    **왜 위험한가.** 워커 지시서는 "J열이 있으면 그게 실물"이라는 신뢰 원칙을 두고 있다.
+    그대로 따르면 모니터 받침대에 소파 이름이 붙는다. 이번엔 워커가 모순을 눈치채고
+    **보류**로 뺐지만(그래서 3건이 작업 손실), 그건 워커 재량이지 장치가 아니다.
+
+    **여기서 하는 일은 판정이 아니라 격리다.** J를 버리면 그 상품은 구버전 그룹과 같은
+    경로(증거 4종으로 직접 판정)를 탈 뿐이라 손해가 없다. 지시서 쪽 방어(J열이 원문·
+    옵션과 모순되면 J를 버리고 증거로 짓되 보류하지 말 것)와 이중으로 건다.
+
+    대조축은 **현황판 `상품` 열**이다(수집 당시 이름이라 rename 후에도 안 바뀐다).
+    현황판에 행이 없거나 어느 한쪽이 비면 판정하지 않고 그대로 둔다.
+
+    반환: (걸러낸 맵, 버린 [(pid, 시트상품명, 현황판상품명)] 리스트).
+    """
+    if not jk_by_id or not m:
+        return jk_by_id, []
+    dropped = []
+    for pid, v in jk_by_id.items():
+        if not (v.get("실물판정") or v.get("썸네일URL")):
+            continue
+        rec = m.get(pid)
+        if not rec:
+            continue
+        live = (rec.get("상품") or "").strip()
+        sheet_name = (v.get("시트상품명") or "").strip()
+        ov = _name_overlap(live, sheet_name)
+        if ov is None or ov >= threshold:
+            continue
+        dropped.append((pid, sheet_name, live))
+        # J·K 둘 다 버린다 — 행 자체가 다른 상품 것이므로 썸네일URL 도 못 믿는다.
+        v["실물판정"] = ""
+        v["썸네일URL"] = ""
+        v["대조불일치"] = True
+    return jk_by_id, dropped
 
 
 def _backfill_jcol(sheet, tab, updates):
@@ -510,6 +587,11 @@ def cmd_prep(args):
         # 대표는 targets 산출이 이미 미착수로 골라낸 것이라 단건 애드혹 경로(--ids/--redo)와
         # 단일 그룹 경로(--group-id)가 조용히 뒤섞이면 안 된다(피어리뷰 지적: 무시되던 결함).
         raise RuntimeError("--targets-json 은 --group-id/--ids/--redo 와 함께 쓸 수 없습니다.")
+
+    # 현황판은 그룹 경로에서 1회만 읽는다(재작업 편입·미아 회수·삭제 게이트가 공유).
+    # `--targets-json` 경로는 그룹 경계가 없어 안 읽으므로 여기서 빈 값으로 열어 둔다 —
+    # 뒤쪽 `_drop_stale_jk` 가 분기 밖에서 이걸 참조한다.
+    _m = {}
 
     group_path = os.path.join(run_dir, "group.json")
     workdata_path = os.path.join(run_dir, "workdata.json")
@@ -613,11 +695,26 @@ def cmd_prep(args):
         if exempt:
             _dump(os.path.join(run_dir, "redo.json"), exempt)
 
+        # 그룹 목록이 빠뜨린 미아를 편입한다 (`_recover_group_orphans` 주석 참조).
+        # `--ids` 로 콕 집어 준 건도 그룹에 없으면 여기서 들어온다 — 종전엔 경고만 찍고
+        # "대상 0건" 으로 끝났다.
+        orphans = _recover_group_orphans(group, _m, want, done_ids)
+        if orphans:
+            group = group + orphans
+            print(f"  그룹 목록 밖 미아 {len(orphans)}건 편입 — "
+                  + " · ".join(o["productId"] for o in orphans[:3])
+                  + (f" 외 {len(orphans) - 3}건" if len(orphans) > 3 else ""))
+
         pending = [g for g in group if g.get("productId") not in done_ids]
         # 삭제대기 게이트 — A열 멱등만으로는 안 걸린다(`_drop_gone` 주석 참조).
         pending, gone = _drop_gone(pending, _m)
         if gone:
-            print(f"  삭제대기·삭제완료 {gone}건 제외 (현황판 게이트)")
+            print(f"  삭제대기·삭제완료 {len(gone)}건 제외 (현황판 게이트)")
+            # 그중 `상품명` 열만 안 찍혀 회차마다 되살아나는 건을 여기서 종결시킨다.
+            n_mark = _mark_gone_column(args.sheet, _m, gone)
+            if n_mark:
+                print(f"    └ 현황판 `상품명` 열 {n_mark}건 삭제상태 마킹 "
+                      "(다음 회차 pending 에서 빠진다)")
         for g in pending:
             if g.get("productId") in auto_redo:
                 g["재작업사유"] = auto_redo[g["productId"]]
@@ -656,6 +753,17 @@ def cmd_prep(args):
             jk_by_id.update(_read_jk_map(sid, CATFIX_TAB))
     else:
         jk_by_id = _read_jk_map(args.sheet, CATFIX_TAB)
+    # 상품id 재할당으로 **다른 상품 것이 된 J열**을 버린다(`_drop_stale_jk` 주석 참조).
+    jk_by_id, stale = _drop_stale_jk(jk_by_id, _m)
+    if stale:
+        print(f"  [경고] 카테고리 J·K {len(stale)}건이 현황판 상품과 대조 불일치 — "
+              "J열을 버리고 증거 4종으로 직접 판정하게 한다")
+        for pid, sheet_name, live in stale[:5]:
+            print(f"    {pid}  시트'{sheet_name[:24]}' ↔ 현황판'{live[:24]}'")
+        if len(stale) > 5:
+            print(f"    … 외 {len(stale) - 5}건")
+        _dump(os.path.join(run_dir, "jk_stale.json"),
+              [{"productId": p, "시트상품명": s, "현황판상품명": l} for p, s, l in stale])
     _dump(os.path.join(run_dir, "jk_map.json"), jk_by_id)
     n_ident = sum(1 for v in jk_by_id.values() if v.get("실물판정"))
     n_kurl = sum(1 for v in jk_by_id.values() if v.get("썸네일URL"))
@@ -1233,6 +1341,90 @@ def _matrix_redo(sheet, candidates, read=None):
             if pid in candidates}
 
 
+def _recover_group_orphans(group, m, want=None, done_ids=None):
+    """마켓그룹 목록에 안 잡히는데 현황판은 `상품명` 미완인 상품을 대상에 편입한다.
+
+    **왜 필요한가 — 그룹에서 빠진 상품은 어느 회차도 안 집는다** (2026-08-17 25-2 실측).
+    prep 의 대상 모집단은 `collect_group.py` 가 받아 온 그룹 목록 하나뿐이다. 그런데
+    불사자 그룹 목록 API 가 **살아 있는 상품을 빠뜨리는 경우가 있다** — 25-2 에서
+    현황판 `상품명` pending 54건 중 **13건이 그룹 1879건에 없었고**, 그중 12건은
+    `bulsaja_product_detail` 로 조회하면 멀쩡히 존재했다(옵션·썸네일 축은 `완료`).
+    prep 은 이런 건을 대상에서 조용히 뺀 뒤 `[2/6] 대상 N건` 만 찍으므로 **에러도
+    경고도 없이** 회차마다 그대로 남는다. 사람이 `group.json` 에 손으로 넣어야만 뚫렸다.
+
+    옵션정리에는 같은 성질의 회수 장치(`run_options._recover_orphans`)가 있는데
+    이 축에만 없었다. 여기서 편입하면 다음 단계는 종전 경로를 그대로 탄다 —
+    `_fill_workdata` 가 캐시에 없는 id 를 조회해 채우고(2026-08-15 수정), `_drop_gone`
+    이 이미 삭제된 건을 걸러낸다. 즉 **이 함수는 모집단만 넓히고 판정은 안 한다.**
+
+    편입 조건: ①현황판에 행이 있고 ②`상품명` 열이 pending(빈칸·재작업)이고
+    ③그룹 목록에 없고 ④`already_gone` 이 아니다. `want`(`--ids`)가 있으면 그 안의 것만.
+    `done_ids`(상품명 탭 A열)에 있는 건 제외한다 — 그쪽은 `--redo` 가 뚫는 경로다.
+
+    반환: 편입할 상품 dict 리스트(그룹 목록과 같은 형태).
+    """
+    if not m:
+        return []
+    have = {g.get("productId") for g in group}
+    done_ids = done_ids or set()
+    out = []
+    for pid in matrix.pending(m, "상품명"):
+        if pid in have or pid in done_ids:
+            continue
+        if want and pid not in want:
+            continue
+        rec = m.get(pid) or {}
+        if category_gate.already_gone(rec):
+            continue
+        out.append({"productId": pid,
+                    "상품명": (rec.get("상품") or "").strip(),
+                    "상태코드": 1, "잠금": False, "미아편입": True})
+    return out
+
+
+def _mark_gone_column(sheet, m, gone_ids, mark=None):
+    """`_drop_gone` 이 뺀 건의 현황판 `상품명` 열에 그 삭제 상태를 되찍는다.
+
+    **왜 필요한가 — 게이트는 막아주지만 큐를 비워주진 않는다** (2026-08-17 25-2 실측).
+    제외카테고리·품목불일치로 삭제된 상품은 나머지 작업 열엔 `상품삭제(…)` 가 찍히는데
+    **`상품명` 열만 빈칸·재작업인 채로 남는 경우가 있다.** `_drop_gone` 이 대상에서
+    빼주므로 워커 비용은 안 새지만, 현황판 `상품명` pending 에는 계속 잡혀서
+    **회차마다 "남은 일감"으로 다시 세어진다** — 25-2 에서 pending 54건 중 18건이
+    이것이었고, 인계문서가 그 18건을 실제 작업량으로 적어 다음 세션을 오도했다.
+
+    4회차 §3① 의 "삭제하고 현황판을 안 찍으면 다음 prep 이 도로 집는다"와 같은 뿌리다.
+    거기서는 사람이 손으로 `matrix.mark_many` 를 돌려 막았는데, 그 수작업을 없앤다.
+
+    찍는 값은 **다른 열에서 이미 쓰고 있는 삭제 상태를 그대로 복사한다** — 사유를 새로
+    지어내지 않는다(제외카테고리·품목불일치·용팀장 지시가 서로 다른 경로다).
+    `mark` 는 테스트 주입점(기본 `matrix.mark_many`).
+
+    반환: 찍은 건수.
+    """
+    if not sheet or not m or not gone_ids:
+        return 0
+    cols = ("수집", "카테고리", "옵션", "썸네일", "상세", "지재권", "배송비", "업로드")
+    dead = ("상품삭제", "삭제대기", "해당없음")
+    tgt = {}
+    for pid in gone_ids:
+        rec = m.get(pid) or {}
+        cur = (rec.get("상품명") or "").strip()
+        # 되찍는 대상은 **현황판이 pending 으로 세는 값**뿐이다 = 빈칸 또는 `재작업(…)`.
+        # `보류(…)`·`진행중(…)`·이미 찍힌 삭제 상태는 다른 단계나 사람이 쓴 값이라
+        # 덮으면 정보가 사라진다(`matrix.pending` 과 같은 기준을 쓴다).
+        if cur and not cur.startswith("재작업"):
+            continue
+        for c in cols:
+            v = (rec.get(c) or "").strip()
+            if v.startswith(dead):
+                tgt[pid] = v
+                break
+    if not tgt:
+        return 0
+    (mark or matrix.mark_many)(sheet, "상품명", tgt)
+    return len(tgt)
+
+
 def _drop_gone(pending, m):
     """현황판이 "이 상품은 이미 없다"고 말하는 건을 대상에서 뺀다 (2026-08-15 4-1 사고).
 
@@ -1247,18 +1439,21 @@ def _drop_gone(pending, m):
     살아 있어 버틴다(4-1 에서 `상품명` 열이 append 로 덮인 뒤에도 `썸네일` 열로 사고를
     찾아낸 게 이 성질이다). 규칙을 여기 다시 적지 않는다 — 두 벌이 되면 어긋난다.
 
-    반환: (남길 것, 뺀 수).
+    반환: (남길 것, 뺀 id 리스트). 종전엔 뺀 **수**만 돌려줬는데, 호출부가
+    `_mark_gone_column` 으로 현황판 `상품명` 열을 되찍으려면 id 가 필요하다
+    (2026-08-17). `len()` 을 쓰면 종전 출력과 같다.
     """
     if not m:
         # 현황판을 못 읽었다 = 게이트가 통째로 안 걸린 상태다. 조용히 넘어가면 안 된다.
         print("  [경고] 현황판을 못 읽어 삭제대기 게이트를 걸지 못했습니다 — "
               "삭제 예정 상품이 대상에 섞일 수 있습니다.", file=sys.stderr)
-        return pending, 0
-    kept, gone = [], 0
+        return pending, []
+    kept, gone = [], []
     for g in pending:
-        rec = m.get(g.get("productId"))
+        pid = g.get("productId")
+        rec = m.get(pid)
         if rec and category_gate.already_gone(rec):
-            gone += 1
+            gone.append(pid)
             continue
         kept.append(g)
     return kept, gone
@@ -2064,6 +2259,20 @@ def cmd_mark(args):
     print(f"###MARK### {len(hit)}건 → '{args.status}'"
           + (" (메모 덧붙임)" if args.note else ""))
 
+    # **현황판도 같이 찍는다** (2026-08-19 실측). 종전엔 `상품명` 탭만 고쳐서 두 저장소가
+    # 갈렸다 — 표본검수로 뺀 3건이 탭에는 `보류(표본의심)` 인데 현황판에는 `진행중(미반영)`
+    # 로 남았다. `진행중` 은 pending 이 아니라 다음 prep 이 집지도 않으므로 **영영 그 상태로
+    # 굳는다.** 다음 세션은 현황판을 원장으로 읽으니 "반영 대기 중"으로 오해한다.
+    # 계약(`_shared/스킬-계약.md`)도 "다른 단계에 넘기거나 상태를 바꿀 땐 현황판에 찍는다"다.
+    if not getattr(args, "no_matrix", False):
+        try:
+            n_m = matrix.mark_many(args.sheet, "상품명",
+                                   {pid: args.status for pid in last_row})
+            print(f"  현황판({matrix.TAB}) 상품명: {n_m}칸 갱신")
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 현황판 갱신 실패 — 상품명 탭만 반영됐다: {str(e)[:120]}",
+                  file=sys.stderr)
+
 
 # ---------------------------------------------------------------------------
 # status — 남은 배치 나열 + 워커 분배표 (순수 파일 glob, LLM·MCP·시트 무관)
@@ -2223,6 +2432,8 @@ def main():
     p8.add_argument("--group-name", default="", help="마켓그룹명(시트 조회 키)")
     p8.add_argument("--sheet", default="", help="스프레드시트 id 직접 지정(그룹명 조회 대신)")
     p8.add_argument("--tab", default=NAME_TAB, help="기록할 탭 이름")
+    p8.add_argument("--no-matrix", action="store_true",
+                    help="현황판(00_진행) 갱신 생략 — 상품명 탭만 고친다")
     p8.set_defaults(func=cmd_mark)
 
     args = ap.parse_args()

@@ -976,5 +976,61 @@ class MarkDeletedTest(unittest.TestCase):
         self.assertEqual(set(self.marked), {"U01a", "U01manual"})
 
 
+class FallbackClearsOptionFlagTest(unittest.TestCase):
+    """원본대체는 **옵션 열 재작업 flag 까지** 걷어야 고리가 끊긴다 (2026-08-18 1-2 실측).
+
+    `apply --commit` 은 `제외(대표옵션의심)`·`제외(기준이미지없음)` 을 썸네일 보류 +
+    **옵션 열 재작업** 으로 찍는다. 원본대체는 그 판정을 뒤집어 썸네일을 종결시키는데
+    옵션 flag 는 그대로 남아 있었다 — 다음 옵션 회차가 그 상품을 다시 집고 옵션은 또
+    썸네일로 넘긴다. **고리가 끊기는 게 아니라 한 칸 뒤로 밀릴 뿐이다.**
+    실측: 1-2 2회차에서 16건이 이 상태로 남아 옵션 pending 이 14→30 으로 부풀었다.
+    """
+
+    def setUp(self):
+        self.run_dir = tempfile.mkdtemp()
+        self.marked = []              # [(task, dict)]
+        self._orig_mark, self._orig_read = matrix.mark_many, matrix.read
+        self.board = {}
+        matrix.read = lambda sheet, tab=matrix.TAB: self.board
+        matrix.mark_many = (lambda sheet, task, d, tab=matrix.TAB, matrix=None:
+                            (self.marked.append((task, dict(d))), len(d))[1])
+
+    def tearDown(self):
+        matrix.mark_many, matrix.read = self._orig_mark, self._orig_read
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _run(self, done):
+        """`cmd_fallback` 의 현황판 기록부만 떼어 재현한다(MCP·시트는 범위 밖)."""
+        args = argparse.Namespace(no_matrix=False, no_sheet=True, run_dir=self.run_dir,
+                                  reason="테스트")
+        run_thumbs.matrix.mark_many("SHEET", run_thumbs.TASK, done)
+        m = run_thumbs.matrix.read("SHEET")
+        stale = {pid: run_thumbs.matrix.DONE for pid in done
+                 if run_thumbs.matrix.is_redo((m.get(pid) or {}).get(run_thumbs.OPT_TASK, ""))
+                 and run_thumbs.TASK in run_thumbs.matrix.redo_reason(
+                     (m.get(pid) or {}).get(run_thumbs.OPT_TASK, ""))}
+        if stale:
+            run_thumbs.matrix.mark_many("SHEET", run_thumbs.OPT_TASK, stale, matrix=m)
+        return args
+
+    def test_썸네일이_찍은_옵션_재작업을_걷는다(self):
+        self.board = {"U01a": {"옵션": "재작업(썸네일: 대표옵션의심: …)"}}
+        self._run({"U01a": "완료(원본대체·대표옵션)"})
+        tasks = dict((t, d) for t, d in self.marked)
+        self.assertIn("옵션", tasks, "옵션 열 flag 를 안 걷었다 — 다음 회차가 또 집는다")
+        self.assertEqual(tasks["옵션"], {"U01a": matrix.DONE})
+
+    def test_다른_단계가_넘긴_재작업은_남긴다(self):
+        # 상품명이 넘긴 건 썸네일이 종결시킬 일이 아니다.
+        self.board = {"U01a": {"옵션": "재작업(상품명: 기본형 부착)"}}
+        self._run({"U01a": "완료(원본대체·대표옵션)"})
+        self.assertEqual([t for t, _ in self.marked], ["썸네일"])
+
+    def test_재작업이_아니면_건드리지_않는다(self):
+        self.board = {"U01a": {"옵션": "완료"}}
+        self._run({"U01a": "완료(원본대체·대표옵션)"})
+        self.assertEqual([t for t, _ in self.marked], ["썸네일"])
+
+
 if __name__ == "__main__":
     unittest.main()

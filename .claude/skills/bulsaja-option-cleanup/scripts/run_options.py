@@ -828,11 +828,16 @@ def _print_review(rows):
         elif plan.get("이름변경"):
             print(f"   [옵션명 교정 0건 — {same}건 그대로]")
 
-        # 축 이름은 이번 저장에서 안 바뀐다(MCP 미지원) — 시트 원장으로만 넘어간다.
+        # 축 이름도 저장된다(2026-08-17 `renameGroups`). 제안이 있는 축만 나가고,
+        # 결과는 `옵션축` 탭 원장에 `반영`/`보류(사유)` 로 남는다.
         if plan.get("축감사"):
-            print(f"   [옵션 축 {len(plan['축감사'])}건 — 저장 안 함, '{AXIS_TAB}' 탭 기록]")
+            n_send = sum(1 for a in plan["축감사"] if a.get("제안"))
+            print(f"   [옵션 축 {len(plan['축감사'])}건 — 저장 {n_send}건 "
+                  f"· 원장 '{AXIS_TAB}' 탭]")
             for a in plan["축감사"]:
-                tail = f"  → 제안 '{a['제안']}'" if a["제안"] else ""
+                tail = (f"  → 제안 '{a['제안']}'"
+                        + ("(코드가 지음)" if a.get("자동") else "")) if a["제안"] else \
+                       ("  → 현재 이름 유지(워커 확인)" if a.get("확인") else "  → 현재 이름 유지")
                 print(f"     차원{a['차원']} '{a['현재']}'(원문 {a['원문'] or '-'})"
                       f"{tail}  [{'; '.join(a['신호']) or '워커 제안'}]")
                 print(f"       값: {' / '.join(v for v in a['값예시'] if v)[:70]}")
@@ -1348,7 +1353,22 @@ def cmd_axis(args):
                 continue
 
             # 3) 재조회 검증 — 보냈다고 박힌 게 아니다. 검증분만 `반영` 으로 적는다.
-            after = mcp.workdata(pid).get("옵션") or {}
+            #    **재조회도 실패한다** — 저장은 됐는데 이 호출이 429 로 죽으면(2-3 실측),
+            #    감싸지 않으면 예외가 루프 밖으로 나가 **그때까지 쌓인 updates 가 통째로
+            #    날아간다**(원장 되쓰기가 아래 4번이라 실행되지 않는다). 즉 서버에는
+            #    반영됐는데 원장에는 아무 기록이 없는 상태가 된다 — 가장 나쁜 결말이다.
+            #    그 상품만 `보류(검증불가)` 로 남기고 계속 간다. 보류는 다음 회차가 다시
+            #    집고, 이미 저장돼 있으면 `현재 축 == 제안` 이라 호출 없이 `반영` 으로 닫힌다.
+            try:
+                after = mcp.workdata(pid).get("옵션") or {}
+            except Exception as e:  # noqa: BLE001
+                for it in send:
+                    updates.append((row_of[it["groupIndex"]],
+                                    f"보류(검증불가: {str(e)[:110]})"[:200]))
+                    n_bad += 1
+                print(f"  [{k}/{len(todo)}] {pid} 저장됨 · 검증 실패: {str(e)[:80]}",
+                      file=sys.stderr)
+                continue
             fails = {f["차원"] for f in R.axis_verify(after, send)}
             for f in R.axis_verify(after, send):
                 updates.append((row_of[f["차원"]], f"보류(검증실패: {f['사유']})"[:200]))
@@ -1359,7 +1379,12 @@ def cmd_axis(args):
                     n_ok += 1
             # 스냅샷도 새 축 이름으로 되쓴다 — 안 하면 다음 회차 워커가 옛 축을 보고
             # 같은 제안을 또 낸다(= 이 원장이 다시 부푼다).
-            snapshot.update(pid, 옵션=after)
+            # 로컬 파일 쓰기라 실패가 드물지만, 여기서 죽어도 위와 같은 사고가 된다.
+            try:
+                snapshot.update(pid, 옵션=after)
+            except Exception as e:  # noqa: BLE001
+                print(f"  [경고] {pid} 스냅샷 갱신 실패(반영은 유효): {str(e)[:80]}",
+                      file=sys.stderr)
             print(f"  [{k}/{len(todo)}] {pid} 반영 {len(send) - len(fails)}축: {names}")
     finally:
         mcp.close()
