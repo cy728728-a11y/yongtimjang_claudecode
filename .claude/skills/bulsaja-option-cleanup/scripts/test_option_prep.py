@@ -1034,10 +1034,10 @@ class AxisLedgerReplayTest(unittest.TestCase):
 
     HDR = run_options.AXIS_HEADER
 
-    def _row(self, pid="P1", 차원="0", 현재="색상", 제안="모델", 상태="대기"):
+    def _row(self, pid="P1", 차원="0", 현재="색상", 제안="모델", 상태="대기", 신호="신호"):
         # A상품id B기록일 C상품명 D차원 E원문축명 F현재축명 G제안축명 H사유 I값예시 J신호 K상태
         return [pid, "2026-08-06", "상품", 차원, "颜色分类", 현재, 제안, "사유", "가/나",
-                "신호", 상태]
+                신호, 상태]
 
     def setUp(self):
         self.written, self.calls, self.snap = [], [], []
@@ -1082,9 +1082,19 @@ class AxisLedgerReplayTest(unittest.TestCase):
         base.update(kw)
         run_options.cmd_axis(argparse.Namespace(**base))
 
+    def _col(self, name):
+        """되쓴 값 중 그 열의 것만 뽑는다 — [(range, [[값],[값]]), ...] → [값...].
+
+        연속 행은 한 구간으로 묶여 나가므로 **구간 안까지 펼쳐야** 한다(안 펼치면
+        2행을 닫아도 1건으로 보인다). 열도 가려야 한다 — `상태` 와 `제안축명` 이
+        같은 `written` 에 섞여 들어온다.
+        """
+        letter = run_options._col_letter(self.HDR.index(name) + 1)
+        return [row[0] for rng, v in self.written
+                if f"!{letter}" in rng for row in v]
+
     def _status(self):
-        """되쓴 상태값만 뽑는다 — [(range, [[값]]), ...] → [값...]."""
-        return [v[0][0] for _rng, v in self.written]
+        return self._col("상태")
 
     def test_제안이_있는_대기_행을_저장한다(self):
         self._run([self._row()])
@@ -1093,11 +1103,42 @@ class AxisLedgerReplayTest(unittest.TestCase):
         self.assertEqual(self._status(), [run_options.AXIS_APPLIED])
         self.assertEqual(self.snap, ["P1"], "저장했는데 스냅샷을 안 되썼다")
 
-    def test_제안이_없으면_대상이_아니다(self):
-        # 기계 신호만 있는 축 — 대체 이름은 사람만 지을 수 있다. `대기` 로 남아야 한다.
-        self._run([self._row(제안="")])
+    # --- 제안이 없는 행 (2026-08-19) --------------------------------------
+    # 축 저장이 없던 시절에 판정만 해서 쌓아둔 행은 `제안축명` 이 비어 있다.
+    # `axis_audit` 은 2026-08-17부터 그런 축을 그 자리에서 닫지만, **원장에 이미
+    # 쌓인 행은 그 함수를 다시 지나지 않아** 영영 `대기` 로 남았다(2-1 실측 61축).
+    # 여기서 같은 판정을 그대로 적용한다 — 두 자리가 갈리면 한쪽이 거짓말을 한다.
+
+    def test_제안이_없고_휴리스틱_신호뿐이면_현재_이름_유지로_닫는다(self):
+        # `색상 축인데 값에 색이 없다` 는 사전에 없는 색(카멜·라벤더)에 헛발질한다.
+        # 아무도 제안을 안 냈다는 건 고칠 게 확정된 상태가 아니라 — 덮으면 개악이다.
+        self._run([self._row(제안="", 신호="색상 축인데 값에 색이 없다")])
+        self.assertEqual(self.calls, [], "판정만 남은 축에 MCP 를 쳤다")
+        self.assertEqual(self._status(), [run_options.AXIS_KEEP])
+
+    def test_제안이_없어도_이름이_깨졌으면_코드가_짓는다(self):
+        # 번역 잔재는 꼬리만 뗀다 — 추측이 아니라 기계번역이 덧붙인 말을 없애는 것이라
+        # 원뜻이 그대로 남는다. `axis_fallback` 과 같은 함수를 쓴다.
+        self.live = "색상별로 정렬하십시오"
+        self._run([self._row(제안="", 현재="색상별로 정렬하십시오", 신호="번역 잔재")])
+        self.assertEqual(self.calls,
+                         [{"renameGroups": [{"groupIndex": 0, "name": "색상"}]}])
+        self.assertEqual(self._status(), [run_options.AXIS_APPLIED])
+        self.assertEqual(self._col("제안축명"), ["색상"],
+                         "코드가 지은 이름을 원장 `제안축명` 에 안 되썼다")
+
+    def test_유지로_닫을_행만_있어도_원장에_쓴다(self):
+        # 저장 대상이 0이면 예전엔 그대로 return 했다 — 그러면 유지 판정이 안 남아
+        # 다음 회차가 같은 61축을 또 집는다(= 이 backlog 가 안 줄어든다).
+        self._run([self._row(제안="", 신호="색상 축인데 값에 색이 없다"),
+                   self._row(pid="P2", 제안="", 신호="색상 축인데 값에 색이 없다")])
         self.assertEqual(self.calls, [])
-        self.assertEqual(self.written, [], "사람 몫인 행의 상태를 덮었다")
+        self.assertEqual(self._status(), [run_options.AXIS_KEEP] * 2)
+
+    def test_미리보기_회차는_유지_판정도_안_쓴다(self):
+        # 원장은 실제로 한 일의 기록이지 예정표가 아니다.
+        self._run([self._row(제안="", 신호="색상 축인데 값에 색이 없다")], commit=False)
+        self.assertEqual(self.written, [])
 
     def test_사람이_판단한_행은_건드리지_않는다(self):
         # `무시`·`반영` 은 사람이 내린 결론이다. 재실행이 되돌리면 원장이 거짓이 된다.

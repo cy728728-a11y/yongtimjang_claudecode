@@ -2003,5 +2003,131 @@ class AppendedLedgerTest(unittest.TestCase):
             self.assertEqual(run_names._appended_load(self.run_dir, "S1"), set())
         self.assertIn("appended.json", err.getvalue())
 
+
+class SyncStaleProgressTest(unittest.TestCase):
+    """굳은 `진행중(…)` 되맞추기 (2026-08-19 25-2 실측 — §3⑥ 의 과거분).
+
+    `진행중` 은 중간표시인데 `matrix.pending` 은 빈칸·재작업만 집으므로 pending 도 아니고
+    prep 도 집지 않는다 — 한 번 찍히면 영영 굳고, 다음 세션은 "반영 대기"로 오해한다.
+    실측 5건은 상품명 탭에서 이미 `보류(…)` 로 종결된 건이었다.
+    """
+
+    def setUp(self):
+        self.marked = []
+        self.mark = lambda s, col, tgt: self.marked.append((s, col, dict(tgt))) or len(tgt)
+
+    def _rows(self, pairs):
+        h = run_names.NAME_HEADER
+        i_id, i_st = h.index("상품id"), h.index("상태")
+        out = []
+        for pid, st in pairs:
+            r = [""] * len(h)
+            r[i_id], r[i_st] = pid, st
+            out.append(r)
+        return out
+
+    def _run(self, matrix_vals, tab_pairs):
+        m = {pid: {"상품명": v} for pid, v in matrix_vals.items()}
+        with mock.patch("eroomlib.gsheets.sheets_get", return_value=self._rows(tab_pairs)), \
+             contextlib.redirect_stdout(io.StringIO()) as buf:
+            n = run_names._sync_stale_progress("SHEET", m, run_names.NAME_TAB, mark=self.mark)
+        return n, buf.getvalue()
+
+    def test_탭이_종결됐으면_그_값으로_되맞춘다(self):
+        n, _ = self._run({"P1": "진행중(미반영)"}, [("P1", "보류(표본의심)")])
+        self.assertEqual(n, 1)
+        self.assertEqual(self.marked[0][2], {"P1": "보류(표본의심)"})
+
+    def test_같은_pid_여러_행이면_마지막_행이_최신이다(self):
+        n, _ = self._run({"P1": "진행중(미반영)"},
+                         [("P1", "검증실패"), ("P1", "반영완료")])
+        self.assertEqual(self.marked[0][2], {"P1": "반영완료"})
+        self.assertEqual(n, 1)
+
+    def test_진행중이_아닌_현황판_값은_건드리지_않는다(self):
+        # 현황판이 더 최신인 정상 케이스 — 삭제가 나중에 일어났거나 어휘만 다르다.
+        n, _ = self._run({"P1": "상품삭제(제외카테고리·자동)", "P2": "완료"},
+                         [("P1", "반영완료"), ("P2", "반영완료")])
+        self.assertEqual(n, 0)
+        self.assertEqual(self.marked, [])
+
+    def test_탭도_진행중이면_되맞출_게_없다(self):
+        n, _ = self._run({"P1": "진행중(미반영)"}, [("P1", "진행중(미반영)")])
+        self.assertEqual(n, 0)
+
+    def test_탭에_행이_없으면_그냥_둔다(self):
+        n, _ = self._run({"P1": "진행중(미반영)"}, [("P9", "반영완료")])
+        self.assertEqual(n, 0)
+
+    def test_탭_조회_실패는_경고만_하고_prep_을_막지_않는다(self):
+        m = {"P1": {"상품명": "진행중(미반영)"}}
+        with mock.patch("eroomlib.gsheets.sheets_get", side_effect=RuntimeError("api")), \
+             contextlib.redirect_stderr(io.StringIO()) as err, \
+             contextlib.redirect_stdout(io.StringIO()):
+            n = run_names._sync_stale_progress("SHEET", m, run_names.NAME_TAB, mark=self.mark)
+        self.assertEqual(n, 0)
+        self.assertIn("경고", err.getvalue())
+
+    def test_현황판이_비면_시트를_읽지도_않는다(self):
+        with mock.patch("eroomlib.gsheets.sheets_get") as g:
+            self.assertEqual(run_names._sync_stale_progress("SHEET", {}, None, mark=self.mark), 0)
+        g.assert_not_called()
+
+
+class FirstOriginalNameTest(unittest.TestCase):
+    """재작업이 **이미 가공된 이름**을 원본으로 삼던 결함 (2026-08-19 25-2 실측).
+
+    E열은 prep 이 불사자의 *현재* 이름으로 채우는데, rename 한 상품은 그게 앞 회차
+    결과물이다. 실측 65행이 앞 결과물을 재가공했고(3연속 1건) **15행은 원본==새것**으로
+    워커 비용만 썼다. 되돌리기 경로(SKILL.md "원본은 E열")도 같이 끊긴다.
+    """
+
+    def _rows(self, triples):
+        h = run_names.NAME_HEADER
+        i_id, i_orig = h.index("상품id"), h.index("원본상품명")
+        out = []
+        for pid, orig in triples:
+            r = [""] * len(h)
+            r[i_id], r[i_orig] = pid, orig
+            out.append(r)
+        return out
+
+    def _first(self, triples):
+        with mock.patch("eroomlib.gsheets.sheets_get", return_value=self._rows(triples)):
+            return run_names._first_original_names("SHEET", run_names.NAME_TAB)
+
+    def test_가장_오래된_행의_원본을_지킨다(self):
+        # 위에서 아래로 = 오래된 순. 2회차 행의 E열(가공본)이 이겨선 안 된다.
+        got = self._first([("P1", "진짜 원본 이름"), ("P1", "1회차 결과물 기본형")])
+        self.assertEqual(got, {"P1": "진짜 원본 이름"})
+
+    def test_빈_원본은_건너뛰고_다음_행을_본다(self):
+        got = self._first([("P1", ""), ("P1", "보류행 뒤의 원본")])
+        self.assertEqual(got, {"P1": "보류행 뒤의 원본"})
+
+    def test_이력이_없으면_빈_맵(self):
+        self.assertEqual(self._first([]), {})
+
+    def test_조회_실패는_종전_동작으로_떨어진다(self):
+        with mock.patch("eroomlib.gsheets.sheets_get", side_effect=RuntimeError("api")), \
+             contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(run_names._first_original_names("SHEET"), {})
+        self.assertIn("경고", err.getvalue())
+
+    def test_배치는_최초_원본을_우선_쓴다(self):
+        tgt = {"P1": {"productId": "P1", "상품명": "1회차 결과물 기본형",
+                      "원본상품명": "진짜 원본 이름", "카테고리": "C"}}
+        with mock.patch.object(run_names, "_same_price_options", return_value=[]), \
+             mock.patch.object(run_names, "_spec_view", return_value=[]):
+            got = run_names._mk_product("P1", "C", tgt, {}, {}, {})
+        self.assertEqual(got["원본상품명"], "진짜 원본 이름")
+
+    def test_최초_원본이_없으면_현재_이름을_쓴다(self):
+        tgt = {"P1": {"productId": "P1", "상품명": "현재 이름", "카테고리": "C"}}
+        with mock.patch.object(run_names, "_same_price_options", return_value=[]), \
+             mock.patch.object(run_names, "_spec_view", return_value=[]):
+            got = run_names._mk_product("P1", "C", tgt, {}, {}, {})
+        self.assertEqual(got["원본상품명"], "현재 이름")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -1134,8 +1134,10 @@ def _log_axis_sheet(sheet, rows, status=None):
     (`반영` / `보류(사유)`). 안 넘기면 전부 `대기` 로 쌓인다(= 미리보기 회차).
 
     **2026-08-17부터 이 탭은 '수동 반영 목록'이 아니라 '무엇을 왜 바꿨나의 원장'이다.**
-    MCP 에 `renameGroups` 가 생겨 축 이름을 코드가 직접 저장한다. 워커 제안이 없어
-    코드가 이름을 지어낼 수 없는 축만 종전대로 `대기` 로 남아 사람 몫이 된다.
+    MCP 에 `renameGroups` 가 생겨 축 이름을 코드가 직접 저장한다. **여기서 `대기` 로
+    남는 건 제안이 있는데 아직 저장 회차를 안 탄 축뿐**이다 — 제안이 없는 축은 그
+    자리에서 닫는다(깨졌으면 `axis_fallback` 이 짓고, 아니면 `AXIS_KEEP`). 사람 몫으로
+    쌓아두지 않는다(2026-08-17 이룸님).
 
     키는 (상품id, 차원 index) — 상품 하나에 축이 여럿이라 상품id 만으로는 못 찍는다.
     **상태가 `대기` 가 아닌 행은 건드리지 않는다** — 이룸님이 `반영`·`무시` 로 바꿔둔 판단을
@@ -1255,51 +1257,82 @@ def cmd_axis(args):
     #    되지 않는다 — 실제로 `/` 하나 때문에 25축이 그 상태로 남았다(1-2, 2026-08-17).
     #    사람이 내린 판단(`무시`·`반영`)만 건드리지 않는다. `_axis_ignored` 가 `보류` 를
     #    빼는 것과 **같은 기준**이다 — 두 자리가 어긋나면 한쪽이 반드시 거짓말을 한다.
-    #    (제안 없는 행 = 사람 몫이라 그대로 둔다)
+    #
+    #    **제안이 없는 행도 여기서 닫는다** (2026-08-19). 그건 축 저장이 없던 시절에
+    #    판정만 해서 쌓아둔 것이라 `제안축명` 칸이 비어 있다. `axis_audit` 은 2026-08-17
+    #    부터 제안 없는 축을 그 자리에서 닫지만(깨졌으면 `axis_fallback`, 아니면 유지),
+    #    **원장에 이미 쌓인 행은 그 함수를 다시 지나지 않는다** — 상품이 옵션 재작업을
+    #    타지 않는 한 영영 `대기` 로 남는다(2-1 실측 61축). 239축 backlog 와 같은 함정이
+    #    한 겹 아래에 있었던 것이다. 여기서 **같은 판정을 그대로 적용**해 출구를 낸다.
     todo = {}                                   # pid → [(행번호, 차원, 현재축명, 제안)]
     repaired = []                               # [(행번호, 고친 제안)] — G열에 되쓴다
-    n_noprop = 0
+    filled = []                                 # [(행번호, 코드가 지은 이름)] — G열에 되쓴다
+    keepers = []                                # [(행번호, pid)] — 현재 이름 유지로 닫는다
     for i, r in enumerate(rows, start=2):
         def _c(j):
             return str(r[j]).strip() if len(r) > j else ""
         pid, st, prop = _c(0), _c(10), _c(6)
         if not pid or not (st == AXIS_PENDING or st.startswith("보류")):
             continue
-        if not prop:
-            n_noprop += 1
-            continue
         try:
             gi = int(_c(3))
         except ValueError:
             continue
-        # 구분자 `/` 만 `·` 로 고친다 — 축 저장이 없던 시절에 지은 제안이라 금지문자
-        # 규칙을 몰랐다(1-2 실측 200축 중 25축). 고친 값은 원장 G열에도 되써서
-        # **원장에 적힌 제안과 실제로 보낸 값이 같게** 한다.
-        fixed = R.axis_repair(prop)
-        if fixed != prop:
-            repaired.append((i, fixed))
-            prop = fixed
+        if not prop:
+            # `axis_audit` 과 **같은 판정**이다 — 두 자리가 갈리면 한쪽이 거짓말을 한다.
+            # 이름이 객관적으로 깨졌으면(번역 잔재·중국어·무의미·길이) 코드가 짓고,
+            # 휴리스틱 신호(`색상 축인데 값에 색이 없다`)뿐이면 지금 이름을 유지한다.
+            # 그 신호는 사전에 없는 색에 헛발질하므로 덮으면 개악이다.
+            sig = [s.strip() for s in _c(9).split(";") if s.strip()]
+            prop = R.axis_fallback(_c(5)) if R.axis_broken(sig) else ""
+            if not prop or R.axis_norm(prop) == R.axis_norm(_c(5)):
+                keepers.append((i, pid))
+                continue
+            filled.append((i, prop))
+        else:
+            # 구분자 `/` 만 `·` 로 고친다 — 축 저장이 없던 시절에 지은 제안이라 금지문자
+            # 규칙을 몰랐다(1-2 실측 200축 중 25축). 고친 값은 원장 G열에도 되써서
+            # **원장에 적힌 제안과 실제로 보낸 값이 같게** 한다.
+            fixed = R.axis_repair(prop)
+            if fixed != prop:
+                repaired.append((i, fixed))
+                prop = fixed
         todo.setdefault(pid, []).append((i, gi, _c(5), prop))
     if args.ids:
         want = set(args.ids)
         todo = {p: v for p, v in todo.items() if p in want}
         keep = {i for v in todo.values() for i, *_ in v}
         repaired = [(i, v) for i, v in repaired if i in keep]
+        filled = [(i, v) for i, v in filled if i in keep]
+        keepers = [(i, p) for i, p in keepers if p in want]
     print(f"[1/3] 원장 {len(rows)}행 → 대상 {sum(len(v) for v in todo.values())}축 "
-          f"/ {len(todo)}상품 (제안 없어 사람 몫 {n_noprop}축)")
+          f"/ {len(todo)}상품 (현재 이름 유지로 닫을 {len(keepers)}축)")
     if repaired:
         print(f"  구분자 교정 {len(repaired)}축: `/` → `·` (원장에도 되쓴다)")
+    if filled:
+        print(f"  제안 없던 {len(filled)}축은 코드가 이름을 지었다(원장에도 되쓴다): "
+              + " · ".join(f"{v}" for _, v in filled[:8])
+              + (" …" if len(filled) > 8 else ""))
     if args.limit:
         todo = dict(list(todo.items())[:args.limit])
         print(f"  --limit {args.limit} 적용 → {len(todo)}상품")
+
+    # 현재 이름 유지분은 MCP 를 안 탄다 — 판정이 이미 끝났고 저장할 게 없다.
+    # (그래서 `--limit` 도 안 건다. 쓰기는 아래 4번에서 상태 칸 한 번으로 나간다.)
+    updates = [(i, AXIS_KEEP) for i, _ in keepers]
+    n_keep = len(keepers)
     if not todo:
-        print("처리할 축이 없다.")
+        if not (updates and args.commit):
+            print(f"처리할 축이 없다.{f' (유지로 닫을 {n_keep}축은 --commit 이어야 쓴다)' if n_keep else ''}")
+            return
+        _axis_writeback(sheet, updates, [])
+        print(f"[3/3] 저장 대상 없음 · 현재 이름 유지 {n_keep}축을 원장에 닫았다.")
         return
 
     # 2) 상품별로 현재 축 이름을 확인하고 저장한다.
     mcp = OptionMCP()
     mcp.open()
-    updates, n_ok, n_skip, n_bad = [], 0, 0, 0
+    n_ok, n_skip, n_bad = 0, 0, 0
     try:
         for k, (pid, items) in enumerate(sorted(todo.items()), start=1):
             try:
@@ -1390,20 +1423,30 @@ def cmd_axis(args):
         mcp.close()
 
     # 4) 원장 되쓰기 — 연속 구간으로 묶어 batchUpdate 한 호출에 싣는다.
-    #    행마다 update 하면 쓰기 호출이 행수만큼 나가 분당 쿼터(60)에 즉사한다.
     #    **미리보기 회차는 안 쓴다** — 원장은 실제로 한 일의 기록이지 예정표가 아니다.
-    if (updates or repaired) and args.commit:
-        ranges = []
-        for name, cells in (("상태", updates), ("제안축명", repaired)):
-            col = _col_letter(AXIS_HEADER.index(name) + 1)
-            ranges += [(f"'{AXIS_TAB}'!{col}{start}:{col}{start + len(block) - 1}", block)
-                       for start, block in _row_runs(sorted((r, [v]) for r, v in cells))]
-        for _, part in chunk_by_size(ranges, budget=_ARG_BUDGET):
-            sheets_batch_update(sheet, part, value_input="USER_ENTERED")
-        print(f"  원장 갱신: 상태 {len(updates)}행 · 제안 {len(repaired)}행 "
-              f"/ 구간 {len(ranges)}개 → '{AXIS_TAB}'")
+    if (updates or repaired or filled) and args.commit:
+        _axis_writeback(sheet, updates, repaired + filled)
     print(f"\n###AXIS### 반영 {n_ok}축 / 이미반영 {n_skip}축 / 보류 {n_bad}축"
+          f" / 현재이름유지 {n_keep}축"
           + ("" if args.commit else "  (미리보기 — 저장하려면 --commit)"))
+
+
+def _axis_writeback(sheet, updates, proposals):
+    """원장 `상태`·`제안축명` 칸을 연속 구간으로 묶어 batchUpdate 한 호출에 싣는다.
+
+    행마다 update 하면 쓰기 호출이 행수만큼 나가 분당 쿼터(60)에 즉사한다.
+    저장 경로와 '유지로 닫기' 경로가 **같은 함수**를 쓴다 — 두 자리로 갈리면
+    한쪽만 고쳐져 원장 형식이 어긋난다.
+    """
+    ranges = []
+    for name, cells in (("상태", updates), ("제안축명", proposals)):
+        col = _col_letter(AXIS_HEADER.index(name) + 1)
+        ranges += [(f"'{AXIS_TAB}'!{col}{start}:{col}{start + len(block) - 1}", block)
+                   for start, block in _row_runs(sorted((r, [v]) for r, v in cells))]
+    for _, part in chunk_by_size(ranges, budget=_ARG_BUDGET):
+        sheets_batch_update(sheet, part, value_input="USER_ENTERED")
+    print(f"  원장 갱신: 상태 {len(updates)}행 · 제안 {len(proposals)}행 "
+          f"/ 구간 {len(ranges)}개 → '{AXIS_TAB}'")
 
 
 def _commit(sheet, rows, args):

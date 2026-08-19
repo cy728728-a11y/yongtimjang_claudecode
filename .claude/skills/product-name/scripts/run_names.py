@@ -174,7 +174,9 @@ def _mk_product(pid, cat, tgt_by_id, wd_by_id, jk_by_id, thumb_map):
     jk = jk_by_id.get(pid) or {}
     return {
         "productId": pid,
-        "원본상품명": t.get("상품명", ""),
+        # prep 이 시트에서 되찾은 **최초** 원본이 있으면 그것 — 없으면 현재 이름.
+        # 재작업 회차에서 현재 이름은 앞 회차 결과물이다(`_first_original_names`).
+        "원본상품명": t.get("원본상품명") or t.get("상품명", ""),
         "카테고리": cat,
         "썸네일경로": thumb_map.get(pid, ""),      # 다운로드된 로컬(K열 있으면 비어 있음)
         # 카테고리교정이 넘긴 증거 — J열 있으면 믿고, 없으면 원문명·옵션명으로 직접 판정
@@ -326,6 +328,94 @@ def _done_ids(sheet, tab=None):
     except Exception as e:
         print(f"  (재개 조회 생략 — 탭 미존재로 간주: {str(e)[:80]})")
         return set()
+
+
+def _first_original_names(sheet, tab=None):
+    """{상품id: **최초** 원본상품명} — 재작업이 이미 가공된 이름을 원본으로 삼지 않게 한다.
+
+    **왜 필요한가** (2026-08-19 25-2 실측). `원본상품명`(E열)은 prep 이 불사자에서 받아온
+    *현재* 상품명으로 채운다. 그런데 rename 을 한 상품은 현재 이름이 **앞 회차의 결과물**
+    이라, 재작업 회차의 E열에 가공된 이름이 들어간다. 결과가 셋 다 나쁘다:
+
+    1. **되돌리기 경로가 끊긴다** — SKILL.md 는 "원본은 시트 E열"이라고 못박는데, 그 E열이
+       앞 회차 결과물이면 진짜 원본으로 돌아갈 수 없다.
+    2. **원본 오기재 교정이 불가능해진다** — 이 스킬의 성과 절반이 "주방카트→쌀통",
+       "와인양조기→정유 증류기" 같은 원본 오기재 잡기인데, 이미 가공된 이름을 원본으로
+       보면 그 오기재가 시야에서 사라진다.
+    3. **이름이 회차마다 표류한다** — 실측 65행이 앞 결과물을 재가공했고(`SNCFHKB1` 은
+       3연속), **15행은 원본과 새것이 완전히 동일**했다. 워커 비용만 쓴 무의미한 회전이다.
+
+    그래서 그 상품의 **가장 오래된 행**의 E열을 진짜 원본으로 되찾는다. 시트에 이력이
+    없는 첫 회차는 빈 값이 나오고, 호출부가 현재 이름으로 넘어간다(동작 변화 없음).
+    """
+    if not sheet:
+        return {}
+    from eroomlib.gsheets import sheets_get  # noqa: E402
+    ncol = len(NAME_HEADER)
+    try:
+        rows = sheets_get(sheet, f"'{tab or NAME_TAB}'!A2:{_col_letter(ncol)}") or []
+    except Exception as e:  # noqa: BLE001  조회 실패는 종전 동작(현재 이름)으로 떨어진다
+        print(f"  [경고] 최초 원본 조회 생략 — 재작업 E열이 현재 이름이 된다: {str(e)[:100]}",
+              file=sys.stderr)
+        return {}
+    i_id, i_orig = NAME_HEADER.index("상품id"), NAME_HEADER.index("원본상품명")
+    out = {}
+    for r in rows:  # 위에서 아래로 = 오래된 순. **먼저 본 값을 지킨다.**
+        r = list(r) + [""] * (ncol - len(r))
+        pid, orig = str(r[i_id]).strip(), str(r[i_orig]).strip()
+        if pid and orig and pid not in out:
+            out[pid] = orig
+    return out
+
+
+def _sync_stale_progress(sheet, m, tab=None, mark=None):
+    """현황판이 `진행중(…)` 인 채 굳은 건을 **상품명 탭의 최신 상태로 되맞춘다**.
+
+    **왜 필요한가** (2026-08-19 25-2 실측, §3⑥ 의 과거분). `진행중(미반영)` 은 작업
+    중간표시지 사람의 판단이 아닌데, `matrix.pending` 은 빈칸·`재작업(…)` 만 집으므로
+    **pending 도 아니고 prep 도 집지 않는다** — 한 번 찍히면 영영 그 값으로 굳는다.
+    다음 세션은 현황판을 원장으로 읽으니 "반영 대기 중"으로 오해한다.
+
+    실측 5건은 상품명 탭에서 이미 `보류(표본의심)`·`보류(카테고리의심)` 로 **종결된**
+    건이었다. `cmd_mark` 는 이제 두 저장소를 함께 찍지만(§3⑥), 그건 *앞으로* 생기는
+    것만 막는다. 탭을 손으로 고친 회차나 그 수정 이전 회차분은 회수되지 않는다.
+
+    **탭이 원장이므로 탭 → 현황판 한 방향만 되맞춘다.** 현황판이 더 최신인 정상 케이스
+    (삭제가 나중에 일어난 `상품삭제(…)`, 어휘만 다른 `완료`↔`반영완료`)는 건드리지 않는다
+    — 되맞추는 건 현황판이 `진행중` 일 때뿐이다.
+
+    반환: 되맞춘 건수.
+    """
+    if not sheet or not m:
+        return 0
+    stuck = {pid for pid, rec in m.items()
+             if (rec.get("상품명") or "").strip().startswith("진행중")}
+    if not stuck:
+        return 0
+    from eroomlib.gsheets import sheets_get  # noqa: E402  (다른 시트 헬퍼와 같은 방식)
+    ncol = len(NAME_HEADER)
+    try:
+        rows = sheets_get(sheet, f"'{tab or NAME_TAB}'!A2:{_col_letter(ncol)}") or []
+    except Exception as e:  # noqa: BLE001  조회 실패가 prep 을 막지 않는다
+        print(f"  [경고] 굳은 `진행중` 대조 생략 — 탭 조회 실패: {str(e)[:100]}",
+              file=sys.stderr)
+        return 0
+    i_id, i_status = NAME_HEADER.index("상품id"), NAME_HEADER.index("상태")
+    latest = {}
+    for r in rows:  # 같은 pid 여러 행이면 **마지막 행**이 최신이다
+        r = list(r) + [""] * (ncol - len(r))
+        pid = str(r[i_id]).strip()
+        if pid:
+            latest[pid] = str(r[i_status]).strip()
+    tgt = {pid: latest[pid] for pid in stuck
+           if latest.get(pid) and not latest[pid].startswith("진행중")}
+    if not tgt:
+        return 0
+    (mark or matrix.mark_many)(sheet, "상품명", tgt)
+    print(f"  굳은 `진행중` {len(tgt)}건을 상품명 탭 상태로 되맞췄다 — "
+          + " · ".join(f"{p[-8:]}→{v}" for p, v in list(tgt.items())[:3])
+          + (f" 외 {len(tgt) - 3}건" if len(tgt) > 3 else ""))
+    return len(tgt)
 
 
 def _appended_path(run_dir):
@@ -726,6 +816,15 @@ def cmd_prep(args):
         except Exception as e:  # noqa: BLE001
             print(f"  [경고] 현황판 읽기 실패: {str(e)[:120]}", file=sys.stderr)
             _m = {}
+
+        # 굳은 `진행중(…)` 되맞추기 — pending 도 prep 도 안 집는 사각지대다
+        # (`_sync_stale_progress` 주석). 뒤 판정이 낡은 값을 보지 않게 여기서 먼저 한다.
+        try:
+            if _sync_stale_progress(args.sheet, _m, args.tab):
+                _m = matrix.read(args.sheet)
+        except Exception as e:  # noqa: BLE001  되맞추기 실패가 prep 을 막지 않는다
+            print(f"  [경고] 굳은 `진행중` 되맞추기 실패: {str(e)[:120]}", file=sys.stderr)
+
         auto_redo = _matrix_redo(
             args.sheet,
             _redo_candidates({g.get("productId") for g in group}, done_ids, redo_hit),
@@ -824,6 +923,12 @@ def cmd_prep(args):
     print(f"  카테고리 J·K: 실물판정 {n_ident}건 / 썸네일URL {n_kurl}건")
 
     # 4) targets.json 조립 — 카테고리 미설정은 대상에서 제외(스킵 마커로 남김)
+    #
+    # 재작업 회차는 불사자의 *현재* 이름이 앞 회차 결과물이다. 진짜 원본을 시트에서
+    # 되찾아 워커·E열에 그걸 실어 보낸다(`_first_original_names` 주석 — 되돌리기 경로와
+    # 원본 오기재 교정이 둘 다 여기 달려 있다).
+    first_orig = _first_original_names(args.sheet, args.tab) if args.sheet else {}
+    n_reclaim = 0
     targets, skipped = [], []
     for g in pending:
         pid = g.get("productId")
@@ -843,6 +948,12 @@ def cmd_prep(args):
             "카테고리": cat,
             "썸네일": (wd.get("썸네일") or [])[:1],
         }
+        # 시트에 이력이 있으면 **최초** 원본을 쓴다. `상품명`(현재 이름)은 그대로 둔다 —
+        # 썸네일·조회 등 다른 쓰임이 현재 이름을 기대한다.
+        orig = first_orig.get(pid, "")
+        if orig and orig != name:
+            t["원본상품명"] = orig
+            n_reclaim += 1
         # 왜 다시 하는지를 워커에게 실어 보낸다 — 사유 없이 다시 시키면 같은 이름이 또 나온다.
         if g.get("재작업사유"):
             t["재작업사유"] = g["재작업사유"]
@@ -850,6 +961,9 @@ def cmd_prep(args):
     _dump(targets_path, targets)
     _dump(os.path.join(run_dir, "skipped.json"), skipped)
     print(f"[4/6] 대상 {len(targets)}건 / 카테고리미설정 스킵 {len(skipped)}건 -> {targets_path}")
+    if n_reclaim:
+        print(f"  최초 원본 회수 {n_reclaim}건 — 현재 이름이 앞 회차 결과물인 건이다"
+              "(가공본 재가공·되돌리기 경로 끊김 방지)")
     if not targets:
         print("카테고리가 설정된 상품이 없습니다. 카테고리 교정을 먼저 하세요.")
         return
