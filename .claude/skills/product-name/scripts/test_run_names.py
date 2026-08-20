@@ -1514,6 +1514,29 @@ class SingleKeywordExemptionTest(unittest.TestCase):
         self.assertTrue(memo.startswith("[키워드1개] 상품수 5만까지 확장"))
         self.assertIn("썸네일=검정 PVC 롤", memo)
 
+    def test_검증실패_사유가_시트_메모에_남는다(self):
+        """★ 종전엔 위반 목록이 run-dir(`checked/`)에만 있어 **run-dir 을 지우면 진단이
+        불가능**했다(2026-08-17 발견). 상태 열엔 `검증실패` 넉 자뿐이라 무엇이 틀렸는지
+        알 길이 없었다."""
+        p = dict(self.BASE, productId="P1", 상태="검증실패",
+                 검증={"통과": False, "위반": ["R2 term 3개(4개 이상 필요)", "R9 배치 위반"]},
+                 메모="썸네일=검정")
+        memo = run_names._build_row(p, "g")[run_names.NAME_HEADER.index("메모")]
+        self.assertTrue(memo.startswith("[검증실패] R2 term 3개"), memo)
+        self.assertIn("R9", memo)
+        self.assertIn("썸네일=검정", memo, "기존 메모가 사라졌다")
+
+    def test_검증실패인데_위반이_비면_그렇다고_적는다(self):
+        p = dict(self.BASE, productId="P1", 상태="검증실패", 메모="")
+        memo = run_names._build_row(p, "g")[run_names.NAME_HEADER.index("메모")]
+        self.assertEqual(memo, "[검증실패] 사유 미기록")
+
+    def test_검증실패가_아니면_종전대로다(self):
+        p = dict(self.BASE, productId="P1", 상태="생성완료",
+                 검증={"통과": True, "위반": []}, 메모="원래메모")
+        memo = run_names._build_row(p, "g")[run_names.NAME_HEADER.index("메모")]
+        self.assertEqual(memo, "원래메모")
+
     def test_키워드가_2개면_메모를_건드리지_않는다(self):
         p = dict(self.BASE, productId="P1", 키워드2="방수시트",
                  키워드확장="남아있는 값", 메모="원래메모")

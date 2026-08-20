@@ -1353,6 +1353,15 @@ def _memo_with_kw1(p):
     """
     memo = str(p.get("메모") or "").strip()
     n_kw = len(name_check.collect_keywords(p))
+    # ★ **검증실패는 사유를 시트에 남긴다** (2026-08-17 발견 · 2026-08-20 수정).
+    # 종전엔 위반 목록이 run-dir(`checked/*.json`)에만 있어 **run-dir 을 지우면 진단이
+    # 불가능**했다. 시트 상태 열엔 `검증실패` 넉 자만 남아 "무엇이 몇 자 넘었는지"를
+    # 알 길이 없었다. 다른 태그보다 **먼저** 본다 — 이 행은 반영되지 않은 행이라
+    # 키워드 경위보다 실패 사유가 먼저 읽혀야 한다.
+    if str(p.get("상태") or "").strip() == "검증실패":
+        위반 = [str(x) for x in ((p.get("검증") or {}).get("위반") or []) if str(x).strip()]
+        tag = "[검증실패] " + ("; ".join(위반)[:150] if 위반 else "사유 미기록")
+        return f"{tag} | {memo}" if memo else tag
     if str(p.get("원본유지사유") or "").strip():
         # 원본을 그대로 둔 행 — 나중에 "왜 안 바꿨나"를 시트에서 바로 읽을 수 있어야 한다.
         tag = f"[원본유지] {str(p['원본유지사유']).strip()}"

@@ -141,6 +141,10 @@ VERDICT_BATCH_SIZE = 8
 # 붙으므로(§워커 패킹 곡선) 20 에서 끊는다.
 PRESCREEN_BATCH_SIZE = 20
 
+# 생성본 이미지 확보 재시도 대기(초). 404·503 은 대개 CDN 반영 지연이라 몇 초면 풀린다
+# (2026-08-19 실측 2/2 회수). 길게 잡을 이유는 없다 — 배치당 몇 건이라도 누적된다.
+VERDICT_REFETCH_WAIT = 3
+
 # 승격 배치 크기 — prescreen 이 `다중혼재` 를 run 팬아웃으로 넘길 때 쓴다. 이 건들은
 # 후보까지 보므로 상품당 최대 6장(대표1+후보5)이라 SKILL.md 권고대로 4건씩 끊는다.
 PROMOTE_BATCH_SIZE = 4
@@ -484,6 +488,17 @@ def cmd_prep(args):
                 p["대표옵션이미지경로"] = ""
         print(f"  옵션 되돌림({R.NO_REAL_BASE}) {len(sent_back)}건 — 선기록 대신 "
               f"비전 배치로 보낸다(왕복 종결 · 대표옵션 기준 제거)")
+        # **이력 열에도 박는다** (2026-08-19 §8). 옵션 쪽 `_stamp_ledger` 가 정본이지만,
+        # 그게 못 돌았거나(구버전이 찍은 재작업) 이력 열이 없던 시절 시트라면 낱말은
+        # 재작업사유에만 있고 **다음 옵션 저장이 옵션 열을 `완료` 로 덮는 순간 사라진다.**
+        # 여기서 한 번 더 박아두면 근거가 살아남아 `R.close_roundtrip` 이 발화한다.
+        try:
+            n = matrix.note_many(sheet, {pid: R.NO_REAL_BASE for pid in sent_back},
+                                 matrix=m)
+            if n:
+                print(f"  [이력] '{R.NO_REAL_BASE}' {n}칸 기록(왕복 종결 근거 보존)")
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 이력 기록 실패: {str(e)[:100]}", file=sys.stderr)
     if fixed:
         _dump(os.path.join(run_dir, "results", "result_000.json"),
               {"배치": 0, "선기록": True,
@@ -618,6 +633,68 @@ def _prerecorded(run_dir):
     return doc, doc.get("products", [])
 
 
+def _vision_picks(run_dir):
+    """비전 배치(run 팬아웃)가 **후보에서 고른 기준** — [{productId, 기준이미지경로, …}].
+
+    ★ **왜 필요한가** (2026-08-19 2-2 4회차 §8 끝 — 이번 회차의 순손실). `prescreen` 은
+    `prep` 선기록건(대표옵션 기준)만 검사한다. 그런데 `실물기준없음` 으로 넘어온 건은
+    **선기록에서 빠져 비전 배치로 간다** — 즉 왕복이 꼬여 제일 위태로운 건들이 정작
+    생성 전 검사를 하나도 안 받는다. 그래서 **후보에도 실물이 없는 상품에 크레딧을
+    태웠다**(11건 중 최소 5건 · 약 25크레딧). 워커 보류(§2-1)에만 기대는 구조였고,
+    워커는 자기가 고른 기준을 스스로 반려하지 않는다.
+
+    보류(`상태`)인 건과 기준을 못 고른 건은 뺀다 — 이미 생성 대상이 아니다.
+    pass-through 필드는 배치(정본)에서 조인한다(`_results` 와 같은 규칙).
+    """
+    batch = _batch_products(run_dir)
+    out, seen = [], set()
+    for rf in sorted(glob.glob(os.path.join(run_dir, "results", "result_*.json"))):
+        doc = _load(rf)
+        if doc.get("선기록"):
+            continue
+        for p in doc.get("products", []):
+            pid = str(p.get("productId") or "").strip()
+            ref = str(p.get("기준이미지경로") or "").strip()
+            if not pid or not ref or pid in seen:
+                continue
+            if str(p.get("상태") or "").startswith("보류"):
+                continue
+            seen.add(pid)
+            src = batch.get(pid) or {}
+            out.append({"productId": pid,
+                        "상품명": src.get("상품명", ""),
+                        "대표옵션명": src.get("대표옵션명", ""),
+                        "기준이미지경로": ref,
+                        "후보수": len(src.get("후보이미지") or []),
+                        "출처": "후보"})
+    return out
+
+
+def _hold_vision_picks(run_dir, holds):
+    """비전 결과에 `상태: 보류(기준이미지없음)` 을 써넣는다. 반환: 실제로 찍은 pid 수.
+
+    **왜 결과 파일을 고치나** — `apply` 가 이미 `상태` 가 `보류` 인 건을 생성에서 빼고
+    현황판 보류 + 옵션 열 재작업 flag 까지 찍는 경로를 갖고 있다(`cmd_apply` §보류).
+    같은 결론을 내는 통로가 둘이면 곧 어긋난다. 여기서는 값만 실어 그 통로에 태운다.
+    이미 보류인 건은 손대지 않으므로 **멱등**하다.
+    """
+    n = 0
+    for rf in sorted(glob.glob(os.path.join(run_dir, "results", "result_*.json"))):
+        doc = _load(rf)
+        if doc.get("선기록"):
+            continue
+        dirty = False
+        for p in doc.get("products", []):
+            pid = str(p.get("productId") or "").strip()
+            if pid in holds and not str(p.get("상태") or "").startswith("보류"):
+                p["상태"] = f"보류({R.VERDICT_NO_BASE})"
+                p["사유"] = holds[pid]
+                dirty, n = True, n + 1
+        if dirty:
+            _dump(rf, doc)
+    return n
+
+
 def cmd_prescreen(args):
     """기준이미지 적격성 검사 — **생성 전에** 돈다. 크레딧 0 · 불사자 조회 0.
 
@@ -649,15 +726,19 @@ def cmd_prescreen(args):
         return
 
     doc, products = _prerecorded(run_dir)
-    if doc is None:
+    picks = _vision_picks(run_dir)
+    if doc is None and not picks:
         # 조용히 0건으로 끝내면 "검사했는데 깨끗하다"로 읽힌다 — 오사용을 드러낸다.
-        print(f"[중단] 선기록이 없다: {os.path.join(run_dir, 'results', 'result_000.json')}\n"
-              "  prep 을 먼저 돌리거나, 이 run-dir 은 전건이 비전 판단(팬아웃)이라\n"
-              "  prescreen 대상이 아니다 — 그 경우 run 워커가 §1-1 을 이미 적용한다.",
+        print(f"[중단] 검사할 기준이 없다: {os.path.join(run_dir, 'results')}\n"
+              "  prep(선기록) 도, run 팬아웃 결과(후보 선택) 도 없다.\n"
+              "  prep 을 먼저 돌리거나, 팬아웃을 끝낸 뒤 다시 불러라.",
               file=sys.stderr)
         sys.exit(2)
 
     items, missing = [], []
+    # 선기록(대표옵션 기준) + 비전 픽(워커가 후보에서 고른 기준)을 **한 배치에** 싣는다.
+    # 워커가 묻는 질문은 같다("이 한 장에서 만들 제품이 하나로 특정되나") — 다른 건
+    # 판정 뒤 처리뿐이라 `출처` 로 갈라 둔다(`_prescreen_commit`).
     for p in products:
         pid = p.get("productId")
         ref = p.get("기준이미지경로") or ""
@@ -670,7 +751,20 @@ def cmd_prescreen(args):
         items.append({"productId": pid, "상품명": p.get("상품명", ""),
                       "대표옵션명": p.get("대표옵션명", ""),
                       "기준이미지경로": ref,
-                      "후보수": len(p.get("후보이미지") or [])})
+                      "후보수": len(p.get("후보이미지") or []),
+                      "출처": "선기록"})
+    prerecorded_pids = {i["productId"] for i in items} | set(missing)
+    gone = []
+    for p in picks:
+        if p["productId"] in prerecorded_pids:
+            continue          # 선기록이 이긴다(같은 상품이 양쪽에 있을 일은 없다)
+        if not os.path.exists(p["기준이미지경로"]):
+            gone.append(p["productId"])
+            continue          # 파일이 없으면 판정 불가 — 종전대로 생성으로 흘린다
+        items.append(p)
+    if picks:
+        print(f"  비전 픽 {len(picks)}건도 검사 대상에 넣는다"
+              + (f" (기준 파일 없음 {len(gone)}건 제외)" if gone else ""))
     if missing:
         _dump(os.path.join(run_dir, "prescreen_results", "presult_000.json"),
               {"배치": 0, "선기록": True,
@@ -678,7 +772,8 @@ def cmd_prescreen(args):
                              "사유": "기준이미지 파일 없음 — 판정 불가(fail-closed)"}
                             for pid in missing]})
         print(f"  기준이미지 파일 없음 {len(missing)}건 → 승격 선기록")
-    print(f"[1/2] 선기록 {len(products)}건 중 판정 대상 {len(items)}건")
+    print(f"[1/2] 선기록 {len(products)}건 + 비전 픽 {len(picks)}건 중 "
+          f"판정 대상 {len(items)}건")
 
     batches = [items[i:i + args.batch_size]
                for i in range(0, len(items), args.batch_size)]
@@ -721,8 +816,9 @@ def _prescreen_commit(sheet, run_dir):
     아무것도 하지 않는다.
     """
     doc, products = _prerecorded(run_dir)
-    if doc is None:
-        print(f"선기록이 없다: {os.path.join(run_dir, 'results', 'result_000.json')}")
+    picks = {p["productId"]: p for p in _vision_picks(run_dir)}
+    if doc is None and not picks:
+        print(f"검사한 기준이 없다: {os.path.join(run_dir, 'results')}")
         return
     judged = []
     for rf in sorted(glob.glob(os.path.join(run_dir, "prescreen_results",
@@ -744,6 +840,17 @@ def _prescreen_commit(sheet, run_dir):
     to_hold = {pid: why for pid, why in noproduct.items() if pid in by_pid}
     unjudged = [pid for pid in by_pid
                 if pid not in mixed and pid not in noproduct and pid not in set(single)]
+
+    # ⓪ 비전 픽 — **선기록과 처리가 다르다.** 승격(다시 고르게 하기)은 하지 않는다:
+    #    이미 워커가 후보에서 고른 것이라 같은 워커에게 되물으면 같은 답이 오고
+    #    (되돌림 루프), 크레딧이 걸린 쪽은 `실물없음` 하나뿐이다.
+    #      실물없음 → 결과에 `보류(기준이미지없음)` 을 실어 `apply` 의 기존 보류 통로로
+    #                 (생성 제외 + 현황판 보류 + 옵션 열 재작업 flag)
+    #      다중혼재 → 그대로 생성하되 **세어서 드러낸다**(사고 원인이 될 수 있는 자리)
+    pick_hold = {pid: why for pid, why in noproduct.items()
+                 if pid in picks and pid not in by_pid}
+    pick_mixed = [pid for pid in mixed if pid in picks and pid not in by_pid]
+    n_pick_hold = _hold_vision_picks(run_dir, pick_hold) if pick_hold else 0
 
     # ① 승격 — 판단 필드는 떼고 넘긴다. batches/ 가 pass-through 필드의 정본이라
     #    (`_batch_products`) prep 이 만든 배치와 같은 모양이어야 한다.
@@ -801,8 +908,16 @@ def _prescreen_commit(sheet, run_dir):
         _dump(os.path.join(run_dir, "prescreen_held.json"), to_hold)
 
     print(f"\n###PRESCREEN### 단일특정 {len(single)}건(그대로 생성) "
-          f"/ 다중혼재 {len(to_promote)}건(run 팬아웃 승격) "
-          f"/ 실물없음 {len(to_hold)}건(보류)")
+          f"/ 다중혼재 {len(to_promote)}건(선기록→run 팬아웃 승격) "
+          f"/ 실물없음 {len(to_hold)}건(선기록→보류)")
+    if n_pick_hold:
+        print(f"  [비전 픽] 실물없음 {n_pick_hold}건 → 결과에 보류({R.VERDICT_NO_BASE}) "
+              f"기재 — 생성 전에 막았다(건당 {R.CREDITS_PER_IMAGE}크레딧 방어). "
+              f"다음 `apply` 가 현황판 보류 + 옵션 열 재작업 flag 까지 찍는다.")
+    if pick_mixed:
+        print(f"  [비전 픽] 다중혼재 {len(pick_mixed)}건 — 그대로 생성한다(워커가 이미 "
+              f"후보에서 고른 기준이라 되돌리지 않는다). 검수에서 갈릴 수 있다: "
+              f"{pick_mixed[:5]}")
     if new_index:
         print(f"  승격 배치 {len(new_index)}개 → {os.path.join(run_dir, 'batches')}")
         print("  다음: pending → Workflow thumb-fanout → apply --generate")
@@ -1065,7 +1180,9 @@ def _batch_products(run_dir):
 # 워커가 채워야 하는 판단 필드 — 이것만 results 에서 취한다. 나머지(기존썸네일·후보·
 # 대표옵션명 등 pass-through)는 배치(정본)에서 조인한다. 워커 환각이 백업·복원 경로
 # (`_generate` 의 before_generate.json)에 들어가는 것을 원천 차단한다.
-_JUDGE_FIELDS = ("기준이미지", "기준이미지경로", "모드", "프롬프트", "상태")
+# `사유` 는 보류의 근거다 — 이게 빠지면 `apply` 가 옵션으로 넘길 때 기본 문구로
+# 뭉개진다(누가 왜 되돌렸는지가 옵션 워커에게 안 간다. 2026-08-19 prescreen 비전 픽).
+_JUDGE_FIELDS = ("기준이미지", "기준이미지경로", "모드", "프롬프트", "상태", "사유")
 
 
 def _index_pids(run_dir, index_name):
@@ -1442,6 +1559,11 @@ def _generate(sheet, run_dir, items, args):
                                       "후보": before[1:], "크레딧": credits,
                                       "재작업사유": p.get("재작업사유", ""), "판정": None,
                                       "기준이미지": ref,
+                                      # 판정 워커가 **무엇이 기준이었는지** 알아야
+                                      # `기준이미지없음` 을 대표옵션과 혼동하지 않는다
+                                      # (2026-08-19 §8 오판율 36%). URL 만으로는 그게
+                                      # 대표옵션인지 후보인지 구분이 안 된다.
+                                      "기준출처": R.reference_source(p),
                                       "재생성횟수": tries + 1,
                                       # 승인 화면에서 "생성본이 대표옵션과 같은 물건인가"를
                                       # 대조할 재료(2026-07-30). 없으면 판단 근거가 빠진다.
@@ -1734,7 +1856,7 @@ def cmd_verdict(args):
         print(f"  --ids {len(ok)}건만 다시 판정한다(앞 라운드 결과는 rounds/ 로 보존).")
 
     thumbs_dir = os.path.join(run_dir, "verdict", "thumbs")
-    items = []
+    items, refetch_failed = [], []
     for pid, g in ok.items():
         # 구분은 **idx** 로 한다(name_hint 는 24자에서 잘린다 — §1-4·§2-1 과 같은 함정).
         # **여기만 축소하지 않는 게 기본이다**(`--max-px 0`). 3축 중 `제외(글자변조)` 는
@@ -1748,17 +1870,43 @@ def cmd_verdict(args):
         new, err = snapshot.materialize_image(g.get("생성본") or "", thumbs_dir, pid, 2,
                                               max_px=_px(args, VERDICT_MAX_PX))
         if not new:
-            # 생성본을 못 받으면 판정 자체가 불가능하다 — 조용히 빼지 않고 드러낸다.
-            print(f"  [경고] {pid}: 생성본 이미지 확보 실패 — 판정 대상에서 뺀다 "
+            # ★ **빼기 전에 한 번 더 받아본다** (2026-08-19 2-2 §5 실측: HTTP 404 · 503
+            # 으로 빠진 2건을 재시도했더니 **2/2 회수**됐고 둘 다 `사용가능` 이었다).
+            # 여기서 빠진 건은 `verdict --commit` 의 누락 검사에도 안 잡히고,
+            # `decisions.json` 에 없으면 `apply --commit` 이 생성 성공분으로 보고
+            # **`사용가능` 으로 반영**한다 — 즉 **판정을 건너뛴 게 통과로 둔갑**한다.
+            # 비용 0(같은 URL 재요청)이라 재시도가 언제나 싸다.
+            time.sleep(VERDICT_REFETCH_WAIT)
+            new, err = snapshot.materialize_image(
+                g.get("생성본") or "", thumbs_dir, pid, 2,
+                max_px=_px(args, VERDICT_MAX_PX))
+            if new:
+                print(f"  [회수] {pid}: 생성본 재시도 성공 — 판정 대상에 넣는다")
+        if not new:
+            # 두 번 다 실패면 판정 자체가 불가능하다 — 조용히 빼지 않고 드러낸다.
+            refetch_failed.append(pid)
+            print(f"  [경고] {pid}: 생성본 이미지 확보 2회 실패 — 판정 대상에서 뺀다 "
                   f"({str(err)[:80]})", file=sys.stderr)
             continue
         items.append({"productId": pid, "상품명": g.get("상품명", ""),
                       "대표옵션명": g.get("대표옵션명", ""),
                       "재작업사유": g.get("재작업사유", ""),
+                      # 생성에 실제로 쓴 기준이 무엇이었나(`R.REF_*`). 워커가 이걸 봐야
+                      # "대표옵션이 도면이다"를 `기준이미지없음` 으로 오판하지 않는다.
+                      "기준출처": g.get("기준출처", ""),
                       "기존대표경로": cur or "", "대표옵션경로": mo or "",
                       "생성본경로": new,
                       "생성본": g.get("생성본", ""),
                       "재생성횟수": g.get("재생성횟수", 0)})
+    if refetch_failed:
+        # **파일로 남긴다** — 이 건들은 판정 없이 `apply --commit` 에서 `사용가능` 이
+        # 된다. 종합보고에 적기 전에 `verdict --ids <목록>` 으로 한 번 더 받아봐라
+        # (비용 0). 그래도 안 받아지면 그때 보고 대상이다.
+        _dump(os.path.join(run_dir, "verdict_refetch_failed.json"), refetch_failed)
+        print(f"  ⚠ 이미지 확보 2회 실패 {len(refetch_failed)}건 — 판정을 건너뛰면 "
+              f"`apply --commit` 이 '사용가능'으로 반영한다(조용한 자동통과).\n"
+              f"    재시도: verdict --run-dir <R> --ids {' '.join(refetch_failed[:3])}\n"
+              f"    목록: {os.path.join(run_dir, 'verdict_refetch_failed.json')}")
     if not items:
         print("판정할 생성본이 없다.")
         return
@@ -1847,6 +1995,7 @@ def _verdict_commit(run_dir, ok):
     # (= 전부 '사용가능')으로 반영한다. 전건 재판정이면 어차피 전 키를 덮는다.
     # `fallback` 이 종결한 건(`R.FINAL_VERDICTS`)은 판정이 다시 와도 지키지 않는다 —
     # 재판정 대상으로 지목했다면 그게 사람의 뜻이다.
+    _warn_no_base_misjudged(run_dir, got, ok)
     dec_path = os.path.join(run_dir, "decisions.json")
     merged = (_load(dec_path) if os.path.exists(dec_path) else {}) or {}
     kept = len([p for p in merged if p not in got])
@@ -1861,6 +2010,36 @@ def _verdict_commit(run_dir, ok):
         print(f"  {v}: {len(pids)}건" + (f" — {pids[:3]}" if v != "사용가능" else ""))
     print(f"  {dec_path}")
     print("  다음: apply --run-dir <R> --commit")
+
+
+def _warn_no_base_misjudged(run_dir, got, ok):
+    """`제외(기준이미지없음)` 인데 **생성 기준이 대표옵션이 아니었던** 건을 드러낸다.
+
+    ★ **왜** (2026-08-19 2-2 4회차 §8 — 오판율 4/11 = 36%). 판정 대상은 **생성본**인데
+    워커가 `대표옵션경로`(대조 축)를 기준이미지로 착각해 "기준이 도면이다"만 보고
+    `기준이미지없음` 을 찍었다. 직접 열어보니 3건은 생성본이 훌륭했다(앵무새 새장 ·
+    미닫이 파티션 · 캣타워). 그 값은 **옵션 열로 되돌리는 값**이라, 오판 1건은
+    멀쩡한 생성본을 버리고 왕복을 한 바퀴 더 돌린다.
+
+    기준출처가 `대표옵션` 이 아니면(= 워커가 후보에서 고른 기준으로 생성했으면)
+    "대표옵션이 도면이라 기준이 없다"는 말 자체가 성립하지 않는다 — 기준은 후보였다.
+    자동으로 뒤집지는 않는다(생성본을 본 건 워커뿐이다). **드러내고 재판정 명령을
+    같이 찍는다** — 크레딧 0 이라 다시 보는 비용이 거의 없다.
+    """
+    suspect = [pid for pid, d in got.items()
+               if R.VERDICT_NO_BASE in d.get("판정", "")
+               and (ok.get(pid) or {}).get("기준출처")
+               and (ok.get(pid) or {}).get("기준출처") != R.REF_MAIN_OPTION]
+    if not suspect:
+        return
+    _dump(os.path.join(run_dir, "verdict_nobase_suspect.json"), suspect)
+    print(f"\n  ⚠ [오판 의심] `{R.VERDICT_NO_BASE}` {len(suspect)}건은 생성 기준이 "
+          f"**대표옵션이 아니었다**(후보에서 고른 기준). 대표옵션이 도면이라는 관찰만으로는 "
+          f"이 값을 쓸 수 없다 — 판정 대상은 생성본이다.\n"
+          f"    생성본을 열어 확인하고, 멀쩡하면 decisions.json 을 '사용가능'으로 고쳐라.\n"
+          f"    재판정(크레딧 0): verdict --run-dir <R> --ids {' '.join(suspect[:3])}\n"
+          f"    목록: {os.path.join(run_dir, 'verdict_nobase_suspect.json')}",
+          file=sys.stderr)
 
 
 def cmd_recover(args):

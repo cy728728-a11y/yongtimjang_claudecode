@@ -38,7 +38,23 @@ TAB = "00_진행"
 # 작업 순서 = 실제 처리 순서(수집 → 카테고리 → 상품명 → … → 업로드).
 # 스킬이 늘면 여기에 추가한다. 기존 시트는 `rebuild` 가 헤더를 확장한다.
 TASKS = ("수집", "카테고리", "상품명", "옵션", "썸네일", "상세", "지재권", "배송비", "업로드")
-HEADER = ("상품id", "상품") + TASKS
+
+# **이력 열 — 작업 열이 아니다. 어떤 스킬의 저장도 이 칸을 덮지 않는다.**
+#
+# **왜 필요한가** (2026-08-19 2-2 4회차 §8 규명): 썸네일↔옵션 왕복의 종결 판정이
+# `옵션` **작업 열 문자열**에서 `실물기준없음` 낱말을 찾는 구조였다. 그런데 옵션정리가
+# 그 상품을 저장하면 옵션 열은 `완료` 로 덮인다 — **옵션이 저장에 성공할수록 왕복이
+# 안 닫힌다.** 실패해서 `보류(…)` 로 남아야만 낱말이 살아남는 뒤집힌 구조였고,
+# 그래서 3회차에 `[왕복종결] 3건` 이 찍혔는데도 4회차에 그중 2건이 그대로 되돌아왔다.
+#
+# 일반화: **상태 열 하나를 "현재 상태"와 "이력"으로 겸용하면 안 된다.** 종결 판정이
+# 필요한 왕복은 저장이 덮지 않는 자리에 근거를 둔다. `mark_many`·`flag_many`·`rebuild`
+# 는 작업 열만 쓰므로(`task_col`) 이 열은 구조적으로 안전하다.
+LEDGER = "이력"
+HEADER = ("상품id", "상품") + TASKS + (LEDGER,)
+
+# 이력 토큰 구분자. 토큰은 낱말 하나(`실물기준없음`)라 사람이 읽어도 뜻이 통한다.
+LEDGER_SEP = " · "
 
 DONE = "완료"
 NA = "해당없음"
@@ -101,9 +117,10 @@ def read(sheet, tab=TAB):
         pid = str(r[0]).strip() if r else ""
         if not pid or pid in out:
             continue
-        rec = {"row": i, "상품": str(r[1]).strip() if len(r) > 1 else ""}
+        rec = {"row": i, "상품": str(r[1]).strip() if len(r) > 1 else "",
+               LEDGER: ""}
         for j, name in enumerate(header):
-            if name in TASKS:
+            if name in TASKS or name == LEDGER:
                 rec[name] = str(r[j]).strip() if len(r) > j else ""
         out[pid] = rec
     return out
@@ -158,6 +175,73 @@ def redo_pending(matrix, task):
     """재작업으로 넘어온 것만 {상품id: 사유}. 왜 다시 하는지를 워커에게 실어 보낼 때 쓴다."""
     return {pid: redo_reason(rec.get(task))
             for pid, rec in matrix.items() if is_redo(rec.get(task))}
+
+
+# ---------------------------------------------------------------------------
+# 이력 — 작업 열과 달리 **덮어쓰지 않고 덧붙인다**
+# ---------------------------------------------------------------------------
+
+def notes(rec):
+    """행 1개의 이력 토큰 목록. rec 는 `read()` 가 준 값(또는 None)."""
+    return [t.strip() for t in str((rec or {}).get(LEDGER) or "").split("·")
+            if t.strip()]
+
+
+def has_note(matrix, pid, token):
+    """그 상품 이력에 이 토큰이 있나 — 왕복 종결 판정의 근거를 읽는 자리."""
+    return str(token) in notes((matrix or {}).get(pid))
+
+
+def _ledger_col(sheet, tab):
+    """이력 열의 A1 열문자. 헤더에 없으면 만들어 붙인 뒤 다시 확인한다. 없으면 None.
+
+    **왜 여기서 헤더를 확인하나** — 이력 열은 2026-08-19 에 생겼다. 그전에 만들어진
+    시트는 11열(`업로드` 까지)뿐이라, 헤더 없이 12열째에 값만 쓰면 `read` 가 그 칸을
+    **열 이름으로 못 찾아** 영영 안 읽는다(값은 시트에 보이는데 코드는 못 본다 —
+    가장 나쁜 종류의 조용한 실패다). `ensure` 가 뒤에만 확장하므로 그걸 먼저 태운다.
+    """
+    try:
+        ensure(sheet, tab)
+        cur = [str(c).strip() for c in (sheets_get(sheet, f"'{tab}'!1:1") or [[]])[0]]
+    except Exception as e:  # noqa: BLE001
+        print(f"  [경고] 이력 열 확인 실패: {str(e)[:100]}")
+        return None
+    if LEDGER not in cur:
+        # `ensure` 가 확장을 거부한 시트(열 순서가 어긋남) — 엉뚱한 열에 쓰면 안 된다.
+        print(f"  [경고] '{tab}' 에 '{LEDGER}' 열이 없다 — 이력을 남기지 않는다.")
+        return None
+    return _col_letter(cur.index(LEDGER) + 1)
+
+
+def note_many(sheet, items, tab=TAB, matrix=None):
+    """이력 열에 토큰을 **덧붙인다**(멱등). items = {상품id: 토큰}. 반환: 바뀐 칸 수.
+
+    이미 있는 토큰은 다시 붙이지 않는다 — 같은 회차를 두 번 돌려도 칸이 안 자란다.
+    작업 열과 달리 기존 값을 지우지 않는 게 이 함수의 존재 이유다.
+    """
+    m = read(sheet, tab) if matrix is None else matrix
+    if not m or not items:
+        return 0
+    last = max(rec["row"] for rec in m.values())
+    col = [[""] for _ in range(last - 1)]
+    changed = 0
+    for pid, rec in m.items():
+        cur = notes(rec)
+        tok = str(items.get(pid) or "").strip()
+        if tok and tok not in cur:
+            cur = cur + [tok]
+            changed += 1
+        col[rec["row"] - 2] = [LEDGER_SEP.join(cur)]
+        # 메모리 상의 matrix 도 같이 갱신한다 — 같은 회차의 뒤 호출이 방금 찍은 근거를
+        # 다시 읽을 수 있어야 한다(시트를 또 읽지 않는다).
+        rec[LEDGER] = col[rec["row"] - 2][0]
+    if not changed:
+        return 0
+    letter = _ledger_col(sheet, tab)
+    if letter is None:
+        return 0
+    _update_column(sheet, tab, letter, col)
+    return changed
 
 
 # ---------------------------------------------------------------------------

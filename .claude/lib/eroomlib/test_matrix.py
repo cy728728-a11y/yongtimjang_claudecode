@@ -353,6 +353,74 @@ class RebuildTest(MatrixBase):
                          ["상품id", "엉뚱한열"])
 
 
+class LedgerTest(MatrixBase):
+    """이력 열 — **저장이 덮지 않는 자리** (2026-08-19 2-2 4회차 §8).
+
+    썸네일↔옵션 왕복 종결 판정이 `옵션` 작업 열 문자열을 근거로 삼고 있었는데,
+    옵션정리가 저장에 성공하면 그 열이 `완료` 로 덮여 근거가 사라졌다 —
+    **옵션이 저장에 성공할수록 왕복이 안 닫히는** 뒤집힌 구조였다.
+    """
+
+    def seed_one(self, ledger=""):
+        self.seed([["P1", "무선 마우스"] + [""] * len(matrix.TASKS) + [ledger]])
+
+    def test_이력_열은_작업_열이_아니다(self):
+        # 작업 열이면 `mark_many`·`rebuild` 가 덮는다 — 그게 이 열을 만든 이유의 반대다.
+        self.assertNotIn(matrix.LEDGER, matrix.TASKS)
+        self.assertEqual(matrix.HEADER[-1], matrix.LEDGER)
+
+    def test_토큰을_덧붙이고_읽는다(self):
+        self.seed_one()
+        self.assertEqual(matrix.note_many("S", {"P1": "실물기준없음"}), 1)
+        self.assertTrue(matrix.has_note(matrix.read("S"), "P1", "실물기준없음"))
+
+    def test_같은_토큰을_두_번_붙이지_않는다(self):
+        self.seed_one("실물기준없음")
+        self.assertEqual(matrix.note_many("S", {"P1": "실물기준없음"}), 0)
+        self.assertFalse(self.fs.updates, "바뀐 게 없으면 시트를 건드리지 않는다")
+
+    def test_다른_토큰은_기존_것을_지우지_않는다(self):
+        self.seed_one("실물기준없음")
+        matrix.note_many("S", {"P1": "품목대조"})
+        self.assertEqual(matrix.notes(matrix.read("S")["P1"]),
+                         ["실물기준없음", "품목대조"])
+
+    def test_작업_열_저장이_이력을_덮지_않는다(self):
+        """이게 이 열의 존재 이유다 — 옵션 저장(`완료`)이 근거를 지우면 안 된다."""
+        self.seed_one("실물기준없음")
+        matrix.mark_many("S", "옵션", {"P1": "완료"})
+        m = matrix.read("S")
+        self.assertEqual(m["P1"]["옵션"], "완료")
+        self.assertTrue(matrix.has_note(m, "P1", "실물기준없음"))
+
+    def test_rebuild_도_이력을_보존한다(self):
+        self.seed_one("실물기준없음")
+        matrix.rebuild("S", PRODUCTS[:1], log=lambda *a: None)
+        self.assertTrue(matrix.has_note(matrix.read("S"), "P1", "실물기준없음"))
+
+    def test_열이_없는_옛_시트는_헤더부터_붙이고_쓴다(self):
+        """헤더 없이 12열째에 값만 쓰면 `read` 가 **열 이름으로 못 찾아** 영영 안 읽는다."""
+        self.fs.tabs[matrix.TAB] = [list(matrix.HEADER[:-1]),
+                                    ["P1", "무선 마우스"] + [""] * len(matrix.TASKS)]
+        self.assertEqual(matrix.note_many("S", {"P1": "실물기준없음"}), 1)
+        self.assertEqual(self.fs.tabs[matrix.TAB][0][-1], matrix.LEDGER,
+                         "헤더가 안 붙었다 — 값은 보이는데 코드는 못 읽는다")
+        self.assertTrue(matrix.has_note(matrix.read("S"), "P1", "실물기준없음"))
+
+    def test_열_순서가_어긋난_시트에는_쓰지_않는다(self):
+        """`ensure` 가 확장을 거부한 시트다 — 엉뚱한 열에 쓰느니 안 쓴다."""
+        self.fs.tabs[matrix.TAB] = [["상품id", "엉뚱한열"], ["P1", "x"]]
+        self.assertEqual(matrix.note_many("S", {"P1": "실물기준없음"}), 0)
+
+    def test_이력_열이_없는_옛_시트도_읽힌다(self):
+        # 헤더가 11열이던 시절 시트. `ensure` 가 확장하기 전에도 read 가 죽으면 안 된다.
+        self.fs.tabs[matrix.TAB] = [list(matrix.HEADER[:-1]),
+                                    ["P1", "무선 마우스"] + [""] * len(matrix.TASKS)]
+        m = matrix.read("S")
+        self.assertEqual(matrix.notes(m["P1"]), [])
+        self.assertFalse(matrix.has_note(m, "P1", "실물기준없음"))
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")

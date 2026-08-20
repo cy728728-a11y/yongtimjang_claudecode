@@ -289,5 +289,108 @@ class ToOptionReasonTest(unittest.TestCase):
                     f"옵션이 '{verdict}' 를 왕복 2회차로 못 알아본다")
 
 
+class VisionPickPrescreenTest(unittest.TestCase):
+    """★ 비전 배치가 **고른 기준**에도 prescreen 을 건다 (2026-08-19 2-2 4회차 §8 끝).
+
+    종전엔 선기록(대표옵션 기준)만 검사했다. 그런데 `실물기준없음` 으로 넘어온 건은
+    선기록에서 빠져 비전 배치로 간다 — **왕복이 꼬여 제일 위태로운 건들이 정작 생성 전
+    검사를 하나도 안 받았다.** 그래서 후보에도 실물이 없는 상품에 크레딧을 태웠다
+    (11건 중 최소 5건 · 약 25크레딧).
+    """
+
+    def setUp(self):
+        self.run_dir = tempfile.mkdtemp()
+        self.refs = {}
+        os.makedirs(os.path.join(self.run_dir, "refs"), exist_ok=True)
+        for pid in ("V1", "V2", "V3"):
+            path = os.path.join(self.run_dir, "refs", f"{pid}.jpg")
+            with open(path, "wb") as f:
+                f.write(b"x")
+            self.refs[pid] = path
+        # 비전 배치(정본) + 워커 결과(판단 필드만)
+        run_thumbs._dump(
+            os.path.join(self.run_dir, "batches", "batch_001.json"),
+            {"배치": 1, "products": [
+                {"productId": pid, "상품명": f"상품 {pid}", "재작업사유": "실물기준없음",
+                 "후보이미지": [{"index": 1, "url": "u", "path": "p"}],
+                 "기존썸네일": ["https://img.alicdn.com/x.jpg"]}
+                for pid in ("V1", "V2", "V3")]})
+        run_thumbs._dump(
+            os.path.join(self.run_dir, "results", "result_001.json"),
+            {"배치": 1, "products": [
+                {"productId": pid, "기준이미지": 1,
+                 "기준이미지경로": self.refs[pid], "모드": "기본"}
+                for pid in ("V1", "V2", "V3")]})
+
+    def tearDown(self):
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _judge(self, mapping, batch=1):
+        run_thumbs._dump(
+            os.path.join(self.run_dir, "prescreen_results",
+                         f"presult_{batch:03d}.json"),
+            {"배치": batch,
+             "products": [{"productId": p, "판정": v, "사유": "후보가 전부 도면이다"}
+                          for p, v in mapping.items()]})
+
+    def _commit(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            run_thumbs._prescreen_commit("SHEET", self.run_dir)
+        return out.getvalue()
+
+    def _states(self):
+        doc = run_thumbs._load(os.path.join(self.run_dir, "results",
+                                            "result_001.json"))
+        return {p["productId"]: p.get("상태", "") for p in doc["products"]}
+
+    def test_선기록이_없어도_비전_픽을_모은다(self):
+        picks = {p["productId"] for p in run_thumbs._vision_picks(self.run_dir)}
+        self.assertEqual(picks, {"V1", "V2", "V3"})
+
+    def test_이미_보류인_건은_다시_검사하지_않는다(self):
+        doc = run_thumbs._load(os.path.join(self.run_dir, "results",
+                                            "result_001.json"))
+        doc["products"][0]["상태"] = "보류(후보 이미지 전부 결손)"
+        run_thumbs._dump(os.path.join(self.run_dir, "results",
+                                      "result_001.json"), doc)
+        picks = {p["productId"] for p in run_thumbs._vision_picks(self.run_dir)}
+        self.assertEqual(picks, {"V2", "V3"})
+
+    def test_실물없음은_생성_전에_보류로_막는다(self):
+        """이게 크레딧 방어다 — `apply` 는 `상태: 보류(...)` 를 생성에서 뺀다."""
+        self._judge({"V1": R.PRE_NOPRODUCT, "V2": R.PRE_SINGLE,
+                     "V3": R.PRE_SINGLE})
+        self._commit()
+        st = self._states()
+        self.assertEqual(st["V1"], f"보류({R.VERDICT_NO_BASE})")
+        self.assertEqual(st["V2"], "")
+        left = [p["productId"] for p in run_thumbs._results(self.run_dir)
+                if not str(p.get("상태", "")).startswith("보류")]
+        self.assertEqual(sorted(left), ["V2", "V3"])
+
+    def test_보류_사유가_결과까지_따라간다(self):
+        """`apply` 가 옵션으로 넘길 때 쓰는 근거다 — 없으면 기본 문구로 뭉개진다."""
+        self._judge({"V1": R.PRE_NOPRODUCT, "V2": R.PRE_SINGLE, "V3": R.PRE_SINGLE})
+        self._commit()
+        got = {p["productId"]: p for p in run_thumbs._results(self.run_dir)}
+        self.assertIn("도면", got["V1"].get("사유", ""))
+
+    def test_다중혼재는_되돌리지_않는다(self):
+        """워커가 이미 후보에서 고른 기준이라 되물으면 같은 답이 온다(루프)."""
+        self._judge({"V1": R.PRE_MIXED, "V2": R.PRE_SINGLE, "V3": R.PRE_SINGLE})
+        out = self._commit()
+        self.assertEqual(self._states()["V1"], "")
+        self.assertIn("다중혼재", out)
+        self.assertFalse(os.path.exists(os.path.join(self.run_dir,
+                                                     "batches", "batch_002.json")))
+
+    def test_commit_이_멱등하다(self):
+        self._judge({"V1": R.PRE_NOPRODUCT, "V2": R.PRE_SINGLE, "V3": R.PRE_SINGLE})
+        self._commit()
+        first = self._states()
+        self._commit()
+        self.assertEqual(first, self._states())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

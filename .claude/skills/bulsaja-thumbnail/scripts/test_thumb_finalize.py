@@ -351,6 +351,123 @@ class VerdictIdsTest(_MCPPatch, unittest.TestCase):
             os.listdir(os.path.join(self.run_dir, "verdict", "results")), [])
 
 
+class VerdictRefetchTest(_MCPPatch, unittest.TestCase):
+    """★ 생성본 이미지 확보 실패는 **빼기 전에 한 번 더 받아본다** (2026-08-19 2-2 §5).
+
+    404·503 으로 빠진 2건을 재시도했더니 2/2 회수됐고 둘 다 `사용가능` 이었다.
+    여기서 빠진 건은 `verdict --commit` 의 누락 검사에도 안 잡히고, `decisions.json`
+    에 없으면 `apply --commit` 이 **`사용가능` 으로 반영**한다 — 판정을 건너뛴 게
+    통과로 둔갑하는 자리다.
+    """
+
+    A, B = "U01AAA", "U01BBB"
+
+    def setUp(self):
+        self.run_dir = tempfile.mkdtemp()
+        self.tries = {}
+        self._orig_mat = snapshot.materialize_image
+        self._orig_wait = run_thumbs.VERDICT_REFETCH_WAIT
+        run_thumbs.VERDICT_REFETCH_WAIT = 0        # 테스트가 3초를 기다릴 이유는 없다
+        snapshot.materialize_image = self._materialize
+        self.flaky, self.dead = set(), set()
+        path = os.path.join(self.run_dir, "generated.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({p: {"상품명": p, "생성본": f"https://g/{p}.jpg",
+                           "기존대표": f"https://c/{p}.jpg"}
+                       for p in (self.A, self.B)}, f, ensure_ascii=False)
+
+    def tearDown(self):
+        snapshot.materialize_image = self._orig_mat
+        run_thumbs.VERDICT_REFETCH_WAIT = self._orig_wait
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _materialize(self, url, d, stem, i, **kw):
+        """i==2 가 생성본. flaky 는 1회차만 실패, dead 는 계속 실패."""
+        if i == 2 and stem in self.dead:
+            return None, "HTTP 404"
+        if i == 2 and stem in self.flaky:
+            self.tries[stem] = self.tries.get(stem, 0) + 1
+            if self.tries[stem] == 1:
+                return None, "HTTP 503"
+        return os.path.join(d, f"{stem}_{i}.jpg"), None
+
+    def _verdict(self):
+        args = argparse.Namespace(run_dir=self.run_dir, ids=None, batch_size=10,
+                                  commit=False, max_px=0)
+        with contextlib.redirect_stdout(io.StringIO()) as out, \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            run_thumbs.cmd_verdict(args)
+        return out.getvalue() + err.getvalue()
+
+    def _batch_pids(self):
+        with open(os.path.join(self.run_dir, "verdict", "batches",
+                               "vbatch_001.json"), encoding="utf-8") as f:
+            return [p["productId"] for p in json.load(f)["products"]]
+
+    def test_일시적_실패는_재시도로_회수한다(self):
+        self.flaky = {self.A}
+        log = self._verdict()
+        self.assertIn(self.A, self._batch_pids(), "회수했는데 판정에서 빠졌다")
+        self.assertIn("재시도 성공", log)
+
+    def test_두_번_실패하면_목록으로_남긴다(self):
+        """조용히 빠지면 `apply --commit` 이 '사용가능'으로 반영한다."""
+        self.dead = {self.B}
+        log = self._verdict()
+        self.assertEqual(self._batch_pids(), [self.A])
+        failed = os.path.join(self.run_dir, "verdict_refetch_failed.json")
+        with open(failed, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), [self.B])
+        self.assertIn("조용한 자동통과", log)
+
+
+class NoBaseMisjudgeTest(unittest.TestCase):
+    """★ `기준이미지없음` 오판 드러내기 (2026-08-19 2-2 4회차 §8 — 오판율 4/11 = 36%).
+
+    판정 대상은 **생성본**인데 워커가 `대표옵션경로`(대조 축)를 기준이미지로 착각해
+    "기준이 도면이다"만 보고 이 값을 찍었다. 직접 열어보니 3건은 생성본이 훌륭했다.
+    그 값은 옵션 열로 되돌리는 값이라, 오판 1건이 멀쩡한 생성본을 버리고 왕복을 한
+    바퀴 더 돌린다.
+    """
+
+    def setUp(self):
+        self.run_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _warn(self, got, ok):
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            run_thumbs._warn_no_base_misjudged(self.run_dir, got, ok)
+        return err.getvalue()
+
+    def _suspect_file(self):
+        path = os.path.join(self.run_dir, "verdict_nobase_suspect.json")
+        if not os.path.exists(path):
+            return None
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_기준이_후보였으면_오판_의심으로_드러낸다(self):
+        got = {"P1": {"판정": f"제외({R.VERDICT_NO_BASE})", "사유": "기준이 도면"}}
+        log = self._warn(got, {"P1": {"기준출처": R.REF_WORKER}})
+        self.assertIn("오판 의심", log)
+        self.assertEqual(self._suspect_file(), ["P1"])
+
+    def test_기준이_대표옵션이었으면_정상_판정이다(self):
+        got = {"P1": {"판정": f"제외({R.VERDICT_NO_BASE})", "사유": "생성본이 도면 그대로"}}
+        self.assertEqual(self._warn(got, {"P1": {"기준출처": R.REF_MAIN_OPTION}}), "")
+        self.assertIsNone(self._suspect_file())
+
+    def test_기준출처가_없는_옛_run_은_건드리지_않는다(self):
+        got = {"P1": {"판정": f"제외({R.VERDICT_NO_BASE})", "사유": ""}}
+        self.assertEqual(self._warn(got, {"P1": {}}), "")
+
+    def test_다른_판정값은_대상이_아니다(self):
+        got = {"P1": {"판정": "제외", "사유": "구성 불일치"}}
+        self.assertEqual(self._warn(got, {"P1": {"기준출처": R.REF_WORKER}}), "")
+
+
 class ReferenceSourceTest(unittest.TestCase):
     """광집게·크레인 — 기준이 이미 0번이면 기존 대표가 그대로 배경교체된다."""
 

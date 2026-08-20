@@ -457,6 +457,32 @@ class CloseRoundtripTest(unittest.TestCase):
     def test_되돌릴_게_없으면_빈_집합(self):
         self.assertEqual(R.close_roundtrip({}, self.M), set())
 
+    def test_옵션_열이_완료로_덮여도_이력이_있으면_종결한다(self):
+        """★ 이 장치가 **한 번도 발화하지 못한** 자리다 (2026-08-19 2-2 4회차 §8).
+
+        옵션정리가 저장에 성공하면 옵션 열이 `완료` 로 덮여 `실물기준없음` 이 사라진다 —
+        옵션이 **잘 돌수록** 왕복이 안 닫혔다. 근거를 저장이 덮지 않는 이력 열에 둔다.
+        """
+        m = {"SAVED": {"row": 2, "옵션": "완료",
+                       R.MATRIX_LEDGER: "실물기준없음"}}
+        self.assertEqual(R.close_roundtrip({"SAVED": "사유"}, m), {"SAVED"})
+
+    def test_이력이_비면_되돌린다(self):
+        m = {"SAVED": {"row": 2, "옵션": "완료", R.MATRIX_LEDGER: ""}}
+        self.assertEqual(R.close_roundtrip({"SAVED": "사유"}, m), set())
+
+    def test_이력에_다른_토큰만_있으면_되돌린다(self):
+        m = {"SAVED": {"row": 2, "옵션": "완료", R.MATRIX_LEDGER: "품목대조"}}
+        self.assertEqual(R.close_roundtrip({"SAVED": "사유"}, m), set())
+
+    def test_이력_열_이름이_matrix_와_같다(self):
+        """`thumb_rules` 는 시트 계층을 import 하지 않는다 — 이름을 여기서 대조한다.
+
+        두 곳에 같은 문자열이 있으니, 한쪽만 바꾸면 왕복이 조용히 안 닫힌다.
+        """
+        import run_thumbs                       # eroomlib 경로를 잡아준다
+        self.assertEqual(R.MATRIX_LEDGER, run_thumbs.matrix.LEDGER)
+
     def test_종결값은_보류라서_다음_prep_이_안_집는다(self):
         # `보류(...)` 가 아니면 `matrix.pending` 이 도로 집어 그게 다음 바퀴가 된다.
         self.assertTrue(R.MATRIX_ROUNDTRIP_CLOSED.startswith("보류("))

@@ -6,6 +6,8 @@
 
     python .claude/skills/bulsaja-option-cleanup/scripts/test_option_prep.py
 """
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -519,6 +521,61 @@ class RoundtripCloseTest(unittest.TestCase):
                  {"이관": [{"단계": "썸네일", "사유": "대표색 불일치"}]}, "정리대상")]
         run_options._handoff("SHEET", rows, {"P1": "완료"}, {})
         self.assertEqual(self.calls[0][1]["P1"], "대표색 불일치")
+
+
+class LedgerStampTest(unittest.TestCase):
+    """★ 왕복 종결 근거를 **저장이 덮지 않는 자리**에 남긴다 (2026-08-19 2-2 4회차 §8).
+
+    종전엔 `실물기준없음` 이 현황판 `옵션` 열 문자열로만 갔다. 그런데 같은 회차의
+    `mark_many` 가 저장 성공분을 `완료` 로 덮는다 — **옵션이 잘 돌수록 왕복이 안 닫혔다.**
+    3회차에 `[왕복종결] 3건` 을 찍고도 4회차에 그중 2건이 그대로 되돌아왔고, 9건을
+    손으로 끊어야 했다. 썸네일 쪽 `R.close_roundtrip` 이 이 이력을 근거로 읽는다.
+    """
+
+    def setUp(self):
+        self.notes, self.flags = {}, []
+        self.run_dir = tempfile.mkdtemp()
+        self._orig = (run_options.matrix.flag_many, run_options.matrix.note_many)
+        run_options.matrix.flag_many = (
+            lambda sheet, task, items, from_task=None, **kw:
+            (self.flags.append((task, dict(items))), len(items))[1])
+        run_options.matrix.note_many = (
+            lambda sheet, items, **kw: (self.notes.update(items), len(items))[1])
+
+    def tearDown(self):
+        run_options.matrix.flag_many, run_options.matrix.note_many = self._orig
+        shutil.rmtree(self.run_dir, ignore_errors=True)
+
+    def _handoff(self, reason):
+        rows = [("P1", {"대표": "1"},
+                 {"이관": [{"단계": "썸네일", "사유": reason}]}, "정리대상")]
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            run_options._handoff("SHEET", rows, {"P1": "완료"}, {}, self.run_dir)
+        return out.getvalue()
+
+    def test_실물기준없음_이관은_이력에_박힌다(self):
+        self._handoff(f"{run_options.NO_REAL_BASE}: 옵션 이미지가 전부 도면")
+        self.assertEqual(self.notes, {"P1": run_options.NO_REAL_BASE})
+
+    def test_보통_이관은_이력을_건드리지_않는다(self):
+        self._handoff("대표색 불일치")
+        self.assertEqual(self.notes, {})
+
+    def test_이력_기록이_실패해도_이관은_넘어간다(self):
+        def _boom(*a, **kw):
+            raise RuntimeError("시트 429")
+        run_options.matrix.note_many = _boom
+        self._handoff(f"{run_options.NO_REAL_BASE}: 전부 도면")
+        self.assertEqual(self.flags[0][0], "썸네일", "이관까지 같이 죽었다")
+
+    def test_이력_토큰_이름이_썸네일_쪽과_같다(self):
+        """두 스킬이 같은 낱말을 봐야 왕복이 코드로 닫힌다."""
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(run_options.__file__)))),
+            "bulsaja-thumbnail", "scripts"))
+        import thumb_rules
+        self.assertEqual(run_options.NO_REAL_BASE, thumb_rules.NO_REAL_BASE)
 
 
 class OrphanRecoveryTest(unittest.TestCase):

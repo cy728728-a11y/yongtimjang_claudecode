@@ -95,6 +95,12 @@ def no_real_base(redo_reason):
     return NO_REAL_BASE in str(redo_reason or "")
 
 
+# 현황판에서 **저장이 덮지 않는** 이력 열 이름(`eroomlib.matrix.LEDGER`).
+# 여기서 이름만 다시 적는 이유: `thumb_rules` 는 순수 규칙 모듈이라 시트 계층을
+# import 하지 않는다. 값이 바뀌면 `matrix.LEDGER` 와 함께 고친다(테스트가 대조한다).
+MATRIX_LEDGER = "이력"
+
+
 # 왕복이 끝났음을 현황판 **썸네일 열**에 남기는 값. `보류(...)` 라 다음 `prep` 이
 # 집지 않는다(집으면 그게 바로 다음 바퀴다).
 MATRIX_ROUNDTRIP_CLOSED = (
@@ -125,12 +131,24 @@ def close_roundtrip(to_option, m):
     되돌리는 쪽(`_close_roundtrip` in run_options)과 **짝을 이루는 반대편 장치**다 —
     거기서는 옵션→썸네일 2회차에 낱말을 붙이고, 여기서는 그 낱말을 보고 왕복을 끝낸다.
 
+    ★ **근거를 두 곳에서 본다** (2026-08-19 2-2 4회차 §8 — 이 장치가 **한 번도 발화하지
+    못한** 이유). 종전엔 현황판 `옵션` 열 문자열만 봤다. 그런데 옵션정리가 그 상품을
+    저장하면 옵션 열은 `완료` 로 덮인다 — **낱말이 도착해도 다음 저장이 지운다.**
+    옵션이 실패해서 `보류(…)` 로 남아야만 살아남는 뒤집힌 구조였다. 그래서 3회차에
+    `[왕복종결] 3건` 이 찍혔는데도 4회차에 그중 2건이 그대로 되돌아왔고, 9건을 손으로
+    끊어야 했다. 이제 `이력` 열(작업 열이 아니라 **저장이 덮지 않는 자리** —
+    `matrix.LEDGER`)에 같은 낱말이 토큰으로 남고, 여기서 둘 중 하나만 있어도 종결한다.
+    옵션 열은 **아직 이력을 안 쓰던 회차의 시트**를 위해 그대로 둔다(하위호환).
+
     반환: 종결시킬 pid 집합.
     """
     if not to_option or not m:
         return set()
-    return {pid for pid in to_option
-            if no_real_base((m.get(pid) or {}).get("옵션"))}
+    def _answered(rec):
+        rec = rec or {}
+        return (no_real_base(rec.get("옵션"))
+                or NO_REAL_BASE in str(rec.get(MATRIX_LEDGER) or ""))
+    return {pid for pid in to_option if _answered(m.get(pid))}
 
 
 # `fallback`(대표옵션 원본대체)이 **이미 종결한** 상품의 판정값. 이후 `apply --commit`

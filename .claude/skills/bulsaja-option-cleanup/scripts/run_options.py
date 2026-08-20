@@ -1847,9 +1847,39 @@ def _handoff(sheet, rows, done, m, run_dir=""):
         print(f"  [왕복종결] 썸네일이 이미 되돌린 건 {len(closed)}건에 "
               f"'{NO_REAL_BASE}' 를 붙였다 — 썸네일이 후보에서 직접 고른다: {closed[:5]}")
     _recover_orphans(rows, done, m, bprod, by_task)
+    _stamp_ledger(sheet, by_task, m)
     for task, items in by_task.items():
         k = matrix.flag_many(sheet, task, items, from_task=TASK, matrix=m)
         print(f"  {task} 재작업 표시: {k}건")
+
+
+def _stamp_ledger(sheet, by_task, m):
+    """썸네일로 되돌리는 사유에 `실물기준없음` 이 있으면 **이력 열**에 토큰을 남긴다.
+
+    ★ **왜 여기가 아니면 안 되는가** (2026-08-19 2-2 4회차 §8). 종결 판정(`R.close_roundtrip`)
+    이 보던 근거는 현황판 **`옵션` 작업 열 문자열**이었다. 그런데 옵션정리가 저장에
+    성공하면 같은 회차의 `mark_many` 가 그 열을 `완료` 로 덮는다 — **답을 준 사실이
+    지워진다.** 그래서 3회차에 `[왕복종결] 3건` 을 찍고도 4회차에 그중 2건이 그대로
+    되돌아왔고(무한 왕복), 9건을 손으로 끊어야 했다.
+
+    이력 열은 작업 열이 아니라 어느 스킬의 저장도 건드리지 않는다(`matrix.LEDGER`).
+    낱말을 여기에 박아야 **다음 회차의 썸네일이 "옵션은 이미 답했다"를 볼 수 있다.**
+    실패해도 이관 자체는 진행한다 — 근거가 하나 없을 뿐 일감은 넘어가야 한다.
+    """
+    stamped = {pid: NO_REAL_BASE
+               for pid, reason in (by_task.get(TASK_THUMB) or {}).items()
+               if NO_REAL_BASE in str(reason or "")}
+    if not stamped:
+        return 0
+    try:
+        n = matrix.note_many(sheet, stamped, matrix=m)
+        print(f"  [이력] '{NO_REAL_BASE}' {n}칸 기록 — 저장이 덮지 않는 자리라 "
+              f"다음 썸네일 회차가 왕복을 종결할 수 있다")
+        return n
+    except Exception as e:  # noqa: BLE001
+        print(f"  [경고] 이력 기록 실패({str(e)[:100]}) — 왕복 종결 근거가 "
+              f"안 남는다(이관은 그대로 진행)", file=sys.stderr)
+        return 0
 
 
 def cmd_restore(args):
