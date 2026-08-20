@@ -30,6 +30,7 @@ venv/
 # Temp / work
 00-inbox/*.tmp
 .playwright-mcp/
+10-projects/이메일-자동화/.state/
 
 # Skill cache
 .cache/
