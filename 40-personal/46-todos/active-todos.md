@@ -300,8 +300,15 @@
   - added: 2026-08-19
   - priority: high
   - project: 이메일자동화
-  - 참고: 실제 확인함(2026-08-19) — gws는 cy728728로 이미 인증되어 살아있음(token_valid). 단 gmail.send 스코프가 빠져있어 전달(+forward)이 막힘 → 이것만 추가 인증하면 됨
+  - 참고: 실제 확인함(2026-08-19, 2026-08-21 재확인 — 아직 미완료) — gws는 cy728728로 이미 인증되어 살아있음(token_valid). 단 gmail.send 스코프가 빠져있어 전달(+forward)이 막힘 → 이것만 추가 인증하면 됨
   - 참고: 10-projects/이메일-자동화/실행-가이드.md ①
+
+- [ ] 이메일 자동관리 — ANTHROPIC_API_KEY 발급 후 .env에 채우기
+  - added: 2026-08-21
+  - priority: high
+  - project: 이메일자동화
+  - 참고: console.anthropic.com/settings/keys 에서 발급. Task 6 dry-run 검증 및 Task 7 스케줄러 등록 전 필수
+  - 선행: 없음 (gmail.send 인증과 별개로 지금 바로 가능)
 
 - [ ] 이메일 자동관리 — 18개 사업자 계정 자동전달 켜기 (각 계정 → cy728728@gmail.com)
   - added: 2026-08-19
