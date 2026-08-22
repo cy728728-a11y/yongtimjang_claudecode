@@ -172,7 +172,7 @@ def _mk_product(pid, cat, tgt_by_id, wd_by_id, jk_by_id, thumb_map):
         return None
     wd = wd_by_id.get(pid) or {}
     jk = jk_by_id.get(pid) or {}
-    return {
+    out = {
         "productId": pid,
         # prep 이 시트에서 되찾은 **최초** 원본이 있으면 그것 — 없으면 현재 이름.
         # 재작업 회차에서 현재 이름은 앞 회차 결과물이다(`_first_original_names`).
@@ -192,6 +192,15 @@ def _mk_product(pid, cat, tgt_by_id, wd_by_id, jk_by_id, thumb_map):
         # 하나도 없어 워커가 제목의 `三层` 만 보고 3단이라 결론냈다.
         "옵션구성": _spec_view(pid),
     }
+    # 재작업 사유 — **여기서 안 옮기면 워커에게 영영 안 간다** (2026-08-22 2-2 실측).
+    # prep 은 `pending.json`·`targets.json` 까지 사유를 잘 실어 놓는데, 배치를 만드는
+    # 이 함수가 키를 하나하나 꼽아 쓰느라 사유만 빠뜨렸다. 그래서 SKILL.md §Step 2
+    # ("사유를 배치의 `재작업사유` 로 워커에게 실어 보낸다")도, 워커 지시서 §1-1 게이트도,
+    # R12(재작업 게이트)도 **실전에서는 한 번도 발동한 적이 없다** — 셋 다 이 필드가
+    # 배치에 있다고 가정한다. 표본의심 6건을 사유와 함께 되돌려 보내려다 발견했다.
+    if t.get("재작업사유"):
+        out["재작업사유"] = t["재작업사유"]
+    return out
 
 
 def _batch_for(run_dir, named_path):
