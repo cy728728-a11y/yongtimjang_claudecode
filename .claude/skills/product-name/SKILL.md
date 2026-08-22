@@ -382,6 +382,18 @@ python .claude/skills/product-name/scripts/run_names.py holds --run-dir "<R>" \
 # → 위 키 + {"무키워드대상": [...], "카테고리수동큐": [...]}   (둘 다 `카테고리의심` 의 부분집합)
 ```
 
+> **`holds` 결과에는 이미 삭제된 상품이 섞여 있다 — 태우기 전에 거른다** (2026-08-19 실측).
+> `holds` 는 상품명 원장을 읽을 뿐 불사자 현재 재고를 보지 않는다. 1-3 에서 보류 17건 중
+> **6건이 이미 삭제된 상품**이었고(제외카테고리·품목불일치로 지워진 것들), 그대로 재교정에
+> 넣으면 없는 상품을 조회한다. 아래로 교집합을 낸 뒤 진행한다:
+>
+> ```bash
+> python .claude/skills/bulsaja-category-fix/scripts/collect_group.py --group-id <ID> -o group_now.json
+> # group_now.json 의 productId 집합과 holds 목록의 교집합만 대상으로 삼는다
+> ```
+>
+> 그룹 목록 조회 1회면 끝나고, 이걸 건너뛰면 재교정·재진입 비용이 지워진 상품에 그대로 나간다.
+
 **① `보류(실물불명)` — 이미지 사다리 → 그래도 불명이면 자동 삭제 (2026-08-05 이룸님)**
 1. `run_all.py recheck --run-dir "<카테고리 run-dir>" --ids <...>` → `recheck.json` 의
    `추가이미지`(남은 썸네일 + 옵션 이미지)를 Read 로 열어 실물 확정 → `named_*.json` 의

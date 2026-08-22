@@ -57,8 +57,10 @@ python ... run_thumbs.py prescreen --group-name "…" --run-dir <R> --commit
 #    → results/result_NNN.json
 
 # ③ apply — 생성도 반영도 승인 대기 없음 (검수 판정 주체 = Claude)
-python ... run_thumbs.py apply --run-dir <R>              # 미리보기(대상+기준이미지+예상크레딧). 선택
-python ... run_thumbs.py apply --run-dir <R> --generate   # 바로 생성(크레딧 소모) → review.html
+python ... run_thumbs.py apply --run-dir <R> --sheet <시트id>              # 미리보기(대상+기준이미지+예상크레딧). 선택
+python ... run_thumbs.py apply --run-dir <R> --sheet <시트id> --generate   # 바로 생성(크레딧 소모) → review.html
+#   ⚠ apply 는 `--sheet` 또는 `--group-name` 이 **없으면 즉시 죽는다**(prep 과 달리 물려받지 않는다).
+#     분리 프로세스에는 한글 인코딩이 안전한 `--sheet <시트id>` 를 준다
 #    **50건 초과면 접수모드가 기본** — `THUMB_POLL_TIMEOUT=20` + recover. §대량 회차는 접수모드로
 
 # ④ verdict — 생성본 3축 판정(크레딧 0). **9건 이상이면 팬아웃** → §검수 판정
@@ -439,6 +441,11 @@ python … run_thumbs.py apply --run-dir <R> --commit       # 반영
 | 그 외(구성·색·형태가 대표옵션과 다름, 이미지 손상) | 대표옵션 이미지를 기준으로 **재생성**(상품당 누적 최대 2회) — `apply --ids <상품id> --generate` |
 | **2회째도 불합격 — 단 기준이 실물일 때만** | **대표옵션 원본 이미지를 그대로 대표로 저장**(AI 생성 없이, 크레딧 0) — `fallback --ids <상품id> --reason "…"`. **불사자에 즉시 반영한다 — 별도 승인 게이트 없음**(원본은 실물 그 자체라 정합이 보장된다. 2026-08-06 이룸님). 원본의 워터마크·중국어 글자 여부는 보고에만 명기 |
 | **2회째도 불합격인데 기준이 비제품**(도면·배너·상세페이지) | ★ **`fallback` 금지.** 위 세 줄(대표옵션의심 · 기준이미지없음)이 **우선한다** — 옵션 단계로 되돌린다 |
+
+> **재생성도 백그라운드로 띄운다.** `--ids` 를 줘도 대상이 십수 건이면 접수만으로 10분을
+> 넘긴다 — 앞단 셸이 10분에서 끊기면 **접수분이 회수되지 않은 채 남는다**(크레딧은 이미 나갔다).
+> 끊겼으면 §안전하게 kill 하기 순서대로 `restore` → `recover` → 재개. 실측(2026-08-18 1-3):
+> 17건 재생성이 10분에 끊겨 4건만 돌고 14건이 taskId 만 남았고, `recover` 로 13건을 0크레딧에 걷었다.
 
 ```bash
 # 재생성(2회까지) — --ids 없이 부르면 재개 모드라 이미 태운 건은 건너뛴다
