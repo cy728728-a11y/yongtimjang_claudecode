@@ -39,3 +39,6 @@ err.txt
 
 # PC별 경로 오버라이드 (per-machine, 커밋 금지)
 workspace.toml
+
+# 이메일 정리 로그 (메일 제목·발신자 포함 — 커밋 금지)
+10-projects/이메일-자동화/logs/
