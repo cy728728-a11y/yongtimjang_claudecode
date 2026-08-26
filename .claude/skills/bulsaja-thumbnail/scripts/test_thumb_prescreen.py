@@ -139,6 +139,39 @@ class PrescreenCommitTest(unittest.TestCase):
             self.assertNotIn(f, prod, f"{f} 는 워커가 채울 필드다")
         self.assertIn("후보이미지", prod, "pass-through 필드는 남아야 한다")
 
+    def test_승격_배치는_규칙0_트리거를_떼고_보낸다(self):
+        """승격 = "이 대표옵션은 기준으로 못 쓴다"는 판정이다. 그런데 배치에
+        `대표옵션이미지경로` 를 남겨 보내면 워커 프롬프트 규칙 0("그 경로가 있으면
+        그게 기준이다, 고르지 마라")이 발동해 **방금 실격시킨 그 이미지를 도로 집는다.**
+
+        실측(2026-08-24 3-1): 승격 39건 중 23건이 `기준이미지: 9`(= 대표옵션 파일의
+        인덱스)로 돌아왔고, 9 는 후보에도 기존썸네일 범위에도 없어 `apply` 가 전부
+        `기준 해석불가` 로 제외했다 — 승격이 통째로 헛돌았다.
+
+        같은 사고가 왕복 종결 경로에서 이미 한 번 났고(2026-08-17) 거기만 고쳐져
+        있었다. 두 경로가 같은 규칙을 쓰므로 승격 경로도 같이 떼어야 한다.
+
+        비우는 건 **로컬 경로 하나뿐**이다 — URL(`대표옵션이미지`)은 verdict 의 대조
+        축이고, 이름(`대표옵션명`)은 후보에서 같은 물건을 고르는 근거다.
+        """
+        self._judge({"U01A": R.PRE_MIXED})
+        self._commit()
+        b = run_thumbs._pending_batches(self.run_dir)[0]
+        prod = run_thumbs._load(b["path"])["products"][0]
+        self.assertEqual(prod.get("대표옵션이미지경로"), "",
+                         "규칙 0 트리거가 남아 있으면 워커가 실격된 기준을 도로 집는다")
+        self.assertEqual(prod.get("대표옵션이미지"), "https://img.alicdn.com/m.jpg",
+                         "URL 은 verdict 의 대조 축이라 지우면 안 된다")
+        self.assertEqual(prod.get("대표옵션명"), "기본형",
+                         "이름은 규칙 0 을 안 걸고 후보 선택의 근거다")
+
+    def test_승격_배치의_imgs는_대표옵션경로를_비워도_그대로다(self):
+        """예산 계산은 대표1 + 후보수다 — 경로를 비우는 게 여기 영향을 주면 안 된다."""
+        self._judge({p: R.PRE_MIXED for p in self.pids})
+        self._commit()
+        index = run_thumbs._load(os.path.join(self.run_dir, "batches_index.json"))
+        self.assertEqual(sum(b["imgs"] for b in index), len(self.pids) * 3)
+
     # ── ② 멱등성 ─────────────────────────────────────────────────────────
     def test_commit을_두_번_해도_승격이_중복되지_않는다(self):
         self._judge({"U01A": R.PRE_SINGLE, "U01B": R.PRE_MIXED,

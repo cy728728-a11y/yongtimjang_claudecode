@@ -1,0 +1,1286 @@
+{
+ "query": "in:inbox",
+ "delete": [],
+ "keep": [
+  {
+   "id": "1a03b9790890c1b5",
+   "from": "\"네이버 커머스API\" <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 장애대응 이메일 주소 정책 변경 사전 안내 (시행 예정일: 2026.09.30)",
+   "date": "Wed, 26 Aug 2026 01:03:02 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "시행 예정일 2026. 09. 30. 장애대응 이메일 주소 정책 변경 사전 안내 안녕하세요, 네이버 커머스API센터입니다. 커머스API센터를 이용해 주시는 고객님께 장애대응 이메일 주소 관리 정책 변경에 대해 사전 안내드립니다. 변경 사유 현재 커머스API센터는 장애 "
+  },
+  {
+   "id": "1a033914198799cf",
+   "from": "\"리펀디\" <contact@refundy.co>",
+   "subject": "[업데이트] 배대지 추가비용 정산 내역서 추가",
+   "date": "Mon, 24 Aug 2026 20:39:11 +0900",
+   "unsub": false,
+   "snippet": "출고 이후 배대지에서 실제로 생긴 비용만, 한 달에 한 번 모아서 안내드려요. 7월 이전 금액은 리펀디가 부담했으니 걱정하지 않으셔도 됩니다. ​​​​​​​​​​​​ 배대지 정산 안내 · 7월 출고분부터 배대지 추가비용, 이제 청구서 한 장으로 정리해드려요. 지금까지 "
+  },
+  {
+   "id": "1a030b08693965be",
+   "from": "Google AI Studio <googleaistudio-noreply@google.com>",
+   "subject": "Congrats! Your account has been upgraded to paid Tier 2",
+   "date": "Sun, 23 Aug 2026 15:14:30 -0700",
+   "unsub": false,
+   "snippet": "🎉 Higher rate limits + higher monthly spend cap ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏"
+  },
+  {
+   "id": "1a029c2b8eb34f12",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Sat, 22 Aug 2026 13:56:59 GMT",
+   "unsub": false,
+   "snippet": "이 메일은 cy17281728@gmail.com 주소로 전송된 보안 경고의 사본입니다. cy728728@gmail.com 주소는 이 계정의 복구 이메일입니다. 모르는 계정이라면 삭제하세요 Mac OS에서 새로 로그인함 cy17281728@gmail.com Mac OS "
+  },
+  {
+   "id": "1a027c6cc9e2b105",
+   "from": "Anthropic <no-reply-BliT52tE3nM_3PVG4N4F0A@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Sat, 22 Aug 2026 04:42:13 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "A new trusted device was added to your Claude account If this was you, no action is needed. If you don&#39;t recognize this activity, review your devi"
+  },
+  {
+   "id": "1a027c6c4d62de25",
+   "from": "Anthropic <no-reply-joTLUMbqRjwxMnwzq2d6xw@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Sat, 22 Aug 2026 04:42:12 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "A new trusted device was added to your Claude account If this was you, no action is needed. If you don&#39;t recognize this activity, review your devi"
+  },
+  {
+   "id": "1a027acc12e08ab8",
+   "from": "Google Play <googleplay-noreply@google.com>",
+   "subject": "Google Play 주문 영수증(2026. 8. 22.)",
+   "date": "Fri, 21 Aug 2026 21:13:47 -0700",
+   "unsub": false,
+   "snippet": "Google Play 감사합니다. Google Play를 통한 Google Digital Inc. 구독이 갱신되어 요금이 청구되었습니다. 구독 관리 주문 번호: SOP.3330-5196-2452-34703..4 주문 날짜: 2026. 8. 22. 오후 1시 13분 43"
+  },
+  {
+   "id": "1a027ac87d28a46e",
+   "from": "\"토스뱅크\" <no.reply@mail.tossbank.com>",
+   "subject": "원리금 납부 안내",
+   "date": "Sat, 22 Aug 2026 13:13:30 +0900 (KST)",
+   "unsub": false,
+   "snippet": "원리금 납부 안내 안녕하세요. 토스뱅크입니다. 이*수님 보유하고 있는 신용대출의 원리금 납부가 예정되어 있습니다. 개인정보 보안을 위해 자세한 내용은 보안 메일로 첨부 드리오니, 보안 메일을 다운로드 하여 내용을 확인해주시길 바랍니다. 감사합니다. 토스뱅크 드림. 보안"
+  },
+  {
+   "id": "1a0273ed38a42831",
+   "from": "Anthropic <no-reply-RxONzcU96VV27sr8kzwkjA@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Sat, 22 Aug 2026 02:13:43 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "A new trusted device was added to your Claude account If this was you, no action is needed. If you don&#39;t recognize this activity, review your devi"
+  },
+  {
+   "id": "1a02464a61bb7535",
+   "from": "Anthropic <no-reply-UtXevOvbOnlthOXc5bzaMA@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Fri, 21 Aug 2026 12:56:09 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "A new trusted device was added to your Claude account If this was you, no action is needed. If you don&#39;t recognize this activity, review your devi"
+  },
+  {
+   "id": "1a02464950dd8a3b",
+   "from": "Anthropic <no-reply-gzJdtcnMmPPgqr1d4vnb6g@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Fri, 21 Aug 2026 12:56:05 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "A new trusted device was added to your Claude account If this was you, no action is needed. If you don&#39;t recognize this activity, review your devi"
+  },
+  {
+   "id": "1a018ebb51b5e438",
+   "from": "Instagram <security@mail.instagram.com>",
+   "subject": "Verify your profile",
+   "date": "Wed, 19 Aug 2026 00:28:11 -0700",
+   "unsub": true,
+   "snippet": "Hi yong_timjang, Someone tried to log in to your Instagram profile. If this was you, please use the following code to confirm your identity: 010608 If"
+  },
+  {
+   "id": "1a0179b5a5c37313",
+   "from": "\"불사자 (Google Sheets에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "‘용감한용팀장1:1상담(응답)’ 스프레드시트가 공유됨",
+   "date": "Wed, 19 Aug 2026 01:20:51 +0000",
+   "unsub": false,
+   "snippet": "불사자님이 스프레드시트 1개를 공유함 불사자(bulsaja23@gmail.com)님이 다음 스프레드시트를 수정하도록 나를 초대했습니다. 용팀장 1:1 신청서 응답 시트 용감한용팀장1:1상담(응답) 열기 의심스러운 항목이 있나요? 발신자 차단 Google LLC, 160"
+  },
+  {
+   "id": "1a013209b56a3b7c",
+   "from": "\"Anthropic, PBC\" <invoice+statements@mail.anthropic.com>",
+   "subject": "Your receipt from Anthropic, PBC #2589-4133-4353",
+   "date": "Tue, 18 Aug 2026 04:28:18 +0000",
+   "unsub": false,
+   "snippet": "Your receipt from Anthropic, PBC #2589-4133-4353 ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏"
+  },
+  {
+   "id": "1a00ef3d2ebf8312",
+   "from": "\"네이버 커머스API\" <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 스토어 애플리케이션 시크릿 조회 안내",
+   "date": "Mon, 17 Aug 2026 09:00:54 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "네이버 커머스API센터 커머스API센터 스토어 애플리케이션 시크릿 조회 안내 안녕하세요. 네이버 커머스API센터입니다. 서이컴퍼니 스토어 통합매니저님이 커머스API센터에서 서이컴퍼니 스토어의 애플리케이션의 시크릿을 조회했습니다. 조회하신 API애플리케이션의 정보는 절대"
+  },
+  {
+   "id": "1a00ae8c1cec6b2f",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sun, 16 Aug 2026 14:10:19 GMT",
+   "unsub": false,
+   "snippet": "일부 Google 계정 데이터에 대한 Claude for Google Drive의 액세스를 허용하셨습니다 cy728728@gmail.com 일부 Google 계정 데이터에 대한 Claude for Google Drive의 액세스를 허용하지 않으셨다면 다른 사람이 내 G"
+  },
+  {
+   "id": "19ffdf2e00615628",
+   "from": "Microsoft <msa@communication.microsoft.com>",
+   "subject": "이용 약관 업데이트",
+   "date": "Fri, 14 Aug 2026 01:46:17 +0000",
+   "unsub": false,
+   "snippet": "안녕하세요. 귀하께서 사용하는 Microsoft 제품 또는 서비스에 적용되는 Microsoft 서비스 계약 업데이트에 대한 소식을 전해드립니다. 이 업데이트는 새로운 Microsoft 제품, 서비스, 기능의 사용 조건에 대해 사용자의 명확한 이해를 도모하기 위해 진행합"
+  },
+  {
+   "id": "19ffdab6878e0bc6",
+   "from": "\"불사자 (Google Forms에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "‘용감한 용팀장 3기 신청서 ’ 양식이 공유됨",
+   "date": "Fri, 14 Aug 2026 00:28:16 +0000",
+   "unsub": false,
+   "snippet": "불사자님이 양식 1개를 공유함 불사자(bulsaja23@gmail.com)님이 다음 양식을 수정하도록 나를 초대했습니다. 3기 신청서 폼 용감한 용팀장 3기 신청서 열기 의심스러운 항목이 있나요? 발신자 차단 Google LLC, 1600 Amphitheatre Par"
+  },
+  {
+   "id": "19ff94ebb91c29e1",
+   "from": "Payple <help@payple.kr>",
+   "subject": "셀록홈즈에서 결제한 내역입니다.",
+   "date": "Thu, 13 Aug 2026 13:08:31 +0900",
+   "unsub": false,
+   "snippet": "결제가 정상적으로 완료되었습니다. 상점정보 상호명 (주)브랜뉴닷컴 서비스명 셀록홈즈 결제문의 028037177 결제 상점으로 이동 결제정보 결제자명 최용 결제일시 2026.08.13 13:08:18 승인번호 25171405 주문번호 20260813130816706402"
+  },
+  {
+   "id": "19fe46c8a923c911",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sun, 09 Aug 2026 02:49:03 GMT",
+   "unsub": false,
+   "snippet": "Windows에서 새로 로그인함 cy728728@gmail.com Windows 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보호하세요. 활동 확인 다음 페이지"
+  },
+  {
+   "id": "19fe1b72fb0d3b84",
+   "from": "\"네이버 커머스API\" <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 스토어 애플리케이션 시크릿 조회 안내",
+   "date": "Sat, 8 Aug 2026 14:11:45 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "네이버 커머스API센터 커머스API센터 스토어 애플리케이션 시크릿 조회 안내 안녕하세요. 네이버 커머스API센터입니다. 제이제이비컴퍼니 스토어 통합매니저님이 커머스API센터에서 제이제이비컴퍼니 스토어의 애플리케이션의 시크릿을 조회했습니다. 조회하신 API애플리케이션의 "
+  },
+  {
+   "id": "19fdcaeaa48971de",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Fri, 07 Aug 2026 14:44:19 GMT",
+   "unsub": false,
+   "snippet": "이 메일은 cy17281728@gmail.com 주소로 전송된 보안 경고의 사본입니다. cy728728@gmail.com 주소는 이 계정의 복구 이메일입니다. 모르는 계정이라면 삭제하세요 Mac에서 새로 로그인함 cy17281728@gmail.com Mac 기기에서 내"
+  },
+  {
+   "id": "19fd9bc2b5dd6f2a",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Fri, 07 Aug 2026 01:00:13 GMT",
+   "unsub": false,
+   "snippet": "이 메일은 cy17281728@gmail.com 주소로 전송된 보안 경고의 사본입니다. cy728728@gmail.com 주소는 이 계정의 복구 이메일입니다. 모르는 계정이라면 삭제하세요 Windows에서 새로 로그인함 cy17281728@gmail.com Window"
+  },
+  {
+   "id": "19fd5f1de4e05cde",
+   "from": "\"네이버쇼핑\" <nv_product_ips@navercorp.com>",
+   "subject": "운영기준위반 '의심'상품에 대한 운영자 검수예정 안내",
+   "date": "Thu, 6 Aug 2026 07:20:25 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "네이버쇼핑에서 알려드립니다. 안녕하세요 네이버쇼핑입니다. 현재 스마트스토어 (제이제이비컴퍼니) 몰 판매자님이 등록하신 상품 중 일부가 운영기준 위반으로 의심되어 네이버쇼핑에서 일시적으로 안보이도록 처리되었습니다. 네이버쇼핑에서는 위험상품으로부터 구매자를 안전하게 보호하"
+  },
+  {
+   "id": "19fd4b27df343903",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Thu, 06 Aug 2026 01:31:32 GMT",
+   "unsub": false,
+   "snippet": "이 메일은 cy17281728@gmail.com 주소로 전송된 보안 경고의 사본입니다. cy728728@gmail.com 주소는 이 계정의 복구 이메일입니다. 모르는 계정이라면 삭제하세요 Mac에서 새로 로그인함 cy17281728@gmail.com Mac 기기에서 내"
+  },
+  {
+   "id": "19fd42e013ce2ad7",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Wed, 05 Aug 2026 23:06:50 GMT",
+   "unsub": false,
+   "snippet": "Mac에서 새로 로그인함 cy728728@gmail.com Mac 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보호하세요. 활동 확인 다음 페이지에서 보안 활동"
+  },
+  {
+   "id": "19fcc874e473fb1c",
+   "from": "\"ssulmung (Google Drive에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "\"smartstore-brand.zip\"에 대한 공유 요청",
+   "date": "Tue, 04 Aug 2026 11:27:27 +0000",
+   "unsub": false,
+   "snippet": "항목 1개를 공유하시겠습니까? ssulmung(seolhwa1989@gmail.com)님이 다음 항목에 액세스할 수 있는 권한을 요청했습니다. smartstore-brand.zip 공유 관리 Google LLC, 1600 Amphitheatre Parkway, Moun"
+  },
+  {
+   "id": "19fcbc696df4d8bb",
+   "from": "\"min yee (Google Drive에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "\"smartstore-brand.zip\"에 대한 공유 요청",
+   "date": "Tue, 04 Aug 2026 07:56:57 +0000",
+   "unsub": false,
+   "snippet": "항목 1개를 공유하시겠습니까? min yee(yurimlee334@gmail.com)님이 다음 항목에 액세스할 수 있는 권한을 요청했습니다. smartstore-brand.zip 공유 관리 Google LLC, 1600 Amphitheatre Parkway, Mount"
+  },
+  {
+   "id": "19fca99f67a13b2e",
+   "from": "\"쿠팡\" <no_reply@e.coupang.com>",
+   "subject": "[쿠팡] 쿠팡 이용 약관 개정 안내",
+   "date": "Tue, 4 Aug 2026 11:08:15 +0900 (KST)",
+   "unsub": false,
+   "snippet": "[쿠팡] 쿠팡 이용 약관 개정 안내 안녕하세요, 쿠팡입니다. 쿠팡을 이용해 주시는 고객 여러분께 감사드리며, 2026년 9월 3일자로 쿠팡 이용약관이 아래와 같이 개정될 예정임을 안내드립니다. ■ 시행 일자: 2026년 9월 3일 ■ 개정 목적: 회사가 제공하는 서비스"
+  },
+  {
+   "id": "19fc8d8785b8c17a",
+   "from": "\"네이버파이낸셜 (주)\" <helpcustomers@navercorp.com>",
+   "subject": "네이버파이낸셜 (주)으로부터 서이컴퍼니에게 전자세금계산서가 발행되었습니다.",
+   "date": "Mon, 3 Aug 2026 18:17:36 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "전자세금계산서 전자세금계산서가 발행되었습니다. 2026-08-04 03:15:33에 네이버파이낸셜 주식회사으로부터 서이컴퍼니 에게 전자세금계산서가 발행되었습니다. 귀사의 정보보호를 위해 전자세금계산서를 보안메일로 보내드립니다. 첨부파일을 열어서 보안메일을 확인해주세요."
+  },
+  {
+   "id": "19fc8d876d3b5a31",
+   "from": "\"네이버파이낸셜 (주)\" <helpcustomers@navercorp.com>",
+   "subject": "네이버파이낸셜 (주)으로부터 서이컴퍼니에게 전자세금계산서가 발행되었습니다.",
+   "date": "Mon, 3 Aug 2026 18:17:36 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "전자세금계산서 전자세금계산서가 발행되었습니다. 2026-08-04 03:15:33에 네이버파이낸셜 주식회사으로부터 서이컴퍼니 에게 전자세금계산서가 발행되었습니다. 귀사의 정보보호를 위해 전자세금계산서를 보안메일로 보내드립니다. 첨부파일을 열어서 보안메일을 확인해주세요."
+  },
+  {
+   "id": "19fc64d0c3260c4a",
+   "from": "\"min yee (Google Drive에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "\"smartstore-brand.zip\"에 대한 공유 요청",
+   "date": "Mon, 03 Aug 2026 06:26:05 +0000",
+   "unsub": false,
+   "snippet": "항목 1개를 공유하시겠습니까? min yee(yurimlee334@gmail.com)님이 다음 항목에 액세스할 수 있는 권한을 요청했습니다. smartstore-brand.zip 공유 관리 Google LLC, 1600 Amphitheatre Parkway, Mount"
+  },
+  {
+   "id": "19fc5b3a5e22550a",
+   "from": "\"ssulmung (Google Drive에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "\"smartstore-brand.zip\"에 대한 공유 요청",
+   "date": "Mon, 03 Aug 2026 03:38:31 +0000",
+   "unsub": false,
+   "snippet": "항목 1개를 공유하시겠습니까? ssulmung(seolhwa1989@gmail.com)님이 다음 항목에 액세스할 수 있는 권한을 요청했습니다. smartstore-brand.zip 공유 관리 Google LLC, 1600 Amphitheatre Parkway, Moun"
+  },
+  {
+   "id": "19fc38d203534be1",
+   "from": "Notion Team <notify@updates.notion.so>",
+   "subject": "A new device logged into your account",
+   "date": "Sun, 02 Aug 2026 17:37:13 +0000",
+   "unsub": false,
+   "snippet": "Review a recent login from a new device There was a recent login to your Notion account. Please review the details: Account cy728728@gmail.com Login m"
+  },
+  {
+   "id": "19fc38c62b754721",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sun, 02 Aug 2026 17:36:22 GMT",
+   "unsub": false,
+   "snippet": "Mac에서 새로 로그인함 cy728728@gmail.com Mac 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보호하세요. 활동 확인 다음 페이지에서 보안 활동"
+  },
+  {
+   "id": "19fc2a1dec9931d6",
+   "from": "\"Minho Cho (Google Drive에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "\"smartstore-brand.zip\"에 대한 공유 요청",
+   "date": "Sun, 02 Aug 2026 13:20:15 +0000",
+   "unsub": false,
+   "snippet": "항목 1개를 공유하시겠습니까? Minho Cho(babo0907@gmail.com)님이 다음 항목에 액세스할 수 있는 권한을 요청했습니다. smartstore-brand.zip 공유 관리 Google LLC, 1600 Amphitheatre Parkway, Mounta"
+  },
+  {
+   "id": "19fc255a30d743c3",
+   "from": "Anthropic <no-reply-ZRKl1QoRA2WLTmsc431KKA@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Sun, 02 Aug 2026 11:56:58 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "A new trusted device was added to your Claude account If this was you, no action is needed. If you don&#39;t recognize this activity, review your devi"
+  },
+  {
+   "id": "19fc255892de3162",
+   "from": "Anthropic <no-reply-U5m4BUKm3v9CpnUXwWa0tQ@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Sun, 02 Aug 2026 11:56:51 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "A new trusted device was added to your Claude account If this was you, no action is needed. If you don&#39;t recognize this activity, review your devi"
+  },
+  {
+   "id": "19fbdda2a1f458f3",
+   "from": "Notion Team <notify@updates.notion.so>",
+   "subject": "A new device logged into your account",
+   "date": "Sat, 01 Aug 2026 15:03:39 +0000",
+   "unsub": false,
+   "snippet": "Review a recent login from a new device There was a recent login to your Notion account. Please review the details: Account cy728728@gmail.com Login m"
+  },
+  {
+   "id": "19fbd7cd789f15b2",
+   "from": "cy728728@gmail.com",
+   "subject": "[배포] 용팀장 스킬팩 - 수강생 배포 링크",
+   "date": "Sat, 1 Aug 2026 06:21:43 -0700",
+   "unsub": false,
+   "snippet": "용팀장 스킬팩 — 수강생 배포 링크 ■ 배포 링크 (카톡에 그대로 붙여넣기) https://drive.google.com/file/d/1YY9tjxn--ptb5LU0woToal5bMjQJ9O7h/view ■ 폴더 (내 드라이브 &gt; 수강생스킬배포) https://d"
+  },
+  {
+   "id": "19fbd626704c5968",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sat, 01 Aug 2026 12:52:47 GMT",
+   "unsub": false,
+   "snippet": "Windows에서 새로 로그인함 cy728728@gmail.com Windows 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보호하세요. 활동 확인 다음 페이지"
+  },
+  {
+   "id": "19fbaeb88d208505",
+   "from": "\"토스뱅크\" <no.reply@mail.tossbank.com>",
+   "subject": "오픈뱅킹 정보 제공 동의 안내",
+   "date": "Sat, 1 Aug 2026 10:23:43 +0900 (KST)",
+   "unsub": false,
+   "snippet": "[토스뱅크] 오픈뱅킹 정보 제공 동의 안내 토스뱅크를 이용해주시는 이광수님, 항상 감사드려요. 금융실명법에 따라 1년에 한 번 오픈뱅킹 정보 제공에 동의한 내역을 확인하고 있어요. 다른 계좌 내역을 토스뱅크에서 확인하고 싶지 않다면, &#39;토스뱅크 홈 &gt; 설정"
+  },
+  {
+   "id": "19fb7eaa0de334ec",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Fri, 31 Jul 2026 11:23:52 GMT",
+   "unsub": false,
+   "snippet": "Windows에서 새로 로그인함 cy728728@gmail.com Windows 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보호하세요. 활동 확인 다음 페이지"
+  },
+  {
+   "id": "19f99b6b87de476f",
+   "from": "GitHub <noreply@github.com>",
+   "subject": "[GitHub] A first-party GitHub OAuth application has been added to your account",
+   "date": "Sat, 25 Jul 2026 07:38:36 -0700",
+   "unsub": false,
+   "snippet": "Hey cy728728-a11y! A first-party GitHub OAuth application (Git Credential Manager) with gist, repo, and workflow scopes was recently authorized to acc"
+  },
+  {
+   "id": "19f8ed65f5c1f32f",
+   "from": "\"김선영 (Google Sheets에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "‘보너스 리스트 2500개’ 스프레드시트가 공유됨",
+   "date": "Thu, 23 Jul 2026 11:57:21 +0000",
+   "unsub": false,
+   "snippet": "김선영님이 스프레드시트 1개를 공유함 김선영(daon067130@gmail.com)님이 다음 스프레드시트를 보도록 나를 초대했습니다. 보너스 리스트 2500개 열기 의심스러운 항목이 있나요? 발신자 차단 Google LLC, 1600 Amphitheatre Parkwa"
+  },
+  {
+   "id": "19f8cebd711d9a83",
+   "from": "\"네이버 쇼핑 안전거래센터\" <help_safety_shopping@navercorp.com>",
+   "subject": "[네이버 쇼핑 안전거래센터] KC인증 소명접수 안내",
+   "date": "Thu, 23 Jul 2026 03:01:33 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "네이버 쇼핑 귀사의 쇼핑몰에서 판매중인 상품 중 KC인증 민원이 접수되어 안내 드립니다 안녕하세요, 네이버 쇼핑 안전거래센터입니다. 귀사의 쇼핑몰에서 판매중인 상품 중 KC인증 민원이 접수되어 안내 드립니다. 이에 해당 판매 상품이 인증을 받았음을 증빙하거나 인증이 필"
+  },
+  {
+   "id": "19f8807903e967a6",
+   "from": "Google Play <googleplay-noreply@google.com>",
+   "subject": "Google Play 주문 영수증(2026. 7. 22.)",
+   "date": "Tue, 21 Jul 2026 21:13:44 -0700",
+   "unsub": false,
+   "snippet": "Google Play 감사합니다. Google Play를 통한 Google Digital Inc. 구독이 갱신되어 요금이 청구되었습니다. 구독 관리 주문 번호: SOP.3330-5196-2452-34703..3 주문 날짜: 2026. 7. 22. 오후 1시 13분 42"
+  },
+  {
+   "id": "19f87d17b3fbc9f8",
+   "from": "\"토스뱅크\" <no.reply@mail.tossbank.com>",
+   "subject": "원리금 납부 안내",
+   "date": "Wed, 22 Jul 2026 12:14:38 +0900 (KST)",
+   "unsub": false,
+   "snippet": "원리금 납부 안내 안녕하세요. 토스뱅크입니다. 이*수님 보유하고 있는 신용대출의 원리금 납부가 예정되어 있습니다. 개인정보 보안을 위해 자세한 내용은 보안 메일로 첨부 드리오니, 보안 메일을 다운로드 하여 내용을 확인해주시길 바랍니다. 감사합니다. 토스뱅크 드림. 보안"
+  },
+  {
+   "id": "19f837a043315b14",
+   "from": "\"스마트스토어\" <help_noreply@navercorp.com>",
+   "subject": "[스마트스토어] 2026년 7월(26년 1기) 부가세 신고 관련 안내드립니다.",
+   "date": "Tue, 21 Jul 2026 07:00:38 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "​ ​ ​ 스마트스토어에서 알려드립니다 ​ 안녕하세요. 네이버 스마트스토어입니다. 2026년 1기 확정 부가세 신고 기간에 판매자분들께 도움이 될 내용을 안내해 드립니다. ​ ​ ​ ​ ​ ​ [참고] 부가세 신고 안내 ​ ■ 2026년 제 1기 확정 신고 기간 : 2"
+  },
+  {
+   "id": "19f78ff80e98442e",
+   "from": "Google <google-noreply@google.com>",
+   "subject": "새로운 Android 백업 스토리지 정책 및 관리 기능",
+   "date": "Sat, 18 Jul 2026 23:10:37 -0700",
+   "unsub": false,
+   "snippet": "‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ "
+  },
+  {
+   "id": "19f73a8ebbbf8e75",
+   "from": "\"한국특허정보원\" <kiprisplus@kipi.or.kr>",
+   "subject": "키프리스 플러스 이용자 이메일 인증",
+   "date": "Sat, 18 Jul 2026 14:16:41 +0900 (KST)",
+   "unsub": false,
+   "snippet": "안녕하세요. KIPRIS Plus 입니다. 메일인증 안내입니다. 아래의 인증코드를 입력하시면 가입이 정상적으로 진행 됩니다. 이메일 인증 코드 : 671980 특허청 한국특허정보원 135-980 서울 강남구 테헤란로 131, 7층(한국지식재산센터) 한국특허정보원 이용문"
+  },
+  {
+   "id": "19f73424f32ad7d3",
+   "from": "\"Anthropic, PBC\" <invoice+statements@mail.anthropic.com>",
+   "subject": "Your receipt from Anthropic, PBC #2024-9146-8215",
+   "date": "Sat, 18 Jul 2026 03:25:52 +0000",
+   "unsub": false,
+   "snippet": "Your receipt from Anthropic, PBC #2024-9146-8215 ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏"
+  },
+  {
+   "id": "19f6f6d50fdbe2ea",
+   "from": "\"이은지 (Google Drive에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "‘20-불사자-상품관리’ 폴더가 공유됨",
+   "date": "Fri, 17 Jul 2026 09:34:22 +0000",
+   "unsub": false,
+   "snippet": "이은지님이 폴더 1개를 공유함 이은지(chloe91727@gmail.com)님이 다음 공유 폴더에 참여하도록 초대했습니다. 20-불사자-상품관리 열기 의심스러운 항목이 있나요? 발신자 차단 Google LLC, 1600 Amphitheatre Parkway, Mount"
+  },
+  {
+   "id": "19f6d463746efb9c",
+   "from": "\"Minho Cho (Google Sheets에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "\"조민호 용감한용팀장1기 챌린지시트\"에 대한 공유 요청",
+   "date": "Thu, 16 Jul 2026 23:32:25 +0000",
+   "unsub": false,
+   "snippet": "스프레드시트를 공유하시겠습니까? Minho Cho(babo0907@gmail.com)님이 다음 스프레드시트에 대한 액세스 권한을 요청했습니다. 조민호 용감한용팀장1기 챌린지시트 공유 관리 Google LLC, 1600 Amphitheatre Parkway, Mounta"
+  },
+  {
+   "id": "19f6aa780c3acd4f",
+   "from": "Anthropic <no-reply-cFnzEtDyHs_lFCJ3tfqa0w@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Thu, 16 Jul 2026 11:19:49 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "A new trusted device was added to your Claude account If this was you, no action is needed. If you don&#39;t recognize this activity, review your devi"
+  },
+  {
+   "id": "19f6878c3abe2ece",
+   "from": "Threads <security@mail.threads.net>",
+   "subject": "New login to Threads from Threads on Samsung SM-A750N",
+   "date": "Wed, 15 Jul 2026 18:09:23 -0700",
+   "unsub": true,
+   "snippet": "We noticed a new login, yong_timjang We noticed a login from a device you don&#39;t usually use. Samsung SM-A750N · Threads · Yongin, South Korea July"
+  },
+  {
+   "id": "19f687789cb6dbb1",
+   "from": "Instagram <security@mail.instagram.com>",
+   "subject": "Reset your password",
+   "date": "Wed, 15 Jul 2026 18:08:08 -0700",
+   "unsub": true,
+   "snippet": "Hi yong_timjang, We got a request to reset your Instagram password. Reset password If you ignore this message, your password will not be changed. If y"
+  },
+  {
+   "id": "19f6877801cc6ca6",
+   "from": "Instagram <security@mail.instagram.com>",
+   "subject": "Reset your password",
+   "date": "Wed, 15 Jul 2026 18:08:07 -0700",
+   "unsub": true,
+   "snippet": "Hi yong_timjang, We got a request to reset your Instagram password. Reset password If you ignore this message, your password will not be changed. If y"
+  },
+  {
+   "id": "19f68774cad1edaf",
+   "from": "Instagram <security@mail.instagram.com>",
+   "subject": "Reset your password",
+   "date": "Wed, 15 Jul 2026 18:07:56 -0700",
+   "unsub": true,
+   "snippet": "Hi yong_timjang, We got a request to reset your Instagram password. Reset password If you ignore this message, your password will not be changed. If y"
+  },
+  {
+   "id": "19f68701f970944f",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 16 Jul 2026 01:00:03 GMT",
+   "unsub": false,
+   "snippet": "Galaxy A7 (2018)에서 새로 로그인함 cy728728@gmail.com Galaxy A7 (2018) 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보"
+  },
+  {
+   "id": "19f60e90d0db7d07",
+   "from": "Anthropic <no-reply-5e0HRigOxaWliwTFnF6j4Q@mail.anthropic.com>",
+   "subject": "Claude.ai 로그인용 보안 링크 |  2026-07-14 22:55:13",
+   "date": "Tue, 14 Jul 2026 13:55:13 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "로그인을 도와드리겠습니다 아래의 보안 링크로 로그인해 주세요 Claude.ai에 로그인 이 이메일을 요청하지 않으셨다면 안전하게 무시하셔도 됩니다. 문제가 발생하시면 Anthropic 지원팀에 문의하세요."
+  },
+  {
+   "id": "19f5ec98b5f28ac1",
+   "from": "GitHub <noreply@github.com>",
+   "subject": "[GitHub] Please verify your device",
+   "date": "Mon, 13 Jul 2026 21:01:33 -0700",
+   "unsub": false,
+   "snippet": "Hey cy728728-a11y! A sign in attempt requires further verification because we did not recognize your device. To complete the sign in, enter the verifi"
+  },
+  {
+   "id": "19f5e52cf2118b47",
+   "from": "\"네이버 커머스API\" <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 스토어 애플리케이션 시크릿 조회 안내",
+   "date": "Tue, 14 Jul 2026 01:51:52 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "네이버 커머스API센터 커머스API센터 스토어 애플리케이션 시크릿 조회 안내 안녕하세요. 네이버 커머스API센터입니다. 서이컴퍼니 스토어 통합매니저님이 커머스API센터에서 서이컴퍼니 스토어의 애플리케이션의 시크릿을 조회했습니다. 조회하신 API애플리케이션의 정보는 절대"
+  },
+  {
+   "id": "19f5e268cfd85497",
+   "from": "\"네이버 개인정보보호\" <privacynotice_noreply@navercorp.com>",
+   "subject": "[2026 네이버 개인정보보호 캠페인] 사업자 회원님을 위한 개인정보 보호 안내",
+   "date": "Tue, 14 Jul 2026 01:03:31 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "NAVER 2026 사업자 회원님을 위한 네이버 개인정보보호 캠페인 안녕하세요, 네이버 개인정보보호 담당자입니다! 고객의 신뢰를 지키는 가장 중요한 요소, 바로 개인정보보호입니다! 이번 공지에서는 사업자 회원님께서 개인정보보호를 위해 기본적으로 준수해주셔야 하는 항목을"
+  },
+  {
+   "id": "19f5acae122803a1",
+   "from": "Threads <security@mail.threads.net>",
+   "subject": "New login to Threads from Threads on Samsung SM-S938N",
+   "date": "Mon, 13 Jul 2026 02:24:30 -0700",
+   "unsub": true,
+   "snippet": "We noticed a new login, yong_timjang We noticed a login from a device you don&#39;t usually use. Samsung SM-S938N · Threads · Seoul, South Korea July "
+  },
+  {
+   "id": "19f565390ad911d0",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sun, 12 Jul 2026 12:35:43 GMT",
+   "unsub": false,
+   "snippet": "계정에 로그인하기 위해 만든 앱 비밀번호 cy728728@gmail.com cy06130613!에 비밀번호를 생성하지 않았다면 다른 사람이 계정을 사용하는 것일 수 있습니다. 지금 계정 보안을 점검하고 강화하세요. 활동 확인 다음 페이지에서 보안 활동도 확인할 수 있습"
+  },
+  {
+   "id": "19f522bab12f1384",
+   "from": "Anthropic <no-reply-CNW8bGk5PKkdCxdHOZUt2A@mail.anthropic.com>",
+   "subject": "Claude.ai 로그인용 보안 링크 |  2026-07-12 02:13:39",
+   "date": "Sat, 11 Jul 2026 17:13:39 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "로그인을 도와드리겠습니다 아래의 보안 링크로 로그인해 주세요 Claude.ai에 로그인 이 이메일을 요청하지 않으셨다면 안전하게 무시하셔도 됩니다. 문제가 발생하시면 Anthropic 지원팀에 문의하세요."
+  },
+  {
+   "id": "19f471f20d0be762",
+   "from": "Google Play <googleplay-noreply@google.com>",
+   "subject": "Google Play 서비스 약관 업데이트",
+   "date": "Thu, 09 Jul 2026 06:44:09 -0700",
+   "unsub": false,
+   "snippet": "2026년 7월 29일, Google Play 서비스 약관 일부에 변경사항이 적용됩니다. 여기에서 새로운 약관을 확인하실 수 있습니다. 이번 업데이트가 사용자에게 미치는 영향을 간략하게 정리하면 다음과 같습니다. • 시스템 서비스: 인증된 Android 기기에서 서비스"
+  },
+  {
+   "id": "19f464f8215dee88",
+   "from": "info@elim.asia",
+   "subject": "ElimAPI - Activate Your Account",
+   "date": "Thu, 9 Jul 2026 09:57:23 +0000",
+   "unsub": false,
+   "snippet": "ElimAPI - Activate Your Account Thank you for registering. Please click the link below to activate your account: https://in.elim.asia/#/activate?token"
+  },
+  {
+   "id": "19f3f71d5e7b3ff9",
+   "from": "Google <noreply-accounts@google.com>",
+   "subject": "Google 계정 데이터 일부를 Claude에 공유하셨습니다",
+   "date": "Tue, 07 Jul 2026 18:57:32 -0700",
+   "unsub": true,
+   "snippet": "Google 계정 데이터 추적 cy728728@gmail.com Google 계정으로 로그인을 사용하여 7월 8일오전 10:57에 로그인( Claude )하셨기 때문에 발송된 이메일입니다. 이 이메일에는 사용자가 공유한 정보가 요약되어 있습니다. 현재로서는 별도의 조치"
+  },
+  {
+   "id": "19f3d4327e513c7b",
+   "from": "Discord <noreply@discord.com>",
+   "subject": "새로운 지역에서의 Discord 로그인 인증",
+   "date": "Tue, 07 Jul 2026 15:47:18 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "cy728728 님, 안녕하세요. 누군가가 새로운 위치에서 회원님의 Discord 계정으로 접속을 시도하고 있어요. 본인이라면, 다음 링크를 눌러 로그인을 승인해주세요. IP 주소: 175.117.103.71 위치: Gangseo-gu, Seoul, South Kore"
+  },
+  {
+   "id": "19f2ab0d529ca8b4",
+   "from": "\"토스뱅크\" <no.reply@mail.tossbank.com>",
+   "subject": "금리인하요구권 제도 안내",
+   "date": "Sat, 4 Jul 2026 10:14:16 +0900 (KST)",
+   "unsub": false,
+   "snippet": "금리인하요구권 제도 안내 안녕하세요. 토스뱅크입니다. 금리인하 요구권제도에 대해 안내드립니다. 1. 금리인하요구권이란? 본인의 신용상태에 현저한 변동이 있는 경우, 사용중인 대출에 대해 금리변경을 요구할 수 있는 권리를 의미합니다. 2. 누가 신청할 수 있나요? 개인에"
+  },
+  {
+   "id": "19f25f4381cb1958",
+   "from": "\"미리캔버스\" <miricanvas@miridih.com>",
+   "subject": "미리캔버스 Pro 정기 결제가 종료될 예정입니다.",
+   "date": "Fri, 3 Jul 2026 03:09:49 +0000",
+   "unsub": false,
+   "snippet": "미리캔버스 Pro 정기 결제가 종료될 예정입니다. 정기 유료 요금제 해지를 요청하셨습니다. 이용중이신 미리캔버스 Pro 이용이 2026년 07월 09일에 종료됩니다. 결제 상세 정보 워크스페이스 : Yong Choi 요금제 : Pro (월간 결제) 멤버 수 : 1명 결"
+  },
+  {
+   "id": "19f173b819a19c8d",
+   "from": "\"토스페이먼츠\" <notification@tosspayments.com>",
+   "subject": "[안내] 토스 비즈니스 회원 체계 통합 전환 안내",
+   "date": "Tue, 30 Jun 2026 06:33:22 +0000",
+   "unsub": true,
+   "snippet": "안녕하세요. 토스페이먼츠입니다. 토스 비즈니스 서비스의 회원 체계가 통합회원 기반으로 변경됩니다. 이에 따라 상점관리자 서비스를 계속 이용하시려면 토스 비즈니스 통합회원으로 전환이 필요합니다. 전환 대상 토스페이먼츠 상점관리자에 로그인하는 모든 회원이 대상입니다. 전환"
+  },
+  {
+   "id": "19f11e4bd229e8c5",
+   "from": "\"라이브클래스\" <info@liveklass.com>",
+   "subject": "(중국구매대행 소싱리스트 10000개) 클래스 참가신청이 완료되었습니다. :)",
+   "date": "Mon, 29 Jun 2026 05:40:30 +0000",
+   "unsub": false,
+   "snippet": "중국구매대행 소싱리스트 10000개 클래스의 참가 신청이 완료되었습니다. 신청한 클래스에 대한 자세한 정보는 클래스 소개 페이지에서 확인하실 수 있습니다. 클래스 소개 보러가기 수신거부 Copyright ⓒ FutureScholé, Inc. All Rights Rese"
+  },
+  {
+   "id": "19f095f441e25aa7",
+   "from": "\"Anthropic, PBC\" <invoice+statements@mail.anthropic.com>",
+   "subject": "Your receipt from Anthropic, PBC #2600-3179-6329",
+   "date": "Sat, 27 Jun 2026 13:57:45 +0000",
+   "unsub": false,
+   "snippet": "Your receipt from Anthropic, PBC #2600-3179-6329 ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏"
+  },
+  {
+   "id": "19ef9fb73bf4427a",
+   "from": "\"토스뱅크\" <no.reply@mail.tossbank.com>",
+   "subject": "[토스뱅크] 전자금융거래기본약관 개정 안내",
+   "date": "Wed, 24 Jun 2026 23:14:24 +0900 (KST)",
+   "unsub": false,
+   "snippet": "[토스뱅크] 전자금융거래기본약관 개정 안내 안녕하세요. 토스뱅크입니다. 항상 토스뱅크를 이용해 주시는 고객님께 진심으로 감사드립니다. 『전자금융거래기본약관』이 다음과 같이 개정될 예정이오니 이용에 참고하여 주시기 바랍니다. 1. 대상 약관 : 전자금융거래기본약관 2. "
+  },
+  {
+   "id": "19ef3ae78ecb812b",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Tue, 23 Jun 2026 08:52:35 GMT",
+   "unsub": false,
+   "snippet": "Windows에서 새로 로그인함 cy728728@gmail.com Windows 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보호하세요. 활동 확인 다음 페이지"
+  },
+  {
+   "id": "19eed5382ccf6954",
+   "from": "\"토스뱅크\" <no.reply@mail.tossbank.com>",
+   "subject": "원리금 납부 안내",
+   "date": "Mon, 22 Jun 2026 12:15:32 +0900 (KST)",
+   "unsub": false,
+   "snippet": "원리금 납부 안내 안녕하세요. 토스뱅크입니다. 이*수님 보유하고 있는 신용대출의 원리금 납부가 예정되어 있습니다. 개인정보 보안을 위해 자세한 내용은 보안 메일로 첨부 드리오니, 보안 메일을 다운로드 하여 내용을 확인해주시길 바랍니다. 감사합니다. 토스뱅크 드림. 보안"
+  },
+  {
+   "id": "19edd6ef1e87bacc",
+   "from": "\"쿠팡\" <no_reply@coupang.com>",
+   "subject": "[쿠팡] 장기 미관리 상품을 알려드립니다",
+   "date": "Fri, 19 Jun 2026 10:11:34 +0900 (KST)",
+   "unsub": false,
+   "snippet": "서이컴퍼니님 안녕하세요. 판매하고 계신 상품 중 67개가 장기간 판매 이력 및 상품 정보 업데이트가 없던 것으로 확인되었고, 구매가 불가능한 상태(품절 상태)로 전환되었습니다. 본 조치는 쿠팡 상품등록 정책에 따른 것으로, 재고 또는 상품 정보가 장기간 업데이트되지 않"
+  },
+  {
+   "id": "19eca05fb2e1a9dd",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Mon, 15 Jun 2026 06:44:07 GMT",
+   "unsub": false,
+   "snippet": "이 메일은 cy17281728@gmail.com 주소로 전송된 보안 경고의 사본입니다. cy728728@gmail.com 주소는 이 계정의 복구 이메일입니다. 모르는 계정이라면 삭제하세요 Windows에서 새로 로그인함 cy17281728@gmail.com Window"
+  },
+  {
+   "id": "19ec9a83873d3b15",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "yjcompanyg@gmail.com 관련 보안 경고",
+   "date": "Mon, 15 Jun 2026 05:01:43 GMT",
+   "unsub": false,
+   "snippet": "이 메일은 yjcompanyg@gmail.com 주소로 전송된 보안 경고의 사본입니다. cy728728@gmail.com 주소는 이 계정의 복구 이메일입니다. 모르는 계정이라면 삭제하세요 Windows에서 새로 로그인함 yjcompanyg@gmail.com Window"
+  },
+  {
+   "id": "19ec90005349f151",
+   "from": "\"쿠팡\" <no_reply@coupang.com>",
+   "subject": "[쿠팡] 장기 미관리 상품을 알려드립니다",
+   "date": "Mon, 15 Jun 2026 10:58:00 +0900 (KST)",
+   "unsub": false,
+   "snippet": "서이컴퍼니님 안녕하세요. 판매하고 계신 상품 중 10개가 장기간 판매 이력 및 상품 정보 업데이트가 없던 것으로 확인되었고, 구매가 불가능한 상태(품절 상태)로 전환되었습니다. 본 조치는 쿠팡 상품등록 정책에 따른 것으로, 재고 또는 상품 정보가 장기간 업데이트되지 않"
+  },
+  {
+   "id": "19ec46af3ba70411",
+   "from": "\"김선영 (Google Drive에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "\"SellarSourcingAll_20260610.zip\"에 대한 공유 요청",
+   "date": "Sun, 14 Jun 2026 04:36:43 +0000",
+   "unsub": false,
+   "snippet": "항목 1개를 공유하시겠습니까? 김선영(entia6746@gmail.com)님이 다음 항목에 액세스할 수 있는 권한을 요청했습니다. SellarSourcingAll_20260610.zip 공유 관리 Google LLC, 1600 Amphitheatre Parkway, M"
+  },
+  {
+   "id": "19ebd0832aec3b4a",
+   "from": "\"토스뱅크\" <no.reply@mail.tossbank.com>",
+   "subject": "금융거래정보 제공내역 안내",
+   "date": "Sat, 13 Jun 2026 03:11:29 +0900 (KST)",
+   "unsub": false,
+   "snippet": "토스뱅크 금융거래정보 제공내역 안내 이광수님, 안녕하세요. 토스뱅크를 이용해 주셔서 감사합니다. 고객님께서 거래하신 금융거래정보에 관하여 「금융실명거래 및 비밀보장에 관한 법률」 제4조의2에 의거 아래와 같이 안내드립니다. 1. 사용 목적 : 고객님의 핀테크 서비스 이"
+  },
+  {
+   "id": "19ebadf8e8b8ddb7",
+   "from": "\"리펀디\" <contact@refundy.co>",
+   "subject": "🎁 셀러님께 광고비 30만원 지원이 도착했어요",
+   "date": "Fri, 12 Jun 2026 17:07:52 +0900",
+   "unsub": false,
+   "snippet": "광고비를 충전하면 같은 금액의 소싱쿠폰을 1:1로 매칭해 드려요. 최대 30만원, 예산 소진 시 조기 마감. ​​​​​​​​​​​​​​​​​ 소상공인 성장지원 · 6월 · 선착순 최대 300명 광고비, 리펀디가 최대 30만원 채워요. 고물가·고환율에 광고비가 부담스러우"
+  },
+  {
+   "id": "19ebad0c44ceff5e",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Fri, 12 Jun 2026 07:51:43 GMT",
+   "unsub": false,
+   "snippet": "일부 Google 계정 데이터에 대한 제목 없는 프로젝트의 액세스를 허용하셨습니다 cy728728@gmail.com 일부 Google 계정 데이터에 대한 제목 없는 프로젝트의 액세스를 허용하지 않으셨다면 다른 사람이 내 Google 계정 데이터에 액세스하려는 것일 수도"
+  },
+  {
+   "id": "19eba16f6070d9e4",
+   "from": "\"리펀디\" <contact@refundy.co>",
+   "subject": "[선착순] 스마트스토어 광고비 최대 30만원 지원",
+   "date": "Fri, 12 Jun 2026 13:28:46 +0900",
+   "unsub": false,
+   "snippet": "광고비를 충전하면 같은 금액의 소싱쿠폰을 1:1로 매칭해 드려요. 최대 30만원, 예산 소진 시 조기 마감. ​​​​​​​​​​​​​​​​​ 소상공인 성장지원 · 6월 · 선착순 최대 300명 광고비, 리펀디가 최대 30만원 채워요. 고물가·고환율에 광고비가 부담스러우"
+  },
+  {
+   "id": "19eb768be7f3188e",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 15:59:13 GMT",
+   "unsub": false,
+   "snippet": "일부 Google 계정 데이터에 대한 제목 없는 프로젝트의 액세스를 허용하셨습니다 cy728728@gmail.com 일부 Google 계정 데이터에 대한 제목 없는 프로젝트의 액세스를 허용하지 않으셨다면 다른 사람이 내 Google 계정 데이터에 액세스하려는 것일 수도"
+  },
+  {
+   "id": "19eb76828c416e1f",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 15:58:36 GMT",
+   "unsub": false,
+   "snippet": "일부 Google 계정 데이터에 대한 제목 없는 프로젝트의 액세스를 허용하셨습니다 cy728728@gmail.com 일부 Google 계정 데이터에 대한 제목 없는 프로젝트의 액세스를 허용하지 않으셨다면 다른 사람이 내 Google 계정 데이터에 액세스하려는 것일 수도"
+  },
+  {
+   "id": "19eb75ed2a71d8f9",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 15:48:23 GMT",
+   "unsub": false,
+   "snippet": "일부 Google 계정 데이터에 대한 제목 없는 프로젝트의 액세스를 허용하셨습니다 cy728728@gmail.com 일부 Google 계정 데이터에 대한 제목 없는 프로젝트의 액세스를 허용하지 않으셨다면 다른 사람이 내 Google 계정 데이터에 액세스하려는 것일 수도"
+  },
+  {
+   "id": "19eb74597a002819",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 15:20:50 GMT",
+   "unsub": false,
+   "snippet": "일부 Google 계정 데이터에 대한 제목 없는 프로젝트의 액세스를 허용하셨습니다 cy728728@gmail.com 일부 Google 계정 데이터에 대한 제목 없는 프로젝트의 액세스를 허용하지 않으셨다면 다른 사람이 내 Google 계정 데이터에 액세스하려는 것일 수도"
+  },
+  {
+   "id": "19eb57ee4c89f507",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 07:04:11 GMT",
+   "unsub": false,
+   "snippet": "일부 Google 계정 데이터에 대한 OpenAI의 액세스를 허용하셨습니다 cy728728@gmail.com 일부 Google 계정 데이터에 대한 OpenAI의 액세스를 허용하지 않으셨다면 다른 사람이 내 Google 계정 데이터에 액세스하려는 것일 수도 있습니다. 지"
+  },
+  {
+   "id": "19eb57e3c2b04b75",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 07:03:26 GMT",
+   "unsub": false,
+   "snippet": "Windows에서 새로 로그인함 cy728728@gmail.com Windows 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보호하세요. 활동 확인 다음 페이지"
+  },
+  {
+   "id": "19eb5407cc2e427c",
+   "from": "Notion Team <notify@updates.notion.so>",
+   "subject": "A new device logged into your account",
+   "date": "Thu, 11 Jun 2026 05:56:02 +0000",
+   "unsub": false,
+   "snippet": "Review a recent login from a new device There was a recent login to your Notion account. Please review the details: Account cy728728@gmail.com Login m"
+  },
+  {
+   "id": "19eb515f6c3bddcd",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 05:09:34 GMT",
+   "unsub": false,
+   "snippet": "Mac에서 새로 로그인함 cy728728@gmail.com Mac 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보호하세요. 활동 확인 다음 페이지에서 보안 활동"
+  },
+  {
+   "id": "19eb4820c48c5519",
+   "from": "\"쿠팡\" <no_reply@coupang.com>",
+   "subject": "[쿠팡] 장기 미관리 상품을 알려드립니다",
+   "date": "Thu, 11 Jun 2026 11:28:00 +0900 (KST)",
+   "unsub": false,
+   "snippet": "서이컴퍼니님 안녕하세요. 판매하고 계신 상품 중 3개가 장기간 판매 이력 및 상품 정보 업데이트가 없던 것으로 확인되었고, 구매가 불가능한 상태(품절 상태)로 전환되었습니다. 본 조치는 쿠팡 상품등록 정책에 따른 것으로, 재고 또는 상품 정보가 장기간 업데이트되지 않아"
+  },
+  {
+   "id": "19eb1af82f0610b8",
+   "from": "Notion Team <notify@updates.notion.so>",
+   "subject": "A new device logged into your account",
+   "date": "Wed, 10 Jun 2026 13:18:49 +0000",
+   "unsub": false,
+   "snippet": "Review a recent login from a new device There was a recent login to your Notion account. Please review the details: Account cy728728@gmail.com Login m"
+  },
+  {
+   "id": "19eb0a470e5688b2",
+   "from": "Google <google-noreply@google.com>",
+   "subject": "Google 검색 서비스의 새로운 개인 정보 보호 설정",
+   "date": "Wed, 10 Jun 2026 01:27:06 -0700",
+   "unsub": false,
+   "snippet": "cy728728@gmail.com Yong님, 안녕하세요. Google은 Google 검색, 지도, 쇼핑, 호텔, 항공편 검색, 번역, 뉴스 등 Google 검색 서비스 전반에서 저장된 기록과 맞춤 추천에 대한 더욱 강화된 제어 기능을 제공하기 위해 설정을 업데이트하고"
+  },
+  {
+   "id": "19eb0849fa4ae298",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Wed, 10 Jun 2026 07:52:21 GMT",
+   "unsub": false,
+   "snippet": "일부 Google 계정 데이터에 대한 Opal의 액세스를 허용하셨습니다 cy728728@gmail.com 일부 Google 계정 데이터에 대한 Opal의 액세스를 허용하지 않으셨다면 다른 사람이 내 Google 계정 데이터에 액세스하려는 것일 수도 있습니다. 지금 잠시"
+  },
+  {
+   "id": "19eafb0ce593d54e",
+   "from": "\"리펀디\" <contact@refundy.co>",
+   "subject": "6/8 오픈 — 배대지, 이제 직접 선택하세요",
+   "date": "Wed, 10 Jun 2026 13:00:59 +0900",
+   "unsub": false,
+   "snippet": "6/8부터 배대지를 직접 고릅니다. 지금 바로 배대지 쿠폰 10만원과 함께 시작하세요. ​​​​​​​​​​​​​​​​​ 2026. 6. 8 · 선택형 배대지 오픈 이제, 배대지를 직접 고르세요. 6월 8일부터 배대지가 선택형으로 바뀝니다. 리펀디가 검증해 선별한 최고 "
+  },
+  {
+   "id": "19eaf6b5d313c072",
+   "from": "\"쿠팡\" <no_reply@coupang.com>",
+   "subject": "[쿠팡] 장기 미관리 상품을 알려드립니다",
+   "date": "Wed, 10 Jun 2026 11:45:07 +0900 (KST)",
+   "unsub": false,
+   "snippet": "서이컴퍼니님 안녕하세요. 판매하고 계신 상품 중 1개가 장기간 판매 이력 및 상품 정보 업데이트가 없던 것으로 확인되었고, 구매가 불가능한 상태(품절 상태)로 전환되었습니다. 본 조치는 쿠팡 상품등록 정책에 따른 것으로, 재고 또는 상품 정보가 장기간 업데이트되지 않아"
+  },
+  {
+   "id": "19eaede130ac5768",
+   "from": "\"리펀디\" <contact@refundy.co>",
+   "subject": "6/8 오픈 — 배대지, 이제 직접 선택하세요",
+   "date": "Wed, 10 Jun 2026 09:10:48 +0900",
+   "unsub": false,
+   "snippet": "6/8부터 배대지를 직접 고릅니다. 지금 바로 배대지 쿠폰 10만원과 함께 시작하세요. ​​​​​​​​​​​​​​​​​ 2026. 6. 8 · 선택형 배대지 오픈 이제, 배대지를 직접 고르세요. 6월 8일부터 배대지가 선택형으로 바뀝니다. 리펀디가 검증해 선별한 최고 "
+  },
+  {
+   "id": "19eaed56ca9042fa",
+   "from": "\"네이버 커머스API\" <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 내스토어 애플리케이션  인증 기간 만료 7일 전 안내",
+   "date": "Wed, 10 Jun 2026 00:01:22 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "네이버 커머스API센터 커머스API센터 스토어 애플리케이션 인증 안내 안녕하세요. 네이버 커머스API센터입니다. 소형리빙전문업소스토어의 불사자애플리케이션 인증이 필요합니다. 커머스API센터는 스토어 API의 안전한 이용을 위해 주기적인 소유주 인증을 진행하고 있으며, "
+  },
+  {
+   "id": "19eaed5605627c4c",
+   "from": "\"네이버 커머스API\" <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 내스토어 애플리케이션  인증 기간 만료 7일 전 안내",
+   "date": "Wed, 10 Jun 2026 00:01:19 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "네이버 커머스API센터 커머스API센터 스토어 애플리케이션 인증 안내 안녕하세요. 네이버 커머스API센터입니다. 서이컴퍼니스토어의 불사자애플리케이션 인증이 필요합니다. 커머스API센터는 스토어 API의 안전한 이용을 위해 주기적인 소유주 인증을 진행하고 있으며, 인증되"
+  },
+  {
+   "id": "19ea507db044444a",
+   "from": "\"쿠팡\" <no_reply@coupang.com>",
+   "subject": "[쿠팡] 장기 미관리 상품을 알려드립니다",
+   "date": "Mon, 8 Jun 2026 11:20:14 +0900 (KST)",
+   "unsub": false,
+   "snippet": "서이컴퍼니님 안녕하세요. 판매하고 계신 상품 중 8개가 장기간 판매 이력 및 상품 정보 업데이트가 없던 것으로 확인되었고, 구매가 불가능한 상태(품절 상태)로 전환되었습니다. 본 조치는 쿠팡 상품등록 정책에 따른 것으로, 재고 또는 상품 정보가 장기간 업데이트되지 않아"
+  },
+  {
+   "id": "19e9bc2317c46cdd",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "yjcompanyg@gmail.com 관련 보안 경고",
+   "date": "Sat, 06 Jun 2026 07:07:32 GMT",
+   "unsub": false,
+   "snippet": "이 메일은 yjcompanyg@gmail.com 주소로 전송된 보안 경고의 사본입니다. cy728728@gmail.com 주소는 이 계정의 복구 이메일입니다. 모르는 계정이라면 삭제하세요 Windows에서 새로 로그인함 yjcompanyg@gmail.com Window"
+  },
+  {
+   "id": "19e8449209778321",
+   "from": "\"Google Cloud Platform, Firebase 및 API\" <CloudPlatform-noreply@google.com>",
+   "subject": "조치 필요: 결제 계정(012113-030AAE-8AF468)에 연체 대금이 있거나 결제 정보가 잘못되었습니다.",
+   "date": "Mon, 01 Jun 2026 10:44:05 -0700",
+   "unsub": false,
+   "snippet": "Go to my console » 조치 필요 Google 고객님 안녕하세요. 본 이메일은 Google Cloud Platform, Firebase 또는 API 고객에게 발송된 이메일입니다. Google 기록에 따르면 결제 계정(012113-030AAE-8AF468)이 "
+  },
+  {
+   "id": "19e8448bf01e6c35",
+   "from": "Google Payments <payments-noreply@google.com>",
+   "subject": "Google Cloud Platform & APIs: 012113-030AAE-8AF468에 대한 결제가 거부됨",
+   "date": "Mon, 01 Jun 2026 10:43:40 -0700",
+   "unsub": false,
+   "snippet": "Google Cloud Platform &amp; APIs 2026년 6월 1일에 금융기관에서 012113-030AAE-8AF468에 사용하는 Google Cloud Platform &amp; APIs 계정에 연결된 Mastercard • • • • 5499의 결제를 "
+  },
+  {
+   "id": "19e80f0f022cce90",
+   "from": "Notion Team <notify@updates.notion.so>",
+   "subject": "A new device logged into your account",
+   "date": "Mon, 01 Jun 2026 02:08:54 +0000",
+   "unsub": false,
+   "snippet": "Review a recent login from a new device There was a recent login to your Notion account. Please review the details: Account cy728728@gmail.com Login m"
+  },
+  {
+   "id": "19e7946d402df5aa",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sat, 30 May 2026 14:25:43 GMT",
+   "unsub": false,
+   "snippet": "Windows에서 새로 로그인함 cy728728@gmail.com Windows 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보호하세요. 활동 확인 다음 페이지"
+  },
+  {
+   "id": "19e72bfa760f62ea",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Fri, 29 May 2026 08:00:19 GMT",
+   "unsub": false,
+   "snippet": "Windows에서 새로 로그인함 cy728728@gmail.com Windows 기기에서 내 Google 계정에 새로 로그인했습니다. 직접 로그인한 것이 맞다면 아무런 조치를 취하지 않아도 됩니다. 본인이 아니라면 안내에 따라 계정을 보호하세요. 활동 확인 다음 페이지"
+  },
+  {
+   "id": "19e72ad2d2de0ce3",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Fri, 29 May 2026 07:40:09 GMT",
+   "unsub": false,
+   "snippet": "이 메일은 cy17281728@gmail.com 주소로 전송된 보안 경고의 사본입니다. cy728728@gmail.com 주소는 이 계정의 복구 이메일입니다. 모르는 계정이라면 삭제하세요 Windows에서 새로 로그인함 cy17281728@gmail.com Window"
+  },
+  {
+   "id": "19e69bbae5266447",
+   "from": "\"Anthropic, PBC\" <invoice+statements@mail.anthropic.com>",
+   "subject": "Your receipt from Anthropic, PBC #2487-4503-3128",
+   "date": "Wed, 27 May 2026 13:59:27 +0000",
+   "unsub": false,
+   "snippet": "Your receipt from Anthropic, PBC #2487-4503-3128 ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏"
+  },
+  {
+   "id": "19e65f6eef579475",
+   "from": "Google Cloud <CloudPlatform-noreply@google.com>",
+   "subject": "[Action Advised] Ensure you trust all Google Trust Services Root CAs and ECDSA certificate chains before Jun 15, 2026",
+   "date": "Tue, 26 May 2026 13:25:42 -0700",
+   "unsub": false,
+   "snippet": "Review changes to intermediate CAs and TLS certificate types. MY CONSOLE Hello Yong, In Q2 2026, to improve efficiency, we will be updating the Transp"
+  },
+  {
+   "id": "19e636a2d7b12bc8",
+   "from": "\"불사자 (Google Sheets에서 공유)\" <drive-shares-dm-noreply@google.com>",
+   "subject": "‘용감한 용팀장 1기 신청서 (1분)(응답)’ 스프레드시트가 공유됨",
+   "date": "Tue, 26 May 2026 08:32:42 +0000",
+   "unsub": false,
+   "snippet": "불사자님이 스프레드시트 1개를 공유함 불사자(bulsaja23@gmail.com)님이 다음 스프레드시트를 수정하도록 나를 초대했습니다. 용감한 용팀장 1기 신청서 (1분)(응답) 열기 의심스러운 항목이 있나요? 발신자 차단 Google LLC, 1600 Amphithe"
+  },
+  {
+   "id": "19e62858a465d67c",
+   "from": "NotebookLM <NotebookLM-noreply@google.com>",
+   "subject": "Notebook shared with you: [두뇌] 용감한용팀장",
+   "date": "Mon, 25 May 2026 21:22:59 -0700",
+   "unsub": false,
+   "snippet": "kirncitra@gmail.com has invited you to edit the following Notebook: [두뇌] 용감한용팀장 Google LLC, 1600 Amphitheatre Parkway, Mountain View, CA 94043, USA Yo"
+  },
+  {
+   "id": "19e4df2437e5d9db",
+   "from": "\"토스뱅크\" <no.reply@mail.tossbank.com>",
+   "subject": "원리금 납부 안내",
+   "date": "Fri, 22 May 2026 13:29:40 +0900 (KST)",
+   "unsub": false,
+   "snippet": "원리금 납부 안내 안녕하세요. 토스뱅크입니다. 이*수님 보유하고 있는 신용대출의 원리금 납부가 예정되어 있습니다. 개인정보 보안을 위해 자세한 내용은 보안 메일로 첨부 드리오니, 보안 메일을 다운로드 하여 내용을 확인해주시길 바랍니다. 감사합니다. 토스뱅크 드림. 보안"
+  },
+  {
+   "id": "19e48cd1e78728c6",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Thu, 21 May 2026 04:30:59 GMT",
+   "unsub": false,
+   "snippet": "이 메일은 cy17281728@gmail.com 주소로 전송된 보안 경고의 사본입니다. cy728728@gmail.com 주소는 이 계정의 복구 이메일입니다. 모르는 계정이라면 삭제하세요 Mac에서 새로 로그인함 cy17281728@gmail.com Mac 기기에서 내"
+  },
+  {
+   "id": "19e4205c926b88e1",
+   "from": "Google Payments <payments-noreply@google.com>",
+   "subject": "Google Cloud Platform & APIs: 결제 완료",
+   "date": "Tue, 19 May 2026 13:55:35 -0700",
+   "unsub": false,
+   "snippet": "Google Cloud Platform &amp; APIs 결제 완료 2026년 5월 19일에 ₩100000의 결제 금액이 Google Cloud Platform &amp; APIs에 적용되었습니다. 고객센터 고객센터 Google에 문의 Google에 문의 Google"
+  },
+  {
+   "id": "19e3dfb94a3af732",
+   "from": "YouTube <no-reply@youtube.com>",
+   "subject": "YouTube 용감한용팀장 - 셀러를 위한 AI 사용법 채널 액세스를 위한 초대\n",
+   "date": "Mon, 18 May 2026 19:05:57 -0700",
+   "unsub": false,
+   "snippet": "편집자로 용감한용팀장 - 셀러를 위한 AI 사용법 채널에 초대되셨습니다 편집자는 모든 항목을 보고, 라이브 스트리밍을 시작하고, 콘텐츠를 만들고, 수정할 수 있습니다. 권한을 관리하거나 콘텐츠를 삭제할 수는 없습니다. 용감한용팀장 - 셀러를 위한 AI 사용법에 액세스하"
+  },
+  {
+   "id": "19e2b4cd342f62ce",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Fri, 15 May 2026 20:01:53 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 1300원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 706원 주문번호 : 3301788939459008188 적립일 : 2026.05.15 타오바오(Taobao) 594원 주문번호 : 3302415"
+  },
+  {
+   "id": "19e2a70cbabd9ef6",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Fri, 15 May 2026 16:01:34 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 343원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 343원 주문번호 : 3301739330775017370 적립일 : 2026.05.15 1:1 문의하기 전체 내역 보기 위 금액은 예상 금액이며, "
+  },
+  {
+   "id": "19e25936d184e742",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Thu, 14 May 2026 08:21:16 GMT",
+   "unsub": false,
+   "snippet": "이 메일은 cy17281728@gmail.com 주소로 전송된 보안 경고의 사본입니다. cy728728@gmail.com 주소는 이 계정의 복구 이메일입니다. 모르는 계정이라면 삭제하세요 Windows에서 새로 로그인함 cy17281728@gmail.com Window"
+  },
+  {
+   "id": "19e254cb752fb97b",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Thu, 14 May 2026 16:04:03 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 615원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 268원 주문번호 : 3301414826214008188 적립일 : 2026.05.14 타오바오(Taobao) 237원 주문번호 : 33014078"
+  },
+  {
+   "id": "19e246e27575edd1",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Thu, 14 May 2026 12:00:57 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 232원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 232원 주문번호 : 3301379295998008188 적립일 : 2026.05.14 1:1 문의하기 전체 내역 보기 위 금액은 예상 금액이며, "
+  },
+  {
+   "id": "19e2445e223f1fc0",
+   "from": "Ivan at Notion <ivan@mail.notion.so>",
+   "subject": "3.5: Notion Developer Platform",
+   "date": "Thu, 14 May 2026 02:16:59 +0000",
+   "unsub": true,
+   "snippet": "Sync any data. Build any tool. Orchestrate any agent. All in Notion. ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏"
+  },
+  {
+   "id": "19e1f48c5b3f890d",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Wed, 13 May 2026 12:02:01 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 646원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 646원 주문번호 : 3301163366105026552 적립일 : 2026.05.13 1:1 문의하기 전체 내역 보기 위 금액은 예상 금액이며, "
+  },
+  {
+   "id": "19e1cb68e1616038",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Wed, 13 May 2026 00:03:05 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 2514원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 1468원 주문번호 : 3301748724353044198 적립일 : 2026.05.13 타오바오(Taobao) 1046원 주문번호 : 33011"
+  },
+  {
+   "id": "19e1bda42f9e769c",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Tue, 12 May 2026 20:02:28 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 554원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 554원 주문번호 : 3301737420348008188 적립일 : 2026.05.12 1:1 문의하기 전체 내역 보기 위 금액은 예상 금액이며, "
+  },
+  {
+   "id": "19e1afee3348b2fd",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Tue, 12 May 2026 16:02:50 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 241원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 241원 주문번호 : 3301509001878053380 적립일 : 2026.05.12 1:1 문의하기 전체 내역 보기 위 금액은 예상 금액이며, "
+  },
+  {
+   "id": "19e1790fb50976ae",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Tue, 12 May 2026 00:03:56 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 417원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 219원 주문번호 : 3301000286507017370 적립일 : 2026.05.12 타오바오(Taobao) 198원 주문번호 : 33014715"
+  },
+  {
+   "id": "19e15d9c7d327e5c",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Mon, 11 May 2026 16:04:13 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 303원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 303원 주문번호 : 3301467276543017370 적립일 : 2026.05.11 1:1 문의하기 전체 내역 보기 위 금액은 예상 금액이며, "
+  },
+  {
+   "id": "19e0b88481334c4b",
+   "from": "\"리펀디\" <contact@refundy.co>",
+   "subject": "🎁 가입 축하 선물 13만원이 도착했어요",
+   "date": "Sat, 09 May 2026 15:59:00 +0900",
+   "unsub": true,
+   "snippet": "가입을 환영합니다 🎉 1달 무료 구독과 10만원 쿠폰을 지금 받아보세요. 매일 80분 걸리던 주문 처리, AI가 5분이면 끝냅니다. REFUNDY · AI 주문처리 🎉 가입을 환영합니다 반갑습니다, 셀러님 👋 지금 가입 혜택으로 최대 13만원을 드려요. 매일 80분씩 "
+  },
+  {
+   "id": "19e081c7597d673a",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Sat, 09 May 2026 00:02:21 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 1647원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 1647원 주문번호 : 3301000897511008188 적립일 : 2026.05.09 1:1 문의하기 전체 내역 보기 위 금액은 예상 금액이며"
+  },
+  {
+   "id": "19e07414e80eec4e",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Fri, 08 May 2026 20:03:00 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 197원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 197원 주문번호 : 3301093452001008188 적립일 : 2026.05.08 1:1 문의하기 전체 내역 보기 위 금액은 예상 금액이며, "
+  },
+  {
+   "id": "19e021b837696d45",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Thu, 07 May 2026 20:03:36 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 197원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 197원 주문번호 : 3300931488001008188 적립일 : 2026.05.07 1:1 문의하기 전체 내역 보기 위 금액은 예상 금액이며, "
+  },
+  {
+   "id": "19dfc19b9a2e6025",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Wed, 06 May 2026 16:03:55 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 1645원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 593원 주문번호 : 3299652770484008188 적립일 : 2026.05.06 타오바오(Taobao) 404원 주문번호 : 3300264"
+  },
+  {
+   "id": "19dfc1697e4bc42e",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Wed, 06 May 2026 16:00:30 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 902원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 627원 주문번호 : 3300112129260108571 적립일 : 2026.05.06 타오바오(Taobao) 275원 주문번호 : 33001184"
+  },
+  {
+   "id": "19df499abf032c7d",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Tue, 05 May 2026 05:06:43 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 3118원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 알리익스프레스(AliExpress) 1559원 주문번호 : 1120435231220365 적립일 : 2026.05.04 알리익스프레스(AliExpress) 1559원 주"
+  },
+  {
+   "id": "19de40f8f9439a9f",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Sat, 02 May 2026 00:01:56 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 500원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 332원 주문번호 : 3299564280929017370 적립일 : 2026.05.02 타오바오(Taobao) 101원 주문번호 : 32994174"
+  },
+  {
+   "id": "19de332fcdc911e8",
+   "from": "Refundy <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Fri, 01 May 2026 20:01:01 +0900",
+   "unsub": true,
+   "snippet": "캐시백 적립 47원 위 금액은 승인 대기 상태이며, 승인 완료 시 출금이 가능합니다. 적립 내역 타오바오(Taobao) 47원 주문번호 : 3298973126748108571 적립일 : 2026.05.01 1:1 문의하기 전체 내역 보기 위 금액은 예상 금액이며, 최종"
+  },
+  {
+   "id": "18c1cf922990f11e",
+   "from": "Calm <noreply@em.calm.com>",
+   "subject": "서비스 약관 및 개인정보처리방침 업데이트",
+   "date": "Wed, 29 Nov 2023 21:25:38 +0000",
+   "unsub": false,
+   "snippet": "Calm에서 서비스 약관 및 개인정보처리방침을 업데이트했음을 알려드리며, 갱신 내용을 살펴보시길 권해 드립니다. Calm 서비스를 계속 사용하실 경우 업데이트된 약관에 동의하신 것으로 간주됩니다. ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ "
+  },
+  {
+   "id": "18c036a66f0bb058",
+   "from": "\"후후\" <info@whowhoncompany.com>",
+   "subject": "[후후] 개인정보 이용내역 안내",
+   "date": "Sat, 25 Nov 2023 07:19:09 +0900 (KST)",
+   "unsub": false,
+   "snippet": "함께 쓰면 더 좋은 후후 후후 개인정보 이용·제공 내역 통지 안내 안녕하세요. 함께 쓰면 더 좋은 후후입니다. 항상 후후를 믿고 이용해주시는 회원님께 깊은 감사의 말씀을 드립니다. 후후는 회원님의 개인정보를 안전하게 보호하기 위해 언제나 최선을 다하고 있습니다. 개인정"
+  },
+  {
+   "id": "18be6ddd35a180af",
+   "from": "\"쿠팡\" <no_reply@e.coupang.com>",
+   "subject": "[쿠팡] 개인정보 이용 제공 내역의 안내",
+   "date": "Sun, 19 Nov 2023 09:16:18 +0000",
+   "unsub": false,
+   "snippet": ""
+  },
+  {
+   "id": "18ba2191c92f7e51",
+   "from": "\"인터파크커머스\" <order@cmail.interparkshop.com>",
+   "subject": "사업자판매자 가입인증 완료 및 상품광고 무료쿠폰 발급",
+   "date": "Mon, 6 Nov 2023 09:46:27 +0900",
+   "unsub": false,
+   "snippet": "INTERPARK 본 메일은 2023년 11월 06일 09시 47분 기준으로 작성되었습니다. %BC%AD%C0%CC%C4%C4%C6%DB%B4%CF 판매자님 안녕하세요. 저희 서비스를 이용해 주셔서 진심으로 감사드립니다. 사업자 판매자 회원 가입 인증 되었습니다. 상품"
+  },
+  {
+   "id": "18b92ff1639ba59b",
+   "from": "Instagram <no-reply@mail.instagram.com>",
+   "subject": "Meta 개인정보 이용 내역 안내",
+   "date": "Thu, 2 Nov 2023 19:24:25 -0700",
+   "unsub": false,
+   "snippet": "Meta는 주기적으로 개인정보처리방침을 업데이트하고 있습니다. Meta 개인정보 이용 내역 안내 Meta는 주기적으로 개인정보처리방침을 업데이트하고 있습니다. 안녕하세요 yong.timjang님, Meta는 회원님의 개인정보를 존중하며 무결성 및 투명성을 기반으로 엄격"
+  },
+  {
+   "id": "18b718351e1c3f55",
+   "from": "YouTube <noreply@youtube.com>",
+   "subject": "'[1편] 해외구매대행 자동화시스템 이렇게 하시면 됩니다.'의 댓글에 새로운 답글이 달렸습니다",
+   "date": "Fri, 27 Oct 2023 07:21:52 -0700",
+   "unsub": true,
+   "snippet": "&#39;[1편] 해외구매대행 자동화시스템 이렇게 하시면 됩니다.&#39;의 댓글에 새로운 답글이 달렸습니다 Youtube Logo 🌟 엔잡곰님이 용팀장님의 댓글에 답글을 달았습니다. [1편] 해외구매대행 자동화시스템 이렇게 하시면 됩니다. 엔잡곰 마켓수집 + 상품소싱"
+  },
+  {
+   "id": "18b4e6b7b45b7e94",
+   "from": "Facebook <notification@facebookmail.com>",
+   "subject": "Meta 개인정보 이용 내역 안내",
+   "date": "Fri, 20 Oct 2023 11:49:03 -0700",
+   "unsub": false,
+   "snippet": "Meta는 주기적으로 개인정보처리방침을 업데이트하고 있습니다. Meta 개인정보 이용 내역 안내 Meta는 주기적으로 개인정보처리방침을 업데이트하고 있습니다. 안녕하세요 최용님, Meta는 회원님의 개인정보를 존중하며 무결성 및 투명성을 기반으로 엄격하게 관리합니다. "
+  },
+  {
+   "id": "186130ffc55340d0",
+   "from": "Airbnb <discover@airbnb.com>",
+   "subject": "에어비앤비 약관 및 개인정보 처리방침 개정 안내",
+   "date": "Thu, 02 Feb 2023 16:57:38 +0000 (UTC)",
+   "unsub": false,
+   "snippet": "Airbnb 에어비앤비 이용 약관, 결제 서비스 약관, 기타 약관과 정책 일부(&#39;약관&#39;) 및 개인정보 처리방침이 변경됩니다. 이번 변경은 변화를 거듭하고 있는 에어비앤비 비즈니스와 새로운 기능을 지원하고, 개인정보 처리 방식과 관련한 유용한 정보를 추가로"
+  },
+  {
+   "id": "1852ca392628fc53",
+   "from": "Facebook <notification@facebookmail.com>",
+   "subject": "메타의 개인정보 이용내역 통지를 확인하시기 바랍니다.",
+   "date": "Mon, 19 Dec 2022 15:06:29 -0800",
+   "unsub": false,
+   "snippet": "당사의 개인정보처리방침에서 당사의 개인정보 처리에 대한 보다 자세한 내용을 확인하시기 바랍니다. Facebook 안녕하세요 최용, 당사는 회원님의 개인정보를 존중하며, 무결성 및 투명성을 기반으로 취급합니다. 당사는 회원님께 당사가 회원님의 개인정보를 수집, 이용 및 "
+  },
+  {
+   "id": "184ed54502dcb95b",
+   "from": "Instagram <security@mail.instagram.com>",
+   "subject": "Username changed on Instagram",
+   "date": "Wed, 7 Dec 2022 08:03:48 -0800",
+   "unsub": true,
+   "snippet": "The username for your Instagram account was changed from c_dragon728 at 08:03 (PDT) on Wednesday, December 07 2022. Your new username is yong_timjang."
+  },
+  {
+   "id": "18401273685c0e68",
+   "from": "YouTube <noreply@youtube.com>",
+   "subject": "'월50만원TQQQ로10억만들기_80주차'의 댓글에 새로운 답글이 달렸습니다",
+   "date": "Sat, 22 Oct 2022 12:24:17 -0700",
+   "unsub": true,
+   "snippet": "&#39;월50만원TQQQ로10억만들기_80주차&#39;의 댓글에 새로운 답글이 달렸습니다 Youtube Logo workman444님이 H2O2님의 댓글에 답글을 남겼습니다. 월50만원TQQQ로10억만들기_80주차 workman444 ㅋㅋㅋㅋㅋ 원래 장기 강세장뒤에는"
+  },
+  {
+   "id": "1840116fc869824f",
+   "from": "YouTube <noreply@youtube.com>",
+   "subject": "'월50만원TQQQ로10억만들기_80주차'의 댓글에 새로운 답글이 달렸습니다",
+   "date": "Sat, 22 Oct 2022 12:06:34 -0700",
+   "unsub": true,
+   "snippet": "&#39;월50만원TQQQ로10억만들기_80주차&#39;의 댓글에 새로운 답글이 달렸습니다 Youtube Logo 김필산님이 H2O2님의 댓글에 답글을 남겼습니다. 월50만원TQQQ로10억만들기_80주차 김필산 감사하다는데 내비둬요 답글 댓글과 답글에 대한 이메일을 더"
+  },
+  {
+   "id": "163fb2b671cb094f",
+   "from": "Instagram <no-reply@mail.instagram.com>",
+   "subject": "약관 및 데이터 정책 업데이트",
+   "date": "Wed, 13 Jun 2018 15:01:53 -0700",
+   "unsub": true,
+   "snippet": "안녕하세요, choi_yong728님, 몇 주 전에 약관 및 데이터 정책의 변경 사항을 안내하는 알림 또는 이메일을 받으셨나요? 회원님의 Instagram 사용 경험은 이전과 마찬가지로 변함없이 유지되며 회원님의 사진과 동영상은 여전히 회원님의 소유입니다. 본 페이지는"
+  },
+  {
+   "id": "15d5f02d756bb38f",
+   "from": "Korbit Info <info@korbit.co.kr>",
+   "subject": "[KORBIT] 가상화폐 출금한도 변경 및 회원등급 변경 안내",
+   "date": "Thu, 20 Jul 2017 08:00:06 +0000",
+   "unsub": true,
+   "snippet": "가상화폐 출금한도 변경 및 회원등급 변경 안내 최근 코인가격의 급등락으로 인하여 2017년 7월 26일 수요일 12시부터 코빗 가상화폐 일일 출금한도를 다음과 같이 변경합니다. 기존 1,2,3등급 회원에게는 일괄 적용될 예정이며, 4등급의 경우 코빗거래소 내부기준에 의"
+  },
+  {
+   "id": "149e3e4e21a9b563",
+   "from": "Facebook <notification+zj4yt=2=2a=c@facebookmail.com>",
+   "subject": "약관과 정책이 업데이트되고 공개 범위 기본 사항이 도입됩니다.",
+   "date": "Mon, 24 Nov 2014 14:21:08 -0800",
+   "unsub": true,
+   "snippet": "Facebook 안녕하세요, 용님? 2015년 1월 1일부터 적용되는 약관 및 정책 업데이트와 공개 범위 기본 사항에 관해 알려드립니다. 아래를 확인하거나 Facebook에서 자세히"
+  },
+  {
+   "id": "147939be17a93b91",
+   "from": "\"sa.noreply\" <sa.noreply@samsung.com>",
+   "subject": "[Samsung Account] 회원님의 개인정보에 대한 이용내역을 안내해드립니다.",
+   "date": "Sat, 02 Aug 2014 07:06:09 +0900",
+   "unsub": false,
+   "snippet": "삼성계정 개인정보 이용내역 안내 안녕하세요 고객님, 이 메일은 정보통신망 이용촉진 및 정보보호 등에 관한 법률 제30조의 2 및 동법 시행령 제17조에 의거하여 1년에 한 번 삼성"
+  },
+  {
+   "id": "14583b8d23a5e610",
+   "from": "\"Samsung Hub\" <sh.noreply@samsung.com>",
+   "subject": "[Samsung Hub 공지] 이제 더욱 쉽고 빠르게 즐기세요!",
+   "date": "Mon, 21 Apr 2014 18:57:58 +0900",
+   "unsub": false,
+   "snippet": ""
+  },
+  {
+   "id": "143e28a73e4d98aa",
+   "from": "\"Samsung Account\" <sa.noreply@samsung.com>",
+   "subject": "[삼성 계정 공지]",
+   "date": "Thu, 30 Jan 2014 18:45:54 +0900",
+   "unsub": false,
+   "snippet": "삼성전자는 고객님의 개인정보 보호를 위해 다음과 같은 내용을 권장합니다. 1. 타 사이트와 동일하게 아이디, 패스워드를 설정하여 사용하시는 것은 위험할 수 있습니다. 2. 비밀번호를"
+  }
+ ]
+}

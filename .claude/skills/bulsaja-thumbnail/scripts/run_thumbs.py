@@ -856,7 +856,19 @@ def _prescreen_commit(sheet, run_dir):
     #    (`_batch_products`) prep 이 만든 배치와 같은 모양이어야 한다.
     new_index = []
     if to_promote:
-        stripped = [{k: v for k, v in p.items() if k not in _JUDGE_FIELDS}
+        # **규칙 0 트리거까지 떼어낸다** (2026-08-24 3-1 실측 — 왕복 종결 경로의
+        # 2026-08-17 수정과 같은 사고, 같은 처방). 승격은 "이 대표옵션은 기준으로 못
+        # 쓴다"는 판정인데, `대표옵션이미지경로` 를 남겨 보내면 워커 프롬프트 규칙 0
+        # ("그 경로가 있으면 그게 기준이다, 고르지 마라")이 발동해 **방금 실격시킨 그
+        # 이미지를 도로 집는다.** 배치가 모순된 지시를 담는 것이라 워커 잘못이 아니다.
+        #   실측: 3-1 승격 39건 중 23건이 `기준이미지: 9`(대표옵션 파일 인덱스)로
+        #   돌아왔고, 9 는 후보에도 기존썸네일 범위에도 없어 `apply` 가 전부 `기준
+        #   해석불가` 로 제외했다 — 승격 라운드가 통째로 헛돌았다.
+        # **비우는 건 로컬 경로 하나뿐이다** — URL(`대표옵션이미지`)은 verdict 3축
+        # ①제품 정확성의 대조 축이고, 이름(`대표옵션명`)은 후보에서 같은 물건을 고르는
+        # 근거이면서 규칙 0 을 걸지 않는다.
+        stripped = [{**{k: v for k, v in p.items() if k not in _JUDGE_FIELDS},
+                     "대표옵션이미지경로": ""}
                     for p in to_promote]
         start = _next_batch_no(run_dir)
         chunks = [stripped[i:i + PROMOTE_BATCH_SIZE]

@@ -1,0 +1,1141 @@
+{
+ "folder": "INBOX",
+ "delete": [
+  {
+   "id": "14187",
+   "from": "\" 디지털노마드 하이클래스 \" <dinohighclass-gm@send.stibee.com>",
+   "subject": "[프로모션] 8월 26일(수) '수강생도 월 1억' 5명 달성, 실버버튼 40명이상, 유트브 운영의 기초부터 신세계를 보여줄 픽셀링까지! 쇼츠투벤츠 [룰루랄라릴리]",
+   "date": "Wed, 26 Aug 2026 16:04:13 +0900",
+   "unsub": true
+  }
+ ],
+ "keep": [
+  {
+   "id": "429",
+   "from": "\" Samsung Account \" <sa.noreply@samsung.com>",
+   "subject": "[삼성 계정 공지]",
+   "date": "Thu, 30 Jan 2014 18:45:54 +0900",
+   "unsub": false
+  },
+  {
+   "id": "545",
+   "from": "\" Samsung Hub \" <sh.noreply@samsung.com>",
+   "subject": "[Samsung Hub 공지] 이제 더욱 쉽고 빠르게 즐기세요!",
+   "date": "Mon, 21 Apr 2014 18:57:58 +0900",
+   "unsub": false
+  },
+  {
+   "id": "714",
+   "from": "\" sa.noreply \" <sa.noreply@samsung.com>",
+   "subject": "[Samsung Account] 회원님의 개인정보에 대한 이용내역을 안내해드립니다.",
+   "date": "Sat, 02 Aug 2014 07:06:09 +0900",
+   "unsub": false
+  },
+  {
+   "id": "905",
+   "from": "\"Facebook\" <notification+zj4yt=2=2a=c@facebookmail.com>",
+   "subject": "약관과 정책이 업데이트되고 공개 범위 기본 사항이 도입됩니다.",
+   "date": "Mon, 24 Nov 2014 14:21:08 -0800",
+   "unsub": true
+  },
+  {
+   "id": "2788",
+   "from": "\"Korbit Info\" <info@korbit.co.kr>",
+   "subject": "[KORBIT] 가상화폐 출금한도 변경 및 회원등급 변경 안내",
+   "date": "Thu, 20 Jul 2017 08:00:06 +0000",
+   "unsub": true
+  },
+  {
+   "id": "4578",
+   "from": "\"Instagram\" <no-reply@mail.instagram.com>",
+   "subject": "약관 및 데이터 정책 업데이트",
+   "date": "Wed, 13 Jun 2018 15:01:53 -0700",
+   "unsub": true
+  },
+  {
+   "id": "6728",
+   "from": "YouTube <noreply@youtube.com>",
+   "subject": "'월50만원TQQQ로10억만들기_80주차'의 댓글에 새로운 답글이 달렸습니다",
+   "date": "Sat, 22 Oct 2022 12:06:34 -0700",
+   "unsub": true
+  },
+  {
+   "id": "6729",
+   "from": "YouTube <noreply@youtube.com>",
+   "subject": "'월50만원TQQQ로10억만들기_80주차'의 댓글에 새로운 답글이 달렸습니다",
+   "date": "Sat, 22 Oct 2022 12:24:17 -0700",
+   "unsub": true
+  },
+  {
+   "id": "6761",
+   "from": "\"Instagram\" <security@mail.instagram.com>",
+   "subject": "Username changed on Instagram",
+   "date": "Wed, 7 Dec 2022 08:03:48 -0800",
+   "unsub": true
+  },
+  {
+   "id": "6774",
+   "from": "\"Facebook\" <notification@facebookmail.com>",
+   "subject": "메타의 개인정보 이용내역 통지를 확인하시기 바랍니다.",
+   "date": "Mon, 19 Dec 2022 15:06:29 -0800",
+   "unsub": false
+  },
+  {
+   "id": "6816",
+   "from": "Airbnb <discover@airbnb.com>",
+   "subject": "에어비앤비 약관 및 개인정보 처리방침 개정 안내",
+   "date": "Thu, 02 Feb 2023 16:57:38 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "7272",
+   "from": "\"Facebook\" <notification@facebookmail.com>",
+   "subject": "Meta 개인정보 이용 내역 안내",
+   "date": "Fri, 20 Oct 2023 11:49:03 -0700",
+   "unsub": false
+  },
+  {
+   "id": "7290",
+   "from": "YouTube <noreply@youtube.com>",
+   "subject": "'[1편] 해외구매대행 자동화시스템 이렇게 하시면 됩니다.'의 댓글에 새로운 답글이 달렸습니다",
+   "date": "Fri, 27 Oct 2023 07:21:52 -0700",
+   "unsub": true
+  },
+  {
+   "id": "7311",
+   "from": "\"Instagram\" <no-reply@mail.instagram.com>",
+   "subject": "Meta 개인정보 이용 내역 안내",
+   "date": "Thu, 2 Nov 2023 19:24:25 -0700",
+   "unsub": false
+  },
+  {
+   "id": "7316",
+   "from": "\" 인터파크커머스 \" <order@cmail.interparkshop.com>",
+   "subject": "사업자판매자 가입인증 완료 및 상품광고 무료쿠폰 발급",
+   "date": "Mon, 6 Nov 2023 09:46:27 +0900",
+   "unsub": false
+  },
+  {
+   "id": "7353",
+   "from": "쿠팡 <no_reply@e.coupang.com>",
+   "subject": "[쿠팡] 개인정보 이용 제공 내역의 안내",
+   "date": "Sun, 19 Nov 2023 09:16:18 +0000",
+   "unsub": false
+  },
+  {
+   "id": "7382",
+   "from": "후후 <info@whowhoncompany.com>",
+   "subject": "[후후] 개인정보 이용내역 안내",
+   "date": "Sat, 25 Nov 2023 07:19:09 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "7398",
+   "from": "Calm <noreply@em.calm.com>",
+   "subject": "서비스 약관 및 개인정보처리방침 업데이트",
+   "date": "Wed, 29 Nov 2023 21:25:38 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13652",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Fri, 01 May 2026 20:01:01 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13653",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Sat, 02 May 2026 00:01:56 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13661",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Tue, 05 May 2026 05:06:43 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13665",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Wed, 06 May 2026 16:00:30 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13666",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Wed, 06 May 2026 16:03:55 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13672",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Thu, 07 May 2026 20:03:36 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13679",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Fri, 08 May 2026 20:03:00 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13680",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Sat, 09 May 2026 00:02:21 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13683",
+   "from": "\" 리펀디 \" <contact@refundy.co>",
+   "subject": "🎁 가입 축하 선물 13만원이 도착했어요",
+   "date": "Sat, 09 May 2026 15:59:00 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13686",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Mon, 11 May 2026 16:04:13 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13688",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Tue, 12 May 2026 00:03:56 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13692",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Tue, 12 May 2026 16:02:50 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13696",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Tue, 12 May 2026 20:02:28 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13698",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Wed, 13 May 2026 00:03:05 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13700",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Wed, 13 May 2026 12:02:01 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13706",
+   "from": "\"Ivan at Notion\" <ivan@mail.notion.so>",
+   "subject": "3.5: Notion Developer Platform",
+   "date": "Thu, 14 May 2026 02:16:59 +0000",
+   "unsub": true
+  },
+  {
+   "id": "13709",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Thu, 14 May 2026 12:00:57 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13712",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Thu, 14 May 2026 16:04:03 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13713",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Thu, 14 May 2026 08:21:16 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13716",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Fri, 15 May 2026 16:01:34 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13717",
+   "from": "\" Refundy \" <contact@refundy.co>",
+   "subject": "[리펀디] 캐시백이 적립되었습니다.",
+   "date": "Fri, 15 May 2026 20:01:53 +0900",
+   "unsub": true
+  },
+  {
+   "id": "13723",
+   "from": "YouTube <no-reply@youtube.com>",
+   "subject": "YouTube 용감한용팀장 - 셀러를 위한 AI 사용법 채널 액세스를 위한 초대\n",
+   "date": "Mon, 18 May 2026 19:05:57 -0700",
+   "unsub": false
+  },
+  {
+   "id": "13726",
+   "from": "Google Payments <payments-noreply@google.com>",
+   "subject": "Google Cloud Platform & APIs: 결제 완료",
+   "date": "Tue, 19 May 2026 13:55:35 -0700",
+   "unsub": false
+  },
+  {
+   "id": "13730",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Thu, 21 May 2026 04:30:59 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13731",
+   "from": "토스뱅크 <no.reply@mail.tossbank.com>",
+   "subject": "원리금 납부 안내",
+   "date": "Fri, 22 May 2026 13:29:40 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "13737",
+   "from": "NotebookLM <NotebookLM-noreply@google.com>",
+   "subject": "Notebook shared with you: [두뇌] 용감한용팀장",
+   "date": "Mon, 25 May 2026 21:22:59 -0700",
+   "unsub": false
+  },
+  {
+   "id": "13739",
+   "from": "불사자 (Google Sheets에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "‘용감한 용팀장 1기 신청서 (1분)(응답)’ 스프레드시트가 공유됨",
+   "date": "Tue, 26 May 2026 08:32:42 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13740",
+   "from": "Google Cloud <CloudPlatform-noreply@google.com>",
+   "subject": "[Action Advised] Ensure you trust all Google Trust Services Root CAs\r\n and ECDSA certificate chains before Jun 15, 2026",
+   "date": "Tue, 26 May 2026 13:25:42 -0700",
+   "unsub": false
+  },
+  {
+   "id": "13745",
+   "from": "\"Anthropic, PBC\" <invoice+statements@mail.anthropic.com>",
+   "subject": "Your receipt from Anthropic, PBC #2487-4503-3128",
+   "date": "Wed, 27 May 2026 13:59:27 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13755",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Fri, 29 May 2026 07:40:09 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13756",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Fri, 29 May 2026 08:00:19 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13758",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sat, 30 May 2026 14:25:43 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13763",
+   "from": "Notion Team <notify@updates.notion.so>",
+   "subject": "A new device logged into your account",
+   "date": "Mon, 01 Jun 2026 02:08:54 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13767",
+   "from": "Google Payments <payments-noreply@google.com>",
+   "subject": "Google Cloud Platform & APIs: 012113-030AAE-8AF468에 대한 결제가 거부됨",
+   "date": "Mon, 01 Jun 2026 10:43:40 -0700",
+   "unsub": false
+  },
+  {
+   "id": "13768",
+   "from": "Google Cloud Platform, Firebase 및 API <CloudPlatform-noreply@google.com>",
+   "subject": "조치 필요: 결제 계정(012113-030AAE-8AF468)에 연체 대금이 있거나 결제 정보가 잘못되었습니다.",
+   "date": "Mon, 01 Jun 2026 10:44:05 -0700",
+   "unsub": false
+  },
+  {
+   "id": "13790",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "yjcompanyg@gmail.com 관련 보안 경고",
+   "date": "Sat, 06 Jun 2026 07:07:32 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13793",
+   "from": "쿠팡 <no_reply@coupang.com>",
+   "subject": "[쿠팡] 장기 미관리 상품을 알려드립니다",
+   "date": "Mon, 8 Jun 2026 11:20:14 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "13803",
+   "from": "네이버 커머스API <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 내스토어 애플리케이션  인증 기간 만료 7일 전 안내",
+   "date": "Wed, 10 Jun 2026 00:01:19 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "13804",
+   "from": "네이버 커머스API <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 내스토어 애플리케이션  인증 기간 만료 7일 전 안내",
+   "date": "Wed, 10 Jun 2026 00:01:22 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "13805",
+   "from": "\" 리펀디 \" <contact@refundy.co>",
+   "subject": "6/8 오픈 — 배대지, 이제 직접 선택하세요",
+   "date": "Wed, 10 Jun 2026 09:10:48 +0900",
+   "unsub": false
+  },
+  {
+   "id": "13807",
+   "from": "쿠팡 <no_reply@coupang.com>",
+   "subject": "[쿠팡] 장기 미관리 상품을 알려드립니다",
+   "date": "Wed, 10 Jun 2026 11:45:07 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "13808",
+   "from": "\" 리펀디 \" <contact@refundy.co>",
+   "subject": "6/8 오픈 — 배대지, 이제 직접 선택하세요",
+   "date": "Wed, 10 Jun 2026 13:00:59 +0900",
+   "unsub": false
+  },
+  {
+   "id": "13809",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Wed, 10 Jun 2026 07:52:21 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13810",
+   "from": "Google <google-noreply@google.com>",
+   "subject": "Google 검색 서비스의 새로운 개인 정보 보호 설정",
+   "date": "Wed, 10 Jun 2026 01:27:06 -0700",
+   "unsub": false
+  },
+  {
+   "id": "13812",
+   "from": "Notion Team <notify@updates.notion.so>",
+   "subject": "A new device logged into your account",
+   "date": "Wed, 10 Jun 2026 13:18:49 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13813",
+   "from": "쿠팡 <no_reply@coupang.com>",
+   "subject": "[쿠팡] 장기 미관리 상품을 알려드립니다",
+   "date": "Thu, 11 Jun 2026 11:28:00 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "13815",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 05:09:34 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13816",
+   "from": "Notion Team <notify@updates.notion.so>",
+   "subject": "A new device logged into your account",
+   "date": "Thu, 11 Jun 2026 05:56:02 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13817",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 07:03:26 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13818",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 07:04:11 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13819",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 15:20:50 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13820",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 15:48:23 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13822",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 15:58:36 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13823",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 11 Jun 2026 15:59:13 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13826",
+   "from": "\" 리펀디 \" <contact@refundy.co>",
+   "subject": "[선착순] 스마트스토어 광고비 최대 30만원 지원",
+   "date": "Fri, 12 Jun 2026 13:28:46 +0900",
+   "unsub": false
+  },
+  {
+   "id": "13828",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Fri, 12 Jun 2026 07:51:43 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13829",
+   "from": "\" 리펀디 \" <contact@refundy.co>",
+   "subject": "🎁 셀러님께 광고비 30만원 지원이 도착했어요",
+   "date": "Fri, 12 Jun 2026 17:07:52 +0900",
+   "unsub": false
+  },
+  {
+   "id": "13831",
+   "from": "토스뱅크 <no.reply@mail.tossbank.com>",
+   "subject": "금융거래정보 제공내역 안내",
+   "date": "Sat, 13 Jun 2026 03:11:29 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "13854",
+   "from": "김선영 (Google Drive에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "\"SellarSourcingAll_20260610.zip\"에 대한 공유 요청",
+   "date": "Sun, 14 Jun 2026 04:36:43 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13857",
+   "from": "쿠팡 <no_reply@coupang.com>",
+   "subject": "[쿠팡] 장기 미관리 상품을 알려드립니다",
+   "date": "Mon, 15 Jun 2026 10:58:00 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "13858",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "yjcompanyg@gmail.com 관련 보안 경고",
+   "date": "Mon, 15 Jun 2026 05:01:43 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13859",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Mon, 15 Jun 2026 06:44:07 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13880",
+   "from": "쿠팡 <no_reply@coupang.com>",
+   "subject": "[쿠팡] 장기 미관리 상품을 알려드립니다",
+   "date": "Fri, 19 Jun 2026 10:11:34 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "13886",
+   "from": "토스뱅크 <no.reply@mail.tossbank.com>",
+   "subject": "원리금 납부 안내",
+   "date": "Mon, 22 Jun 2026 12:15:32 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "13893",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Tue, 23 Jun 2026 08:52:35 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13898",
+   "from": "토스뱅크 <no.reply@mail.tossbank.com>",
+   "subject": "[토스뱅크] 전자금융거래기본약관 개정 안내",
+   "date": "Wed, 24 Jun 2026 23:14:24 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "13917",
+   "from": "\"Anthropic, PBC\" <invoice+statements@mail.anthropic.com>",
+   "subject": "Your receipt from Anthropic, PBC #2600-3179-6329",
+   "date": "Sat, 27 Jun 2026 13:57:45 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13918",
+   "from": "라이브클래스 <info@liveklass.com>",
+   "subject": "(중국구매대행 소싱리스트 10000개) 클래스 참가신청이 완료되었습니다. :)",
+   "date": "Mon, 29 Jun 2026 05:40:30 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13924",
+   "from": "토스페이먼츠 <notification@tosspayments.com>",
+   "subject": "[안내] 토스 비즈니스 회원 체계 통합 전환 안내",
+   "date": "Tue, 30 Jun 2026 06:33:22 +0000",
+   "unsub": true
+  },
+  {
+   "id": "13938",
+   "from": "미리캔버스 <miricanvas@miridih.com>",
+   "subject": "미리캔버스 Pro 정기 결제가 종료될 예정입니다.",
+   "date": "Fri, 3 Jul 2026 03:09:49 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13939",
+   "from": "토스뱅크 <no.reply@mail.tossbank.com>",
+   "subject": "금리인하요구권 제도 안내",
+   "date": "Sat, 4 Jul 2026 10:14:16 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "13947",
+   "from": "Discord <noreply@discord.com>",
+   "subject": "새로운 지역에서의 Discord 로그인 인증",
+   "date": "Tue, 07 Jul 2026 15:47:18 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "13951",
+   "from": "Google <noreply-accounts@google.com>",
+   "subject": "Google 계정 데이터 일부를 Claude에 공유하셨습니다",
+   "date": "Tue, 07 Jul 2026 18:57:32 -0700",
+   "unsub": true
+  },
+  {
+   "id": "13955",
+   "from": "info@elim.asia",
+   "subject": "ElimAPI - Activate Your Account",
+   "date": "Thu, 9 Jul 2026 09:57:23 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13956",
+   "from": "Google Play <googleplay-noreply@google.com>",
+   "subject": "Google Play 서비스 약관 업데이트",
+   "date": "Thu, 09 Jul 2026 06:44:09 -0700",
+   "unsub": false
+  },
+  {
+   "id": "13962",
+   "from": "Anthropic <no-reply-CNW8bGk5PKkdCxdHOZUt2A@mail.anthropic.com>",
+   "subject": "Claude.ai 로그인용 보안 링크 | 2026-07-12 02:13:39",
+   "date": "Sat, 11 Jul 2026 17:13:39 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "13963",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sun, 12 Jul 2026 12:35:43 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13968",
+   "from": "\"Threads\" <security@mail.threads.net>",
+   "subject": "New login to Threads from Threads on Samsung SM-S938N",
+   "date": "Mon, 13 Jul 2026 02:24:30 -0700",
+   "unsub": true
+  },
+  {
+   "id": "13969",
+   "from": "네이버 개인정보보호 <privacynotice_noreply@navercorp.com>",
+   "subject": "[2026 네이버 개인정보보호 캠페인] 사업자 회원님을 위한 개인정보 보호 안내",
+   "date": "Tue, 14 Jul 2026 01:03:31 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "13970",
+   "from": "네이버 커머스API <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 스토어 애플리케이션 시크릿 조회 안내",
+   "date": "Tue, 14 Jul 2026 01:51:52 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "13972",
+   "from": "GitHub <noreply@github.com>",
+   "subject": "[GitHub] Please verify your device",
+   "date": "Mon, 13 Jul 2026 21:01:33 -0700",
+   "unsub": false
+  },
+  {
+   "id": "13975",
+   "from": "Anthropic <no-reply-5e0HRigOxaWliwTFnF6j4Q@mail.anthropic.com>",
+   "subject": "Claude.ai 로그인용 보안 링크 | 2026-07-14 22:55:13",
+   "date": "Tue, 14 Jul 2026 13:55:13 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "13981",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Thu, 16 Jul 2026 01:00:03 GMT",
+   "unsub": false
+  },
+  {
+   "id": "13983",
+   "from": "\"Instagram\" <security@mail.instagram.com>",
+   "subject": "Reset your password",
+   "date": "Wed, 15 Jul 2026 18:07:56 -0700",
+   "unsub": true
+  },
+  {
+   "id": "13984",
+   "from": "\"Instagram\" <security@mail.instagram.com>",
+   "subject": "Reset your password",
+   "date": "Wed, 15 Jul 2026 18:08:07 -0700",
+   "unsub": true
+  },
+  {
+   "id": "13985",
+   "from": "\"Instagram\" <security@mail.instagram.com>",
+   "subject": "Reset your password",
+   "date": "Wed, 15 Jul 2026 18:08:08 -0700",
+   "unsub": true
+  },
+  {
+   "id": "13986",
+   "from": "\"Threads\" <security@mail.threads.net>",
+   "subject": "New login to Threads from Threads on Samsung SM-A750N",
+   "date": "Wed, 15 Jul 2026 18:09:23 -0700",
+   "unsub": true
+  },
+  {
+   "id": "13987",
+   "from": "Anthropic <no-reply-cFnzEtDyHs_lFCJ3tfqa0w@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Thu, 16 Jul 2026 11:19:49 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "13991",
+   "from": "Minho Cho (Google Sheets에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "\"조민호 용감한용팀장1기 챌린지시트\"에 대한 공유 요청",
+   "date": "Thu, 16 Jul 2026 23:32:25 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13992",
+   "from": "이은지 (Google Drive에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "‘20-불사자-상품관리’ 폴더가 공유됨",
+   "date": "Fri, 17 Jul 2026 09:34:22 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13996",
+   "from": "\"Anthropic, PBC\" <invoice+statements@mail.anthropic.com>",
+   "subject": "Your receipt from Anthropic, PBC #2024-9146-8215",
+   "date": "Sat, 18 Jul 2026 03:25:52 +0000",
+   "unsub": false
+  },
+  {
+   "id": "13998",
+   "from": "한국특허정보원 <kiprisplus@kipi.or.kr>",
+   "subject": "키프리스 플러스 이용자 이메일 인증",
+   "date": "Sat, 18 Jul 2026 14:16:41 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "14002",
+   "from": "Google <google-noreply@google.com>",
+   "subject": "새로운 Android 백업 스토리지 정책 및 관리 기능",
+   "date": "Sat, 18 Jul 2026 23:10:37 -0700",
+   "unsub": false
+  },
+  {
+   "id": "14010",
+   "from": "스마트스토어 <help_noreply@navercorp.com>",
+   "subject": "[스마트스토어] 2026년 7월(26년 1기) 부가세 신고 관련 안내드립니다.",
+   "date": "Tue, 21 Jul 2026 07:00:38 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14012",
+   "from": "토스뱅크 <no.reply@mail.tossbank.com>",
+   "subject": "원리금 납부 안내",
+   "date": "Wed, 22 Jul 2026 12:14:38 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "14013",
+   "from": "Google Play <googleplay-noreply@google.com>",
+   "subject": "Google Play 주문 영수증(2026. 7. 22.)",
+   "date": "Tue, 21 Jul 2026 21:13:44 -0700",
+   "unsub": false
+  },
+  {
+   "id": "14018",
+   "from": "네이버 쇼핑 안전거래센터 <help_safety_shopping@navercorp.com>",
+   "subject": "[네이버 쇼핑 안전거래센터] KC인증 소명접수 안내",
+   "date": "Thu, 23 Jul 2026 03:01:33 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14019",
+   "from": "김선영 (Google Sheets에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "‘보너스 리스트 2500개’ 스프레드시트가 공유됨",
+   "date": "Thu, 23 Jul 2026 11:57:21 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14032",
+   "from": "GitHub <noreply@github.com>",
+   "subject": "[GitHub] A first-party GitHub OAuth application has been added to\r\n your account",
+   "date": "Sat, 25 Jul 2026 07:38:36 -0700",
+   "unsub": false
+  },
+  {
+   "id": "14057",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Fri, 31 Jul 2026 11:23:52 GMT",
+   "unsub": false
+  },
+  {
+   "id": "14060",
+   "from": "토스뱅크 <no.reply@mail.tossbank.com>",
+   "subject": "오픈뱅킹 정보 제공 동의 안내",
+   "date": "Sat, 1 Aug 2026 10:23:43 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "14064",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sat, 01 Aug 2026 12:52:47 GMT",
+   "unsub": false
+  },
+  {
+   "id": "14065",
+   "from": "cy728728@gmail.com",
+   "subject": "[배포] 용팀장 스킬팩 - 수강생 배포 링크",
+   "date": "Sat, 1 Aug 2026 06:21:43 -0700",
+   "unsub": false
+  },
+  {
+   "id": "14066",
+   "from": "Notion Team <notify@updates.notion.so>",
+   "subject": "A new device logged into your account",
+   "date": "Sat, 01 Aug 2026 15:03:39 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14069",
+   "from": "Anthropic <no-reply-U5m4BUKm3v9CpnUXwWa0tQ@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Sun, 02 Aug 2026 11:56:51 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14070",
+   "from": "Anthropic <no-reply-ZRKl1QoRA2WLTmsc431KKA@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Sun, 02 Aug 2026 11:56:58 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14072",
+   "from": "Minho Cho (Google Drive에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "\"smartstore-brand.zip\"에 대한 공유 요청",
+   "date": "Sun, 02 Aug 2026 13:20:15 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14073",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sun, 02 Aug 2026 17:36:22 GMT",
+   "unsub": false
+  },
+  {
+   "id": "14074",
+   "from": "Notion Team <notify@updates.notion.so>",
+   "subject": "A new device logged into your account",
+   "date": "Sun, 02 Aug 2026 17:37:13 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14075",
+   "from": "ssulmung (Google Drive에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "\"smartstore-brand.zip\"에 대한 공유 요청",
+   "date": "Mon, 03 Aug 2026 03:38:31 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14076",
+   "from": "min yee (Google Drive에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "\"smartstore-brand.zip\"에 대한 공유 요청",
+   "date": "Mon, 03 Aug 2026 06:26:05 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14078",
+   "from": "네이버파이낸셜 (주) <helpcustomers@navercorp.com>",
+   "subject": "네이버파이낸셜 (주)으로부터 서이컴퍼니에게 전자세금계산서가 발행되었습니다.",
+   "date": "Mon, 3 Aug 2026 18:17:36 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14079",
+   "from": "네이버파이낸셜 (주) <helpcustomers@navercorp.com>",
+   "subject": "네이버파이낸셜 (주)으로부터 서이컴퍼니에게 전자세금계산서가 발행되었습니다.",
+   "date": "Mon, 3 Aug 2026 18:17:36 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14081",
+   "from": "쿠팡 <no_reply@e.coupang.com>",
+   "subject": "[쿠팡] 쿠팡 이용 약관 개정 안내",
+   "date": "Tue, 4 Aug 2026 11:08:15 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "14083",
+   "from": "min yee (Google Drive에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "\"smartstore-brand.zip\"에 대한 공유 요청",
+   "date": "Tue, 04 Aug 2026 07:56:57 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14085",
+   "from": "ssulmung (Google Drive에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "\"smartstore-brand.zip\"에 대한 공유 요청",
+   "date": "Tue, 04 Aug 2026 11:27:27 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14095",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Wed, 05 Aug 2026 23:06:50 GMT",
+   "unsub": false
+  },
+  {
+   "id": "14098",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Thu, 06 Aug 2026 01:31:32 GMT",
+   "unsub": false
+  },
+  {
+   "id": "14100",
+   "from": "네이버쇼핑 <nv_product_ips@navercorp.com>",
+   "subject": "운영기준위반 '의심'상품에 대한 운영자 검수예정 안내",
+   "date": "Thu, 6 Aug 2026 07:20:25 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14103",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Fri, 07 Aug 2026 01:00:13 GMT",
+   "unsub": false
+  },
+  {
+   "id": "14106",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Fri, 07 Aug 2026 14:44:19 GMT",
+   "unsub": false
+  },
+  {
+   "id": "14110",
+   "from": "네이버 커머스API <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 스토어 애플리케이션 시크릿 조회 안내",
+   "date": "Sat, 8 Aug 2026 14:11:45 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14111",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sun, 09 Aug 2026 02:49:03 GMT",
+   "unsub": false
+  },
+  {
+   "id": "14123",
+   "from": "Payple <help@payple.kr>",
+   "subject": "셀록홈즈에서 결제한 내역입니다.",
+   "date": "Thu, 13 Aug 2026 13:08:31 +0900",
+   "unsub": false
+  },
+  {
+   "id": "14127",
+   "from": "불사자 (Google Forms에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "‘용감한 용팀장 3기 신청서 ’ 양식이 공유됨",
+   "date": "Fri, 14 Aug 2026 00:28:16 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14130",
+   "from": "Microsoft <msa@communication.microsoft.com>",
+   "subject": "이용 약관 업데이트",
+   "date": "Fri, 14 Aug 2026 01:46:17 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14134",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Sun, 16 Aug 2026 14:10:19 GMT",
+   "unsub": false
+  },
+  {
+   "id": "14135",
+   "from": "네이버 커머스API <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 스토어 애플리케이션 시크릿 조회 안내",
+   "date": "Mon, 17 Aug 2026 09:00:54 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14140",
+   "from": "\"Anthropic, PBC\" <invoice+statements@mail.anthropic.com>",
+   "subject": "Your receipt from Anthropic, PBC #2589-4133-4353",
+   "date": "Tue, 18 Aug 2026 04:28:18 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14144",
+   "from": "불사자 (Google Sheets에서 공유) <drive-shares-dm-noreply@google.com>",
+   "subject": "‘용감한용팀장1:1상담(응답)’ 스프레드시트가 공유됨",
+   "date": "Wed, 19 Aug 2026 01:20:51 +0000",
+   "unsub": false
+  },
+  {
+   "id": "14145",
+   "from": "\"Instagram\" <security@mail.instagram.com>",
+   "subject": "Verify your profile",
+   "date": "Wed, 19 Aug 2026 00:28:11 -0700",
+   "unsub": true
+  },
+  {
+   "id": "14157",
+   "from": "Anthropic <no-reply-gzJdtcnMmPPgqr1d4vnb6g@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Fri, 21 Aug 2026 12:56:05 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14158",
+   "from": "Anthropic <no-reply-UtXevOvbOnlthOXc5bzaMA@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Fri, 21 Aug 2026 12:56:09 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14161",
+   "from": "Anthropic <no-reply-RxONzcU96VV27sr8kzwkjA@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Sat, 22 Aug 2026 02:13:43 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14162",
+   "from": "토스뱅크 <no.reply@mail.tossbank.com>",
+   "subject": "원리금 납부 안내",
+   "date": "Sat, 22 Aug 2026 13:13:30 +0900 (KST)",
+   "unsub": false
+  },
+  {
+   "id": "14163",
+   "from": "Google Play <googleplay-noreply@google.com>",
+   "subject": "Google Play 주문 영수증(2026. 8. 22.)",
+   "date": "Fri, 21 Aug 2026 21:13:47 -0700",
+   "unsub": false
+  },
+  {
+   "id": "14164",
+   "from": "Anthropic <no-reply-joTLUMbqRjwxMnwzq2d6xw@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Sat, 22 Aug 2026 04:42:12 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14165",
+   "from": "Anthropic <no-reply-BliT52tE3nM_3PVG4N4F0A@mail.anthropic.com>",
+   "subject": "Security alert: new trusted device added to your Claude account",
+   "date": "Sat, 22 Aug 2026 04:42:13 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14167",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "cy17281728@gmail.com 관련 보안 경고",
+   "date": "Sat, 22 Aug 2026 13:56:59 GMT",
+   "unsub": false
+  },
+  {
+   "id": "14169",
+   "from": "Google AI Studio <googleaistudio-noreply@google.com>",
+   "subject": "Congrats! Your account has been upgraded to paid Tier 2",
+   "date": "Sun, 23 Aug 2026 15:14:30 -0700",
+   "unsub": false
+  },
+  {
+   "id": "14174",
+   "from": "\" 리펀디 \" <contact@refundy.co>",
+   "subject": "[업데이트] 배대지 추가비용 정산 내역서 추가",
+   "date": "Mon, 24 Aug 2026 20:39:11 +0900",
+   "unsub": false
+  },
+  {
+   "id": "14184",
+   "from": "네이버 커머스API <noreply_commerceapi@navercorp.com>",
+   "subject": "[네이버 커머스API센터] 장애대응 이메일 주소 정책 변경 사전 안내 (시행 예정일: 2026.09.30)",
+   "date": "Wed, 26 Aug 2026 01:03:02 +0000 (UTC)",
+   "unsub": false
+  },
+  {
+   "id": "14188",
+   "from": "Google <no-reply@accounts.google.com>",
+   "subject": "보안 알림",
+   "date": "Wed, 26 Aug 2026 15:57:16 GMT",
+   "unsub": false
+  }
+ ]
+}
