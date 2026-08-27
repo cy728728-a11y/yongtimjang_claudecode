@@ -31,6 +31,10 @@
   - added: 2026-08-19
   - priority: normal
 
+- [ ] 줌 오픈: 용감한용팀장3기 (19:30 접속 → start_url로 열기)
+  - added: 2026-08-26
+  - priority: normal
+
 
 ## Scheduled
 
@@ -307,6 +311,11 @@
   - priority: high
   - project: 원천세신고
   - 귀속월 2026-07 / 지급월 2026-08 / 신고기한 2026-09-10
+
+- [ ] 줌 오픈: 회의 (09:30 접속 → start_url로 열기)
+  - added: 2026-08-22
+  - due: 2026-08-23
+  - priority: normal
 
 ## This Week
 
