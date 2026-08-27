@@ -37,9 +37,10 @@ def body_text(msg):
 
 def extract(text, subject):
     """본문에서 요청 계정 · 확인 코드 · 확인 링크를 뽑는다."""
-    # 확인 링크: https://mail.google.com/mail/vf-...
+    # 확인 링크: https://mail-settings.google.com/mail/vf-...
+    # ⚠️ 같은 본문에 취소 링크(/mail/uf-...)가 함께 들어있다. 반드시 vf- 만 잡을 것.
     link = None
-    m = re.search(r"https://mail\.google\.com/mail/[^\s\"'<>]*vf-[^\s\"'<>]*", text)
+    m = re.search(r"https://mail(?:-settings)?\.google\.com/mail/vf-[^\s\"'<>]*", text)
     if m:
         link = m.group(0).rstrip(").,")
     # 확인 코드: 8~11자리 숫자 (제목에도 자주 들어있다)
