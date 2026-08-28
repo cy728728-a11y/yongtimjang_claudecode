@@ -3,6 +3,10 @@ import re
 
 # ── 무조건 남김: 보안·세금·정책·제재·금융·결제·공유·본인발신 ──────────────
 KEEP_FROM = [
+    r'forwarding-noreply@google\.com',   # 자동전달 확인 메일 — 절대 삭제 금지
+    # 알리 주문·송장·배송·분쟁 알림 = 구매대행 업무 핵심. 광고(deals/promotion)와 발신자가 다르다
+    r'transaction@notice\.aliexpress\.com',
+    r'(dispute|order|logistics|refund)[\w.-]*@[\w.-]*aliexpress',
     r'accounts\.google\.com',            # 구글 보안 알림
     r'no-reply-.*@.*claude\.(ai|com)',   # Claude 로그인/기기 보안
     r'security@mail\.(instagram|threads)\.(net|com)',
@@ -30,6 +34,7 @@ KEEP_SUBJ = [
     r'보안\s*(경고|알림)', r'Security alert', r'로그인용 보안', r'verify your device',
     r'세금계산서', r'부가세', r'원천세', r'소명', r'운영기준', r'제재', r'검수',
     r'약관', r'정책 변경', r'개인정보', r'영수증', r'receipt', r'인증',
+    r'송장번호', r'주문 건', r'발송 완료', r'배송 정보', r'분쟁', r'환불',   # 구매대행 업무
     r'댓글에 새로운 답글', r'채널 액세스', r'비밀번호',
 ]
 
@@ -64,7 +69,7 @@ DEL_FROM = [
     # 소셜/협업 알림 (용팀장 승인: 전부 삭제)
     r'facebookmail\.com',
     r'notify@mail\.notion\.(so|com)',
-    r'no-reply@google\.com',                  # 기기 설정 유도
+    r'(?<![\w.-])no-reply@google\.com',       # 기기 설정 유도 (부분일치 방지)
     r'noreply-maps-timeline@google',
     r'news-googleplay@google\.com',              # 구글플레이 광고
     r'(no-reply|stories-recap|unread-messages)@mail\.instagram\.com',
