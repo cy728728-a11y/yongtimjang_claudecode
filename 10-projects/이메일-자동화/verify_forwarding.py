@@ -17,6 +17,8 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from imap_triage import ACCOUNT, get_password, decode, find_special
+STATE_DIR = os.environ.get("MAIL_TRIAGE_LOGS") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "logs")
 
 imaplib._MAXLINE = 10_000_000
 
@@ -81,12 +83,28 @@ def main():
     print("-" * 52)
     live = 0
     for t in TARGETS:
+        if t.endswith("@naver.com"):
+            continue          # 아래 naver_pull 집계에서 따로 다룬다
         n = seen.get(t, 0)
         mark = "✅" if n else "  "
         if n:
             live += 1
         print(f"{mark} {t:28s} {n:5d}통")
     print("-" * 52)
+
+    # 네이버는 전달이 아니라 naver_pull.py 가 APPEND 하는 방식이라
+    # X-Forwarded-For 가 붙지 않는다. 수집 상태 파일로 따로 판정한다.
+    import json, glob
+    for f in glob.glob(os.path.join(STATE_DIR, "naver-pull-*.json")):
+        acct = os.path.basename(f)[len("naver-pull-"):-len(".json")].replace("_at_", "@")
+        try:
+            n = len(json.load(open(f)))
+        except Exception:
+            n = 0
+        if n:
+            live += 1
+            print(f"✅ {acct:28s} {n:5d}통  (naver_pull 수집)")
+
     print(f"가동 {live} / 대상 {len(TARGETS)}")
 
     if spam_seen:
