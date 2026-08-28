@@ -28,7 +28,7 @@ TARGETS = [
     "yjcompanyr@gmail.com", "yjcompanyt@gmail.com", "yjcompanyu@gmail.com",
     "yjcompanyv@gmail.com", "yjcompanyw@gmail.com", "yjcompanyx@gmail.com",
     "yjcompanyy@gmail.com", "yjzcompany@gmail.com",
-    "cy728@naver.com", "cy7728@naver.com",
+    "cy728@naver.com",
 ]
 
 

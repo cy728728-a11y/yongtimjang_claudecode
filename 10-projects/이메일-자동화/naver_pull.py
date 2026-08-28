@@ -17,7 +17,7 @@ Gmail 쪽 POP3 가져오기("Check mail from other accounts")도 개인 계정�
 사용법:
     python3 naver_pull.py            # 미리보기 (옮기지 않음)
     python3 naver_pull.py --apply    # 실제로 수집함에 넣음
-    python3 naver_pull.py --apply --account cy7728@naver.com
+    python3 naver_pull.py --apply --account <다른-네이버-계정>
 """
 import imaplib, email, json, os, re, subprocess, sys, argparse, time
 from email.utils import parsedate_to_datetime
