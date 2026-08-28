@@ -1,12 +1,17 @@
 # 받은편지함 일괄 분류 규칙. KEEP 이 DELETE 보다 우선한다(오삭제 방지).
 import re
 
+# ── 최우선 삭제: 아래 KEEP 규칙보다 앞선다 ──────────────────────────────
+# 용팀장 지시(2026-08-28): "알리익스프레스 관련 메일은 전부 삭제해".
+# 주문확인·송장번호·배송정보 같은 업무성 알림도 포함한다 —
+# 업무 메일이라 남기자고 제안했으나 전부 삭제로 확정됨.
+DEL_FROM_ABSOLUTE = [
+    r'aliexpress',
+]
+
 # ── 무조건 남김: 보안·세금·정책·제재·금융·결제·공유·본인발신 ──────────────
 KEEP_FROM = [
     r'forwarding-noreply@google\.com',   # 자동전달 확인 메일 — 절대 삭제 금지
-    # 알리 주문·송장·배송·분쟁 알림 = 구매대행 업무 핵심. 광고(deals/promotion)와 발신자가 다르다
-    r'transaction@notice\.aliexpress\.com',
-    r'(dispute|order|logistics|refund)[\w.-]*@[\w.-]*aliexpress',
     r'accounts\.google\.com',            # 구글 보안 알림
     r'no-reply-.*@.*claude\.(ai|com)',   # Claude 로그인/기기 보안
     r'security@mail\.(instagram|threads)\.(net|com)',
@@ -83,6 +88,7 @@ def judge(m):
     """한 건을 KEEP/DELETE/UNKNOWN 으로 판정"""
     f = (m.get('from') or '').lower()
     s = m.get('subject') or ''
+    if any(re.search(p, f, re.I) for p in DEL_FROM_ABSOLUTE): return 'DELETE'
     if any(re.search(p, f, re.I) for p in KEEP_FROM): return 'KEEP'
     if any(re.search(p, s, re.I) for p in KEEP_SUBJ): return 'KEEP'
     if any(re.search(p, f, re.I) for p in DEL_FROM):  return 'DELETE'
