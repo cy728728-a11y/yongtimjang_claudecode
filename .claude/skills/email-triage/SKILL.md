@@ -78,6 +78,7 @@ launchctl load   ~/Library/LaunchAgents/com.yongtimjang.mailtriage.plist
 | 전달 메일이 안 보인다 | 수집함 **스팸함**에 갇혔을 수 있다. `rescue_spam.py` 로 꺼낸다 |
 | `UID_FETCH: Invalid arguments` | FETCH 스펙에 `UID` 를 명시 안 함. 네이버는 UID 를 응답에 안 실어준다 |
 | UID MOVE 가 조용히 no-op | 응답 앞머리 첫 숫자는 **시퀀스 번호**다. `UID <n>` 을 파싱해야 한다 |
+| 특정 계정만 전달이 안 온다 | **원 계정 스팸함부터 봐라.** Gmail 은 스팸 판정된 메일을 전달하지 않고, 나중에 꺼내도 소급 전달 안 된다. 그 다음 전달 주소가 `cy728@daum.net` 이 아닌지 확인 |
 | 계정 설정 화면에 버튼이 없다 | **한국어 Gmail UI 에는 `전달 주소 추가` 가 없다.** 언어를 English (US) 로 바꾸면 나타난다 |
 
 ## 하지 않는 것
