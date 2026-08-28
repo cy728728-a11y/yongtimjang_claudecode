@@ -126,6 +126,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="실제 삭제 실행 (미지정 시 미리보기)")
     ap.add_argument("--folder", default="INBOX", help="대상 폴더 (기본 INBOX)")
+    ap.add_argument("--archive", action="store_true",
+                    help="받은편지함 밖 아카이브를 대상으로 (보낸편지함·임시보관·휴지통·스팸 제외)")
     a = ap.parse_args()
 
     M = imaplib.IMAP4_SSL("imap.gmail.com", 993)
@@ -138,10 +140,20 @@ def main():
     trash = find_trash(M)
     print("휴지통 폴더:", trash)
 
-    typ, _ = M.select(a.folder, readonly=not a.apply)
-    if typ != "OK":
-        raise SystemExit(f"폴더 열기 실패: {a.folder}")
-    typ, data = M.uid("SEARCH", None, "ALL")
+    if a.archive:
+        # 아카이브는 폴더가 아니다 — 전체보관함에서 받은편지함·보낸편지함 등을 뺀 나머지.
+        # 보낸편지함을 빼지 않으면 본인이 보낸 메일까지 지우게 된다.
+        a.folder = find_special(M, "\\All", '"[Gmail]/All Mail"')
+        typ, _ = M.select(a.folder, readonly=not a.apply)
+        if typ != "OK":
+            raise SystemExit("전체보관함 열기 실패")
+        typ, data = M.uid("SEARCH", None, "X-GM-RAW",
+                          '"-in:inbox -in:sent -in:drafts -in:trash -in:spam"')
+    else:
+        typ, _ = M.select(a.folder, readonly=not a.apply)
+        if typ != "OK":
+            raise SystemExit(f"폴더 열기 실패: {a.folder}")
+        typ, data = M.uid("SEARCH", None, "ALL")
     uids = data[0].split()
     uids = [u.decode() for u in uids]
     print(f"대상 {len(uids)}건 ({a.folder})")

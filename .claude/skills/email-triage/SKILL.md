@@ -19,6 +19,7 @@ argument-hint: [정리 | 확인 | 전달검증 | 스팸구조 | 규칙수정]
 |---|---|
 | 정리 미리보기 (삭제 안 함) | `python3 imap_triage.py` |
 | 실제 정리 (휴지통, 30일 복구) | `python3 imap_triage.py --apply` |
+| 아카이브(받은편지함 밖) 정리 | `python3 imap_triage.py --archive --apply` |
 | 네이버 메일 끌어오기 | `python3 naver_pull.py --apply` |
 | 전달 실제 가동 검증 | `python3 verify_forwarding.py --days 7` |
 | 스팸에 갇힌 전달 메일 구조 | `python3 rescue_spam.py --apply` |
@@ -81,6 +82,7 @@ launchctl load   ~/Library/LaunchAgents/com.yongtimjang.mailtriage.plist
 | UID MOVE 가 조용히 no-op | 응답 앞머리 첫 숫자는 **시퀀스 번호**다. `UID <n>` 을 파싱해야 한다 |
 | 특정 계정만 전달이 안 온다 | **원 계정 스팸함부터 봐라.** Gmail 은 스팸 판정된 메일을 전달하지 않고, 나중에 꺼내도 소급 전달 안 된다. 그 다음 전달 주소가 `cy728@daum.net` 이 아닌지 확인 |
 | 네이버를 매번 다시 긁는다 | 중복방지 상태는 `~/.local/share/mail-triage/state` 에 **공유**된다. 실행 위치별로 갈리면 매번 전량 재수집한다 |
+| 아카이브를 지웠는데 보낸 메일까지 사라졌다 | 전체보관함에는 **보낸편지함도 들어 있다.** `--archive` 는 `-in:sent -in:drafts` 로 반드시 제외한다 |
 | 계정 설정 화면에 버튼이 없다 | **한국어 Gmail UI 에는 `전달 주소 추가` 가 없다.** 언어를 English (US) 로 바꾸면 나타난다 |
 
 ## 하지 않는 것
@@ -88,6 +90,8 @@ launchctl load   ~/Library/LaunchAgents/com.yongtimjang.mailtriage.plist
 - **비밀번호 입력·계정 로그인** — 사용자가 직접 한다. 앱 비밀번호는 키체인에서 읽고 값을 출력하지 않는다
 - **브라우저로 전달 설정 조작** — Google 보안 검증에 막힌다. 확인 메일이 발송되지 않고 조용히 실패한다
 - **휴지통 비우기·영구 삭제** — 삭제는 항상 휴지통(30일 복구)까지만
+- **보낸편지함 삭제** — 고객·거래처에 뭘 보냈는지의 유일한 기록이다. 요청받아도 되묻는다
+- **스팸함 비우기** — 30일 뒤 자동 삭제된다. 굳이 손대지 않는다
 
 ## 관련 문서
 
