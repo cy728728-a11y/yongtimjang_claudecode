@@ -18,6 +18,19 @@ from imap_triage import ACCOUNT, get_password, decode, find_special
 imaplib._MAXLINE = 10_000_000
 
 SENDER = "forwarding-noreply@google.com"
+CONFIRMED_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "confirmed.txt")
+
+
+def already_confirmed():
+    """이미 Confirm 을 누른 계정 목록. 배치로 링크를 열 때 중복을 막는다."""
+    if not os.path.exists(CONFIRMED_FILE):
+        return set()
+    out = set()
+    for line in open(CONFIRMED_FILE, encoding="utf-8"):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            out.add(line.lower())
+    return out
 
 
 def body_text(msg):
@@ -59,7 +72,8 @@ def extract(text, subject):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--open", action="store_true", help="확인 링크를 맥북 크롬에서 연다")
+    ap.add_argument("--open", action="store_true", help="미확인 계정의 확인 링크를 크롬에서 연다")
+    ap.add_argument("--force", action="store_true", help="이미 확인한 계정의 링크도 다시 연다")
     a = ap.parse_args()
 
     M = imaplib.IMAP4_SSL("imap.gmail.com", 993)
@@ -112,10 +126,20 @@ def main():
         print(f"{(f['requester'] or '?'):32s} {(f['code'] or '?'):12s} {(f['link'] or '(없음)')[:60]}")
 
     if a.open:
+        done = set() if a.force else already_confirmed()
+        opened, skipped = 0, 0
         for k, f in sorted(latest.items()):
-            if f["link"]:
-                subprocess.run(["open", "-a", "Google Chrome", f["link"]])
-        print("\n확인 링크를 크롬에서 열었다. 각 탭에서 '확인' 버튼을 눌러라.")
+            req = (f["requester"] or "").lower()
+            if not f["link"]:
+                continue
+            if any(d.split("@")[0] in req for d in done):
+                skipped += 1
+                continue
+            subprocess.run(["open", "-a", "Google Chrome", f["link"]])
+            print(f"  열었음: {f['requester']}")
+            opened += 1
+        print(f"\n{opened}개 탭을 열었다 (이미 확인한 {skipped}개는 건너뜀).")
+        print("각 탭에서 Confirm 을 누른 뒤, confirmed.txt 에 계정을 추가하면 다음부터 건너뛴다.")
 
 
 if __name__ == "__main__":
