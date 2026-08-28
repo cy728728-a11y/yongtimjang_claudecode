@@ -27,7 +27,9 @@ from imap_triage import ACCOUNT as COLLECTOR, get_password as collector_password
 
 imaplib._MAXLINE = 10_000_000
 HERE = os.path.dirname(os.path.abspath(__file__))
-STATE_DIR = os.environ.get("MAIL_TRIAGE_LOGS") or os.path.join(HERE, "logs")
+# 중복 방지 상태는 저장소본/설치본이 반드시 공유해야 한다.
+# 실행 위치에 따라 갈리면 자동 실행이 이미 가져온 메일을 매번 다시 긁는다.
+STATE_DIR = os.path.expanduser("~/.local/share/mail-triage/state")
 
 
 def keychain(account, service):

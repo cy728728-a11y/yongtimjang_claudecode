@@ -60,9 +60,10 @@ argument-hint: [정리 | 확인 | 전달검증 | 스팸구조 | 규칙수정]
 매일 **08:00** launchd (`com.yongtimjang.mailtriage`).
 네이버 수집 → 판정 → `logs/daily-report.md` 에 한 줄.
 
-**현재 `preview` 모드 — 아무것도 지우지 않는다.** 실삭제 전환:
+**현재 `apply` 모드 — 실제로 휴지통으로 보낸다** (30일 복구 가능).
+미리보기로 되돌리려면 아래에서 `apply` ↔ `preview` 를 바꾼다:
 ```bash
-sed -i '' 's|<string>preview</string>|<string>apply</string>|' \
+sed -i '' 's|<string>apply</string>|<string>preview</string>|' \
   ~/Library/LaunchAgents/com.yongtimjang.mailtriage.plist
 launchctl unload ~/Library/LaunchAgents/com.yongtimjang.mailtriage.plist
 launchctl load   ~/Library/LaunchAgents/com.yongtimjang.mailtriage.plist
@@ -79,6 +80,7 @@ launchctl load   ~/Library/LaunchAgents/com.yongtimjang.mailtriage.plist
 | `UID_FETCH: Invalid arguments` | FETCH 스펙에 `UID` 를 명시 안 함. 네이버는 UID 를 응답에 안 실어준다 |
 | UID MOVE 가 조용히 no-op | 응답 앞머리 첫 숫자는 **시퀀스 번호**다. `UID <n>` 을 파싱해야 한다 |
 | 특정 계정만 전달이 안 온다 | **원 계정 스팸함부터 봐라.** Gmail 은 스팸 판정된 메일을 전달하지 않고, 나중에 꺼내도 소급 전달 안 된다. 그 다음 전달 주소가 `cy728@daum.net` 이 아닌지 확인 |
+| 네이버를 매번 다시 긁는다 | 중복방지 상태는 `~/.local/share/mail-triage/state` 에 **공유**된다. 실행 위치별로 갈리면 매번 전량 재수집한다 |
 | 계정 설정 화면에 버튼이 없다 | **한국어 Gmail UI 에는 `전달 주소 추가` 가 없다.** 언어를 English (US) 로 바꾸면 나타난다 |
 
 ## 하지 않는 것
