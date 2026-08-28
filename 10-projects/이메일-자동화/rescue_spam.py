@@ -44,7 +44,7 @@ def main():
     for i in range(0, len(uids), 300):
         part = uids[i:i + 300]
         typ, resp = M.uid("FETCH", ",".join(part),
-                          "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT X-FORWARDED-FOR DELIVERED-TO)])")
+                          "(UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT X-FORWARDED-FOR DELIVERED-TO)])")
         cur = None
         for item in resp:
             if not isinstance(item, tuple):

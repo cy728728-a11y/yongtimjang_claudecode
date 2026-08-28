@@ -83,8 +83,9 @@ def fetch_headers(M, uids, chunk=300):
     out = []
     for i in range(0, len(uids), chunk):
         part = uids[i:i + chunk]
+        # UID 를 명시적으로 요청한다 — 서버에 따라 응답에 UID 를 안 실어주는 경우가 있다
         typ, data = M.uid("FETCH", ",".join(part),
-                          "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE LIST-UNSUBSCRIBE)])")
+                          "(UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE LIST-UNSUBSCRIBE)])")
         if typ != "OK":
             raise SystemExit("IMAP FETCH 실패")
         cur_uid = None

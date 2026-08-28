@@ -8,6 +8,6 @@ set -eu
 SRC="$(cd "$(dirname "$0")" && pwd)"
 DST="$HOME/.local/share/mail-triage"
 mkdir -p "$DST/logs"
-cp "$SRC/rules.py" "$SRC/imap_triage.py" "$SRC/run_daily.sh" "$DST/"
+cp "$SRC/rules.py" "$SRC/imap_triage.py" "$SRC/naver_pull.py" "$SRC/run_daily.sh" "$DST/"
 chmod +x "$DST/run_daily.sh"
 echo "설치 완료: $DST"
