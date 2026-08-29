@@ -36,5 +36,25 @@ class TestParse(unittest.TestCase):
         self.assertEqual(len(reports.parse_conversion_tsv(REAL + "\n\n")), 2)
 
 
+from datetime import date  # noqa: E402
+import collect  # noqa: E402
+
+
+class TestWindow(unittest.TestCase):
+    def test_끝은_D_2_다(self):
+        # D-1 은 "20007 지표 준비중" 이라 못 쓴다
+        since, until = collect.window(7, today=date(2026, 8, 29))
+        self.assertEqual(until, date(2026, 8, 27))
+
+    def test_7일이면_시작은_끝에서_6일_전이다(self):
+        since, until = collect.window(7, today=date(2026, 8, 29))
+        self.assertEqual(since, date(2026, 8, 21))
+        self.assertEqual((until - since).days, 6)
+
+    def test_30일_창(self):
+        since, until = collect.window(30, today=date(2026, 8, 29))
+        self.assertEqual((until - since).days, 29)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
