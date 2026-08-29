@@ -106,8 +106,11 @@ def update_streaks(led, zero_ids, recovered_ids, run_date, log=print):
         return 0, 0
     still = rec = 0
     for ad_id, e in list(led.items()):
-        # 밑줄 키는 메타값이고, 한 번도 안 올린 소재는 연속 판정 대상이 아니다
-        if ad_id.startswith("_") or not isinstance(e, dict) or not e.get("raises"):
+        # 밑줄 키는 메타값이고, 한 번도 안 올린 소재는 연속 판정 대상이 아니다.
+        # Minor 4: `e.get("raises")` 만 보면 되돌린(reverted) 인상까지 판정 대상으로
+        # 잡는다 — 되돌려서 실효 인상이 0인 소재도 노출 0이면 streak 이 쌓여 3주 뒤
+        # "연속실패중단"으로 영구 제외된다. 비-reverted 인상이 하나라도 있어야 한다.
+        if ad_id.startswith("_") or not isinstance(e, dict) or not ledger.last_raise_date(e):
             continue
         if ad_id in zero_ids:
             ledger.record_still_zero(led, ad_id)
@@ -170,11 +173,24 @@ def run_bids(acct, run_dir, rows, commit=False, log=print):
         return {"plans": plans, "counts": counts, "committed": 0}
 
     # 백업 먼저 — 실행 전 원본 adAttr 전량. 되돌릴 수단 없이 광고비를 건드리면 안 된다.
+    #
+    # Important 1: 기존 백업 키는 보존한 채 병합한다(덮어쓰지 않는다). 중간에 죽고
+    # 재수집으로 복구하면, 이미 오른 소재는 이번 회차 계획에서 "최근인상" 으로 빠져
+    # 백업 후보에도 안 잡힌다 — 그걸 무조건 덮으면 먼저 회차에서 성공한 소재의 원본이
+    # 사라져 --revert 로 되돌릴 수 없게 된다. 같은 키는 먼저 것을 유지한다(최초 원본이
+    # 진짜 원본).
     bk = run_dir / f"before_bids_{alias}.json"
     try:
-        bk.write_text(json.dumps(
-            {p["adId"]: (ad_by_id.get(p["adId"], {}).get("adAttr")) for p in plans if p["action"] == "인상"},
-            ensure_ascii=False, indent=1), encoding="utf-8")
+        existing_bk = json.loads(bk.read_text(encoding="utf-8")) if bk.exists() else {}
+    except Exception as e:
+        log(f"  ⚠ 기존 백업 읽기 실패(새로 만든다): {type(e).__name__}: {e}")
+        existing_bk = {}
+    merged_bk = dict(existing_bk)
+    for p in plans:
+        if p["action"] == "인상" and p["adId"] not in merged_bk:
+            merged_bk[p["adId"]] = ad_by_id.get(p["adId"], {}).get("adAttr")
+    try:
+        bk.write_text(json.dumps(merged_bk, ensure_ascii=False, indent=1), encoding="utf-8")
     except Exception as e:
         log(f"  ✗ 백업 실패 — 인상을 중단한다: {type(e).__name__}: {e}")
         return {"plans": plans, "counts": counts, "committed": 0, "aborted": "backup_failed"}

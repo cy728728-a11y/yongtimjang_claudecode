@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -53,7 +54,7 @@ class TestPlanRaise(unittest.TestCase):
         led = {"a": {"raises": [{"date": "2026-08-30", "from": 100, "to": 110}],
                      "streak": 0, "capped": False}}
         p = bids.plan_raise(row(ad_id="a", bid=110), led, today="2026-08-30")
-        self.assertEqual(p["action"], "오늘이미인상")
+        self.assertEqual(p["action"], "최근인상")
         self.assertIsNone(p["to"])
 
 
@@ -178,23 +179,92 @@ class TestRevert(unittest.TestCase):
                 json.dumps({"ads": [{"nccAdId": "a", "nccAdgroupId": "g",
                                      "adAttr": {"bidAmt": 120, "useGroupBidAmt": False}}]}),
                 encoding="utf-8")
+            # Minor 5: record_reverted 는 이제 "오늘" 실제로 성공한 인상에만 플래그를
+            # 찍는다 — 되돌릴 실제 이력이 있다는 걸 보이려면 오늘 날짜의 raise 를
+            # 미리 남겨 둬야 한다(run_revert 는 date.today() 를 그대로 쓴다).
+            today = date.today().isoformat()
+            led_path = run_dir.parent.parent / "ledger" / "cy728.json"
+            ledger.save(led_path, {"a": {"raises": [{"date": today, "from": 70, "to": 120}],
+                                         "streak": 0, "capped": False}})
             sent_bodies = []
 
             def fake_call(acct, method, path, params=None, body=None):
                 sent_bodies.append(body)
                 return 200, {}
 
-            orig = bids.nvad.call
+            orig_call = bids.nvad.call
+            orig_sleep = bids.time.sleep
             bids.nvad.call = fake_call
             bids.time.sleep = lambda *_: None
             try:
                 out = bids.run_revert({"alias": "cy728"}, run_dir, commit=True)
             finally:
-                bids.nvad.call = orig
+                bids.nvad.call = orig_call
+                bids.time.sleep = orig_sleep
             self.assertEqual(out["committed"], 1)
             self.assertEqual(sent_bodies[0]["adAttr"], {"bidAmt": 70, "useGroupBidAmt": True})
-            led = ledger.load(run_dir.parent.parent / "ledger" / "cy728.json")
+            led = ledger.load(led_path)
             self.assertTrue(led["a"]["raises"][-1]["reverted"])
+
+
+class TestRunBidsBackupMerge(unittest.TestCase):
+    """Important 1 — 복구 회차 백업이 이전 회차 원본을 지우면 안 된다.
+
+    1회차 백업 {a, b} → a 성공·b 실패 → 재수집 복구 2회차. a 는 "최근인상" 가드로
+    계획에서 빠지므로, 백업을 무조건 덮어쓰면 a 의 원본이 사라진다.
+    """
+
+    def setUp(self):
+        self._orig_call = bids.nvad.call
+        self._orig_sleep = bids.time.sleep
+        bids.time.sleep = lambda *_: None
+        self.tmp = tempfile.TemporaryDirectory()
+        self.run_dir = Path(self.tmp.name) / "runs" / "2026-08-30"
+        acc_dir = self.run_dir / "accounts" / "cy728"
+        acc_dir.mkdir(parents=True)
+        (acc_dir / "stats_7d.json").write_text("{}", encoding="utf-8")
+        self.ads_path = acc_dir / "ads.json"
+        self._write_ads(100, 100)
+        self.acct = {"alias": "cy728"}
+
+    def tearDown(self):
+        bids.nvad.call = self._orig_call
+        bids.time.sleep = self._orig_sleep
+        self.tmp.cleanup()
+
+    def _write_ads(self, bid_a, bid_b):
+        self.ads_path.write_text(json.dumps({"ads": [
+            {"nccAdId": "a", "adAttr": {"bidAmt": bid_a, "useGroupBidAmt": False}},
+            {"nccAdId": "b", "adAttr": {"bidAmt": bid_b, "useGroupBidAmt": False}},
+        ]}), encoding="utf-8")
+
+    def test_두번째_회차_백업이_첫_회차_원본을_보존한다(self):
+        def round1(acct, method, path, params=None, body=None):
+            if path.endswith("/a"):
+                return 200, {}
+            return 500, "down"
+        bids.nvad.call = round1
+        rows = [row(ad_id="a", bid=100), row(ad_id="b", bid=100)]
+        bids.run_bids(self.acct, self.run_dir, rows, commit=True, log=lambda *a, **k: None)
+
+        bk_path = self.run_dir / "before_bids_cy728.json"
+        bk1 = json.loads(bk_path.read_text(encoding="utf-8"))
+        self.assertEqual(bk1["a"], {"bidAmt": 100, "useGroupBidAmt": False})
+        self.assertEqual(bk1["b"], {"bidAmt": 100, "useGroupBidAmt": False})
+
+        # 재수집: a 는 110 으로 오른 스냅샷, b 는 그대로(100) — 실패한 b 는 안 올랐다
+        self._write_ads(110, 100)
+
+        def round2(acct, method, path, params=None, body=None):
+            return 200, {}
+        bids.nvad.call = round2
+        rows2 = [row(ad_id="a", bid=110), row(ad_id="b", bid=100)]
+        bids.run_bids(self.acct, self.run_dir, rows2, commit=True, log=lambda *a, **k: None)
+
+        bk2 = json.loads(bk_path.read_text(encoding="utf-8"))
+        self.assertIn("a", bk2, "1회차 원본 백업이 2회차에서 사라지면 안 된다")
+        self.assertEqual(bk2["a"], {"bidAmt": 100, "useGroupBidAmt": False})
+        self.assertEqual(bk2["b"], {"bidAmt": 100, "useGroupBidAmt": False})
 
 
 class TestStreaks(unittest.TestCase):
@@ -229,6 +299,15 @@ class TestStreaks(unittest.TestCase):
 
     def test_한번도_안올린_소재는_건드리지_않는다(self):
         led = {"a": {"raises": [], "streak": 0, "capped": False}}
+        bids.update_streaks(led, {"a"}, set(), "2026-08-30")
+        self.assertEqual(led["a"]["streak"], 0)
+
+    def test_되돌린_인상만_있는_소재는_연속판정_대상이_아니다(self):
+        # Minor 4 재현: 유일한 인상 기록이 되돌려졌으면 실효 인상은 0이다 — 노출0
+        # 이라고 streak 을 쌓으면 안 된다(그러면 3주 뒤 연속실패중단으로 영구 제외된다).
+        led = {"a": {"raises": [{"date": "2026-08-01", "from": 70, "to": 80,
+                                  "reverted": True, "revertedDate": "2026-08-02"}],
+                     "streak": 0, "capped": False}}
         bids.update_streaks(led, {"a"}, set(), "2026-08-30")
         self.assertEqual(led["a"]["streak"], 0)
 

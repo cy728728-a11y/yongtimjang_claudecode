@@ -220,6 +220,39 @@ class TestRunPruneCommitRechecks(unittest.TestCase):
             self.assertIn("b", deleted_ids)
             self.assertEqual(out.get("revived"), 1)
 
+    def test_재확인_조회가_빈결과면_전량_되살아남으로_오판하지_않고_중단한다(self):
+        # Minor 3 재현: collect.fetch_ads 는 예외를 던지지 않는다(nvad.call 이 모든
+        # 예외를 흡수해 ([], {}) 를 돌려준다) — 인증 만료·방화벽 차단이면 이 경로로
+        # 조용히 빈 리스트가 온다. 그걸 그대로 revived_filter 에 넘기면 삭제 대상
+        # 전량이 "되살아나 제외"로 찍혀 운영자가 연동 문제가 저절로 풀렸다고 오독한다.
+        with tempfile.TemporaryDirectory() as t:
+            run_dir = Path(t) / "runs" / "2026-08-30"
+            acc_dir = run_dir / "accounts" / "cy728"
+            acc_dir.mkdir(parents=True)
+            stale_ads = [ad("a", enable=False, reason="AD_ABNORMAL_INTERLOCK")]
+            (acc_dir / "ads.json").write_text(json.dumps({"ads": stale_ads}), encoding="utf-8")
+
+            orig_fetch = prune.collect.fetch_ads
+            prune.collect.fetch_ads = lambda acct: ([], {})  # 인증 만료 등으로 빈 결과
+
+            deleted_ids = []
+
+            def fake_call(acct, method, path, params=None, body=None):
+                if method == "DELETE":
+                    deleted_ids.append(path.rsplit("/", 1)[-1])
+                    return 204, None
+                return 200, {}
+
+            prune.nvad.call = fake_call
+            try:
+                out = prune.run_prune({"alias": "cy728"}, run_dir, commit=True)
+            finally:
+                prune.collect.fetch_ads = orig_fetch
+
+            self.assertEqual(deleted_ids, [])
+            self.assertEqual(out.get("aborted"), "recheck_failed")
+            self.assertNotEqual(out.get("revived"), 1)  # "되살아나 제외" 로 둔갑하면 안 된다
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -156,10 +156,19 @@ def run_prune(acct, run_dir, commit=False, log=print):
     # 그 사이 되살아난 소재(UI 에서 켰거나 연동이 스스로 복구됨)까지 스냅샷만 믿고
     # 지우면 되돌릴 수 없다 — commit 직전에 현재 상태를 다시 조회해 교집합한다.
     # 조회는 계정당 11~13회로 DELETE 수천 번에 비하면 무시할 비용이다.
+    # Minor 3: collect.fetch_ads 는 예외를 던지지 않는다(nvad.call 이 모든 예외를 흡수해
+    # ([], {}) 를 돌려준다) — 그래서 try/except 로는 절대 못 잡는다. 인증 만료·방화벽
+    # 차단이면 fresh_ads 가 그냥 빈 리스트로 온다. 이걸 그대로 revived_filter 에 넘기면
+    # deletable(fresh_ads) 이 공집합이라 tgt 전량이 "되살아나 제외"로 둔갑해 운영자가
+    # "연동 문제가 저절로 풀렸다"로 오독한다 — 삭제 0건이라 안전하지만 원인 오판이다.
     try:
         fresh_ads, _ = collect.fetch_ads(acct)
     except Exception as e:
         log(f"  ✗ 재확인 조회 실패 — 이 계정은 삭제하지 않는다: {type(e).__name__}: {e}")
+        return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
+                "backup": str(bk), "aborted": "recheck_failed"}
+    if not fresh_ads:
+        log(f"  ✗ 재확인 조회 결과 0건 — 인증 만료·방화벽 차단 가능성. 이 계정은 삭제하지 않는다")
         return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
                 "backup": str(bk), "aborted": "recheck_failed"}
     tgt, revived = revived_filter(tgt, fresh_ads)

@@ -177,14 +177,19 @@ def cmd_prune(args):
     run_dir = run_dir_of(args.run_dir)
     accts = {a.get("alias"): a for a in _accounts(args.account)}
     acc_dir = run_dir / "accounts"
-    # prep 이 만든 계정 목록을 "처리해야 할 계정" 기준으로 삼는다 — --account 로 좁혔으면
-    # 그 목록을 그대로 쓴다. 이래야 자격증명 파일이 잘려 일부 계정이 조용히 빠져도 잡힌다.
-    expected = args.account or (sorted(d.name for d in acc_dir.iterdir() if d.is_dir())
-                                if acc_dir.exists() else list(accts))
+    prepped = set(d.name for d in acc_dir.iterdir() if d.is_dir()) if acc_dir.exists() else set()
+    # Minor 7: prep 이 만든 계정 목록만 돌면, 자격증명은 있는데 prep 디렉터리가 없는
+    # 계정이 완전 무음으로 빠진다(구코드는 최소한 "소재 읽기 실패"를 찍었다) — I2 의
+    # 요지가 "빠진 게 안 보이는 것" 이었으므로 그 자체를 어기는 셈이다. prep 된 계정과
+    # 자격증명 있는 계정의 합집합을 돌아, 어느 쪽이 빠졌는지 각각 다른 문구로 남긴다.
+    expected = args.account or sorted(prepped | set(accts))
     for alias in expected:
         acct = accts.get(alias)
         if not acct:
             print(f"[{alias}] 자격증명 없음 — 건너뛴다")
+            continue
+        if alias not in prepped:
+            print(f"[{alias}] prep 없음 — 건너뛴다")
             continue
         prune.run_prune(acct, run_dir, commit=args.commit)
     return 0

@@ -40,10 +40,27 @@ class TestDecision(unittest.TestCase):
         data = {"a": {"raises": [{"date": "2026-08-30", "from": 100, "to": 110}],
                       "streak": 0, "capped": False}}
         self.assertEqual(L.bid_decision(data, "a", 110, today="2026-08-30"),
-                         ("오늘이미인상", None))
+                         ("최근인상", None))
 
-    def test_오늘이_아니면_다시_인상한다(self):
-        data = {"a": {"raises": [{"date": "2026-08-29", "from": 100, "to": 110}],
+    def test_7일_지나면_다시_인상한다(self):
+        # 룩백 창(RAISE_COOLDOWN_DAYS=6) 밖이면 주 1회 케이던스상 다시 인상 대상이다
+        data = {"a": {"raises": [{"date": "2026-08-23", "from": 100, "to": 110}],
+                      "streak": 0, "capped": False}}
+        self.assertEqual(L.bid_decision(data, "a", 110, today="2026-08-30"),
+                         ("인상", 120))
+
+    def test_3일_지나면_최근인상으로_막는다(self):
+        # Important 2 재현: 자정을 넘겨 복구해도(날짜가 달라져도) 룩백 창 안이면 막는다.
+        # 고치기 전엔 `date == today` 비교라 하루라도 다르면 통과해버려 100→110→120 처럼
+        # 같은 회차 몫을 두 번 올리는 사고가 났다.
+        data = {"a": {"raises": [{"date": "2026-08-27", "from": 100, "to": 110}],
+                      "streak": 0, "capped": False}}
+        self.assertEqual(L.bid_decision(data, "a", 110, today="2026-08-30"),
+                         ("최근인상", None))
+
+    def test_날짜_파싱_실패하면_막지_않는다(self):
+        # 이력이 깨졌다고 인상을 영영 못 하면 안 된다 — 파싱 실패는 통과시킨다
+        data = {"a": {"raises": [{"date": "이상한값", "from": 100, "to": 110}],
                       "streak": 0, "capped": False}}
         self.assertEqual(L.bid_decision(data, "a", 110, today="2026-08-30"),
                          ("인상", 120))
@@ -78,11 +95,29 @@ class TestStreak(unittest.TestCase):
         self.assertEqual(d["a"]["streak"], 0)
 
     def test_되돌리면_마지막_인상에_플래그가_붙는다(self):
+        # 같은 날 인상·되돌림(revert 는 보통 같은 회차에 바로 뒤따른다)
         d = {}
-        L.record_raise(d, "a", "2026-08-29", 100, 110)
+        L.record_raise(d, "a", "2026-08-30", 100, 110)
         L.record_reverted(d, "a", "2026-08-30")
         self.assertEqual(d["a"]["raises"][-1]["reverted"], True)
         self.assertEqual(d["a"]["raises"][-1]["from"], 100)  # 원본 인상 정보는 남는다
+
+    def test_인상이력없는_소재는_되돌려도_플래그를_지어내지_않는다(self):
+        # Minor 5 재현: run_revert 는 백업의 모든 키를 되돌리는데, 그중엔 이번 회차
+        # 인상 시도가 실패해 이력이 아예 없는 소재도 섞여 있다 — 없던 인상 이력을
+        # 지어내면 안 된다.
+        d = {}
+        L.record_reverted(d, "a", "2026-08-30")
+        self.assertEqual(d["a"]["raises"], [])
+
+    def test_지난주_인상은_이번_되돌림으로_건드리지_않는다(self):
+        # Minor 5 재현: 마지막 인상 날짜가 이번 되돌림 날짜와 다르면(지난주 인상 등,
+        # 이번 회차 시도는 실패해 새 이력이 없음) 엉뚱한 인상 항목에 reverted 플래그를
+        # 찍으면 안 된다 — 실제로 되돌려지지 않은 과거 인상의 이력이 오염된다.
+        d = {"a": {"raises": [{"date": "2026-08-23", "from": 70, "to": 80}],
+                   "streak": 0, "capped": False}}
+        L.record_reverted(d, "a", "2026-08-30")
+        self.assertNotIn("reverted", d["a"]["raises"][-1])
 
     def test_인상이력이_쌓인다(self):
         d = {}
