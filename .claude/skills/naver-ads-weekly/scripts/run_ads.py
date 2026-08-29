@@ -22,11 +22,22 @@ import ads_rules
 import collect
 import nvad
 
+# eroomlib 찾기 — 스크립트 위치에서 위로 올라가며 lib/eroomlib 를 찾는다.
+# 절대경로를 박으면 다른 PC·배포본에서 조용히 폴백돼 workspace.toml 이 영영 안 읽힌다
+# (bulsaja-thumbnail·sellerlife-keyword 가 쓰는 저장소 관례).
+_d = str(Path(__file__).resolve().parent)
+while _d and _d != str(Path(_d).parent):
+    _lib = str(Path(_d) / "lib")
+    if (Path(_lib) / "eroomlib").is_dir():
+        if _lib not in sys.path:
+            sys.path.insert(0, _lib)
+        break
+    _d = str(Path(_d).parent)
+
 
 def data_root():
     """경로를 코드에 박지 않는다 — workspace.toml 을 먼저 본다."""
     try:
-        sys.path.insert(0, "/Users/choiyongsmacbook/Documents/yongtimjang_claudecode/.claude/lib")
         from eroomlib.config import cfg
         p = cfg("paths.data_root")
         if p:
@@ -61,8 +72,14 @@ def cmd_prep(args):
             summaries[a.get("alias")] = collect.collect_account(a, run_dir)
         except Exception as e:
             print(f"[{a.get('alias')}] 수집 실패: {type(e).__name__}: {e}")
-    (run_dir / "prep_summary.json").write_text(
-        json.dumps(summaries, ensure_ascii=False, indent=1), encoding="utf-8")
+    # --account 로 계정을 나눠 여러 번 돌릴 수 있다 — 덮어쓰면 마지막 것만 남는다
+    sp = run_dir / "prep_summary.json"
+    try:
+        merged = json.loads(sp.read_text(encoding="utf-8"))
+    except Exception:
+        merged = {}
+    merged.update(summaries)
+    sp.write_text(json.dumps(merged, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"\n수집 완료 → {run_dir}")
     return 0
 
@@ -86,10 +103,11 @@ def cmd_run(args):
             print(f"[{d.name}] 읽기 실패: {type(e).__name__}: {e}")
             continue
         rules = ads_rules.classify(adsdata["ads"], adsdata["groups"], s7, s30, pur)
-        out["accounts"][d.name] = {"rules": rules}
-        # 밑줄로 시작하는 키(_summary)는 규칙이 아니라 요약이다
-        print(f"[{d.name}] " + " · ".join(f"{k} {len(v)}" for k, v in rules.items()
-                                          if not k.startswith("_")))
+        # 요약을 규칙과 형제로 분리한다 — 규칙 dict 안에 규칙 아닌 키가 섞여 있으면
+        # 순회하는 쪽마다 밑줄 가드를 기억해야 하고, 한 번만 잊어도 조용히 틀린다
+        summary = rules.pop("_summary", {})
+        out["accounts"][d.name] = {"summary": summary, "rules": rules}
+        print(f"[{d.name}] " + " · ".join(f"{k} {len(v)}" for k, v in rules.items()))
     (run_dir / "result.json").write_text(
         json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"\n판정 완료 → {run_dir / 'result.json'}")
