@@ -53,6 +53,21 @@ class TestClassify(unittest.TestCase):
         res = self._run([ad("a"), ad("b")], s7={"a": stat(imp=10)})
         self.assertEqual([x["adId"] for x in res["①노출0"]], ["b"])
 
+    def test_규칙1은_검수대기_소재를_담지_않는다(self):
+        # 검수 대기는 노출이 없는 게 정상이다. 입찰가를 올려도 노출이 생기지 않는다
+        # 실측 2026-08-29: 검수대기 7건이 전부 규칙 ① 에 잡혔다
+        a = ad("a"); a["inspectStatus"] = "PENDING"
+        b = ad("b"); b["inspectStatus"] = "UNDER_REVIEW"
+        c = ad("c"); c["inspectStatus"] = "APPROVED"
+        res = self._run([a, b, c])
+        self.assertEqual([x["adId"] for x in res["①노출0"]], ["c"])
+
+    def test_검수대기여도_다른_규칙에는_정상적으로_들어간다(self):
+        # ① 만 제외 대상이다 — 노출·클릭이 있으면 ②④ 판정은 정상으로 받는다
+        a = ad("a"); a["inspectStatus"] = "PENDING"
+        res = self._run([a], s30={"a": stat(imp=500, ctr=0.5)})
+        self.assertEqual([x["adId"] for x in res["②썸네일교체"]], ["a"])
+
     def test_규칙1은_꺼진_소재를_담지_않는다(self):
         # 꺼진 소재는 당연히 노출 0이다. 담으면 죽은 광고 입찰가만 올리게 된다
         res = self._run([ad("a", enable=False)])

@@ -10,6 +10,8 @@ IMP_MIN = 100      # ②④ 노출 하한 — 없으면 ②가 전체의 66% 가
 CLICK_MIN = 20     # ③ 클릭 하한
 CTR_LOW = 1.0      # ② 기준
 CTR_HIGH = 2.0     # ④ 기준
+# 검수 대기 상태 — 노출이 없는 게 정상이라 규칙 ①(입찰 인상) 대상에서 뺀다
+INSPECT_WAITING = ("PENDING", "UNDER_REVIEW")
 
 
 def live_ads(ads):
@@ -72,7 +74,10 @@ def classify(ads, group_of, stats_7d, stats_30d, purchases):
     off = [a for a in ads if not a.get("enable")]
 
     # ① 7일 통계에 행이 없는 게재중 소재 = 노출 0
-    r1 = [info_of(a) for a in live if a["nccAdId"] not in stats_7d]
+    #    단 검수 대기 중인 소재는 뺀다 — 노출이 없는 게 당연하고, 입찰가를 올려도
+    #    노출이 생기지 않는다. 실측(2026-08-29): 검수대기 7건이 전부 규칙 ① 에 잡혔다.
+    r1 = [info_of(a) for a in live
+          if a["nccAdId"] not in stats_7d and a.get("inspectStatus") not in INSPECT_WAITING]
 
     r2, r3, r4, r5 = [], [], [], []
     for a in live:
