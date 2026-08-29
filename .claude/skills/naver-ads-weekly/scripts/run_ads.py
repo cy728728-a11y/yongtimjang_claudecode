@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import ads_rules
+import bids
 import collect
 import nvad
 import report_md
@@ -141,6 +142,22 @@ def cmd_apply(args):
     return 0
 
 
+def cmd_bids(args):
+    run_dir = run_dir_of(args.run_dir)
+    rp = run_dir / "result.json"
+    if not rp.exists():
+        print("판정 결과가 없다 — 먼저 run 을 돌려라")
+        return 1
+    result = json.loads(rp.read_text(encoding="utf-8"))
+    accts = {a.get("alias"): a for a in _accounts(args.account)}
+    for alias, v in result.get("accounts", {}).items():
+        acct = accts.get(alias)
+        if not acct:
+            continue
+        bids.run_bids(acct, run_dir, v["rules"]["①노출0"], commit=args.commit)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="네이버 검색광고 주간 관리")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -151,8 +168,12 @@ def main():
     ap_apply = sub.choices["apply"]
     ap_apply.add_argument("--sheet", help="구글시트 ID (없으면 마크다운만)")
     ap_apply.add_argument("--no-sheet", action="store_true", help="원장 탭 쓰기만 막는다")
+    s = sub.add_parser("bids")
+    s.add_argument("--run-dir")
+    s.add_argument("--account", nargs="*")
+    s.add_argument("--commit", action="store_true", help="실제로 입찰가를 바꾼다")
     args = ap.parse_args()
-    return {"prep": cmd_prep, "run": cmd_run, "apply": cmd_apply}[args.cmd](args)
+    return {"prep": cmd_prep, "run": cmd_run, "apply": cmd_apply, "bids": cmd_bids}[args.cmd](args)
 
 
 if __name__ == "__main__":
