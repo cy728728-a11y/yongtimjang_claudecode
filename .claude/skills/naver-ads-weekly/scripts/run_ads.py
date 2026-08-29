@@ -22,6 +22,7 @@ import ads_rules
 import collect
 import nvad
 import report_md
+import sheets_out
 
 # eroomlib 찾기 — 스크립트 위치에서 위로 올라가며 lib/eroomlib 를 찾는다.
 # 절대경로를 박으면 다른 PC·배포본에서 조용히 폴백돼 workspace.toml 이 영영 안 읽힌다
@@ -133,6 +134,9 @@ def cmd_apply(args):
     except Exception as e:
         print(f"보고서 쓰기 실패: {type(e).__name__}: {e}")
         return 1
+    if args.sheet and not args.no_sheet:
+        print("시트 기록:")
+        sheets_out.write_sheet(args.sheet, result)
     print(f"보고서 → {out}")
     return 0
 
@@ -144,6 +148,9 @@ def main():
         s = sub.add_parser(name)
         s.add_argument("--run-dir", help="회차 이름(기본: 오늘 날짜)")
         s.add_argument("--account", nargs="*", help="특정 계정 alias 만")
+    ap_apply = sub.choices["apply"]
+    ap_apply.add_argument("--sheet", help="구글시트 ID (없으면 마크다운만)")
+    ap_apply.add_argument("--no-sheet", action="store_true", help="원장 탭 쓰기만 막는다")
     args = ap.parse_args()
     return {"prep": cmd_prep, "run": cmd_run, "apply": cmd_apply}[args.cmd](args)
 
