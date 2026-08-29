@@ -22,6 +22,7 @@ import ads_rules
 import bids
 import collect
 import nvad
+import prune
 import report_md
 import sheets_out
 
@@ -158,6 +159,13 @@ def cmd_bids(args):
     return 0
 
 
+def cmd_prune(args):
+    run_dir = run_dir_of(args.run_dir)
+    for a in _accounts(args.account):
+        prune.run_prune(a, run_dir, commit=args.commit)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="네이버 검색광고 주간 관리")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -172,8 +180,13 @@ def main():
     s.add_argument("--run-dir")
     s.add_argument("--account", nargs="*")
     s.add_argument("--commit", action="store_true", help="실제로 입찰가를 바꾼다")
+    s = sub.add_parser("prune")
+    s.add_argument("--run-dir")
+    s.add_argument("--account", nargs="*")
+    s.add_argument("--commit", action="store_true", help="실제로 삭제한다(되돌릴 수 없다)")
     args = ap.parse_args()
-    return {"prep": cmd_prep, "run": cmd_run, "apply": cmd_apply, "bids": cmd_bids}[args.cmd](args)
+    return {"prep": cmd_prep, "run": cmd_run, "apply": cmd_apply, "bids": cmd_bids,
+            "prune": cmd_prune}[args.cmd](args)
 
 
 if __name__ == "__main__":
