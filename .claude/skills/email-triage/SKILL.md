@@ -24,7 +24,9 @@ argument-hint: [정리 | 확인 | 전달검증 | 스팸구조 | 규칙수정]
 | 전달 실제 가동 검증 | `python3 verify_forwarding.py --days 7` |
 | 스팸에 갇힌 전달 메일 구조 | `python3 rescue_spam.py --apply` |
 | 전달 확인 링크 열기 | `python3 forward_codes.py --open` |
-| 매일 자동 실행 리포트 | `cat logs/daily-report.md` |
+| 자동 실행 리포트 보기 | `cat ~/.local/share/mail-triage/logs/daily-report.md` |
+| 보고서 미리보기 (발송 안 함) | `python3 report_mail.py` |
+| 보고서 강제 발송 | `python3 report_mail.py --send` |
 
 전부 `10-projects/이메일-자동화/` 에서 실행. 미리보기가 기본이고 `--apply` 를 붙여야 실제로 바뀐다.
 
@@ -58,7 +60,11 @@ argument-hint: [정리 | 확인 | 전달검증 | 스팸구조 | 규칙수정]
 
 ## 자동 실행
 
-매일 **08:00** launchd (`com.yongtimjang.mailtriage`).
+**하루 3회 08:00 · 14:00 · 22:00** launchd (`com.yongtimjang.mailtriage`).
+회차마다 **`cy728@daum.net` 으로 보고서 발송** — 확인 필요한 새 메일 목록 + 삭제·수집 건수.
+**새 메일도 삭제도 없으면 안 보낸다** (빈 보고서가 쌓이면 그것도 스팸이 된다).
+이미 보고한 메일은 `~/.local/share/mail-triage/state/reported.json` 로 걸러진다.
+맥이 자고 있으면 깨어난 직후 실행된다 — 예약 시각에 안 돌았다고 고장이 아니다.
 네이버 수집 → 판정 → `logs/daily-report.md` 에 한 줄.
 
 **현재 `apply` 모드 — 실제로 휴지통으로 보낸다** (30일 복구 가능).
@@ -83,6 +89,8 @@ launchctl load   ~/Library/LaunchAgents/com.yongtimjang.mailtriage.plist
 | 특정 계정만 전달이 안 온다 | **원 계정 스팸함부터 봐라.** Gmail 은 스팸 판정된 메일을 전달하지 않고, 나중에 꺼내도 소급 전달 안 된다. 그 다음 전달 주소가 `cy728@daum.net` 이 아닌지 확인 |
 | 네이버를 매번 다시 긁는다 | 중복방지 상태는 `~/.local/share/mail-triage/state` 에 **공유**된다. 실행 위치별로 갈리면 매번 전량 재수집한다 |
 | 아카이브를 지웠는데 보낸 메일까지 사라졌다 | 전체보관함에는 **보낸편지함도 들어 있다.** `--archive` 는 `-in:sent -in:drafts` 로 반드시 제외한다 |
+| 보고서에 수백 건이 한꺼번에 | 기존 재고가 보고 대상에 들어간 것. `python3 report_mail.py --seed` 로 현재분을 '보고 완료' 처리 |
+| 예약 시각에 안 돌았다 | 맥이 잠들어 있으면 launchd 가 깨어난 뒤로 미룬다. `ls -lT ~/.local/share/mail-triage/logs/` 로 실제 실행 시각을 확인 |
 | 계정 설정 화면에 버튼이 없다 | **한국어 Gmail UI 에는 `전달 주소 추가` 가 없다.** 언어를 English (US) 로 바꾸면 나타난다 |
 
 ## 하지 않는 것

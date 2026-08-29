@@ -21,9 +21,16 @@ STAMP="$(date '+%Y-%m-%d %H:%M')"
 
 # 요약 두 줄만 리포트에 누적한다 (상세는 logs/*.json)
 SUMMARY="$(printf '%s\n' "$OUT" | grep -E '삭제 대상|대상 [0-9]+건|완료\.' | tr '\n' ' ')"
+
+# 보고서 발송 — 새 메일도 삭제도 없으면 스크립트가 알아서 안 보낸다
+DEL_N="$(printf '%s\n' "$OUT"   | grep -oE '삭제 대상 [0-9]+' | grep -oE '[0-9]+' | head -1)"
+NAV_N="$(printf '%s\n' "$NAVER" | grep -oE '[0-9]+' | head -1)"
+MAILRPT="$(/usr/bin/python3 "$DIR/report_mail.py" --send \
+            --deleted "${DEL_N:-0}" --naver "${NAV_N:-0}" 2>&1 | tail -1)"
 {
   echo "- **$STAMP** [$MODE] ${SUMMARY:-실행 실패}"
   echo "    - 네이버: ${NAVER:-없음}"
+  echo "    - 보고서: ${MAILRPT:-없음}"
   if printf '%s\n' "$OUT" | grep -q '실패\|Traceback'; then
     echo "    - ⚠️ $(printf '%s\n' "$OUT" | tail -3 | tr '\n' ' ')"
   fi
