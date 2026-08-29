@@ -4,9 +4,14 @@
 
 보고서에는 구매완료 기준 숫자만 싣는다(2026-08-28 용팀장).
 총전환·장바구니는 착시라 나란히 놓으면 헷갈리기만 한다.
+
+Important 5: ①②③④ 표는 모두 top_n 으로 잘린다 — 실측 ①만 1,195행이라 자르지 않으면
+보고서가 298KB 로 불어나 아무도 안 읽는다. 실제 실행 대상 전량은 result.json·시트에
+그대로 있다(bids·prune 은 이 보고서가 아니라 result.json 을 읽는다). ⑤는 계정당 20건
+미만이라 그대로 둔다.
 """
 
-TOP_N = 20   # ② 는 주당 이만큼만 처리한다
+TOP_N = 20   # ①②③④ 는 주당 이만큼만 표에 싣는다(전량 처리·전량 시트 기록엔 영향 없음)
 
 
 def _table(rows, cols, limit=None):
@@ -69,10 +74,12 @@ def build_report(result, top_n=TOP_N):
         r = v["rules"]
         lines.append(f"\n## {alias}\n")
 
-        lines.append(f"### ① 노출 0 — 입찰 인상 대상 {len(r['①노출0'])}건\n")
-        lines.append("`bids --commit` 으로 실행한다. 그룹입찰 상품은 개별 전환 후 `그룹기본가+10원`으로 시작한다.\n")
+        lines.append(f"### ① 노출 0 — 입찰 인상 대상 {_count_label(len(r['①노출0']), top_n)}\n")
+        lines.append("`bids --commit` 으로 실행한다(전량 처리 — 이 표는 상위 미리보기일 뿐이다). "
+                     "그룹입찰 상품은 개별 전환 후 `그룹기본가+10원`으로 시작한다.\n")
         lines.append(_table(r["①노출0"], [("상품", "title"), ("광고그룹", "adGroup"),
-                                          ("현재입찰", "bid"), ("그룹입찰따름", "useGroupBid")]))
+                                          ("현재입찰", "bid"), ("그룹입찰따름", "useGroupBid")],
+                            limit=top_n))
 
         lines.append(f"\n### ② 썸네일 교체 — {_count_label(len(r['②썸네일교체']), top_n)}\n")
         lines.append("노출 100회 이상인데 CTR 1% 미만. 노출 많은 순.\n")
@@ -80,9 +87,9 @@ def build_report(result, top_n=TOP_N):
                                               ("CTR %", "ctr"), ("순위", "rank"), ("상품ID", "mallProductId")],
                             limit=top_n))
 
-        lines.append(f"\n### ③ 클릭 20+ 인데 구매완료 0 — {len(r['③원인분석'])}건\n")
+        lines.append(f"\n### ③ 클릭 20+ 인데 구매완료 0 — {_count_label(len(r['③원인분석']), top_n)}\n")
         lines.append(_table(r["③원인분석"], [("상품", "title"), ("클릭", "clk"), ("CTR %", "ctr"),
-                                            ("광고비", "cost")]))
+                                            ("광고비", "cost")], limit=top_n))
 
         lines.append(f"\n### ④ CTR 2% 이상 — 효자 후보 {_count_label(len(r['④효자후보']), top_n)}\n")
         lines.append(_table(r["④효자후보"], [("상품", "title"), ("노출", "imp"), ("CTR %", "ctr"),

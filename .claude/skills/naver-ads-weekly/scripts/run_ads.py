@@ -4,9 +4,9 @@
 
     prep   전 계정 수집 → run-dir
     run    수집분으로 6개 규칙 판정 → result.json
-    apply  시트 기록 + 보고서 (Task 7·8 에서 채운다)
-    bids   ① 입찰 인상 (Task 9)
-    prune  ⑥ 꺼진 소재 삭제 (Task 10)
+    apply  시트 기록 + 보고서
+    bids   ① 입찰 인상. --revert 로 before_bids 백업에서 되돌린다
+    prune  ⑥ 꺼진 소재 삭제
 
 주간 배치(prep/run/apply)는 광고 API 에 아무것도 쓰지 않는다.
 """
@@ -145,24 +145,48 @@ def cmd_apply(args):
 
 def cmd_bids(args):
     run_dir = run_dir_of(args.run_dir)
+    accts = {a.get("alias"): a for a in _accounts(args.account)}
+
+    # Important 4: --revert 는 result.json 이 필요 없다 — before_bids 백업만 있으면 된다.
+    if args.revert:
+        for alias, acct in accts.items():
+            bids.run_revert(acct, run_dir, commit=args.commit)
+        return 0
+
     rp = run_dir / "result.json"
     if not rp.exists():
         print("판정 결과가 없다 — 먼저 run 을 돌려라")
         return 1
-    result = json.loads(rp.read_text(encoding="utf-8"))
-    accts = {a.get("alias"): a for a in _accounts(args.account)}
+    # Important 10: cmd_apply 와 같은 수준으로 읽기를 보호한다 — 돈이 나가는 명령이다.
+    try:
+        result = json.loads(rp.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"result.json 읽기 실패: {type(e).__name__}: {e}")
+        return 1
     for alias, v in result.get("accounts", {}).items():
         acct = accts.get(alias)
         if not acct:
+            # Important 2: 돈이 나가는 명령이니 자격증명 없어 건너뛴 계정도 로그에 남긴다
+            print(f"[{alias}] 자격증명 없음 — 건너뛴다")
             continue
-        bids.run_bids(acct, run_dir, v["rules"]["①노출0"], commit=args.commit)
+        bids.run_bids(acct, run_dir, v.get("rules", {}).get("①노출0", []), commit=args.commit)
     return 0
 
 
 def cmd_prune(args):
     run_dir = run_dir_of(args.run_dir)
-    for a in _accounts(args.account):
-        prune.run_prune(a, run_dir, commit=args.commit)
+    accts = {a.get("alias"): a for a in _accounts(args.account)}
+    acc_dir = run_dir / "accounts"
+    # prep 이 만든 계정 목록을 "처리해야 할 계정" 기준으로 삼는다 — --account 로 좁혔으면
+    # 그 목록을 그대로 쓴다. 이래야 자격증명 파일이 잘려 일부 계정이 조용히 빠져도 잡힌다.
+    expected = args.account or (sorted(d.name for d in acc_dir.iterdir() if d.is_dir())
+                                if acc_dir.exists() else list(accts))
+    for alias in expected:
+        acct = accts.get(alias)
+        if not acct:
+            print(f"[{alias}] 자격증명 없음 — 건너뛴다")
+            continue
+        prune.run_prune(acct, run_dir, commit=args.commit)
     return 0
 
 
@@ -180,6 +204,8 @@ def main():
     s.add_argument("--run-dir")
     s.add_argument("--account", nargs="*")
     s.add_argument("--commit", action="store_true", help="실제로 입찰가를 바꾼다")
+    s.add_argument("--revert", action="store_true",
+                   help="직전 인상을 before_bids 백업으로 되돌린다(스펙 §4.3)")
     s = sub.add_parser("prune")
     s.add_argument("--run-dir")
     s.add_argument("--account", nargs="*")

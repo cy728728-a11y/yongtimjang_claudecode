@@ -11,6 +11,7 @@ import time
 from collections import Counter
 from datetime import date
 
+import collect
 import nvad
 
 # 재등록에 필요한 최소 필드 + 원본 통째로
@@ -27,6 +28,19 @@ DELETE_REASONS = ("AD_ABNORMAL_INTERLOCK",)
 def deletable(ads):
     """삭제 대상만 고른다 — 꺼져 있고 사유가 DELETE_REASONS 인 것."""
     return [a for a in ads if not a.get("enable") and a.get("statusReason") in DELETE_REASONS]
+
+
+def revived_filter(target_ads, fresh_ads):
+    """Critical 3 — commit 직전 재조회 결과와 대조해 그새 되살아난 소재를 뺀다.
+
+    `prep` 스냅샷으로 고른 삭제 대상(target_ads)을 `fresh_ads`(commit 시점에 다시 조회한
+    현재 상태)의 deletable() 결과와 교집합한다. `prep` → 사람 검토 → `prune --commit`
+    사이 몇 시간~며칠 동안 사용자가 UI 에서 다시 켰거나 연동이 스스로 복구된 소재까지
+    지우면 되돌릴 수 없다. (남길 것, 제외 건수) 를 돌려준다.
+    """
+    fresh_ids = {a["nccAdId"] for a in deletable(fresh_ads)}
+    keep = [a for a in target_ads if a["nccAdId"] in fresh_ids]
+    return keep, len(target_ads) - len(keep)
 
 
 def backup_paused(acct, ads, out_dir):
@@ -138,8 +152,22 @@ def run_prune(acct, run_dir, commit=False, log=print):
         return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
                 "backup": str(bk), "deleted": 0}
 
+    # Critical 3: prep → 사람 검토 → prune --commit 사이 몇 시간~며칠이 뜬다.
+    # 그 사이 되살아난 소재(UI 에서 켰거나 연동이 스스로 복구됨)까지 스냅샷만 믿고
+    # 지우면 되돌릴 수 없다 — commit 직전에 현재 상태를 다시 조회해 교집합한다.
+    # 조회는 계정당 11~13회로 DELETE 수천 번에 비하면 무시할 비용이다.
+    try:
+        fresh_ads, _ = collect.fetch_ads(acct)
+    except Exception as e:
+        log(f"  ✗ 재확인 조회 실패 — 이 계정은 삭제하지 않는다: {type(e).__name__}: {e}")
+        return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
+                "backup": str(bk), "aborted": "recheck_failed"}
+    tgt, revived = revived_filter(tgt, fresh_ads)
+    if revived:
+        log(f"  재확인 결과 {revived}건이 되살아나 제외")
+
     stat = delete_ads(acct, [a["nccAdId"] for a in tgt],
                       backup_root / f"delete_progress_{alias}.jsonl", log=log)
     log(f"  삭제 결과 {stat}")
     return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
-            "backup": str(bk), "result": stat}
+            "backup": str(bk), "result": stat, "revived": revived}

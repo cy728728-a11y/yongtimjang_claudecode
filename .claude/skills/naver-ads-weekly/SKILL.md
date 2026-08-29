@@ -31,6 +31,10 @@ $P $S apply --sheet <시트ID>     # 시트 원장 append + report.md (--sheet �
 $P $S bids                      # dry-run — 뭘 올릴지만 보여준다
 $P $S bids --commit             # 실제 인상
 $P $S prune --commit            # 꺼진 소재 삭제 (백업 선행)
+
+# 되돌려야 하면(잘못 인상했을 때) — before_bids_<계정>.json 백업으로 원본을 복원한다
+$P $S bids --revert             # dry-run — 무엇을 되돌릴지만 보여준다
+$P $S bids --revert --commit    # 실제로 되돌린다
 ```
 
 **`prep`·`run`·`apply` 는 광고 API 에 아무것도 쓰지 않는다.** `bids`·`prune` 만 쓰고, 둘 다
@@ -74,19 +78,23 @@ $P $S prune --commit            # 꺼진 소재 삭제 (백업 선행)
 
 ## 구글시트 기록
 
-`apply --sheet <시트ID>` 는 `①노출0`~`⑤효자확정` 5개 탭에 회차·계정을 앞에 붙여 append 한다
-(⑥ 삭제대상과 총괄은 시트 탭이 아니라 `report.md` 에만 실린다). **시트 실제 쓰기는 아직
-검증되지 않았다.** 실패해도 `prep`·`run`·`apply` 의 판정·보고서 산출 자체는 죽지 않는다
-(시트 실패는 계정·규칙별로 로그만 남기고 나머지를 계속 시도한다).
+`apply --sheet <시트ID>` 는 `sheets_out.write_sheet` 가 `eroomlib.gsheets.append_rows`/
+`ensure_tab`(429 백오프 재시도 포함, 다른 스킬 두 개도 쓰는 검증된 헬퍼)을 불러
+`①노출0`~`⑤효자확정` 5개 탭에 회차·계정을 앞에 붙여 append 한다(⑥ 삭제대상과 총괄은
+시트 탭이 아니라 `report.md` 에만 실린다).
 
-**2026-08-30 확인 — 현재는 gws 인증이 아니라 요청 형식 문제로 100% 실패한다.**
-`gws auth status` 로 보면 인증은 살아 있고(`spreadsheets` 스코프 포함) 정상 호출도 되는데,
-`sheets_out._gws()` 가 `values.append` 의 본문(`values`)을 `--json` 이 아니라 `--params` 안에
-`"body"` 키로 넣고 있다 — 실제 `gws sheets spreadsheets values append --help` 는 쿼리/경로
-값은 `--params`, 요청 본문은 `--json` 으로 분리해서 받는다. 그 결과 매번
-`Invalid JSON payload ... Unknown name "body"` 로 죽는다(재현: `sheets_out.write_sheet` 를
-아무 시트ID로나 호출해봐도 동일). **코드 수정이 필요하다** — 이 태스크(문서화)에서는 고치지
-않았다. gws 인증이 실제로 끊긴 것처럼 보이면(403·invalid_grant 류) 아래로 재인증한다:
+**2026-08-30 확인 — 실제 시트 쓰기가 검증됐다.** 시트ID
+`1-oSQepeUGbdmRfSizJHUIjgHu-UYxMtyS504mzDeJKI` 에 5개 탭 합계
+2,242/198/78/138/38행이 기록됐다. (과거 이 문서가 언급하던 `_gws()` 헬퍼는 제거되고
+`eroomlib.gsheets` 로 교체됐다 — subprocess 로 `gws` 를 직접 부르지 않는다.)
+
+한 탭(규칙)이 실패해도 **판정(`result.json`)과 마크다운 보고서는 죽지 않는다** — `write_sheet`
+가 규칙마다 try/except 로 감싸기 때문이다. 다만 실패 단위는 **규칙**이지 계정이 아니다:
+`write_sheet` 는 규칙마다 전 계정의 행을 한 번에 합쳐 append 하므로, 한 규칙이 실패하면
+그 규칙의 **모든 계정 행**이 함께 빠진다 — "한 탭이 실패해도 나머지 계정은 계속 기록한다"는
+서술은 틀렸다.
+
+gws 인증이 끊긴 것처럼 보이면(403·invalid_grant 류) 아래로 재인증한다:
 
 ```bash
 gws auth login
@@ -98,7 +106,7 @@ rm -f ~/.config/gws/token_cache.json
 ## 테스트
 
 ```bash
-for t in nvad reports ads_rules ledger bids; do
+for t in nvad reports ads_rules ledger bids prune; do
   .venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_$t.py
 done
 ```

@@ -33,6 +33,36 @@ class TestDecision(unittest.TestCase):
     def test_현재값을_모르면_올리지_않는다(self):
         self.assertEqual(L.bid_decision({}, "a", None), ("입찰가불명", None))
 
+    def test_오늘_이미_인상한_소재는_다시_올리지_않는다(self):
+        # Critical 1 재현: bids --commit 이 중간에 죽고 prep&&run&&bids--commit 으로
+        # 자연스럽게 복구하면, 이력에 오늘 날짜 인상이 이미 있는데도 스냅샷 bid 기준으로
+        # 또 인상해버려 하루에 두 번(100→110→120) 오르면 안 된다.
+        data = {"a": {"raises": [{"date": "2026-08-30", "from": 100, "to": 110}],
+                      "streak": 0, "capped": False}}
+        self.assertEqual(L.bid_decision(data, "a", 110, today="2026-08-30"),
+                         ("오늘이미인상", None))
+
+    def test_오늘이_아니면_다시_인상한다(self):
+        data = {"a": {"raises": [{"date": "2026-08-29", "from": 100, "to": 110}],
+                      "streak": 0, "capped": False}}
+        self.assertEqual(L.bid_decision(data, "a", 110, today="2026-08-30"),
+                         ("인상", 120))
+
+    def test_today_인자_없으면_기존과_동일하게_동작한다(self):
+        # today 를 안 주는 기존 호출부(테스트 포함)는 동작이 바뀌면 안 된다
+        data = {"a": {"raises": [{"date": "2026-08-30", "from": 100, "to": 110}],
+                      "streak": 0, "capped": False}}
+        self.assertEqual(L.bid_decision(data, "a", 110), ("인상", 120))
+
+    def test_되돌린_인상은_당일_재인상을_막지_않는다(self):
+        # Important 4(revert) 와 맞물리는 경계: record_reverted 가 붙인 reverted 플래그는
+        # "오늘이미인상" 판정에서 제외한다 — 되돌렸으면 다시 올릴 수 있어야 한다.
+        data = {"a": {"raises": [{"date": "2026-08-30", "from": 100, "to": 110}],
+                      "streak": 0, "capped": False}}
+        L.record_reverted(data, "a", "2026-08-30")
+        self.assertEqual(L.bid_decision(data, "a", 100, today="2026-08-30"),
+                         ("인상", 110))
+
 
 class TestStreak(unittest.TestCase):
     def test_또_노출0이면_연속이_쌓인다(self):
@@ -46,6 +76,13 @@ class TestStreak(unittest.TestCase):
         d = {"a": {"raises": [], "streak": 2, "capped": False}}
         L.record_recovered(d, "a")
         self.assertEqual(d["a"]["streak"], 0)
+
+    def test_되돌리면_마지막_인상에_플래그가_붙는다(self):
+        d = {}
+        L.record_raise(d, "a", "2026-08-29", 100, 110)
+        L.record_reverted(d, "a", "2026-08-30")
+        self.assertEqual(d["a"]["raises"][-1]["reverted"], True)
+        self.assertEqual(d["a"]["raises"][-1]["from"], 100)  # 원본 인상 정보는 남는다
 
     def test_인상이력이_쌓인다(self):
         d = {}

@@ -49,11 +49,36 @@ def record_recovered(data, ad_id):
     _entry(data, ad_id)["streak"] = 0
 
 
-def bid_decision(data, ad_id, current_bid):
-    """이 소재를 올릴지 정한다. (사유, 새 입찰가) 를 돌려준다."""
+def record_reverted(data, ad_id, date_str):
+    """되돌림 사실을 기록한다(Important 4 — bids --revert).
+
+    인상 기록을 지우지 않고 마지막 인상 항목에 `reverted` 플래그를 남긴다 — 삭제하면
+    다음 회차가 "이 소재를 언제 얼마로 올렸었는지" 를 잃는다. `bid_decision` 은 `reverted`
+    가 붙은 항목을 "오늘 이미 인상" 판정에서 제외한다 — 되돌렸으면 같은 날 다시 인상할 수
+    있어야 한다.
+    """
+    e = _entry(data, ad_id)
+    if e["raises"]:
+        e["raises"][-1]["reverted"] = True
+        e["raises"][-1]["revertedDate"] = date_str
+    else:
+        e["raises"].append({"date": date_str, "reverted": True})
+
+
+def bid_decision(data, ad_id, current_bid, today=None):
+    """이 소재를 올릴지 정한다. (사유, 새 입찰가) 를 돌려준다.
+
+    Critical 1 가드: `today` 가 주어지고 이력에 오늘 날짜의 (되돌리지 않은) 인상 기록이
+    있으면 다시 올리지 않는다. `bids --commit` 이 중간에 죽고 prep&&run&&bids--commit 으로
+    자연스럽게 복구하면, 계획을 세울 때 스냅샷의 bid 만 보고 이력을 안 봐서 하루에 두 번
+    (100→110→120) 올리는 사고가 났다 — 이 체크가 그걸 막는다.
+    """
     if current_bid is None:
         return ("입찰가불명", None)
     e = data.get(ad_id) or {}
+    if today and any(r.get("date") == today and not r.get("reverted")
+                     for r in e.get("raises", [])):
+        return ("오늘이미인상", None)
     if e.get("streak", 0) >= FAIL_STREAK:
         return ("연속실패중단", None)
     new = current_bid + BID_STEP
