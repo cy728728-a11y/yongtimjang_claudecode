@@ -30,11 +30,14 @@ def deletable(ads):
 
 
 def backup_paused(acct, ads, out_dir):
-    """삭제 대상을 백업한다. referenceKey·mallProductId 가 있어야 재등록이 가능하다."""
+    """삭제 대상을 백업한다. referenceKey·mallProductId 가 있어야 재등록이 가능하다.
+
+    실패하면 None 을 돌려준다 — 호출자가 그 계정의 삭제를 건너뛴다.
+    되돌릴 수단 없이 지우지 않는다.
+    """
     alias = acct.get("alias") or str(acct.get("customer_id"))
-    off = deletable(ads)
     rows = []
-    for a in off:
+    for a in deletable(ads):
         rd = a.get("referenceData") or {}
         row = {k: a.get(k) for k in BACKUP_KEYS}
         row.update({
@@ -43,23 +46,35 @@ def backup_paused(acct, ads, out_dir):
             "referenceData": rd,
         })
         rows.append(row)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    p = out_dir / f"paused_{alias}_{date.today().isoformat()}.json"
-    p.write_text(json.dumps({"account": alias, "customer_id": acct.get("customer_id"),
-                             "count": len(rows), "ads": rows}, ensure_ascii=False, indent=1),
-                 encoding="utf-8")
-    return p
+    path = out_dir / f"paused_{alias}_{date.today().isoformat()}.json"
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"account": alias, "customer_id": acct.get("customer_id"),
+                                    "reason": list(DELETE_REASONS), "count": len(rows), "ads": rows},
+                                   ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception as e:
+        print(f"  ✗ 백업 실패 — 이 계정은 삭제하지 않는다: {type(e).__name__}: {e}")
+        return None
+    return path
 
 
 def delete_ads(acct, ad_ids, progress_path, log=print):
     """소재를 삭제한다. 진행 파일로 재개 가능하고, 404 는 이미 없는 것으로 성공 처리한다."""
     done = set()
     if progress_path.exists():
-        for line in progress_path.read_text(encoding="utf-8").splitlines():
-            try:
-                done.add(json.loads(line)["nccAdId"])
-            except Exception:
-                pass
+        try:
+            for line in progress_path.read_text(encoding="utf-8").splitlines():
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                # **성공한 것만 건너뛴다.** 하드 에러(400·403 등)까지 done 에 넣으면
+                # 실제로는 안 지워졌는데 영영 재시도하지 않고 매주 조용히 스킵된다
+                if r.get("status") in (200, 204, 404):
+                    done.add(r.get("nccAdId"))
+        except Exception as e:
+            print(f"  진행 파일 읽기 실패(처음부터 진행한다): {type(e).__name__}: {e}")
+            done = set()
     todo = [i for i in ad_ids if i not in done]
     log(f"  삭제 대상 {len(todo)}건 (이미 처리 {len(done)})")
 
@@ -112,6 +127,10 @@ def run_prune(acct, run_dir, commit=False, log=print):
 
     backup_root = run_dir.parent.parent / "paused-backup"
     bk = backup_paused(acct, ads, backup_root)
+    if bk is None:
+        # 백업이 없으면 되돌릴 수단이 없다 — 이 계정은 지우지 않고 넘어간다
+        return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
+                "aborted": "backup_failed"}
     log(f"  백업 {len(tgt)}건 → {bk}")
 
     if not commit:
