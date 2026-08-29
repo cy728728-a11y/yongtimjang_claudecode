@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ads_rules
 import collect
 import nvad
+import report_md
 
 # eroomlib 찾기 — 스크립트 위치에서 위로 올라가며 lib/eroomlib 를 찾는다.
 # 절대경로를 박으면 다른 PC·배포본에서 조용히 폴백돼 workspace.toml 이 영영 안 읽힌다
@@ -114,15 +115,37 @@ def cmd_run(args):
     return 0
 
 
+def cmd_apply(args):
+    run_dir = run_dir_of(args.run_dir)
+    rp = run_dir / "result.json"
+    if not rp.exists():
+        print("판정 결과가 없다 — 먼저 run 을 돌려라")
+        return 1
+    try:
+        result = json.loads(rp.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"result.json 읽기 실패: {type(e).__name__}: {e}")
+        return 1
+    md = report_md.build_report(result)
+    out = run_dir / "report.md"
+    try:
+        out.write_text(md, encoding="utf-8")
+    except Exception as e:
+        print(f"보고서 쓰기 실패: {type(e).__name__}: {e}")
+        return 1
+    print(f"보고서 → {out}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="네이버 검색광고 주간 관리")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("prep", "run"):
+    for name in ("prep", "run", "apply"):
         s = sub.add_parser(name)
         s.add_argument("--run-dir", help="회차 이름(기본: 오늘 날짜)")
         s.add_argument("--account", nargs="*", help="특정 계정 alias 만")
     args = ap.parse_args()
-    return {"prep": cmd_prep, "run": cmd_run}[args.cmd](args)
+    return {"prep": cmd_prep, "run": cmd_run, "apply": cmd_apply}[args.cmd](args)
 
 
 if __name__ == "__main__":
