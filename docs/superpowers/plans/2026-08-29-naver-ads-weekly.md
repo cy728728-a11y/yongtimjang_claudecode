@@ -83,6 +83,8 @@ report.md                        총괄 보고서
   - `load_accounts() -> list[dict]` — `~/.eroom/naver-ads.json` 의 `accounts` 배열
   - `sign(secret: str, ts: str, method: str, path: str) -> str` — base64 서명
   - `call(acct: dict, method: str, path: str, params: dict|None = None, body: dict|None = None, raw: bool = False) -> tuple[int, object]`
+    **어떤 입력에도 예외를 올리지 않는다** — 자격증명 키 누락·직렬화 불가 body 포함 전부 `(0, "에러문자열")`
+  - `download(acct: dict, url: str) -> str|None` — 리포트 다운로드. **실패하면 None**(예외를 올리지 않는다)
   - `chunks(seq: list, n: int)` — 제너레이터
   - `BASE: str`, `CRED: Path`
 
@@ -392,11 +394,11 @@ def _build_and_download(acct, day, log):
         if not isinstance(j, dict):
             continue
         if j.get("status") == "BUILT" and j.get("downloadUrl"):
-            try:
-                return nvad.download(acct, j["downloadUrl"])
-            except Exception as e:
-                log(f"    {day} 다운로드 실패 {type(e).__name__}: {e}")
-                return None
+            # nvad.download 는 실패하면 예외 대신 None 을 준다
+            text = nvad.download(acct, j["downloadUrl"])
+            if text is None:
+                log(f"    {day} 다운로드 실패")
+            return text
         if j.get("status") in ("NONE", "ERROR"):
             return None
     log(f"    {day} 빌드 대기 초과")
