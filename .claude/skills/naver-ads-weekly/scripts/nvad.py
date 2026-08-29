@@ -53,10 +53,10 @@ def headers(acct, method, path):
 
 def call(acct, method, path, params=None, body=None, raw=False):
     """API 1회 호출. (status, body) 반환. 예외는 (0, "에러문자열")."""
-    url = BASE + path + (("?" + urllib.parse.urlencode(params)) if params else "")
-    data = json.dumps(body).encode("utf-8") if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method, headers=headers(acct, method, path))
     try:
+        url = BASE + path + (("?" + urllib.parse.urlencode(params)) if params else "")
+        data = json.dumps(body).encode("utf-8") if body is not None else None
+        req = urllib.request.Request(url, data=data, method=method, headers=headers(acct, method, path))
         with urllib.request.urlopen(req, timeout=60) as r:
             text = r.read().decode("utf-8")
             if raw:
@@ -72,13 +72,16 @@ def call(acct, method, path, params=None, body=None, raw=False):
 
 
 def download(acct, url):
-    """리포트 다운로드. 같은 서명이 필요하고 서명 대상은 URL 의 path 부분이다."""
-    p = urllib.parse.urlparse(url)
-    h = headers(acct, "GET", p.path)
-    h.pop("Content-Type", None)
-    req = urllib.request.Request(url, headers=h)
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return r.read().decode("utf-8", errors="replace")
+    """리포트 다운로드. 같은 서명이 필요하고 서명 대상은 URL 의 path 부분이다. 실패 시 None."""
+    try:
+        p = urllib.parse.urlparse(url)
+        h = headers(acct, "GET", p.path)
+        h.pop("Content-Type", None)
+        req = urllib.request.Request(url, headers=h)
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return r.read().decode("utf-8", errors="replace")
+    except Exception:
+        return None
 
 
 def chunks(seq, n):

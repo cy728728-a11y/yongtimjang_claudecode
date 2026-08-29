@@ -37,5 +37,23 @@ class TestChunks(unittest.TestCase):
         self.assertEqual(list(nvad.chunks([], 100)), [])
 
 
+class TestCall(unittest.TestCase):
+    def test_call은_자격증명_키_누락시_예외가_아니라_0을_반환한다(self):
+        # 자격증명에 api_key 키가 없음 → KeyError 발생 → (0, "KeyError: ...") 반환
+        incomplete_acct = {"customer_id": 12345, "secret_key": "secret"}
+        status, result = nvad.call(incomplete_acct, "GET", "/ncc/campaigns")
+        self.assertEqual(status, 0)
+        self.assertIsInstance(result, str)
+        self.assertIn("KeyError", result)
+
+    def test_call은_직렬화_불가능한_body에_예외가_아니라_0을_반환한다(self):
+        # set은 JSON 직렬화 불가능 → TypeError 발생 → (0, "TypeError: ...") 반환
+        acct = {"customer_id": 12345, "api_key": "key", "secret_key": "secret"}
+        status, result = nvad.call(acct, "POST", "/test", body={"x": {1, 2}})
+        self.assertEqual(status, 0)
+        self.assertIsInstance(result, str)
+        self.assertIn("TypeError", result)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
