@@ -62,5 +62,46 @@ class TestBody(unittest.TestCase):
         self.assertEqual(body["type"], "SHOPPING_PRODUCT_AD")
 
 
+class TestStreaks(unittest.TestCase):
+    def test_인상이력있고_이번에도_노출0이면_streak_증가(self):
+        led = {"a": {"raises": [{"date": "2026-08-01", "from": 70, "to": 80}], "streak": 1, "capped": False}}
+        bids.update_streaks(led, {"a"}, "2026-08-30")
+        self.assertEqual(led["a"]["streak"], 2)
+
+    def test_인상이력있고_이번엔_노출_회복이면_streak_초기화(self):
+        led = {"a": {"raises": [{"date": "2026-08-01", "from": 70, "to": 80}], "streak": 2, "capped": False}}
+        bids.update_streaks(led, set(), "2026-08-30")  # a 는 이번 회차 노출0 목록에 없다 = 회복
+        self.assertEqual(led["a"]["streak"], 0)
+
+    def test_한번도_안올린_소재는_건드리지_않는다(self):
+        led = {"a": {"raises": [], "streak": 0, "capped": False}}
+        bids.update_streaks(led, {"a"}, "2026-08-30")
+        self.assertEqual(led["a"]["streak"], 0)
+
+    def test_같은_회차를_두번_돌려도_중복_갱신되지_않는다(self):
+        led = {"a": {"raises": [{"date": "2026-08-01", "from": 70, "to": 80}], "streak": 1, "capped": False}}
+        bids.update_streaks(led, {"a"}, "2026-08-30")
+        bids.update_streaks(led, {"a"}, "2026-08-30")  # 같은 날짜 재호출
+        self.assertEqual(led["a"]["streak"], 2)
+
+    def test_반환값은_갱신건수다(self):
+        led = {
+            "a": {"raises": [{"date": "2026-08-01", "from": 70, "to": 80}], "streak": 0, "capped": False},
+            "b": {"raises": [{"date": "2026-08-01", "from": 70, "to": 80}], "streak": 1, "capped": False},
+        }
+        still, rec = bids.update_streaks(led, {"a"}, "2026-08-30")
+        self.assertEqual((still, rec), (1, 1))
+
+    def test_이력_갱신이_실제_판정까지_이어진다(self):
+        # streak 2 인 소재가 이번 회차에도 노출0 이면 3이 되고, 그 갱신이 즉시
+        # plan_raise 의 "연속실패중단" 판정에 반영돼야 한다 — 갱신이 죽은 코드가 아님을
+        # 끝단(end-to-end)에서 검증한다.
+        led = {"a": {"raises": [{"date": "2026-08-01", "from": 70, "to": 80}], "streak": 2, "capped": False}}
+        bids.update_streaks(led, {"a"}, "2026-08-30")
+        p = bids.plan_raise(row(ad_id="a"), led)
+        self.assertEqual(p["action"], "연속실패중단")
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
