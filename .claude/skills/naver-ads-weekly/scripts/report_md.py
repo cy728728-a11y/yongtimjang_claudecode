@@ -21,9 +21,23 @@ def _table(rows, cols, limit=None):
         cells = []
         for _, k in cols:
             v = r.get(k, "")
-            cells.append(f"{v:,}" if isinstance(v, int) else (f"{v:.2f}" if isinstance(v, float) else str(v)))
+            # bool 을 int 보다 먼저 본다 — 파이썬에서 bool 은 int 의 하위 타입이라
+            # 순서를 바꾸면 True/False 가 1/0 으로 찍혀 사람이 못 읽는다
+            if isinstance(v, bool):
+                cells.append("예" if v else "아니오")
+            elif isinstance(v, int):
+                cells.append(f"{v:,}")
+            elif isinstance(v, float):
+                cells.append(f"{v:.2f}")
+            else:
+                cells.append(str(v))
         body += "| " + " | ".join(cells) + " |\n"
     return head + sep + body
+
+
+def _count_label(n, limit):
+    """헤더에 쓸 건수 표기. 표가 잘렸으면 잘렸다고 반드시 말한다."""
+    return f"{n}건 중 상위 {limit}건" if limit and n > limit else f"{n}건"
 
 
 def build_report(result, top_n=TOP_N):
@@ -60,18 +74,18 @@ def build_report(result, top_n=TOP_N):
         lines.append(_table(r["①노출0"], [("상품", "title"), ("광고그룹", "adGroup"),
                                           ("현재입찰", "bid"), ("그룹입찰따름", "useGroupBid")]))
 
-        lines.append(f"\n### ② 썸네일 교체 — {len(r['②썸네일교체'])}건 중 상위 {top_n}건\n")
+        lines.append(f"\n### ② 썸네일 교체 — {_count_label(len(r['②썸네일교체']), top_n)}\n")
         lines.append("노출 100회 이상인데 CTR 1% 미만. 노출 많은 순.\n")
         lines.append(_table(r["②썸네일교체"], [("상품", "title"), ("노출", "imp"), ("클릭", "clk"),
-                                              ("CTR", "ctr"), ("순위", "rank"), ("상품ID", "mallProductId")],
+                                              ("CTR %", "ctr"), ("순위", "rank"), ("상품ID", "mallProductId")],
                             limit=top_n))
 
         lines.append(f"\n### ③ 클릭 20+ 인데 구매완료 0 — {len(r['③원인분석'])}건\n")
-        lines.append(_table(r["③원인분석"], [("상품", "title"), ("클릭", "clk"), ("CTR", "ctr"),
+        lines.append(_table(r["③원인분석"], [("상품", "title"), ("클릭", "clk"), ("CTR %", "ctr"),
                                             ("광고비", "cost")]))
 
-        lines.append(f"\n### ④ CTR 2% 이상 — 효자 후보 {len(r['④효자후보'])}건\n")
-        lines.append(_table(r["④효자후보"], [("상품", "title"), ("노출", "imp"), ("CTR", "ctr"),
+        lines.append(f"\n### ④ CTR 2% 이상 — 효자 후보 {_count_label(len(r['④효자후보']), top_n)}\n")
+        lines.append(_table(r["④효자후보"], [("상품", "title"), ("노출", "imp"), ("CTR %", "ctr"),
                                             ("순위", "rank")], limit=top_n))
 
         lines.append(f"\n### ⑤ 구매완료 발생 — 효자 확정 {len(r['⑤효자확정'])}건\n")
