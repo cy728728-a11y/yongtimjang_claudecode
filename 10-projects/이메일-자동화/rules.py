@@ -9,6 +9,14 @@ DEL_FROM_ABSOLUTE = [
     r'aliexpress',
 ]
 
+# ── 최우선 삭제(제목): KEEP_FROM 이 발신자를 남기더라도 이 제목이면 지운다 ──
+# 여기 넣는 건 극히 좁고 구체적인 문구만. 넓게 쓰면 보안 알림을 통째로 날린다.
+# 용팀장 지시(2026-09-01): Claude 계정 연동 알림은 앞으로 전부 삭제.
+# 발신자 noreply-accounts@google.com 이 KEEP_FROM(구글 보안 알림)이라 제목만으론 안 걸렸다.
+DEL_SUBJ_ABSOLUTE = [
+    r'Google 계정 데이터 일부를 .*Claude.*공유',
+]
+
 # ── 무조건 남김: 보안·세금·정책·제재·금융·결제·공유·본인발신 ──────────────
 KEEP_FROM = [
     r'forwarding-noreply@google\.com',   # 자동전달 확인 메일 — 절대 삭제 금지
@@ -91,6 +99,7 @@ def judge(m):
     f = (m.get('from') or '').lower()
     s = m.get('subject') or ''
     if any(re.search(p, f, re.I) for p in DEL_FROM_ABSOLUTE): return 'DELETE'
+    if any(re.search(p, s, re.I) for p in DEL_SUBJ_ABSOLUTE): return 'DELETE'
     if any(re.search(p, f, re.I) for p in KEEP_FROM): return 'KEEP'
     if any(re.search(p, s, re.I) for p in KEEP_SUBJ): return 'KEEP'
     if any(re.search(p, f, re.I) for p in DEL_FROM):  return 'DELETE'

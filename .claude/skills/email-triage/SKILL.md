@@ -36,6 +36,8 @@ argument-hint: [정리 | 확인 | 전달검증 | 스팸구조 | 규칙수정]
 평가 순서가 중요하다 — **위가 아래를 이긴다**:
 
 1. `DEL_FROM_ABSOLUTE` — 무조건 삭제 (알리익스프레스 전량)
+1b. `DEL_SUBJ_ABSOLUTE` — 제목으로 무조건 삭제. **KEEP 을 이긴다** — KEEP_FROM 발신자라도 지운다.
+   좁고 구체적인 문구만 넣는다 (예: Claude 계정 연동 알림). 넓게 쓰면 보안 알림이 통째로 날아간다
 2. `KEEP_FROM` / `KEEP_SUBJ` — 보안·세금·제재·금융·영수증·전달확인메일
 3. `DEL_FROM` / `DEL_SUBJ` — 광고·뉴스레터·소셜알림·정산입금·주문현황
 4. `DEL_SUBJ_BULK` — 상업 키워드(할인·특가·쿠폰). **List-Unsubscribe 가 있을 때만** 적용
