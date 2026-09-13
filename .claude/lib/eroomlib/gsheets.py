@@ -92,6 +92,46 @@ def sheets_get(spreadsheet_id, rng, max_retries=4):
     return d.get("values", [])
 
 
+def sheets_batch_get(spreadsheet_id, ranges, max_retries=4):
+    """여러 range 를 한 번에 읽어 `[값2차원, ...]` 를 range 순서대로 반환.
+
+    **왜 sheets_get 반복이 아닌가**: 읽기도 분당 쿼터가 있다. 주문시트처럼
+    12개월 탭 × 열 여러 개를 훑으면 get 을 100회 가까이 부르게 되고 쿼터에 걸린다.
+    batchGet 은 같은 일을 1회로 끝낸다.
+
+    응답의 valueRanges 가 요청보다 짧게 오는 경우(빈 range)가 있으므로
+    **요청 길이에 맞춰 빈 리스트로 채워** 인덱스가 밀리지 않게 한다.
+    """
+    ranges = list(ranges)
+    if not ranges:
+        return []
+    d = _with_retry(lambda: _run_gws(
+        ["sheets", "spreadsheets", "values", "batchGet",
+         "--params", json.dumps({"spreadsheetId": spreadsheet_id,
+                                 "ranges": ranges,
+                                 "valueRenderOption": "FORMATTED_VALUE"}),
+         "--format", "json"]), f"batchGet({len(ranges)}개)", max_retries)
+    vrs = d.get("valueRanges") or []
+    out = [(vr.get("values") or []) for vr in vrs]
+    while len(out) < len(ranges):
+        out.append([])
+    return out[:len(ranges)]
+
+
+def sheets_tabs(spreadsheet_id, max_retries=4):
+    """스프레드시트의 탭 이름 목록을 시트 순서대로 반환.
+
+    탭이 늘어나도 코드를 안 고치려면 탭 목록을 **하드코딩하지 않고** 여기서 받는다.
+    """
+    d = _with_retry(lambda: _run_gws(
+        ["sheets", "spreadsheets", "get",
+         "--params", json.dumps({"spreadsheetId": spreadsheet_id,
+                                 "fields": "sheets.properties.title"}),
+         "--format", "json"]), "tabs()", max_retries)
+    return [s.get("properties", {}).get("title", "")
+            for s in (d.get("sheets") or [])]
+
+
 def sheets_update(spreadsheet_id, rng, values_2d, value_input="RAW", max_retries=4):
     """range 에 2차원 배열 기록(update, append 아님).
 
@@ -184,6 +224,18 @@ _RETRY_HINTS = ("429", "quota", "RESOURCE_EXHAUSTED", "rateLimitExceeded",
                 "gws API 오류 500", "gws API 오류 502", "gws API 오류 503",
                 "gws API 오류 504", "internalError", "backendError",
                 "Service Unavailable")
+
+
+def sheets_clear(spreadsheet_id, rng, max_retries=4):
+    """range 의 값을 비운다(서식은 남는다).
+
+    **왜 필요한가**: 매번 전체를 다시 뽑는 산출물 탭은 append 하면 재실행마다
+    행이 배로 늘어난다. 덮어쓰기 전에 지워야 멱등해진다.
+    """
+    return _with_retry(lambda: _run_gws(
+        ["sheets", "spreadsheets", "values", "clear",
+         "--params", json.dumps({"spreadsheetId": spreadsheet_id, "range": rng}),
+         "--format", "json"]), f"clear({rng})", max_retries)
 
 
 def append_rows(spreadsheet_id, tab, rows, max_retries=7):
