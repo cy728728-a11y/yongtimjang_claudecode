@@ -599,11 +599,76 @@ LEDGER_TABS = {
             "편차%", "불사자현재", "차액", "교정필요", "방향"],
     "후보": ["대표pid", "판매자상품코드", "불사자코드", "사본수", "상품명", "그룹명",
            "합산주문수", "합산매출", "가중마진", "쿠팡수수료율", "쿠팡보정마진",
-           "카테고리", "잠금", "배송비방향", "배송비차액", "배송비과소", "게이트", "사유"],
+           "카테고리", "메인키워드", "잠금", "배송비방향", "배송비차액", "배송비과소",
+           "게이트", "사유"],
     "복사": ["원본pid", "신pid", "불사자코드", "판매자상품코드", "상품명",
-           "원본판매가", "복사후판매가", "복사일"],
+           "메인키워드", "확신도", "카테고리", "모델명", "추천상품명(쿠팡)",
+           "원본판매가", "복사후판매가", "복사일", "최종상품명(용팀장)"],
     "제외": ["판매자상품코드", "상품명", "합산주문수", "가중마진", "쿠팡보정마진", "사유"],
 }
+
+
+def _sheet_models(sid, tab="복사"):
+    """원장 `복사` 탭에서 `{원본pid: 모델명}` 을 읽는다 — 모델명 정본.
+
+    run-dir 은 회차마다 새로 만들어지므로 과거 회차의 모델명은 로컬에 없다.
+    시트만이 회차를 넘어 남는 기록이라 여기서 읽는다.
+    """
+    try:
+        hdr = (gsheets.sheets_get(sid, f"'{tab}'!A1:Z1") or [[]])[0]
+        if "모델명" not in hdr:
+            return {}
+        mi, pi = hdr.index("모델명"), hdr.index("원본pid")
+        out = {}
+        for r in (gsheets.sheets_get(sid, f"'{tab}'!A2:Z5000") or []):
+            pid = (r[pi] if len(r) > pi else "").strip()
+            m = (r[mi] if len(r) > mi else "").strip()
+            if pid and m:
+                out[pid] = m
+        return out
+    except Exception as e:  # noqa: BLE001
+        print(f"  [경고] 기존 모델명 읽기 실패 — 중복 검사 못 함: {str(e)[:90]}")
+        return None
+
+
+def _report_models(verdict):
+    """모델명 판정 출력. 통과면 한 줄, 아니면 사유별로."""
+    if verdict["통과"]:
+        print("  모델명 검사: 중복·형식 문제 없음")
+        return
+    if verdict["누락"]:
+        print(f"  ❌ 모델명 누락 {len(verdict['누락'])}건: {verdict['누락'][:6]}")
+    if verdict["형식위반"]:
+        print(f"  ❌ 형식 위반(ON-XXX-000 이어야 한다): {verdict['형식위반'][:6]}")
+    for m, ps in list(verdict["런내중복"].items())[:6]:
+        print(f"  ❌ 이번 회차 안에서 중복 — {m}: {ps}")
+    for m, d in list(verdict["기존충돌"].items())[:6]:
+        print(f"  ❌ 기존 상품과 충돌 — {m}: 새 {d['새상품']} vs 기존 {d['기존상품']}")
+
+
+def cmd_models(args):
+    """모델명 중복·형식 검사(읽기 전용). 시트 기록 전에 단독으로 돌려볼 수 있다."""
+    sid = args.sheet or cfg("sheets.coupang")
+    models = _load(_p(args.run_dir, "models.json"), {}) or {}
+    if not models:
+        print("[models] models.json 이 없다.", file=sys.stderr)
+        return 2
+    existing = _sheet_models(sid) if sid else {}
+    v = R.model_conflicts(models, existing or {})
+    print(f"[models] 이번 회차 {len(models)}건 · 시트 기존 "
+          f"{len(existing or {})}건과 대조")
+    _report_models(v)
+    if not v["통과"] and args.suggest:
+        taken = R.taken_models(models, existing or {})
+        for m in list(v["런내중복"]) + list(v["기존충돌"]):
+            parts = m.split("-")
+            if len(parts) == 3:
+                try:
+                    print(f"     {m} → 빈 번호 제안: "
+                          f"{R.next_model(parts[1], parts[2][-1], taken)}")
+                except ValueError as e:
+                    print(f"     {m}: {e}")
+    return 0 if v["통과"] else 5
 
 
 def cmd_sheet(args):
@@ -620,6 +685,48 @@ def cmd_sheet(args):
     copied = _read_jsonl(_p(args.run_dir, "copied.jsonl"))
     ver = _load(_p(args.run_dir, "verified.json"), {}) or {}
     price = {c["신pid"]: c.get("복사후판매가") for c in (ver.get("판매가") or [])}
+    # 카테고리교정 때 실제로 조회에 넣은 키워드(그룹 시트 `시트1` E열 "검색어(사용)").
+    # 그 키워드가 카테고리를 결정했으므로 상품명·상위노출 작업의 출발점이 된다.
+    kw = _load(_p(args.run_dir, "keywords.json"), {}) or {}
+    # 쿠팡 상품명 = 후킹 + 후킹 + 메인키워드 + 서브키워드 (2026-09-13 용팀장 지시).
+    # 후킹은 클릭을 부르는 수식어, 서브키워드는 색상·규격 같은 간단한 특징.
+    names = _load(_p(args.run_dir, "product_names.json"), {}) or {}
+    # 모델명 — 실제 제품에는 모델명이 없어 임의로 부여한다(2026-09-15 용팀장 지시).
+    # `ON`(오네이) + 품목 약어 3자 + 규격 3자. 상품마다 고유해야 한다.
+    models = _load(_p(args.run_dir, "models.json"), {}) or {}
+
+    # **기록 전에 모델명을 검사한다.** 같은 모델명을 다른 상품에 쓰면 쿠팡이 동일상품으로
+    # 묶을 수 있다. 시트가 회차를 넘는 정본이라 거기서 기존 코드를 읽어 대조한다.
+    if models:
+        existing = _sheet_models(sid)
+        if existing is None:
+            print("  [경고] 기존 모델명을 못 읽었다 — 중복 검사 없이 진행한다")
+        else:
+            v = R.model_conflicts(models, existing)
+            _report_models(v)
+            if not v["통과"] and not args.allow_model_conflict:
+                print("  중단 — 모델명을 고치고 다시 돌려라 "
+                      "(알고도 진행하려면 --allow-model-conflict, "
+                      "빈 번호 제안은 `models --suggest`)", file=sys.stderr)
+                return 5
+
+    # **사람이 손으로 적은 열은 보존한다.** `sheet` 는 전체 덮어쓰기라, 지키지 않으면
+    # 용팀장이 직접 적은 최종상품명이 다음 실행에서 통째로 날아간다.
+    manual = {}
+    try:
+        cur = gsheets.sheets_get(sid, f"'복사'!A2:Z3000") or []
+        hdr = (gsheets.sheets_get(sid, f"'복사'!A1:Z1") or [[]])[0]
+        if "최종상품명(용팀장)" in hdr:
+            ci = hdr.index("최종상품명(용팀장)")
+            for r in cur:
+                pid = (r[0] if r else "").strip()
+                val = (r[ci] if len(r) > ci else "").strip()
+                if pid and val:
+                    manual[pid] = val
+        if manual:
+            print(f"  손으로 적은 최종상품명 {len(manual)}건 보존")
+    except Exception as e:
+        print(f"  [경고] 기존 최종상품명 읽기 실패 — 보존 못 함: {str(e)[:90]}")
 
     def num(v, nd=1):
         return "" if v is None else round(float(v), nd)
@@ -641,13 +748,21 @@ def cmd_sheet(args):
         "후보": [[c["대표pid"], c["판매자상품코드"], c["불사자코드"], c["사본수"],
                 c["상품명"], c["그룹명"] or "", c["합산주문수"], num(c["합산매출"], 0),
                 num(c["가중마진"]), num(c["쿠팡수수료율"]), num(c["쿠팡보정마진"]),
-                c["카테고리"], "Y" if c["잠금"] else "", c.get("배송비방향", ""),
+                c["카테고리"], (kw.get(c["대표pid"]) or {}).get("검색어", ""),
+                "Y" if c["잠금"] else "", c.get("배송비방향", ""),
                 c.get("배송비차액") or "", "Y" if c["배송비과소"] else "",
                 "통과", c["사유"]]
                for c in cands],
         "복사": [[c["원본pid"], c.get("신pid") or "", c["불사자코드"],
-                c["판매자상품코드"], c["상품명"], c.get("원본판매가") or "",
-                price.get(c.get("신pid")) or "", c["복사일"]]
+                c["판매자상품코드"], c["상품명"],
+                (kw.get(c["원본pid"]) or {}).get("검색어", ""),
+                (kw.get(c["원본pid"]) or {}).get("확신도", ""),
+                (kw.get(c["원본pid"]) or {}).get("카테고리", ""),
+                models.get(c["원본pid"], ""),
+                names.get(c["원본pid"], ""),
+                c.get("원본판매가") or "",
+                price.get(c.get("신pid")) or "", c["복사일"],
+                manual.get(c["원본pid"], "")]
                for c in copied],
         "제외": [[r["판매자상품코드"], r["상품명"], r["합산주문수"],
                 num(r["가중마진"]), num(r["쿠팡보정마진"]), r["사유"]]
@@ -662,6 +777,9 @@ def cmd_sheet(args):
         if not rows:
             continue
         gsheets.ensure_tab(sid, tab, header)
+        # **헤더도 매번 다시 쓴다.** `ensure_tab` 은 탭을 새로 만들 때만 헤더를 쓰므로,
+        # 열을 추가하면 데이터는 새 구조인데 머리글은 옛 것이 남아 라벨이 어긋난다.
+        gsheets.sheets_update(sid, f"'{tab}'!A1", [list(header)])
         gsheets.sheets_clear(sid, f"'{tab}'!A2:ZZ")
         # chunk_by_size 는 (시작인덱스, 행들) 쌍을 내준다 — 시작 인덱스로 행 위치를 잡는다.
         for start, chunk in gsheets.chunk_by_size(rows):
@@ -723,7 +841,14 @@ def main():
 
     p = common(sub.add_parser("sheet", help="원장 기록"))
     p.add_argument("--sheet", default="")
+    p.add_argument("--allow-model-conflict", action="store_true",
+                   help="모델명 충돌이 있어도 기록한다(기본은 중단)")
     p.set_defaults(fn=cmd_sheet)
+
+    p = common(sub.add_parser("models", help="모델명 중복·형식 검사(읽기 전용)"))
+    p.add_argument("--sheet", default="")
+    p.add_argument("--suggest", action="store_true", help="빈 번호를 제안한다")
+    p.set_defaults(fn=cmd_models)
 
     args = ap.parse_args()
     os.makedirs(args.run_dir, exist_ok=True)

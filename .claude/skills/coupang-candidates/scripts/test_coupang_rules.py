@@ -187,5 +187,63 @@ class TestDedupeByBulsajaCode(unittest.TestCase):
         self.assertTrue(list(groups)[0].startswith("solo:"))
 
 
+class TestModelCode(unittest.TestCase):
+    def test_valid_format(self):
+        for code in ("ON-DSP-08S", "ON-HNG-01W", "ON-FKL-200", "ON-CTF-800"):
+            self.assertTrue(R.valid_model(code), code)
+
+    def test_invalid_format(self):
+        for code in ("DSP-08S", "ON-DS-08S", "ON-DSP-08SX", "ON-dsp-08S",
+                     "ON_DSP_08S", "", None, "ON-DSP-0"):
+            self.assertFalse(R.valid_model(code), repr(code))
+
+    def test_no_conflict_when_all_unique(self):
+        r = R.model_conflicts({"p1": "ON-AAA-001", "p2": "ON-BBB-002"}, {})
+        self.assertEqual(r["런내중복"], {})
+        self.assertEqual(r["기존충돌"], {})
+        self.assertEqual(r["형식위반"], [])
+        self.assertTrue(r["통과"])
+
+    def test_detects_duplicate_within_run(self):
+        r = R.model_conflicts({"p1": "ON-AAA-001", "p2": "ON-AAA-001"}, {})
+        self.assertIn("ON-AAA-001", r["런내중복"])
+        self.assertEqual(sorted(r["런내중복"]["ON-AAA-001"]), ["p1", "p2"])
+        self.assertFalse(r["통과"])
+
+    def test_detects_conflict_with_existing_other_product(self):
+        """다른 상품이 이미 쓰는 모델명이면 충돌 — 쿠팡에서 동일상품으로 묶일 수 있다."""
+        r = R.model_conflicts({"new1": "ON-AAA-001"}, {"old9": "ON-AAA-001"})
+        self.assertIn("ON-AAA-001", r["기존충돌"])
+        self.assertFalse(r["통과"])
+
+    def test_same_product_keeping_its_own_code_is_not_conflict(self):
+        """같은 상품이 자기 코드를 그대로 쓰는 건 재실행일 뿐 충돌이 아니다."""
+        r = R.model_conflicts({"p1": "ON-AAA-001"}, {"p1": "ON-AAA-001"})
+        self.assertEqual(r["기존충돌"], {})
+        self.assertTrue(r["통과"])
+
+    def test_flags_bad_format(self):
+        r = R.model_conflicts({"p1": "BAD"}, {})
+        self.assertEqual(r["형식위반"], ["BAD"])
+        self.assertFalse(r["통과"])
+
+    def test_blank_model_is_reported_not_crashed(self):
+        r = R.model_conflicts({"p1": ""}, {})
+        self.assertEqual(r["누락"], ["p1"])
+        self.assertFalse(r["통과"])
+
+    def test_next_model_suffix_avoids_taken(self):
+        taken = {"ON-HNG-01W", "ON-HNG-02W"}
+        self.assertEqual(R.next_model("HNG", "W", taken), "ON-HNG-03W")
+
+    def test_next_model_first_free(self):
+        self.assertEqual(R.next_model("ABC", "X", set()), "ON-ABC-01X")
+
+    def test_next_model_raises_when_exhausted(self):
+        taken = {f"ON-ZZZ-{i:02d}Q" for i in range(1, 100)}
+        with self.assertRaises(ValueError):
+            R.next_model("ZZZ", "Q", taken)
+
+
 if __name__ == "__main__":
     unittest.main()

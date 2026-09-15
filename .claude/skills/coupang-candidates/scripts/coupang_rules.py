@@ -8,6 +8,7 @@
 실측에서 한 코드가 `마진률` 산술평균 31.4% vs 가중평균 11.6% 였다. 정의가 흔들리면
 게이트가 무의미해지므로 공식을 한 곳에 박고 단위테스트로 묶는다.
 """
+import re as _re
 
 # 스마트스토어 실측 수수료율(주문시트 `마켓수수료율` 열). 결측 행의 기본값.
 DEFAULT_SS_FEE = 7.0
@@ -182,3 +183,87 @@ def shipping_diff(실측P75, 불사자현재, tolerance_pct=10.0):
         "실측P75": round(실측),
         "현재": round(현재),
     }
+
+
+# ---------------------------------------------------------------- 모델명
+
+# 오네이 모델명 형식: ON + 품목 약어 3자 + 규격 3자 (예 ON-DSP-08S).
+# 실제 판매 제품에는 모델명이 없어 임의로 부여한다(2026-09-15 용팀장 지시).
+MODEL_RE = _re.compile(r"^ON-[A-Z]{3}-[A-Z0-9]{3}$")
+
+
+def valid_model(code):
+    """오네이 모델명 형식인가."""
+    return bool(code) and bool(MODEL_RE.match(str(code)))
+
+
+def model_conflicts(new_models, existing_models=None):
+    """새 모델명이 겹치는지 검사 → 판정 dict.
+
+    `new_models` / `existing_models` 는 모두 `{productId: 모델명}`.
+    `existing_models` 는 **원장 시트 `복사` 탭 모델명 열**이 정본이다 — run-dir 은
+    회차마다 새로 만들므로 로컬 파일로는 과거 회차를 알 수 없다.
+
+    **왜 검사하는가**: 같은 모델명을 다른 상품에 쓰면 쿠팡이 **동일상품으로 묶을 수**
+    있다. 묶이면 가격·리뷰가 섞이고 떼어내기 어렵다.
+
+    같은 상품(productId)이 자기 코드를 그대로 쓰는 건 재실행이므로 충돌이 아니다.
+    """
+    new_models = dict(new_models or {})
+    existing = dict(existing_models or {})
+
+    누락 = sorted(p for p, m in new_models.items() if not str(m or "").strip())
+    형식위반 = sorted({str(m) for m in new_models.values()
+                   if str(m or "").strip() and not valid_model(m)})
+
+    by_code = {}
+    for pid, m in new_models.items():
+        m = str(m or "").strip()
+        if m:
+            by_code.setdefault(m, []).append(pid)
+    런내중복 = {m: sorted(ps) for m, ps in by_code.items() if len(ps) > 1}
+
+    # 기존 정본에서 같은 코드를 쓰는 **다른** 상품
+    owner = {}
+    for pid, m in existing.items():
+        m = str(m or "").strip()
+        if m:
+            owner.setdefault(m, set()).add(pid)
+    기존충돌 = {}
+    for m, ps in by_code.items():
+        others = sorted(owner.get(m, set()) - set(ps))
+        if others:
+            기존충돌[m] = {"새상품": ps, "기존상품": others}
+
+    return {
+        "누락": 누락,
+        "형식위반": 형식위반,
+        "런내중복": 런내중복,
+        "기존충돌": 기존충돌,
+        "통과": not (누락 or 형식위반 or 런내중복 or 기존충돌),
+    }
+
+
+def taken_models(*maps):
+    """여러 `{pid: 모델명}` 에서 쓰인 모델명 집합."""
+    out = set()
+    for m in maps:
+        for v in (m or {}).values():
+            v = str(v or "").strip()
+            if v:
+                out.add(v)
+    return out
+
+
+def next_model(type3, spec_tail, taken):
+    """`ON-{type3}-{NN}{tail}` 에서 안 쓰인 가장 작은 번호를 돌려준다.
+
+    2차 라운드에서 같은 품목을 또 올릴 때 손으로 번호를 세지 않게 한다.
+    """
+    t = str(type3 or "").upper()[:3]
+    tail = str(spec_tail or "").upper()[:1]
+    for n in range(1, 100):
+        code = f"ON-{t}-{n:02d}{tail}"
+        if code not in (taken or set()):
+            return code
+    raise ValueError(f"ON-{t}-NN{tail} 번호가 모두 소진됐다(01~99). 품목 약어를 바꿔라.")
