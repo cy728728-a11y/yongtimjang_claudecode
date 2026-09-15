@@ -35,6 +35,14 @@
   - added: 2026-08-26
   - priority: normal
 
+- [ ] 줌 오픈: 용감한용팀장3기 줌미팅 (19:30 접속 → start_url로 열기)
+  - added: 2026-09-02
+  - priority: normal
+
+- [ ] 줌 오픈: 용감한용팀장3기 3주차줌미팅 (19:30 접속 → start_url로 열기)
+  - added: 2026-09-09
+  - priority: normal
+
 
 ## Scheduled
 
