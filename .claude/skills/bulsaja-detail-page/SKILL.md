@@ -10,9 +10,6 @@ allowed-tools:
   - mcp__bulsaja__bulsaja_detail_page_generate
   - mcp__bulsaja__bulsaja_detail_page_status
   - mcp__bulsaja__bulsaja_ai_credit_balance
-  - mcp__bulsaja-yongssaem__bulsaja_detail_page_generate
-  - mcp__bulsaja-yongssaem__bulsaja_detail_page_status
-  - mcp__bulsaja-yongssaem__bulsaja_ai_credit_balance
 ---
 
 # 불사자 AI 상세페이지 생성 (배치)
@@ -63,10 +60,12 @@ allowed-tools:
 
 ## 계정 라우팅
 
-- **용팀장 계정**(기본, `bulsaja` 서버): 스크립트 직접 실행.
-- **용쌤 계정**(`bulsaja-yongssaem` 서버): `run_yong.py` 래퍼로 실행 —
-  `python scripts/run_yong.py <python절대경로> scripts/detail_batch.py ...`
-  (환경변수 `BULSAJA_MCP_URL/TOKEN` 주입. 토큰은 절대 출력 금지.)
+정본은 [`_shared/불사자-안전규칙.md` §계정 라우팅](../_shared/불사자-안전규칙.md).
+
+- **작업 계정은 용쌤(부킹) 하나**, 기본 `bulsaja` 서버다. 스크립트를 그냥 실행하면 된다.
+- ~~`bulsaja-yongssaem` 서버 + `run_yong.py` 래퍼~~ — **죽은 경로다** (2026-09-19 실측:
+  그 MCP 서버 항목이 존재하지 않는다). `scripts/run_yong.py` 는 용팀장 계정을 다시 등록하기
+  전까지 쓰지 않는다.
 
 ## Workflow
 
@@ -83,7 +82,6 @@ allowed-tools:
 ### Step 3. 배치 실행
 ```
 python scripts/detail_batch.py --run-dir <RUN> --pages 10
-# 용쌤 계정이면: python scripts/run_yong.py <python> scripts/detail_batch.py --run-dir <RUN> --pages 10
 ```
 - 접수: 상품별 2단계 확인(확인토큰) → 작업번호 기록 (`detail_status.json`).
 - **첫 건 자동 검증**: 진행 분모 ≠ `--pages` 면 스크립트가 즉시 중단.

@@ -11,23 +11,19 @@ allowed-tools:
   - mcp__bulsaja__bulsaja_product_workdata
   - mcp__bulsaja__bulsaja_shipping_cost_recommend
   - mcp__bulsaja__bulsaja_price_update
-  - mcp__bulsaja-yongssaem__bulsaja_product_find_by_code
-  - mcp__bulsaja-yongssaem__bulsaja_product_detail
-  - mcp__bulsaja-yongssaem__bulsaja_product_workdata
-  - mcp__bulsaja-yongssaem__bulsaja_shipping_cost_recommend
-  - mcp__bulsaja-yongssaem__bulsaja_price_update
 ---
 
 # 해외배송비 측정·추천·반영
 
 ## 계정 라우팅
 
-불사자 MCP는 두 계정으로 등록되어 있다.
+정본은 [`_shared/불사자-안전규칙.md` §계정 라우팅](../_shared/불사자-안전규칙.md).
 
-- **용쌤 계정** (`mcp__bulsaja-yongssaem__*`): `N번_용쌤X-X` 등 일반 마켓그룹. 계정 지정 없이 "마켓"이라고만 하면 기본값.
-- **용팀장 계정** (`mcp__bulsaja__*`): "용감한 용팀장" 그룹(유튜브·강의용).
+**등록된 MCP 서버는 `bulsaja` 하나뿐이고, 그게 용쌤(부킹) 계정이다** (2026-09-19 실측).
+`N번_용쌤X-X` 등 일반 마켓그룹이 전부 여기 있으니 `mcp__bulsaja__*` 를 그냥 쓰면 된다.
 
-용팀장님이 계정을 명시하면 그 계정의 도구를 쓴다. 지정이 없으면 용쌤 계정으로 먼저 조회하고, 상품코드가 안 나오면 용팀장 계정도 확인한다.
+~~`mcp__bulsaja-yongssaem__*`~~ 은 존재하지 않는 도구다. 용팀장 계정(`용감한용팀장` 그룹)은
+별도 토큰이고 지금 등록돼 있지 않다 — 필요하면 MCP 교체·재연결이 선행돼야 한다.
 
 ## 개요
 
