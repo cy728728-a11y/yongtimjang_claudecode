@@ -100,6 +100,15 @@ Tailscale 설치 자체는 재부팅 불필요.
   `git fetch ssh://choiyongsmacbook@100.95.62.13/Users/choiyongsmacbook/Documents/yongtimjang_claudecode main`
 - 근본 해결(미착수): 맥에 `credential.helper osxkeychain` + GitHub 토큰 등록, 또는 리모트를 SSH 방식으로 전환
 
+**단축 명령 (2026-09-19)**
+- 노트북 PowerShell 프로파일: `cc` = 로컬 Claude, `ss` = 맥 접속+screen+Claude 바이패스
+  `ss` 실체: `ssh -t mac "screen -R work ~/.local/bin/work"`
+- 맥 `~/.local/bin/work`: 워크스페이스 이동 후 `claude --dangerously-skip-permissions` 실행
+- **함정**: 원격 실행·screen 은 비대화형 셸이라 `.zshrc` 를 안 읽는다.
+  PATH 에 의존해 `claude` 를 부르면 `not found` 로 즉시 죽고 screen 이 바로 종료된다.
+  스크립트 안에서 **절대경로**(`$HOME/.local/bin/claude`)를 쓸 것.
+- screen 빠져나오기: `Ctrl+A` 다음 `D` (맥에서는 계속 돌아감)
+
 **세션 유지**: tmux 없음, macOS 기본 `screen` 사용 (동작 검증 완료)
 
 [source: 원격 서버화 세션 실측, 2026-09-19]
