@@ -10,6 +10,8 @@
 네트워크를 타지 않는다 — `bids.nvad.call` 을 전부 몽키패치한다.
 """
 import json
+import os
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -171,3 +173,104 @@ def test_revert_도_고른것만_되돌린다(회차, 네트워크차단):
     assert 전량["targets"] == 3, "only_ads 를 안 주면 백업 전량이 대상이다(기존 동작 불변)"
 
     assert json.loads(bk.read_text(encoding="utf-8")) == 백업원본, "run_revert 는 백업을 쓰지 않는다"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 여기부터는 **실제 프로세스**를 띄운다. CLI 계약(종료코드·산출물 파일)은
+# 함수 호출로는 증명할 수 없다 — argparse·main()·종료코드가 그 계약의 일부다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+REPO = Path(__file__).resolve().parents[2]
+CLI_PY = REPO / ".venv" / "bin" / "python3"          # CLI 는 언제나 자기 venv 로 돈다
+RUN_ADS = SCRIPTS_DIR / "run_ads.py"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
+def _격리된_데이터루트(tmp_path):
+    """`data_root` 를 tmp 로 돌리는 환경을 만든다. 실제 `~/python_work/data` 를 안 만진다.
+
+    `run_ads.run_dir_of()` 는 회차 폴더를 **만든다**(`mkdir(parents=True, exist_ok=True)`).
+    tmp 회차 이름을 그냥 주면 실제 데이터 루트에 쓰레기 폴더가 남는다. `eroomlib.config`
+    가 보는 `EROOM_WORKSPACE_TOML` 을 갈아끼워 그 경로 자체를 tmp 로 옮긴다.
+    """
+    toml = tmp_path / "workspace.toml"
+    toml.write_text(f'[paths]\ndata_root = "{tmp_path}"\n', encoding="utf-8")
+    env = dict(os.environ, EROOM_WORKSPACE_TOML=str(toml))
+    return env, tmp_path
+
+
+def _cli(env, *argv):
+    return subprocess.run([str(CLI_PY), str(RUN_ADS), *argv],
+                          capture_output=True, text=True, env=env, cwd=str(REPO))
+
+
+def test_only_ads_깨지면_실패한다(tmp_path):
+    """회귀-04 / T-1-05 — 대상 파일이 깨지면 **exit 1**. 전량 실행으로 번지지 않는다.
+
+    5건인 줄 알았던 게 2,242건이 되는 게 이 명령의 가장 비싼 실수다.
+    실제 프로세스를 띄우는 이유: 종료코드가 CLI 계약의 일부라 함수 호출로는 증명이 안 된다.
+    """
+    env, _ = _격리된_데이터루트(tmp_path)
+    p = _cli(env, "bids", "--run-dir", "2026-08-30",
+             "--only-ads", str(FIXTURES / "targets_broken.json"))
+
+    assert p.returncode == 1, f"깨진 대상 파일은 중단이어야 한다: {p.stdout}{p.stderr}"
+    assert "폴백하지 않는다" in p.stdout
+    assert "대상" not in p.stdout, "한 계정도 처리에 들어가면 안 된다"
+
+
+def test_only_ads_파일이_없어도_실패한다(tmp_path):
+    """파일 부재도 같은 취급이다 — 없는 대상 파일을 '전량' 으로 읽지 않는다."""
+    env, _ = _격리된_데이터루트(tmp_path)
+    p = _cli(env, "bids", "--run-dir", "2026-08-30", "--only-ads", str(tmp_path / "없다.json"))
+    assert p.returncode == 1
+    assert "폴백하지 않는다" in p.stdout
+
+
+def test_preview_out_이_전량을_쓴다(tmp_path):
+    """D-02 — stdout 은 10건에서 접지만 산출물은 전량이다.
+
+    dry-run 이라 네트워크를 타지 않는다 — 쓰기 플래그를 안 주면 run_bids 는 계획만 세우고
+    돌아온다. 그 플래그 이름을 여기 적지 않는 이유는 `no_commit_guard.sh` 가 이 파일도
+    훑기 때문이다(주석이든 코드든 글자 자체가 없어야 한다 — 그게 이 가드의 요지다).
+    계정 alias 는 `run_ads.py accounts` 에서 받아온다 — 테스트에도 계정을 박지 않는다(BOARD-02).
+    """
+    env, root = _격리된_데이터루트(tmp_path)
+
+    계정 = json.loads(_cli(env, "accounts").stdout)
+    assert 계정, "자격증명이 없으면 이 테스트는 의미가 없다"
+    alias = 계정[0]["alias"]
+
+    run_dir = root / "naver-ads" / "runs" / "2026-08-30"
+    acc = run_dir / "accounts" / alias
+    acc.mkdir(parents=True)
+    행 = [row(f"ad{i:02d}", bid=100, title=f"상품{i}") for i in range(12)]
+    (run_dir / "result.json").write_text(json.dumps(
+        {"generated": "2026-08-30", "accounts": {alias: {"summary": {}, "rules": {"①노출0": 행}}}},
+        ensure_ascii=False), encoding="utf-8")
+    (acc / "stats_7d.json").write_text("{}", encoding="utf-8")
+    (acc / "ads.json").write_text(json.dumps({"ads": [
+        {"nccAdId": r["adId"], "adAttr": {"bidAmt": 100, "useGroupBidAmt": False}} for r in 행
+    ]}), encoding="utf-8")
+
+    out = tmp_path / "preview.json"
+    p = _cli(env, "bids", "--run-dir", "2026-08-30", "--preview-out", str(out))
+
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "… 외 2건" in p.stdout, "stdout 은 여전히 10건에서 접는다(기존 동작 불변)"
+    산출 = json.loads(out.read_text(encoding="utf-8"))
+    assert len(산출[alias]["plans"]) == 12, "산출물은 stdout 접기와 무관하게 전량이다"
+    assert 산출[alias]["counts"] == {"인상": 12}
+    assert "result" not in 산출[alias]["plans"][0], "dry-run 은 아직 결과를 말하지 않는다"
+    assert "상품11" in out.read_text(encoding="utf-8"), "한국어가 \\uXXXX 로 깨지지 않는다"
+
+
+def test_accounts_는_시크릿을_찍지_않는다(tmp_path):
+    """SAFE-03 / T-1-03b — 웹앱이 자격증명 파일을 두 번째로 갖지 않게 하는 통로."""
+    env, _ = _격리된_데이터루트(tmp_path)
+    p = _cli(env, "accounts")
+    assert p.returncode == 0
+    목록 = json.loads(p.stdout)
+    assert isinstance(목록, list)
+    for a in 목록:
+        assert set(a) == {"alias", "customer_id"}, f"화이트리스트 밖의 키가 샜다: {a}"
