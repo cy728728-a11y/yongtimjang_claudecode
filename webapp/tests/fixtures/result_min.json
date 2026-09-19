@@ -1,0 +1,257 @@
+{
+ "_주석": [
+  "실제 result.json 의 축소판. 스키마는 ads_rules.classify 출력 정본을 그대로 따른다.",
+  "계정이 5개인 이유: zzfake 는 설정에 없는 가짜 계정이다. 계정을 코드에 박으면 이 계정이 사라진다(BOARD-02).",
+  "①노출0·⑥삭제대상 행에는 imp/clk/ctr/rank/cost 가 없다 — 7일 통계에 행이 없는 것이 그 규칙의 정의다(BOARD-01).",
+  "ownway1 에 함정 4종: (a)그룹입찰 (b)개별입찰 (c)②③ 중복 adId (d)한 상품에 ①2개+③1개."
+ ],
+ "generated": "2026-08-30",
+ "accounts": {
+  "cy728": {
+   "summary": {
+    "ads": 223,
+    "live": 223,
+    "cost": 205056,
+    "purAmt": 656150,
+    "purCnt": 6
+   },
+   "rules": {
+    "①노출0": [
+     {
+      "adId": "nad-a001-02-000000495390001",
+      "adGroup": "판매상품_9-2_제이제이디컴퍼니",
+      "title": "까스통 실린더 산소통트롤리 이동 운반기 거치대",
+      "mallProductId": "13111983902",
+      "bid": 70,
+      "useGroupBid": true,
+      "groupBid": 70
+     }
+    ],
+    "②썸네일교체": [],
+    "③원인분석": [],
+    "④효자후보": [],
+    "⑤효자확정": [
+     {
+      "adId": "nad-a001-02-000000495390002",
+      "adGroup": "판매상품_15-2_제이와이이컴퍼니",
+      "title": "책상 의자 기역자 화장대 서랍장",
+      "mallProductId": "12610054809",
+      "bid": 80,
+      "useGroupBid": false,
+      "groupBid": 70,
+      "imp": 17122,
+      "clk": 240,
+      "ctr": 1.4,
+      "rank": 7.4,
+      "cost": 23721,
+      "purCnt": 1,
+      "purAmt": 240560
+     }
+    ],
+    "⑥삭제대상": []
+   }
+  },
+  "cy7728": {
+   "summary": {
+    "ads": 118,
+    "live": 118,
+    "cost": 51204,
+    "purAmt": 0,
+    "purCnt": 0
+   },
+   "rules": {
+    "①노출0": [],
+    "②썸네일교체": [],
+    "③원인분석": [],
+    "④효자후보": [],
+    "⑤효자확정": [],
+    "⑥삭제대상": [
+     {
+      "adId": "nad-a001-02-000000495390003",
+      "adGroup": "판매상품_3-1_꺼진그룹",
+      "title": "단종된 캠핑 랜턴",
+      "mallProductId": "12999000111",
+      "bid": 100,
+      "useGroupBid": false,
+      "groupBid": 70
+     }
+    ]
+   }
+  },
+  "ownway1": {
+   "summary": {
+    "ads": 1380,
+    "live": 1360,
+    "cost": 412880,
+    "purAmt": 121000,
+    "purCnt": 2
+   },
+   "rules": {
+    "①노출0": [
+     {
+      "adId": "nad-a001-02-000000495390006",
+      "adGroup": "판매상품_7-2_제이제이이컴퍼니",
+      "title": "무선 전정기 가지치기 트리머 전지톱",
+      "mallProductId": "12610054809",
+      "bid": 70,
+      "useGroupBid": true,
+      "groupBid": 70
+     },
+     {
+      "adId": "nad-a001-02-000000495390007",
+      "adGroup": "판매상품_7-2_제이제이이컴퍼니",
+      "title": "무선 전정기 배터리 추가팩",
+      "mallProductId": "12610054809",
+      "bid": 130,
+      "useGroupBid": false,
+      "groupBid": 70
+     },
+     {
+      "adId": "nad-a001-02-000000495390008",
+      "adGroup": "판매상품_14-2_이동식미니하우스",
+      "title": "책꽂이 북 카트 문서 트롤리",
+      "mallProductId": "12625037255",
+      "bid": 70,
+      "useGroupBid": true,
+      "groupBid": 70
+     }
+    ],
+    "②썸네일교체": [
+     {
+      "adId": "nad-a001-02-000000502308153",
+      "adGroup": "판매상품_7-2_제이제이이컴퍼니",
+      "title": "무선 전정기 세트",
+      "mallProductId": "13149034429",
+      "bid": 130,
+      "useGroupBid": false,
+      "groupBid": 70,
+      "imp": 25850,
+      "clk": 60,
+      "ctr": 0.23,
+      "rank": 8,
+      "cost": 10087
+     }
+    ],
+    "③원인분석": [
+     {
+      "adId": "nad-a001-02-000000502308153",
+      "adGroup": "판매상품_7-2_제이제이이컴퍼니",
+      "title": "무선 전정기 세트",
+      "mallProductId": "13149034429",
+      "bid": 130,
+      "useGroupBid": false,
+      "groupBid": 70,
+      "imp": 25850,
+      "clk": 60,
+      "ctr": 0.23,
+      "rank": 8,
+      "cost": 10087
+     },
+     {
+      "adId": "nad-a001-02-000000495390009",
+      "adGroup": "판매상품_7-2_제이제이이컴퍼니",
+      "title": "무선 전정기 거치대",
+      "mallProductId": "12610054809",
+      "bid": 70,
+      "useGroupBid": true,
+      "groupBid": 70,
+      "imp": 327,
+      "clk": 40,
+      "ctr": 12.23,
+      "rank": 2.9,
+      "cost": 3215
+     }
+    ],
+    "④효자후보": [
+     {
+      "adId": "nad-a001-02-000000495390009",
+      "adGroup": "판매상품_7-2_제이제이이컴퍼니",
+      "title": "무선 전정기 거치대",
+      "mallProductId": "12610054809",
+      "bid": 70,
+      "useGroupBid": true,
+      "groupBid": 70,
+      "imp": 327,
+      "clk": 40,
+      "ctr": 12.23,
+      "rank": 2.9,
+      "cost": 3215
+     }
+    ],
+    "⑤효자확정": [],
+    "⑥삭제대상": []
+   }
+  },
+  "pogeunae": {
+   "summary": {
+    "ads": 940,
+    "live": 931,
+    "cost": 98000,
+    "purAmt": 0,
+    "purCnt": 0
+   },
+   "rules": {
+    "①노출0": [
+     {
+      "adId": "nad-a001-02-000000495390010",
+      "adGroup": "판매상품_1-1_포근애",
+      "title": "극세사 러그 카페트",
+      "mallProductId": "13222000555",
+      "bid": 90,
+      "useGroupBid": false,
+      "groupBid": 70
+     }
+    ],
+    "②썸네일교체": [],
+    "③원인분석": [],
+    "④효자후보": [],
+    "⑤효자확정": [],
+    "⑥삭제대상": []
+   }
+  },
+  "zzfake": {
+   "summary": {
+    "ads": 5,
+    "live": 5,
+    "cost": 1000,
+    "purAmt": 33000,
+    "purCnt": 1
+   },
+   "rules": {
+    "①노출0": [
+     {
+      "adId": "nad-a001-02-000000495390011",
+      "adGroup": "판매상품_99-9_가짜그룹",
+      "title": "가짜 계정 전용 소재",
+      "mallProductId": "19999999999",
+      "bid": 70,
+      "useGroupBid": true,
+      "groupBid": 70
+     }
+    ],
+    "②썸네일교체": [],
+    "③원인분석": [],
+    "④효자후보": [],
+    "⑤효자확정": [
+     {
+      "adId": "nad-a001-02-000000495390012",
+      "adGroup": "판매상품_99-9_가짜그룹",
+      "title": "가짜 계정 효자 소재",
+      "mallProductId": "19999999998",
+      "bid": 110,
+      "useGroupBid": false,
+      "groupBid": 70,
+      "imp": 900,
+      "clk": 30,
+      "ctr": 3.33,
+      "rank": 4.1,
+      "cost": 5000,
+      "purCnt": 1,
+      "purAmt": 33000
+     }
+    ],
+    "⑥삭제대상": []
+   }
+  }
+ }
+}
