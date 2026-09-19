@@ -25,3 +25,8 @@
 - enriched: [[tailscale]] 신규 — 구성 결과·macOS 네트워크 확장 함정·닭과달걀 문제·FileVault 주의
 - cross-refs: [[불사자-자동화]] [[CS-자동화]] (아직 미작성 — 향후 연결)
 - contradictions: 없음
+## [2026-09-19] ingest | 맥실버 서버화 세션 (SSH 키·Claude Code 설치·workspace clone)
+- source: 원격 구성 세션 실측
+- enriched: [[tailscale]] — '맥실버 서버화' 섹션 신설, 적용 표에 일상 사용법 추가
+- 주요 함정 기록: `!` 는 TTY 아님 / 원격 붙여넣기 `^[[200~` 깨짐 / tmux 대신 screen
+- contradictions: 없음

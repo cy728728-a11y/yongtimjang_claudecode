@@ -54,6 +54,41 @@ Tailscale 자체가 원격 통로를 만드는 도구이므로, 대상 기기에
 Tailscale 설치 자체는 재부팅 불필요.
 [source: 2026-09-19]
 
+### 맥실버 서버화 (2026-09-19)
+
+노트북에서 맥실버를 원격 작업 서버로 쓰기 위한 구성. 목표는 Claude Code 를 맥에서 돌리고 노트북은 터미널로만 쓰는 것.
+
+**노트북 → 맥 무암호 접속**
+- 노트북에 ed25519 키 생성, 공개키를 맥 `~/.ssh/authorized_keys` 에 등록
+- `~/.ssh/config` 에 별칭 `mac` 등록 → `ssh mac` 한 줄로 접속
+- 함정: Claude Code 의 `!` 실행은 TTY 가 아니라 비밀번호 입력이 불가능하다.
+  키 등록은 크롬 원격 데스크톱으로 맥 터미널에서 직접 하는 게 확실하다.
+- 함정: 원격 데스크톱 경유 붙여넣기가 `^[[200~` 로 깨진다.
+  맥 터미널에서 `unset zle_bracketed_paste` 를 손으로 친 뒤 붙여넣을 것.
+
+**맥 환경 실측**
+
+| 항목 | 상태 |
+|------|------|
+| macOS | 26.5.1 / arm64 |
+| git | 있음 (Apple Git 2.50.1) |
+| python3 | 3.9.6 (시스템 기본) |
+| Homebrew / node / tmux | 없음 |
+| screen | 있음 (`/usr/bin/screen`, 동작 검증 완료) |
+| 디스크 여유 | 786GB |
+
+**설치한 것**
+- Claude Code 2.1.278 — 네이티브 설치본(`claude.ai/install.sh`). sudo 불필요, `~/.local/bin` 에 설치되고 PATH 는 `.zshrc` 에 추가함
+- 워크스페이스 clone → `~/workspace`
+- 세션 유지는 tmux 대신 **screen** 사용. macOS 기본 탑재라 Homebrew·sudo 가 필요 없다
+
+**남은 것**
+- 맥에서 Claude Code 로그인 (대화형, 사람이 직접 해야 함)
+- 파이썬 가상환경·API 키·불사자 MCP 설정 이식 (3단계, 미착수)
+- git push 용 자격증명 (clone 은 public 이라 통과, push 는 별도 설정 필요)
+
+[source: 원격 서버화 세션 실측, 2026-09-19]
+
 ## 적용 (내 맥락에서 실제 사용)
 
 | 용도 | 방법 |
@@ -62,6 +97,7 @@ Tailscale 설치 자체는 재부팅 불필요.
 | 맥 화면 제어 | 원격 데스크톱/VNC 로 `macbookair` 또는 100.95.62.13 |
 | 파일 주고받기 | Taildrop — 파일 우클릭 → Tailscale 로 보내기 |
 | 연결 확인 | 노트북에서 `tailscale status`, `tailscale ping macbookair` |
+| 맥에서 작업 | `ssh mac` → `screen -R work` → `cd ~/workspace && claude` |
 
 **운용 전제**: 맥실버는 전원 연결 + 잠자기 방지 ON 상태로 집에 상주.
 잠들면 밖에서 못 붙는다.
@@ -83,4 +119,4 @@ Tailscale 설치 자체는 재부팅 불필요.
 
 ---
 Sources: 원격 설치 세션 실측 로그 (2026-09-19)
-Last enriched: 2026-09-19
+Last enriched: 2026-09-19 (2회)
