@@ -124,8 +124,16 @@ def update_streaks(led, zero_ids, recovered_ids, run_date, log=print):
     return still, rec
 
 
-def run_bids(acct, run_dir, rows, commit=False, log=print):
-    """규칙 ① 대상 전체를 처리한다. commit 이 False 면 계획만 세운다."""
+def run_bids(acct, run_dir, rows, commit=False, log=print, only_ads=None):
+    """규칙 ① 대상 전체를 처리한다. commit 이 False 면 계획만 세운다.
+
+    `only_ads` 는 처리할 adId 집합이다(없으면 rows 전량). 웹앱이 보드에서 고른 소재만
+    처리하려고 존재한다 — 판정·계산·백업·ledger 로직은 이 인자로 하나도 바뀌지 않는다.
+    필터를 거는 **위치**가 전부다(Pitfall 5, 아래 주석 참조).
+
+    각 plan 은 commit 경로에서 `result`("성공"/"실패"/"스킵")와 `error`(사유)를 갖는다 —
+    화면이 로그를 파싱하지 않고 항목 단위 결과를 읽게 하려는 것이다.
+    """
     alias = acct.get("alias") or str(acct.get("customer_id"))
     led_path = run_dir.parent.parent / "ledger" / f"{alias}.json"
     led = ledger.load(led_path)
@@ -157,6 +165,12 @@ def run_bids(acct, run_dir, rows, commit=False, log=print):
         log(f"[{alias}] 소재 읽기 실패: {type(e).__name__}: {e}")
         return {}
 
+    # 고른 소재만 남긴다 — 반드시 **여기**다. update_streaks 는 rows 전량을 봐야 한다:
+    # 앞에서 거르면 나머지 소재의 연속실패 카운팅이 이번 회차에 통째로 빠지고,
+    # `_last_streak_update=today` 가 찍혀 같은 날 도는 전량 실행마저 건너뛴다 (Pitfall 5).
+    if only_ads is not None:
+        rows = [r for r in rows if r["adId"] in only_ads]
+
     plans = [plan_raise(r, led, today=today) for r in rows]
     counts = {}
     for p in plans:
@@ -179,6 +193,11 @@ def run_bids(acct, run_dir, rows, commit=False, log=print):
     # 백업 후보에도 안 잡힌다 — 그걸 무조건 덮으면 먼저 회차에서 성공한 소재의 원본이
     # 사라져 --revert 로 되돌릴 수 없게 된다. 같은 키는 먼저 것을 유지한다(최초 원본이
     # 진짜 원본).
+    #
+    # `only_ads` 로 rows 가 줄면 plans 도 줄어 이번 백업에 안 담기는 adId 가 생긴다.
+    # 그래도 안전하다 — 기존 키가 보존되므로 지난 작업분의 원본은 그대로 남는다.
+    # 그리고 이게 D-12~D-14("이 작업분만 되돌리기")가 성립하는 근거다: 백업은 회차
+    # 전체의 원본 창고이고, 되돌릴 범위는 run_revert 의 only_ads 가 정한다.
     bk = run_dir / f"before_bids_{alias}.json"
     try:
         existing_bk = json.loads(bk.read_text(encoding="utf-8")) if bk.exists() else {}
@@ -200,18 +219,25 @@ def run_bids(acct, run_dir, rows, commit=False, log=print):
     try:
         for p in plans:
             if p["action"] != "인상":
+                # 스킵 사유가 곧 action 이다(최근인상·연속실패중단·상한도달·입찰가불명).
+                p["result"], p["error"] = "스킵", p["action"]
                 continue
             ad_obj = ad_by_id.get(p["adId"])
             if not ad_obj:
                 fail += 1
+                # prep 이후 소재가 삭제된 경우 — 스냅샷 기반 실행의 정상적 실패다(Pitfall 7).
+                p["result"], p["error"] = "실패", "스냅샷에 소재 없음"
                 continue
             good, err = apply_raise(acct, ad_obj, p["to"])
             if good:
                 ok += 1
                 ledger.record_raise(led, p["adId"], today, p["from"], p["to"])
+                p["result"], p["error"] = "성공", ""
             else:
                 fail += 1
                 log(f"    ✗ {p['adId']} {err}")
+                # 원문 예외를 통째로 싣지 않는다 — 저장소 관례대로 잘라 담는다(T-1-15).
+                p["result"], p["error"] = "실패", str(err)[:150]
             time.sleep(0.08)   # prune.delete_ads 와 같은 페이싱 — 초당 12건
     finally:
         # 중간에 끊겨도 이미 올린 것은 반드시 남긴다.
@@ -221,11 +247,16 @@ def run_bids(acct, run_dir, rows, commit=False, log=print):
     return {"plans": plans, "counts": counts, "committed": ok, "failed": fail}
 
 
-def run_revert(acct, run_dir, commit=False, log=print):
+def run_revert(acct, run_dir, commit=False, log=print, only_ads=None):
     """Important 4 — 인상을 되돌린다.
 
     `before_bids_<alias>.json` 백업(run_bids 가 인상 직전 원본 adAttr 전량을 남긴 것)을
     읽어 각 소재의 원본 adAttr 그대로 되쓴다. `--commit` 없이는 무엇을 되돌릴지만 보여준다.
+
+    `only_ads` 는 되돌릴 adId 집합이다(없으면 백업 전량 — 기존 동작). 웹앱이 "그 작업분만"
+    되돌리려고 존재한다(D-12~D-14). **이 함수는 백업 파일을 읽기만 한다** — 되돌렸다고
+    `before_bids_<alias>.json` 에서 키를 지우지 않는다. 지우면 같은 회차의 다른 작업분을
+    되돌릴 근거가 사라지고, 중간에 죽었을 때 재시도할 원본도 함께 날아간다(D-13).
     """
     alias = acct.get("alias") or str(acct.get("customer_id"))
     bk_path = run_dir / f"before_bids_{alias}.json"
@@ -247,7 +278,8 @@ def run_revert(acct, run_dir, commit=False, log=print):
         log(f"[{alias}] 소재 읽기 실패: {type(e).__name__}: {e}")
         return {}
 
-    targets = [ad_id for ad_id, attr in backup.items() if attr is not None]
+    targets = [ad_id for ad_id, attr in backup.items()
+               if attr is not None and (only_ads is None or ad_id in only_ads)]
     log(f"[{alias}] 되돌릴 대상 {len(targets)}건")
     for ad_id in targets[:10]:
         log(f"    {ad_id} → {backup[ad_id]}")
