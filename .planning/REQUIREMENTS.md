@@ -35,10 +35,10 @@
 ### 실행 틀 — 3단 계약 (FLOW)
 
 - [ ] **FLOW-01**: 모든 버튼이 **판정 → 미리보기 → 실행** 3단을 똑같은 모양으로 지난다
-- [ ] **FLOW-02**: 미리보기 결과가 화면 상태가 아니라 **run-dir 의 파일**로 저장되고, 실행은 그 파일을 지목해서 돈다
+- [x] **FLOW-02**: 미리보기 결과가 화면 상태가 아니라 **run-dir 의 파일**로 저장되고, 실행은 그 파일을 지목해서 돈다
 - [ ] **FLOW-03**: 미리보기가 낡으면(대상 상태가 바뀜) 실행이 거부되고 다시 판정하라고 안내한다
 - [ ] **FLOW-04**: 확인 강도가 버튼마다 다르다 — 되돌릴 수 있는 작업은 모달 없이 되돌리기 버튼만, 되돌릴 수 없는 작업만 건수 타이핑
-- [ ] **FLOW-05**: 결과가 **항목 단위**로 남는다 — 성공 / 실패 / 스킵을 사유와 함께 구분해 보여준다
+- [x] **FLOW-05**: 결과가 **항목 단위**로 남는다 — 성공 / 실패 / 스킵을 사유와 함께 구분해 보여준다
 - [ ] **FLOW-06**: 실패한 항목만 골라 재시도할 수 있다
 - [ ] **FLOW-07**: 실행 이력이 감사 로그(JSONL)로 남는다 — 언제·뭘·몇 건·크레딧 얼마
 
@@ -165,10 +165,10 @@
 | SAFE-06 | Phase 2 | Pending |
 | SAFE-07 | Phase 2 | Pending |
 | FLOW-01 | Phase 1 | Pending |
-| FLOW-02 | Phase 1 | Pending |
+| FLOW-02 | Phase 1 | Complete |
 | FLOW-03 | Phase 2 | Pending |
 | FLOW-04 | Phase 1 | Pending |
-| FLOW-05 | Phase 1 | Pending |
+| FLOW-05 | Phase 1 | Complete |
 | FLOW-06 | Phase 2 | Pending |
 | FLOW-07 | Phase 2 | Pending |
 | BOARD-01 | Phase 1 | Pending |

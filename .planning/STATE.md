@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-09-19T17:18:13.453Z"
+last_updated: "2026-09-19T17:27:09.174Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 01 (board-bid-raise) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [█░░░░░░░░░] 11%
+Progress: [██░░░░░░░░] 22%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [█░░░░░░░░░] 11%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 8min | 3 tasks | 19 files |
+| Phase 01 P02 | 14min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,9 @@ Recent decisions affecting current work:
 - [Phase 01]: `workspace.toml` 파싱 실패는 RuntimeError, 파일 부재는 `{}`. `data_root()` 만 삼킨다(폴백이 돈으로 안 이어짐) — `settings` 는 안 삼킨다(D-08 가드 보존, T-1-12)
 - [Phase 01]: D-08 상한 리터럴 금지를 문서가 아니라 테스트로 강제 — `webapp/**` 를 매 실행 훑는다
 - [Phase 01]: `run_dir_path()` 가 회차 이름의 유일한 관문 — 화이트리스트 밖 이름은 Path 가 되지 않는다 (T-1-11)
+- [Phase 01]: 01-02 only_ads 필터는 run_bids 안쪽 update_streaks 뒤·plan_raise 앞 한 줄 — 앞에 걸면 연속실패 카운팅이 통째로 빠진다
+- [Phase 01]: 01-02 --only-ads 읽기 실패는 exit 1. 전량 실행으로 폴백하지 않는다 (T-1-05)
+- [Phase 01]: 01-02 accounts 서브커맨드 화이트리스트 투영으로 SAFE-03 을 구조로 보장 — 웹앱이 자격증명 파일을 두 번째로 갖지 않는다
 
 ### Pending Todos
 
@@ -94,6 +98,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T17:17:57.724Z
+Last session: 2026-09-19T17:27:03.820Z
 Stopped at: Phase 1 context gathered
 Resume file: None
