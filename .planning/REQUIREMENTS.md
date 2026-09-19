@@ -146,16 +146,91 @@
 
 ## Traceability
 
-로드맵 생성 시 채워진다.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (roadmap 생성 대기) | — | Pending |
+| ENG-01 | Phase 1 | Pending |
+| ENG-02 | Phase 1 | Pending |
+| ENG-03 | Phase 1 | Pending |
+| ENG-04 | Phase 2 | Pending |
+| ENG-05 | Phase 2 | Pending |
+| ENG-06 | Phase 2 | Pending |
+| ENG-07 | Phase 1 | Pending |
+| ENG-08 | Phase 3 | Pending |
+| SAFE-01 | Phase 1 | Pending |
+| SAFE-02 | Phase 1 | Pending |
+| SAFE-03 | Phase 1 | Pending |
+| SAFE-04 | Phase 2 | Pending |
+| SAFE-05 | Phase 2 | Pending |
+| SAFE-06 | Phase 2 | Pending |
+| SAFE-07 | Phase 2 | Pending |
+| FLOW-01 | Phase 1 | Pending |
+| FLOW-02 | Phase 1 | Pending |
+| FLOW-03 | Phase 2 | Pending |
+| FLOW-04 | Phase 1 | Pending |
+| FLOW-05 | Phase 1 | Pending |
+| FLOW-06 | Phase 2 | Pending |
+| FLOW-07 | Phase 2 | Pending |
+| BOARD-01 | Phase 1 | Pending |
+| BOARD-02 | Phase 1 | Pending |
+| BOARD-03 | Phase 1 | Pending |
+| BOARD-04 | Phase 1 | Pending |
+| BOARD-05 | Phase 2 | Pending |
+| BOARD-06 | Phase 2 | Pending |
+| BID-01 | Phase 1 | Pending |
+| BID-02 | Phase 1 | Pending |
+| BID-03 | Phase 1 | Pending |
+| BID-04 | Phase 1 | Pending |
+| PRUNE-01 | Phase 2 | Pending |
+| PRUNE-02 | Phase 2 | Pending |
+| PRUNE-03 | Phase 2 | Pending |
+| JOIN-01 | Phase 3 | Pending |
+| JOIN-02 | Phase 3 | Pending |
+| JOIN-03 | Phase 3 | Pending |
+| JOIN-04 | Phase 3 | Pending |
+| STATE-01 | Phase 3 | Pending |
+| STATE-02 | Phase 3 | Pending |
+| STATE-03 | Phase 3 | Pending |
+| STATE-04 | Phase 3 | Pending |
+| STATE-05 | Phase 3 | Pending |
+| BANNER-01 | Phase 4 | Pending |
+| BANNER-02 | Phase 4 | Pending |
+| BANNER-03 | Phase 4 | Pending |
+| BANNER-04 | Phase 4 | Pending |
+| BANNER-05 | Phase 4 | Pending |
+| DETAIL-01 | Phase 5 | Pending |
+| DETAIL-02 | Phase 5 | Pending |
+| DETAIL-03 | Phase 5 | Pending |
+| DETAIL-04 | Phase 5 | Pending |
+| DETAIL-05 | Phase 5 | Pending |
+| DETAIL-06 | Phase 5 | Pending |
+| DETAIL-07 | Phase 5 | Pending |
+| MARKET-01 | Phase 6 | Pending |
+| MARKET-02 | Phase 6 | Pending |
+| MARKET-03 | Phase 6 | Pending |
+| CP-01 | Phase 7 | Pending |
+| CP-02 | Phase 7 | Pending |
+| CP-03 | Phase 7 | Pending |
+| CP-04 | Phase 7 | Pending |
+| THUMB-01 | Phase 7 | Pending |
+| THUMB-02 | Phase 7 | Pending |
+| THUMB-03 | Phase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 66 total
-- Mapped to phases: 0
-- Unmapped: 66 ⚠️ (로드맵 생성 전)
+- Mapped to phases: 66
+- Unmapped: 0 ✅
+
+**Phase 요약:**
+
+| Phase | 이름 | 요구사항 수 |
+|-------|------|------------|
+| 1 | 첫 왕복 — 보드 + 입찰가 인상 버튼 | 19 |
+| 2 | 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 15 |
+| 3 | 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 10 |
+| 4 | 홍보배너 식별 | 5 |
+| 5 | 상세페이지 작업 버튼 ★ Core Value | 7 |
+| 6 | 마켓 수정업로드 | 3 |
+| 7 | 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 7 |
 
 ---
 *Requirements defined: 2026-09-19*
