@@ -1,0 +1,12 @@
+<!-- 작업 진행 패널 — Plan 01-05 가 채운다.
+
+     여기에 들어올 것:
+       · sse-connect="/jobs/{id}/stream" · sse-swap 으로 진행 로그를 받는다 (JS 0줄)
+       · 매 접속마다 로그를 **처음부터 재생한 뒤 tail** 한다 — 탭을 닫았다 열어도 이어진다(SC-03)
+       · 로그는 security.scrub() 을 통과한 뒤에만 화면으로 나간다
+
+     지금은 자리만 있다. htmx-ext-sse 배선이 없으면 이 div 는 조용히 비어 있다. -->
+<section id="job-panel" hidden>
+  <h2>작업 진행</h2>
+  <pre id="job-log"></pre>
+</section>
