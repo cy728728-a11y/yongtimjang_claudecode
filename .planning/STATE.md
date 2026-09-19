@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-09-19T17:07:34.849Z"
-last_activity: 2026-09-19 -- Phase 01 execution started
+last_updated: "2026-09-19T17:18:13.453Z"
+last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 01 (board-bid-raise) — EXECUTING
-Plan: 1 of 9
-Status: Executing Phase 01
-Last activity: 2026-09-19 -- Phase 01 execution started
+Plan: 2 of 9
+Status: Ready to execute
+Last activity: 2026-09-19
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 11%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01 P01 | 8min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,11 @@ Recent decisions affecting current work:
 - [로드맵]: 홍보배너 식별은 독립 단계(Phase 4). 상세 생성에 묶으면 100건 라벨링 게이트가 생략된다
 - [로드맵]: 마켓 쓰기(Phase 6)를 크레딧 쓰기(Phase 5)와 분리 — 실패 모드와 복구 비용이 다르다
 - [로드맵]: 기존 CLI 는 재작성하지 않고 서브프로세스로 래핑한다 (ENG-01)
+- [Phase 01]: 웹앱 의존은 `.venv-web` 로 분리 — CLI `.venv` 는 손대지 않는다 (subprocess 경계)
+- [Phase 01]: `prep_summary.json` 실데이터는 계정 alias 로 한 겹 중첩 — `freshness()` 가 평평·중첩 두 모양을 모두 읽는다
+- [Phase 01]: `workspace.toml` 파싱 실패는 RuntimeError, 파일 부재는 `{}`. `data_root()` 만 삼킨다(폴백이 돈으로 안 이어짐) — `settings` 는 안 삼킨다(D-08 가드 보존, T-1-12)
+- [Phase 01]: D-08 상한 리터럴 금지를 문서가 아니라 테스트로 강제 — `webapp/**` 를 매 실행 훑는다
+- [Phase 01]: `run_dir_path()` 가 회차 이름의 유일한 관문 — 화이트리스트 밖 이름은 Path 가 되지 않는다 (T-1-11)
 
 ### Pending Todos
 
@@ -88,6 +94,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T13:24:21.244Z
+Last session: 2026-09-19T17:17:57.724Z
 Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-board-bid-raise/01-CONTEXT.md
+Resume file: None

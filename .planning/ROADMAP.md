@@ -49,7 +49,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Wave 0: 테스트 기반(.venv-web · pytest · 픽스처) + paths/settings + 프론트 vendoring
+- [x] 01-01-PLAN.md — Wave 0: 테스트 기반(.venv-web · pytest · 픽스처) + paths/settings + 프론트 vendoring
 - [ ] 01-02-PLAN.md — Wave 1: CLI 주입구 패치 (--only-ads · --preview-out · accounts · 항목단위 result/error)
 - [ ] 01-03-PLAN.md — Wave 1: 보안 3층(127.0.0.1 · Host · Origin · 부팅토큰) + 앱 셸 + 기동 스크립트
 
@@ -185,7 +185,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 0/9 | Planned | - |
+| 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 1/9 | In Progress|  |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 0/TBD | Not started | - |
 | 4. 홍보배너 식별 | 0/TBD | Not started | - |
