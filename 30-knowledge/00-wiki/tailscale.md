@@ -77,15 +77,30 @@ Tailscale 설치 자체는 재부팅 불필요.
 | screen | 있음 (`/usr/bin/screen`, 동작 검증 완료) |
 | 디스크 여유 | 786GB |
 
-**설치한 것**
-- Claude Code 2.1.278 — 네이티브 설치본(`claude.ai/install.sh`). sudo 불필요, `~/.local/bin` 에 설치되고 PATH 는 `.zshrc` 에 추가함
-- 워크스페이스 clone → `~/workspace`
-- 세션 유지는 tmux 대신 **screen** 사용. macOS 기본 탑재라 Homebrew·sudo 가 필요 없다
+**[!correction] 맥에는 이미 작업 환경이 있었다 (2026-09-19 확인)**
 
-**남은 것**
-- 맥에서 Claude Code 로그인 (대화형, 사람이 직접 해야 함)
-- 파이썬 가상환경·API 키·불사자 MCP 설정 이식 (3단계, 미착수)
-- git push 용 자격증명 (clone 은 public 이라 통과, push 는 별도 설정 필요)
+처음엔 맥이 빈 상태인 줄 알고 `~/workspace` 에 새로 clone 했으나, 실제로는 기존 환경이 이미 완비돼 있었다.
+중복본은 삭제함. **실제 워크스페이스 경로는 `~/Documents/yongtimjang_claudecode` 다.**
+
+| 항목 | 상태 |
+|------|------|
+| 워크스페이스 | `~/Documents/yongtimjang_claudecode` (main, trust 승인됨) |
+| 가상환경 | `.venv` / Python 3.12.13 |
+| 환경변수 | `.env` 있음 |
+| MCP 서버 | 전역 등록 `aside`, `bulsaja` |
+| 기타 | `~/bulsaja-kit`, `~/python_work/data` |
+
+즉 **파이썬·API키·MCP 이식(3단계)은 애초에 필요 없었다.** 맥은 원래 작업 머신이었다.
+이번 세션에서 새로 한 건 Claude Code 최신 설치와 노트북→맥 무암호 SSH 연결뿐이다.
+
+**진짜 남은 구멍: 맥에 GitHub push 자격증명이 없다.**
+- 증상: 맥에서 `git push` 시 `fatal: unable to get password from user`
+- 실제 사고: 2026-09-15 커밋 하나가 나흘간 맥에만 갇혀 있었다
+- 이번 임시 조치: 노트북에서 맥을 git 원격으로 직접 fetch 해 구조 후 노트북에서 push
+  `git fetch ssh://choiyongsmacbook@100.95.62.13/Users/choiyongsmacbook/Documents/yongtimjang_claudecode main`
+- 근본 해결(미착수): 맥에 `credential.helper osxkeychain` + GitHub 토큰 등록, 또는 리모트를 SSH 방식으로 전환
+
+**세션 유지**: tmux 없음, macOS 기본 `screen` 사용 (동작 검증 완료)
 
 [source: 원격 서버화 세션 실측, 2026-09-19]
 
@@ -97,7 +112,7 @@ Tailscale 설치 자체는 재부팅 불필요.
 | 맥 화면 제어 | 원격 데스크톱/VNC 로 `macbookair` 또는 100.95.62.13 |
 | 파일 주고받기 | Taildrop — 파일 우클릭 → Tailscale 로 보내기 |
 | 연결 확인 | 노트북에서 `tailscale status`, `tailscale ping macbookair` |
-| 맥에서 작업 | `ssh mac` → `screen -R work` → `cd ~/workspace && claude` |
+| 맥에서 작업 | `ssh mac` → `screen -R work` → `cd ~/Documents/yongtimjang_claudecode && claude` |
 
 **운용 전제**: 맥실버는 전원 연결 + 잠자기 방지 ON 상태로 집에 상주.
 잠들면 밖에서 못 붙는다.

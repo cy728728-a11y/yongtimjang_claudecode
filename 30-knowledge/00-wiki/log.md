@@ -30,3 +30,8 @@
 - enriched: [[tailscale]] — '맥실버 서버화' 섹션 신설, 적용 표에 일상 사용법 추가
 - 주요 함정 기록: `!` 는 TTY 아님 / 원격 붙여넣기 `^[[200~` 깨짐 / tmux 대신 screen
 - contradictions: 없음
+## [2026-09-19] ingest | 맥 기존 환경 확인 → [[tailscale]] 정정
+- 발견: 맥은 원래 작업 머신이었다. 워크스페이스는 ~/Documents/yongtimjang_claudecode, venv·.env·MCP 모두 기존 보유
+- 정정: 3단계(파이썬·MCP 이식) 불필요. 새로 만든 중복 clone ~/workspace 삭제
+- 신규 발견 이슈: 맥에 GitHub push 자격증명 없음 → 9/15 커밋 1건이 나흘간 고립돼 있었음 (노트북 경유로 구조 완료)
+- contradictions: [!correction] 플래그로 기존 서술 정정
