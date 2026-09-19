@@ -35,3 +35,8 @@
 - 정정: 3단계(파이썬·MCP 이식) 불필요. 새로 만든 중복 clone ~/workspace 삭제
 - 신규 발견 이슈: 맥에 GitHub push 자격증명 없음 → 9/15 커밋 1건이 나흘간 고립돼 있었음 (노트북 경유로 구조 완료)
 - contradictions: [!correction] 플래그로 기존 서술 정정
+## [2026-09-19] ingest | 맥 원격 세션 한글 깨짐 해결 + 공유 모드 구성 → [[tailscale]]
+- 해결: screen -U + .screenrc defutf8 + work 스크립트 LANG. 핵심은 기존 세션을 죽여야 설정이 먹는다는 것
+- 정정: 맥 tailnet 이탈 원인은 잠자기가 아니라 Tailscale 앱 종료였음
+- 추가: ss = 공유 모드(screen -x)로 맥 화면과 노트북이 같은 화면을 동시에 봄
+- contradictions: [!correction] 잠자기 오진단 정정
