@@ -13,6 +13,8 @@ updated: 2026-09-20
 > Per-phase validation contract for feedback sampling during execution.
 > 근거: `01-RESEARCH.md` § Validation Architecture (전부 이 맥북에서 실측).
 > **2026-09-20 갱신:** PLAN 확정에 따라 `Plan`·`Wave` 열을 실제 값으로 채웠고, 명령을 `.venv-web/bin/pytest` 로 실행 가능한 형태로 고쳤다. 행 6개를 추가했다(표시: ✚).
+> **2026-09-20 재검(plan-checker 반영):** `Automated Command` 를 **파일 단위**로 통일하고 노드 ID 는 `(핵심 노드: …)` 로 병기했다 — 태스크의 `<verify>` 가 실제로 파일 전체를 돌리기 때문이다(주장과 실행의 불일치 제거).
+> BID-01 · BOARD-04 는 대상 테스트가 `test_board.py` → **`test_flow.py`(01-07 Task 2)** 로 옮겨졌다 — 그 테스트들이 부르는 `webapp/flow.py` 가 Task 2 에서 처음 생겨, Task 1 에 두면 collect 단계에서 깨진다.
 
 ---
 
@@ -46,42 +48,44 @@ updated: 2026-09-20
 
 > `Plan` 열은 `01-NN-PLAN.md` 의 NN. `Wave` 열은 그 플랜의 frontmatter `wave`.
 > Threat Ref 는 각 PLAN.md `<threat_model>` 의 T-1-XX 와 연결된다.
-> **Automated Command 는 각 태스크의 `<acceptance_criteria>` 와 글자 그대로 일치해야 한다.**
+> **Automated Command 는 `파일 단위` 로 적는다** — 태스크의 `<verify>` 가 실제로 그렇게 돈다(노드 하나만 돌리는 것보다
+> 파일 전체가 도는 편이 회귀 방어에 낫다). 그 행이 **겨누는** 특정 테스트는 같은 칸에 `(핵심 노드: ::test_이름)` 으로 병기한다.
+> 태스크의 `<acceptance_criteria>` 는 "이 행이 지목한 파일이 명령에 들어 있고 핵심 노드가 그 실행에 포함된다" 를 주장한다.
 
 | Req ID | Plan | Wave | 증명할 동작 | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |--------|------|------|------------|-----------|-----------------|-----------|-------------------|-------------|--------|
 | ✚경로-01 | 01-01 | 0 | `data_root` 가 workspace.toml 에서 오고, 모르는 회차는 경로가 되지 않는다 | T-1-11 | 사용자 입력이 파일 경로가 되지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_paths.py -x -q` | ❌ W0 | ⬜ pending |
 | ✚픽스처-01 | 01-01 | 0 | 테스트 기반(가짜 5번째 계정 · ①행 imp 없음)이 선다 | T-1-SC2 | 테스트에 `--commit` 리터럴 0건 | unit | `.venv-web/bin/pytest webapp/tests -x -q && bash webapp/tests/no_commit_guard.sh` | ❌ W0 | ⬜ pending |
 | 회귀-01 | 01-02 | 1 | CLI 패치 후 기존 가드 100개 불변 | — | N/A | unit | `for t in nvad reports ads_rules ledger bids prune; do .venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_$t.py \|\| exit 1; done` | ✅ 존재 (100 OK) | ⬜ pending |
-| 회귀-02 | 01-02 | 1 | `--only-ads` 없이 부르면 필터 전과 동일 | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_cli_patch.py::test_only_ads_none_은_전량과_같다 -x -q` | ❌ W0 | ⬜ pending |
-| 회귀-03 | 01-02 | 1 | `--only-ads` 가 `update_streaks` **뒤에** 걸린다 | T-1-04 | 필터가 연속실패 카운팅을 오염시키지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_cli_patch.py::test_필터해도_streak_은_전량기준 -x -q` | ❌ W0 | ⬜ pending |
-| 회귀-04 | 01-02 | 1 | `--only-ads` 파일 손상 시 exit 1 (전량 폴백 **금지**) | T-1-05 | 대상 파일이 깨지면 전량 실행으로 번지지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_cli_patch.py::test_only_ads_깨지면_실패한다 -x -q` | ❌ W0 | ⬜ pending |
-| FLOW-05 (CLI) | 01-02 | 1 | 결과 JSON 이 항목별 성공/실패/스킵+사유를 담는다 | T-1-15 | 에러 문자열을 축약해 담는다 | unit | `.venv-web/bin/pytest webapp/tests/test_cli_patch.py::test_항목단위_결과 -x -q` | ❌ W0 | ⬜ pending |
+| 회귀-02 | 01-02 | 1 | `--only-ads` 없이 부르면 필터 전과 동일 | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_cli_patch.py -x -q` (핵심 노드: `::test_only_ads_none_은_전량과_같다`) | ❌ W0 | ⬜ pending |
+| 회귀-03 | 01-02 | 1 | `--only-ads` 가 `update_streaks` **뒤에** 걸린다 | T-1-04 | 필터가 연속실패 카운팅을 오염시키지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_cli_patch.py -x -q` (핵심 노드: `::test_필터해도_streak_은_전량기준`) | ❌ W0 | ⬜ pending |
+| 회귀-04 | 01-02 | 1 | `--only-ads` 파일 손상 시 exit 1 (전량 폴백 **금지**) | T-1-05 | 대상 파일이 깨지면 전량 실행으로 번지지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_cli_patch.py -x -q` (핵심 노드: `::test_only_ads_깨지면_실패한다`) | ❌ W0 | ⬜ pending |
+| FLOW-05 (CLI) | 01-02 | 1 | 결과 JSON 이 항목별 성공/실패/스킵+사유를 담는다 | T-1-15 | 에러 문자열을 축약해 담는다 | unit | `.venv-web/bin/pytest webapp/tests/test_cli_patch.py -x -q` (핵심 노드: `::test_항목단위_결과`) | ❌ W0 | ⬜ pending |
 | SAFE-01 | 01-03 | 1 | Host `evil.com` → 400 / Origin `evil.com` → 403 | T-1-01, T-1-01b | DNS rebinding·타 탭 CSRF 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_security.py -x -q` | ❌ W0 | ⬜ pending |
 | SAFE-02 | 01-03 | 1 | 토큰 없음·틀림 → 403, 맞음 → 200 | T-1-02, T-1-16 | 부팅 토큰 없이는 쓰기 불가 | unit | `.venv-web/bin/pytest webapp/tests/test_security.py -x -q` | ❌ W0 | ⬜ pending |
-| SAFE-03 | 01-03 | 1 | 응답·로그·템플릿 어디에도 시크릿 문자열이 없다 | T-1-03 | 광고 시크릿·불사자 토큰 미노출 | unit | `.venv-web/bin/pytest webapp/tests/test_security.py::test_시크릿이_새지_않는다 -x -q` | ❌ W0 | ⬜ pending |
+| SAFE-03 | 01-03 | 1 | 응답·로그·템플릿 어디에도 시크릿 문자열이 없다 | T-1-03 | 광고 시크릿·불사자 토큰 미노출 | unit | `.venv-web/bin/pytest webapp/tests/test_security.py -x -q` (핵심 노드: `::test_시크릿이_새지_않는다`) | ❌ W0 | ⬜ pending |
 | ✚보안-curl | 01-03 | 1 | 실행 중인 서버에 대한 보안 8종 | T-1-01, T-1-02, T-1-03 | 바인드·Host·Origin·토큰·시크릿 | integration | `CT_DEV_TOKEN=devtoken123 bash webapp/tests/security_curl.sh` | ❌ W0 | ⬜ pending |
 | BOARD-01 | 01-04 | 2 | ①행에 `imp` 가 없어도 접기가 안 깨진다 | T-1-21 | 지표 중복 계상 없음 | unit | `.venv-web/bin/pytest webapp/tests/test_board.py -x -q` | ❌ W0 | ⬜ pending |
-| BOARD-02 | 01-04 | 2 | 계정 alias 가 `result.json` 에서만 온다 (가짜 5번째 계정 픽스처) | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_board.py::test_계정을_코드에_박지_않는다 -x -q` | ❌ W0 | ⬜ pending |
+| BOARD-02 | 01-04 | 2 | 계정 alias 가 `result.json` 에서만 온다 (가짜 5번째 계정 픽스처) | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_board.py -x -q` (핵심 노드: `::test_계정을_코드에_박지_않는다`) | ❌ W0 | ⬜ pending |
 | ✚신선도-01 | 01-04 | 2 | 회차 날짜·경과일·통계기간이 함께 나오고 임계값 초과를 stale 로 본다 (D-16) | T-1-20 | 낡은 판정으로 실행하는 것을 경고한다 | manual | 브라우저 확인 (Plan 01-04 Task 3 의 2번 단계) | — | ⬜ pending |
 | ENG-01 | 01-05 | 3 | argv 가 `.venv/bin/python3` + `run_ads.py` 로 조립된다 | T-1-10 | shell=False · Literal 화이트리스트 | unit | `.venv-web/bin/pytest webapp/tests/test_argv.py -x -q` | ❌ W0 | ⬜ pending |
-| ENG-07 | 01-05 | 3 | `create_job` 이 HTTP 없이 호출된다 | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_jobs.py::test_create_job_은_http_없이_돈다 -x -q` | ❌ W0 | ⬜ pending |
-| ✚동시쓰기-01 | 01-05 | 3 | 쓰기 잡은 전역에서 한 번에 하나만 돈다 (Pitfall 3) | T-1-09 | 백업·ledger read-modify-write 레이스 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_jobs.py::test_쓰기잡은_동시에_두개가_안된다 -x -q` | ❌ W0 | ⬜ pending |
-| ENG-02 | 01-06 | 4 | 서버가 죽어도 자식이 산다 (`start_new_session=True`) | — | N/A | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py::test_자식은_서버_종료를_견딘다 -x -q` | ❌ W0 | ⬜ pending |
-| ENG-03 | 01-06 | 4 | 작업 **중간 시점**에 로그파일이 이미 커져 있다 (`PYTHONUNBUFFERED=1`) | T-1-25 | 진행 로그 은폐 방지 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py::test_로그가_실시간으로_쌓인다 -x -q` | ❌ W0 | ⬜ pending |
-| SC-03 | 01-06 | 4 | 탭 닫았다 열어도 로그를 처음부터 이어본다 | T-1-26, T-1-27 | Last-Event-ID 미의존 · 중복 미표시 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py::test_재접속하면_처음부터_이어본다 -x -q` | ❌ W0 | ⬜ pending |
+| ENG-07 | 01-05 | 3 | `create_job` 이 HTTP 없이 호출된다 | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_create_job_은_http_없이_돈다`) | ❌ W0 | ⬜ pending |
+| ✚동시쓰기-01 | 01-05 | 3 | 쓰기 잡은 전역에서 한 번에 하나만 돈다 (Pitfall 3) | T-1-09 | 백업·ledger read-modify-write 레이스 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_쓰기잡은_동시에_두개가_안된다`) | ❌ W0 | ⬜ pending |
+| ENG-02 | 01-06 | 4 | 서버가 죽어도 자식이 산다 (`start_new_session=True`) | — | N/A | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_자식은_서버_종료를_견딘다`) | ❌ W0 | ⬜ pending |
+| ENG-03 | 01-06 | 4 | 작업 **중간 시점**에 로그파일이 이미 커져 있다 (`PYTHONUNBUFFERED=1`) | T-1-25 | 진행 로그 은폐 방지 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_로그가_실시간으로_쌓인다`) | ❌ W0 | ⬜ pending |
+| SC-03 | 01-06 | 4 | 탭 닫았다 열어도 로그를 처음부터 이어본다 | T-1-26, T-1-27 | Last-Event-ID 미의존 · 중복 미표시 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_재접속하면_처음부터_이어본다`) | ❌ W0 | ⬜ pending |
 | ✚로그tail-01 | 01-06 | 4 | 오프셋 읽기가 멀티바이트 절단·파일 부재를 버틴다 | T-1-03d, T-1-17b | 스크러버 + escape 통과 | unit | `.venv-web/bin/pytest webapp/tests/test_logtail.py -x -q` | ❌ W0 | ⬜ pending |
-| FLOW-02 | 01-07 | 5 | 실행이 미리보기와 **같은 targets 파일**을 지목 | T-1-06 | 화면 상태에서 대상을 다시 만들지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py::test_targets_파일이_하나다 -x -q` | ❌ W0 | ⬜ pending |
-| BID-01 | 01-07 | 5 | ①만 대상으로 잡힌다 (②③ 소재 제외) | T-1-30 | 대상 규칙 오염 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_board.py::test_대상은_규칙1_소재만 -x -q` | ❌ W0 | ⬜ pending |
-| BID-02 | 01-07 | 5 | 그룹입찰 행의 `from` 이 `groupBid` 다 (웹앱은 **계산하지 않는다**) | T-1-07 | 진실이 둘이 되지 않는다 | unit | **기존** `.venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_bids.py` + `.venv-web/bin/pytest webapp/tests/test_flow.py::test_웹앱은_입찰가를_계산하지_않는다 -x -q` | ✅ 존재 / ❌ W0 | ⬜ pending |
-| BID-03 | 01-07 | 5 | 미리보기가 현재가 → 인상 후 가격을 보여준다 | T-1-07 | 산출물 값 그대로 표시 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py::test_미리보기_표 -x -q` | ❌ W0 | ⬜ pending |
-| BOARD-04 | 01-07 | 5 | 선택 건수·예상 인상액 합계가 맞는다 | T-1-32 | 0건이어도 집계를 보여준다 | unit | `.venv-web/bin/pytest webapp/tests/test_board.py::test_예상_인상액_합계 -x -q` | ❌ W0 | ⬜ pending |
-| ✚상한-01 | 01-07 | 5 | 계정별 1,500건 상한을 넘으면 거부된다 (D-08) | T-1-29 | 의도치 않은 대량 쓰기 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py::test_계정별_상한을_넘으면_거부한다 -x -q` | ❌ W0 | ⬜ pending |
+| FLOW-02 | 01-07 | 5 | 실행이 미리보기와 **같은 targets 파일**을 지목 | T-1-06 | 화면 상태에서 대상을 다시 만들지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_targets_파일이_하나다`) | ❌ W0 | ⬜ pending |
+| BID-01 | 01-07 | 5 | ①만 대상으로 잡힌다 (②③ 소재 제외) | T-1-30 | 대상 규칙 오염 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_대상은_규칙1_소재만`) — **01-07 Task 2**. `flow.collect_rule1_ads` 가 태어나는 태스크에 테스트가 같이 있다 | ❌ W0 | ⬜ pending |
+| BID-02 | 01-07 | 5 | 그룹입찰 행의 `from` 이 `groupBid` 다 (웹앱은 **계산하지 않는다**) | T-1-07 | 진실이 둘이 되지 않는다 | unit | **기존** `.venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_bids.py` + `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_웹앱은_입찰가를_계산하지_않는다`) | ✅ 존재 / ❌ W0 | ⬜ pending |
+| BID-03 | 01-07 | 5 | 미리보기가 현재가 → 인상 후 가격을 보여준다 | T-1-07 | 산출물 값 그대로 표시 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_미리보기_표`) | ❌ W0 | ⬜ pending |
+| BOARD-04 | 01-07 | 5 | 선택 건수·예상 인상액 합계가 맞는다 | T-1-32 | 0건이어도 집계를 보여준다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_예상_인상액_합계`) — **01-07 Task 2**. `flow.raise_total` 이 태어나는 태스크에 테스트가 같이 있다 | ❌ W0 | ⬜ pending |
+| ✚상한-01 | 01-07 | 5 | 계정별 1,500건 상한을 넘으면 거부된다 (D-08) | T-1-29 | 의도치 않은 대량 쓰기 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_계정별_상한을_넘으면_거부한다`) | ❌ W0 | ⬜ pending |
 | BOARD-03 | 01-07 | 5 | 보이는 선택 vs 필터 전체가 다른 수를 준다 | T-1-29 | 대량 선택을 한 번 더 확인 | manual | 브라우저 확인 (Tabulator API 는 JS) — Plan 01-07 Task 3 의 3번 단계 | — | ⬜ pending |
 | FLOW-04 | 01-07 | 5 | 필터 전체 선택은 별도 배너로 한 번 더 확인 (건수 타이핑 없음) | T-1-29 | 되돌릴 수 있는 작업은 타이핑을 받지 않는다 | manual | 브라우저 확인 — Plan 01-07 Task 3 의 4·5번 단계 | — | ⬜ pending |
 | FLOW-01 | 01-08 | 6 | 미리보기 → 실행이 한 흐름으로 이어진다 (미리보기 없이 실행 불가) | T-1-34 | dry-run 선행 강제 | integration | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` | ❌ W0 | ⬜ pending |
-| FLOW-05 (화면) | 01-08 | 6 | 항목별 성공/실패/스킵+사유가 화면에 투영된다 | T-1-37 | 스킵·실패를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py::test_항목단위_결과가_화면투영된다 -x -q` | ❌ W0 | ⬜ pending |
-| ✚diff-01 | 01-08 | 6 | 미리보기와 달라진 N건을 사유와 함께 보고한다 (D-10) | T-1-36 | 재계산 차이를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py::test_미리보기와_달라진건을_보고한다 -x -q` | ❌ W0 | ⬜ pending |
+| FLOW-05 (화면) | 01-08 | 6 | 항목별 성공/실패/스킵+사유가 화면에 투영된다 | T-1-37 | 스킵·실패를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_항목단위_결과가_화면투영된다`) | ❌ W0 | ⬜ pending |
+| ✚diff-01 | 01-08 | 6 | 미리보기와 달라진 N건을 사유와 함께 보고한다 (D-10) | T-1-36 | 재계산 차이를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_미리보기와_달라진건을_보고한다`) | ❌ W0 | ⬜ pending |
 | BID-04 | 01-09 | 7 | 되돌리기가 **그 작업분만** 되돌린다 (백업 파일 불변) | T-1-08, T-1-40 | 회차 전체가 풀리지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_revert.py -x -q` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
