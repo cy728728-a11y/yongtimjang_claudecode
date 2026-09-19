@@ -20,3 +20,8 @@
 - enriched: [[자청-마케팅이론-용팀장-적용판]] (9번 섹션 신설 — 라이브 전후 공지방 카피 시퀀스 5패턴: 저빈도 드립/사전질문 접수/분산 카운트다운/깜짝 접점/종료 후 차등 혜택)
 - cross-refs: 9번 섹션 ↔ 8번 섹션(라이브 내부 장치) ↔ 10번 섹션(실행 우선순위, 6번째 항목 추가)
 - contradictions: 없음
+## [2026-09-19] query | 노트북-맥북 Tailscale 연동 설치 → entity 페이지 생성 [[tailscale]]
+- source: 카페 원격 설치 세션 실측 (크롬 원격 데스크톱 경유)
+- enriched: [[tailscale]] 신규 — 구성 결과·macOS 네트워크 확장 함정·닭과달걀 문제·FileVault 주의
+- cross-refs: [[불사자-자동화]] [[CS-자동화]] (아직 미작성 — 향후 연결)
+- contradictions: 없음
