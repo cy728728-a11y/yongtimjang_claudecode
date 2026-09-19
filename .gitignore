@@ -42,3 +42,11 @@ workspace.toml
 
 # 이메일 정리 로그 (메일 제목·발신자 포함 — 커밋 금지)
 10-projects/이메일-자동화/logs/
+
+# 웹앱(셀러 관제탑) — 로컬 전용 산출물
+.venv-web/
+webapp.db*
+webapp-logs/
+# 이 프로젝트는 npm 을 쓰지 않는다. 정적파일은 webapp/static/vendor/ 에 curl 로 박아 둔다.
+package.json
+package-lock.json
