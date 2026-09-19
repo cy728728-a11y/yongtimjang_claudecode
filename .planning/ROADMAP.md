@@ -69,7 +69,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. 불사자코드 하나에 사본이 여러 개 붙은 항목은 "이 버튼이 N건에 적용됩니다"로 팬아웃이 먼저 보인다
   4. 지금 이 맥북에서 `detail_batch.py` 가 `ModuleNotFoundError` 없이 돈다 (로직 무변경 shim)
   5. 불사자 외부 경로로 상세를 반영해도 `aiImageGenerated` 가 찍히는지 1건 실측으로 답이 나오고, 안 찍히면 보완 인덱스가 서 있다 (크레딧 무한 루프 차단)
-  6. 어느 불사자 계정(용팀장/용쌤)으로 도는지가 작업 화면에 항상 표시되고, 작업 단위로 자격증명이 격리된다
+  6. 작업 화면에 현재 불사자 계정이 항상 표시되고, 기대 계정(부킹/용쌤)이 아니면 실행이 거부된다
 **Plans**: TBD
 **UI hint**: yes
 
