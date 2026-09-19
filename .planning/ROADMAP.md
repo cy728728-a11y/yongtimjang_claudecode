@@ -40,7 +40,19 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. 사용자가 실행을 누른 뒤 브라우저 탭을 닫았다 다시 열어도 그 작업의 진행 로그를 처음부터 이어서 본다
   4. 실행 결과가 항목 단위(성공/실패/스킵 + 사유)로 남고, 화면의 되돌리기 버튼 한 번으로 인상 전 상태로 복원된다
   5. 다른 탭의 임의 사이트가 이 서버에 쓰기를 트리거하지 못한다 (127.0.0.1 바인드 + Host/Origin 검증 + 부팅 토큰), 그리고 화면·로그 어디에도 광고 시크릿·불사자 토큰이 나오지 않는다
-**Plans**: TBD
+**Plans**: 9 plans in 8 waves
+
+Plans:
+- [ ] 01-01-PLAN.md — Wave 0: 테스트 기반(.venv-web · pytest · 픽스처) + paths/settings + 프론트 vendoring
+- [ ] 01-02-PLAN.md — Wave 1: CLI 주입구 패치 (--only-ads · --preview-out · accounts · 항목단위 result/error)
+- [ ] 01-03-PLAN.md — Wave 1: 보안 3층(127.0.0.1 · Host · Origin · 부팅토큰) + 앱 셸 + 기동 스크립트
+- [ ] 01-04-PLAN.md — Wave 2: 상품 단위 보드(6규칙 · 필터 · 정렬 · 검색) + 회차 신선도 배너
+- [ ] 01-05-PLAN.md — Wave 3: 작업 엔진(argv · jobs SQLite · subprocess · 쓰기 잡 전역 가드) + "새로 수집" 버튼
+- [ ] 01-06-PLAN.md — Wave 4: 로그 오프셋 tail + SSE 전량 재생 (탭 닫았다 이어보기) + Skeleton B
+- [ ] 01-07-PLAN.md — Wave 5: 선택 UI(보이는 것만 vs 필터 전체) + 입찰가 인상 미리보기 (Skeleton A)
+- [ ] 01-08-PLAN.md — Wave 6: 실행(commit) + 항목 단위 결과 + 미리보기 대비 diff
+- [ ] 01-09-PLAN.md — Wave 7: 되돌리기 2종(이 작업분만 / 이 회차 전체) + 범위 가드
+
 **UI hint**: yes
 
 ### Phase 2: 되돌릴 수 없는 쓰기 — 꺼진 소재 정리
@@ -131,7 +143,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 0/TBD | Not started | - |
+| 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 0/9 | Planned | - |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 0/TBD | Not started | - |
 | 4. 홍보배너 식별 | 0/TBD | Not started | - |
