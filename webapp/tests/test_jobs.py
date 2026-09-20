@@ -796,3 +796,276 @@ def test_새로고침하면_도는_작업_패널이_다시_뜬다(화면, tmp_ru
     assert f'/jobs/{job_id}/stream' in 본문
     assert 본문.count("sse-connect") == 1, "스트림을 여럿 연다 (HTTP/1.1 6 커넥션 한계)"
     assert 'id="job-log"' in 본문
+
+
+# ── 불사자 잡 가드 2종 (Phase 3 / ENG-08 · Pitfall 3) ───────────────────────
+#
+# 자식을 **한 번도 띄우지 않는다.** `jobs.spawn` 을 가짜로 바꿔 가드만 겨눈다 —
+# 불사자 CLI 는 03-04 가 만들고, 여기서 태우면 레이트리밋 예산을 실제로 갉아먹는다.
+
+from webapp import bulsaja_index, paths  # noqa: E402
+
+
+@pytest.fixture
+def 계정확인(tmp_path, monkeypatch):
+    """저장소 루트를 tmp 로 돌리고 프로필 파일을 깔아 주는 팩토리.
+
+    `내용=None` 으로 부르면 파일을 안 깐다("계정 확인을 한 번도 안 했다" 상태).
+    """
+    monkeypatch.setattr(paths, "repo_root", lambda: tmp_path)
+
+    def _깔기(닉: str | None = None, 분전: float = 0):
+        if 닉 is None:
+            return
+        본때 = (datetime.now().astimezone()
+                - timedelta(minutes=분전)).isoformat(timespec="seconds")
+        bulsaja_index.profile_path().write_text(
+            json.dumps({"닉네임": 닉, "확인시각": 본때}, ensure_ascii=False),
+            encoding="utf-8")
+    return _깔기
+
+
+@pytest.fixture
+def 기대닉(monkeypatch):
+    """기대 닉네임을 테스트가 정한 값으로 돌린다.
+
+    **진짜 닉네임을 테스트에 적지 않는다** — 적으면 리터럴 가드와 충돌하고, 저장소가
+    공개될 때 계정 정보가 같이 나간다(conftest.py 원칙 둘).
+    """
+    값 = "zz기대계정"
+    원래 = settings.load()
+    monkeypatch.setattr(settings, "_cache", {**원래, "expected_bulsaja_nick": 값})
+    return 값
+
+
+@pytest.fixture
+def 안띄운다(monkeypatch):
+    """`spawn` 을 가짜로 바꾼다. 가드만 겨누는 테스트가 진짜 자식을 안 띄우게."""
+    monkeypatch.setattr(jobs, "spawn", lambda argv_list, log_path: 가짜프로세스(argv_list))
+
+
+def _행수() -> int:
+    import sqlite3
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        return cx.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+    finally:
+        cx.close()
+
+
+def _인덱스잡(run_dir: str) -> str:
+    """인덱스 잡 하나를 만든다.
+
+    대상(그룹) 목록은 광고 쪽과 **같은 통로**로 떨어진다 — `only_ads` 가 `_write_targets`
+    로 회차의 `web/` 밑에 JSON 배열을 쓴다. 담기는 내용만 groupId 리스트다.
+    """
+    return jobs.create_job("bulsaja_index", run_dir=run_dir, only_ads=["zzgrp-a"])
+
+
+def test_계정불일치_거부(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+    """붙어 있는 계정이 기대와 다르면 **자식을 띄우기 전에** 거부된다 (ENG-08).
+
+    그리고 **jobs 테이블에 행이 안 생긴다** — 거부가 INSERT 보다 먼저라는 증거다.
+    행이 생기면 화면 목록에 "실패한 불사자 잡" 이 쌓여 진짜 실패와 구분이 안 된다.
+    """
+    계정확인("zz다른계정")
+    이전 = _행수()
+
+    with pytest.raises(jobs.AccountMismatchError):
+        _인덱스잡(tmp_run_dir.name)
+
+    assert _행수() == 이전, "거부했는데 jobs 행이 생겼다"
+
+
+def test_계정확인이_없으면_거부(잡판, 계정확인, 기대닉, 안띄운다):
+    """프로필 파일 자체가 없으면 같은 예외다 — "모르면 통과" 하는 가드는 없는 것이다."""
+    계정확인(None)
+
+    with pytest.raises(jobs.AccountMismatchError):
+        jobs.create_job("bulsaja_scan")
+
+
+def test_계정확인이_오래되면_거부(잡판, 계정확인, 기대닉, 안띄운다, monkeypatch):
+    """닉네임이 맞아도 확인이 낡았으면 거부다 — 그 사이에 계정을 바꿨을 수 있다."""
+    상한 = int(settings.cfg("profile_max_age_min",
+                            settings.DEFAULTS["profile_max_age_min"]))
+    계정확인(기대닉, 분전=상한 + 10)
+
+    with pytest.raises(jobs.AccountMismatchError):
+        jobs.create_job("bulsaja_scan")
+
+
+def test_프로필잡은_가드를_안_탄다(잡판, 계정확인, 기대닉, 안띄운다):
+    """계정 확인 잡이 계정 가드를 타면 **첫 확인을 영영 못 한다**(닭·달걀).
+
+    `argv_override` 로 합성 스펙을 태워 피하지 않는다 — 그러면 `_build_argv` 를 안 타서
+    "가드를 안 탄다" 가 아니라 "그 경로를 안 밟았다" 를 검증하게 된다.
+    """
+    계정확인(None)
+
+    job_id = jobs.create_job("bulsaja_profile")
+
+    상태 = jobs.job_status(job_id)
+    assert 상태 and 상태["kind"] == "bulsaja_profile"
+    assert "--profile-only" in json.loads(상태["argv"])
+
+
+def test_인덱스잡은_쓰기가드를_안_탄다(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+    """도는 `bulsaja_index` 가 있어도 입찰가 실행이 만들어진다.
+
+    넣었으면 3시간 32분 동안 입찰가 인상·되돌리기가 전부 409 다 — 그러면 사람이 가드를 끈다.
+    """
+    계정확인(기대닉)
+    _인덱스잡(tmp_run_dir.name)
+
+    미리보기 = jobs.create_job("bids_preview", run_dir=tmp_run_dir.name,
+                               only_ads=["nad-zz1"])
+    대상 = jobs.job_status(미리보기)["targets_path"]
+    # 쓰기 잡(`bids_commit`)도 BusyError 없이 들어간다
+    assert jobs.create_job("bids_commit", run_dir=tmp_run_dir.name, commit=True,
+                           targets_path_override=대상)
+
+
+def test_같은_kind_두번째는_거부된다(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+    """인덱스 잡 두 개가 각자 초당 4회로 돌면 합산 8회/초라 429 가 쏟아진다 (Pitfall 3).
+
+    그 429 는 `unresolved=1` 로 남고 화면에서 "미해소" 로 보인다 — 최대 오진이다.
+    그리고 **jobs 행이 안 늘어난다**(거부가 INSERT 보다 먼저).
+    """
+    계정확인(기대닉)
+
+    첫번째 = _인덱스잡(tmp_run_dir.name)
+    이전 = _행수()
+
+    with pytest.raises(jobs.SameKindBusyError):
+        _인덱스잡(tmp_run_dir.name)
+
+    assert _행수() == 이전, "거부했는데 jobs 행이 생겼다"
+    assert jobs.job_status(첫번째)["status"] == "running"
+
+
+def test_starting_상태도_중복을_막는다(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+    """`running` 만 보면 **자식을 띄우는 중인 잡**을 못 잡아 구멍이 그대로 남는다.
+
+    `LIVE_STATUSES` 주석이 이미 한 번 고친 실수와 같은 부류다.
+    """
+    계정확인(기대닉)
+    첫번째 = _인덱스잡(tmp_run_dir.name)
+
+    import sqlite3
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("UPDATE jobs SET status='starting', pid=NULL WHERE id=?", (첫번째,))
+        cx.commit()
+    finally:
+        cx.close()
+    jobs._PROCS.pop(첫번째, None)
+
+    with pytest.raises(jobs.SameKindBusyError):
+        _인덱스잡(tmp_run_dir.name)
+
+
+def test_다른_kind_는_안_막힌다(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+    """**kind 단위 가드가 전역 락으로 번지지 않았다는 증거.**
+
+    도는 `bulsaja_index` 가 있어도 계정 확인과 입찰가 미리보기는 그대로 만들어진다.
+    """
+    계정확인(기대닉)
+    _인덱스잡(tmp_run_dir.name)
+
+    assert jobs.create_job("bulsaja_profile")
+    # 입찰가 미리보기도 막히지 않는다 — 인덱스는 불사자에 아무것도 안 쓴다
+    assert jobs.create_job("bids_preview", run_dir=tmp_run_dir.name, only_ads=["nad-zz1"])
+
+
+def test_쓰기잡이_돌아도_인덱스잡은_만들어진다(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+    """반대 방향. 회차 준비(`prep`)가 도는 동안에도 인덱스는 시작할 수 있다."""
+    계정확인(기대닉)
+    jobs.create_job("prep")
+
+    assert _인덱스잡(tmp_run_dir.name)
+
+
+def test_kind가드는_전역쓰기락과_다른_예외다(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+    """409 로는 같이 번역되지만 **타입으로 구분되고 메시지가 다르다.**
+
+    섞이면 사용자가 "입찰가 작업이 도나?" 를 찾으러 간다.
+    """
+    계정확인(기대닉)
+    _인덱스잡(tmp_run_dir.name)
+
+    with pytest.raises(jobs.SameKindBusyError) as 터진것:
+        _인덱스잡(tmp_run_dir.name)
+
+    # 라우트를 안 고쳐도 409 가 된다
+    assert isinstance(터진것.value, jobs.BusyError)
+    # 그런데 전역 쓰기 락은 아니다
+    assert type(터진것.value) is not jobs.BusyError
+    메시지 = str(터진것.value)
+    assert "bulsaja_index" in 메시지
+    assert "전역 쓰기 락이 아니" in 메시지
+
+
+def test_기대닉네임이_코드가_아니라_설정에서_온다(잡판, 계정확인, 안띄운다, monkeypatch):
+    """**문자열 검사가 아니라 동작으로** 본다 (`test_paths.py` 의 리터럴 가드와 상보적).
+
+    설정값을 바꾸면 거부/통과가 따라 바뀐다 — 그래야 그 값이 진짜로 가드를 움직인다.
+    """
+    계정확인("zz계정하나")
+    원래 = settings.load()
+
+    monkeypatch.setattr(settings, "_cache", {**원래, "expected_bulsaja_nick": "zz계정둘"})
+    with pytest.raises(jobs.AccountMismatchError):
+        jobs.create_job("bulsaja_scan")
+
+    monkeypatch.setattr(settings, "_cache", {**원래, "expected_bulsaja_nick": "zz계정하나"})
+    # 이제 계정은 통과하고, 막히는 건 **대상 파일 없음**(다른 가드)이다
+    with pytest.raises(ValueError) as 터진것:
+        jobs.create_job("bulsaja_scan")
+    assert not isinstance(터진것.value, jobs.AccountMismatchError)
+
+
+def test_latest_done_은_성공한_잡만_준다(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+    """산출물 파일을 glob 으로 뒤지지 않는 이유 — 파일이 있는 것과 성공은 다르다.
+
+    중간에 죽은 잡도 반쯤 쓴 파일을 남긴다. 어느 잡이 성공했는지는 레지스트리가 정본이다.
+    """
+    계정확인(기대닉)
+
+    assert jobs.latest_done("bulsaja_index") is None
+
+    돌던것 = _인덱스잡(tmp_run_dir.name)
+    assert jobs.latest_done("bulsaja_index") is None, "도는 잡이 '성공' 으로 나왔다"
+
+    import sqlite3
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("UPDATE jobs SET status='failed', exit_code=1 WHERE id=?", (돌던것,))
+        cx.commit()
+    finally:
+        cx.close()
+    jobs._PROCS.pop(돌던것, None)
+    assert jobs.latest_done("bulsaja_index") is None, "실패한 잡이 '성공' 으로 나왔다"
+
+    끝난것 = _인덱스잡(tmp_run_dir.name)
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("UPDATE jobs SET status='done', exit_code=0 WHERE id=?", (끝난것,))
+        cx.commit()
+    finally:
+        cx.close()
+    jobs._PROCS.pop(끝난것, None)
+
+    최근 = jobs.latest_done("bulsaja_index")
+    assert 최근 and 최근["id"] == 끝난것
+    # 다른 종류까지 집어오지 않는다
+    assert jobs.latest_done("bulsaja_scan") is None
+
+
+def test_latest_done_은_디비를_만들지_않는다(tmp_path, monkeypatch):
+    """읽기 경로가 파일을 만들면 "GET 은 상태를 안 바꾼다" 가 흐려진다 (T-1-01b)."""
+    없는디비 = tmp_path / "아직없다.db"
+    monkeypatch.setattr(settings, "DB_PATH", str(없는디비))
+
+    assert jobs.latest_done("bulsaja_scan") is None
+    assert not 없는디비.exists()

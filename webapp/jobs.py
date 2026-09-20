@@ -79,6 +79,25 @@ WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "
 # 프로필이 없을 때 프로필을 만들 수 없다(닭·달걀). 계정 확인은 그 자체로 읽기 조회 1회다.
 BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan"})
 
+# **같은 kind 가 동시에 두 개 돌면 안 되는 작업.** 전역 쓰기 락과 **다른 이유로** 존재한다.
+#
+# 왜 전역이 아니라 kind 단위인가: 인덱스 잡은 불사자에 아무것도 안 쓴다. 전역 락에 넣으면
+# 3시간 32분 동안 입찰가 인상·되돌리기가 전부 409 가 되고, 그러면 사람이 가드를 끈다
+# (위 WRITE_KINDS 주석과 같은 판단).
+#
+# 그런데 **같은 잡 두 개가 동시에 도는 건 막아야 한다.** 각자 최소간격 0.26초(초당 4회)를
+# 지켜도 합산 8회/초라 서버 정책(RateLimit-Policy: 240;w=60)을 넘긴다. 실측상 세션을 늘려도
+# 총량이 같았고 — 프로세스를 늘려도 마찬가지다 — 429 가 쏟아진다. 그 429 는 `unresolved=1`
+# 로 남고, 화면에서 "미해소" 로 보인다. **우리가 제일 막고 싶은 오진이 그거다** (Pitfall 3).
+#
+# 화면의 `hx-disabled-elt` 는 이 방어의 대체물이 **아니다.** POST 왕복 중에만 버튼을 잠그므로
+# 새로고침한 뒤 다시 누르면 두 번째 프로세스가 그대로 뜬다.
+#
+# ⚠️ `BULSAJA_KINDS` 와 멤버가 같지만 **뜻이 다르다.** 앞은 "불사자 MCP 를 부른다",
+#    이쪽은 "둘이 동시에 돌면 레이트리밋 예산이 깨진다" 다. 합치지 마라 — 싸고 빠른 MCP 잡
+#    (계정 확인)이 늘면 둘은 갈라진다.
+SINGLETON_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan"})
+
 # **살아 있는 잡의 상태 두 가지.** `starting` 은 "행은 들어갔는데 자식이 아직 안 떴다" 다.
 # 왜 둘로 쪼갰나: 예전에는 INSERT 가 바로 `running` 이었는데, 그 행의 `pid` 는 spawn 뒤에야
 # 채워진다. 그 수~수십 ms 창에서 `_reap`(SSE 가 0.4초마다 부른다)이 `pid=NULL` 을 보고
@@ -154,6 +173,31 @@ CREATE INDEX IF NOT EXISTS idx_ss_index_group ON ss_index(market_group_id);
 
 class BusyError(RuntimeError):
     """이미 도는 쓰기 작업이 있다. 라우트가 409 로 번역한다."""
+
+
+class SameKindBusyError(BusyError):
+    """같은 종류의 작업이 이미 돌고 있다 (`SINGLETON_KINDS`).
+
+    **`BusyError` 를 상속한다** — 그래야 `routes/jobs.py` 의 기존 `except jobs.BusyError`
+    가 그대로 409 로 번역하고 라우트를 안 고쳐도 된다.
+
+    다만 **타입과 메시지는 전역 쓰기 락과 구분**한다. 둘이 섞이면 사용자가 "입찰가 작업이
+    도나?" 를 찾으러 가는데, 실제로 막은 건 "같은 인덱스 잡이 이미 돈다" 다.
+    """
+
+
+class AccountMismatchError(ValueError):
+    """붙어 있는 불사자 계정이 기대와 다르다 (ENG-08).
+
+    **라우트가 409 로 번역해야 한다.** `ValueError` 를 그냥 쓰면 `_작업만들기` 의
+    `except ValueError`(400)에 걸려 "모르는 회차" 와 구분이 안 된다 — 둘 다 400 이면
+    화면이 "회차를 다시 골라라" 로 안내하는데 진짜 원인은 계정이다.
+    라우트에 별도 `except` 를 다는 건 03-05 의 작업이다.
+
+    그때까지 `ValueError` **상속은 유지한다**: 03-05 이전 상태에서도 400 으로 거부되어
+    **열린 채로 새지 않는다.** 안전한 기본값이다 — 상태코드가 덜 정확한 것보다
+    가드가 없는 게 훨씬 나쁘다.
+    """
 
 
 # 인메모리 `Popen` 맵. **`--workers 1` 전제다** (Pitfall 9 / T-1-22).
@@ -503,7 +547,13 @@ def create_job(kind: str, *, run_dir: str | None = None,
     자기 서버에 요청을 쏘는 모양이 되지 않게 지금 경계를 그어 둔다.
 
     순서에 의미가 있다:
+      ①.5 불사자 계정 가드 (AccountMismatchError) — **트랜잭션을 열기 전에.**
+          파일 읽기라 DB 경합과 무관하고, 3시간 32분짜리 인덱스를 틀린 계정으로 쌓고 나면
+          되돌리는 비용이 그 시간 전부다. 그래서 제일 먼저 본다 (ENG-08)
       ① 쓰기 잡 전역 가드 (BusyError) — 자식을 띄우기 **전에** 막는다
+      ①.9 같은 kind 중복 가드 (SameKindBusyError) — **트랜잭션 안.** DB 상태를 보는
+          체크라 ①과 같은 창 안에 있어야 두 요청이 "둘 다 없네" 를 보고 둘 다 들어가지
+          않는다. 계정 가드(①.5)가 밖인 것과 대비된다 (SINGLETON_KINDS 주석)
       ② 회차 화이트리스트 — 라우트가 깜빡해도 여기서 막힌다 (T-1-11)
       ③ 대상 목록을 파일로 (FLOW-02)
       ④ argv 조립 (webapp/argv.py 한 곳)
@@ -526,6 +576,21 @@ def create_job(kind: str, *, run_dir: str | None = None,
         raise ValueError("only_ads 와 targets_path_override 를 같이 줄 수 없다 — 대상 파일은 하나다")
     if kind == "synthetic" and not argv_override:
         raise ValueError("합성 잡은 argv_override 가 필요하다 (테스트 전용 경로)")
+
+    # ①.5 불사자 계정 가드 (ENG-08). **자식을 띄우기 전이고, 트랜잭션을 열기도 전이다.**
+    #      여기가 라우트가 아니라 `create_job` 인 것이 핵심이다 — v2 의 APScheduler 가
+    #      이 함수를 그대로 부르므로, 라우트에 두면 스케줄러가 가드를 통째로 우회한다
+    #      (D-17 / ENG-07).
+    #      `required=True` 를 쓰는 것도 핵심이다. 값이 비면 KeyError 로 터져야지 조용히
+    #      폴백해 가드가 사라지면 안 된다(T-1-12). 그 KeyError 는 라우트에서 500 이 되는데,
+    #      **그게 맞다** — 설정이 빈 채로 불사자 잡이 도는 것보다 낫다.
+    if kind in BULSAJA_KINDS:
+        통과, 사유 = bulsaja_index.profile_ok(
+            settings.cfg("expected_bulsaja_nick", required=True),
+            int(settings.cfg("profile_max_age_min",
+                             settings.DEFAULTS["profile_max_age_min"])))
+        if not 통과:
+            raise AccountMismatchError(사유)
 
     accounts = list(accounts or [])
     init_db()
@@ -556,6 +621,24 @@ def create_job(kind: str, *, run_dir: str | None = None,
             if 막는것:
                 raise BusyError(
                     f"이미 도는 쓰기 작업이 있다: {막는것['id']} ({막는것['kind']})")
+
+        # ①.9 같은 kind 중복 가드. **트랜잭션 안**이다 — 쓰기 가드와 같은 이유로,
+        #     두 요청이 스레드풀에서 겹쳐 "둘 다 없네" 를 보고 둘 다 들어가는 창을 없앤다.
+        #     계정 확인(①.5)은 파일 읽기라 밖이지만, 이 체크는 DB 상태를 보므로 안이다.
+        #     **`starting` 도 본다**(`LIVE_STATUSES`). `running` 만 보면 자식을 띄우는 중인
+        #     잡을 못 잡아 구멍이 그대로 남는다 — 위 LIVE_STATUSES 주석이 이미 한 번 고친 실수다.
+        if kind in SINGLETON_KINDS:
+            상태표시 = ",".join("?" * len(LIVE_STATUSES))
+            겹친것 = cx.execute(
+                f"SELECT id FROM jobs WHERE status IN ({상태표시}) AND kind = ? "
+                "ORDER BY rowid LIMIT 1",
+                tuple(LIVE_STATUSES) + (kind,)).fetchone()
+            if 겹친것:
+                # 메시지에 **어느 kind 인지**와 "전역 쓰기 락이 아니다" 를 같이 밝힌다.
+                # 안 밝히면 사용자가 엉뚱하게 입찰가 작업을 찾으러 간다.
+                raise SameKindBusyError(
+                    f"같은 작업이 이미 돌고 있다: {겹친것['id']} ({kind}). "
+                    "전역 쓰기 락이 아니라 같은 종류 중복이다 — 끝나기를 기다려라")
 
         # ② 회차 화이트리스트. `..` 를 거르는 블랙리스트가 아니라 "실재하는 회차 목록에
         #    있는 이름만" 통과시킨다. 실패는 ValueError → 라우트가 400 으로 번역한다.
@@ -598,15 +681,16 @@ def create_job(kind: str, *, run_dir: str | None = None,
             # 설정이 정한 프로필 파일 한 자리다(`bulsaja_index.profile_path()` — 읽는 쪽과
             # 같은 계산을 본다).
             #
-            # 인덱스·스캔은 회차가 있으면 회차의 `web/` 밑에, 없으면 잡 로그 옆에 둔다.
-            # 인덱스는 회차를 넘어 사는 기록이라 회차가 없는 호출이 정상이고, 그때 새
-            # 디렉터리를 파지 않는다 — 로그 루트는 이미 있고 이미 `.gitignore` 대상이다.
+            # 인덱스·스캔은 회차의 `web/` 밑이다. 인덱스 **기록**은 회차를 넘어 살지만
+            # (`ss_index` 테이블), 그 잡의 **진행요약 산출물**은 회차에 속한다 — 대상(그룹)
+            # 목록 파일도 거기 있어서 "무엇을 넣어 무엇이 나왔나" 가 한 폴더에 모인다.
             if kind == "bulsaja_profile":
                 result_path = bulsaja_index.profile_path()
-            elif run_dir:
-                result_path = _web_dir(run_dir) / f"{BULSAJA_접두[kind]}_{job_id}.json"
+            elif not run_dir:
+                raise ValueError(f"{kind} 에는 회차가 필요하다 — 산출물과 대상 목록이 "
+                                 "회차의 web/ 밑에 같이 남아야 추적이 된다")
             else:
-                result_path = log_dir() / f"{BULSAJA_접두[kind]}_{job_id}.json"
+                result_path = _web_dir(run_dir) / f"{BULSAJA_접두[kind]}_{job_id}.json"
 
         # ④ argv
         if argv_override:
