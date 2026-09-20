@@ -93,12 +93,39 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_parent ON jobs(parent_job_id);
+
+CREATE TABLE IF NOT EXISTS ss_index (
+  product_id      TEXT PRIMARY KEY,
+  smartstore      TEXT,
+  market_group_id TEXT NOT NULL,
+  group_total     INTEGER,
+  unresolved      INTEGER NOT NULL DEFAULT 0,
+  observed_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ss_index_smartstore ON ss_index(smartstore);
+CREATE INDEX IF NOT EXISTS idx_ss_index_group ON ss_index(market_group_id);
 """
 # ※ RESEARCH §5.7 의 DDL 에서 `run_dir` 만 NOT NULL 을 뺐다. `prep` 은 회차 이름을
 #    **CLI 가 오늘 날짜로 정한다** — 웹앱이 미리 지어내면 진실이 둘이 된다.
 # ※ 보드용 캐시 테이블은 만들지 않는다. 보드는 매번 `result.json` 을 투영한다(수십 ms).
 #    캐시는 최적화이고, 지금 넣으면 "진실이 둘" 위험만 는다.
 # ※ 대상별 잠금 테이블은 Phase 2(ENG-04) 다. 안 쓰는 스키마를 미리 굳히지 않는다.
+#
+# ── ss_index (Phase 3 / D-20) ───────────────────────────────────────────────
+# ※ observed_at 이 있어야 D-04 를 안 어긴다. "채널상품ID 를 영구 키로 저장하는 것" 과
+#    "관측 기록을 관측시각과 함께 보관하는 것" 은 다르다. 20일 물갈이로 번호가 재발급되므로
+#    적힌 값을 그대로 믿으면 조용히 틀린 상품을 가리킨다 — 쓰기 직전 재검증이 그 선을 지킨다
+#    (JOIN-04). 관측시각이 없으면 "언제 본 값인가" 를 물을 수 없어 재검증이 성립하지 않는다.
+# ※ 이건 보드 캐시가 아니다. 보드 캐시는 `result.json` 에서 언제든 재생성되는 투영이라
+#    두는 순간 진실이 둘이 되지만, 이건 **3시간 반을 태워야 다시 얻는 외부 관측 기록**이다
+#    (36그룹 / 47,105 상품). 재생성이 공짜가 아니면 그건 캐시가 아니라 기록이다.
+#    위 "보드용 캐시 테이블은 만들지 않는다" 는 여전히 유효하고, 대상별 잠금도 여전히 Phase 2 다.
+# ※ `smartstore` 에 NOT NULL 을 걸지 않는다. 업로드 안 된 상품이 **정상적으로** NULL 이다
+#    (전체 수집상품 97만 건 중 대부분). 걸면 인덱스 잡이 그 그룹 중간에서 통째로 죽는다.
+# ※ `unresolved` 는 429·타임아웃으로 **못 본 것**이다. 0 으로 접지 마라 — 미조회를 성공으로
+#    적으면 그 행이 화면에서 "미해소(광고 쪽 오류)" 로 둔갑한다(Pitfall 3).
+# ※ `group_total` 은 관측 시점의 그룹 전체 상품수다. 행수와 비교해야 "중간에 끊긴 잡" 을
+#    "다 훑었다" 와 구분할 수 있다 (`bulsaja_index.group_health`).
 
 
 class BusyError(RuntimeError):

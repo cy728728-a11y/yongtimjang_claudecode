@@ -152,7 +152,7 @@ def test_같은_번호는_최신_관측이_이긴다(잡판):
         ("zzpid-new", "10000000001", 그룹A, 2, 0, _지금()),
     ])
 
-    assert bulsaja_index.lookup(["10000000001"])["product_id"] == "zzpid-new"
+    assert bulsaja_index.lookup(["10000000001"])["10000000001"]["product_id"] == "zzpid-new"
 
 
 def test_빈_입력은_빈_결과다(잡판):
