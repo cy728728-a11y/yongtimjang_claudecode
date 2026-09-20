@@ -228,12 +228,20 @@ else
   # 어느 쪽이든 시크릿이 없으니 **초록**이었다. CT_DEV_TOKEN 과 서버 토큰이
   # 어긋난 채로 돌리면 "시크릿 0건" 이 거짓으로 통과한다. 검사가 성립하지
   # 않는 상태와 검사를 통과한 상태를 같은 화면으로 두지 않는다.
-  body=$(curl -s --max-time 10 -H "Cookie: ct_session=$T" "$B/")
-  if ! printf '%s' "$body" | grep -q 'id="board-rows"'; then
+  # **파이프로 넘기지 않고 파일로 받는다.** `set -o pipefail` 이 켜져 있는데
+  # `printf '%s' "$body" | grep -q` 는 grep 이 먼저 끝나면 printf 가 SIGPIPE 로 죽어
+  # 파이프라인 종료코드가 141 이 된다 — 보드를 멀쩡히 받았는데 "못 받았다" 로
+  # 빨개진다. 보드가 2.4MB(6,945행)라 이 경합이 실제로 난다(실측: 8회 중 2회 141).
+  # 보안과 무관한 이유로 빨개지는 스크립트는 곧 안 돌리는 스크립트가 된다(WR-11).
+  BODY_FILE="$(mktemp -t ct-sec-body)"
+  curl -s --max-time 30 -o "$BODY_FILE" -H "Cookie: ct_session=$T" "$B/"
+  if ! grep -q 'id="board-rows"' "$BODY_FILE"; then
+    # 못 받은 걸 초록으로 넘기지 않는다 — 검사가 성립하지 않는 상태와 검사를
+    # 통과한 상태를 같은 화면으로 두지 않는 것이 이 항목의 요지다.
     check V-SAFE-03 "보드를 못 받았다 — 시크릿 검사가 성립하지 않는다 (토큰·서버 확인)" 1
   else
     leaked=0
-    printf '%s' "$body" | grep -q -- "$S" && leaked=1
+    grep -q -- "$S" "$BODY_FILE" && leaked=1
     # 상대경로 금지 — 저장소 루트가 아닌 데서 부르면 조용히 건너뛰어졌다.
     LOGDIR="$ROOT/webapp-logs"
     if [ -d "$LOGDIR" ]; then
@@ -244,6 +252,7 @@ else
       check V-SAFE-03 "응답 본문(보드 확인됨)에 광고 시크릿 0건 · webapp-logs 없음(로그 검사 못 했다)" "$leaked"
     fi
   fi
+  rm -f "$BODY_FILE"
 fi
 
 echo "----"
