@@ -147,6 +147,19 @@ window.__ct = {
   미리보기줄수: function () {
     return document.querySelectorAll("#preview-body tbody tr").length;
   },
+  // 끝난 미리보기의 job_id. board.js 의 "실행닫기" 가 접수 시점에 "" 로 비우고,
+  // 미리보기가 끝나면 "실행열기" 가 새 id 를 채운다 — 2차 접수가 실제로 돌았는지를
+  // 가리키는 유일한 신호다. 표 내용은 1차 결과가 그대로 남아 있어 신호가 안 된다.
+  // (이 블록은 템플릿 문자열 안이라 백틱을 쓰지 마라 — 문자열이 거기서 끊긴다)
+  실행잡값: function () {
+    var el = document.getElementById("commit-preview-job");
+    return el ? el.value : null;
+  },
+  // 다음 접수 전에 표 자리를 비운다. 안 비우면 1차 결과를 2차 결과로 읽는다.
+  표비우기: function () {
+    document.getElementById("preview-body").textContent = "";
+    return true;
+  },
   미리보기행: function (adId) {
     var tr = Array.prototype.filter.call(
       document.querySelectorAll("#preview-body tbody tr"),
@@ -185,6 +198,26 @@ window.__ct = {
 };
 true;
 `;
+
+/** **새** 미리보기가 끝날 때까지 기다린다 (WR-06).
+
+   `표기다리기` 만으로는 두 번째 접수를 못 기다린다 — `#preview-body` 에 1차 결과가
+   그대로 남아 있어서(`실행닫기()` 는 `#result` 만 닫는다) 누르자마자 1차 텍스트가
+   반환된다. 그래서 2차가 아예 접수되지 않았거나 409 로 거부됐어도 "결과가 같다" 가
+   참이 됐다 — 영원히 초록인 검사였다.
+
+   여기서는 `commit-preview-job` 이 **이전 값과 다른 비어 있지 않은 값**이 될 때까지
+   기다린다. 접수 시점에 "" 로 비워지고 끝나야 새 id 가 채워지므로, 이 값이 바뀌었다는
+   것은 새 잡이 실제로 접수되고 끝났다는 뜻이다. 못 기다리면 null 이다 — 그러면
+   검사는 FAIL 이어야 한다. */
+async function 새미리보기기다리기(이전잡, 초 = 90) {
+  for (let i = 0; i < 초 * 5; i++) {
+    const 잡 = await 평가(`window.__ct.실행잡값()`);
+    if (잡 && 잡 !== 이전잡) { return 잡; }
+    await 잠깐(200);
+  }
+  return null;
+}
 
 /** 미리보기 표가 그려질 때까지 기다린다. */
 async function 표기다리기(초 = 60) {
@@ -385,11 +418,20 @@ async function main() {
 
   // ── 같은 선택으로 한 번 더: dry-run 은 이력을 오염시키지 않는다 ──────────
   {
+    // 1차 잡 id 를 기준점으로 잡고, 표 자리를 **비우고** 누른다.
+    // 안 비우면 아래 `표기다리기` 가 1차 결과를 즉시 돌려줘서 2차를 안 기다린다.
+    const 이전잡 = await 평가(`window.__ct.실행잡값()`);
+    await 평가(`window.__ct.표비우기()`);
     await 평가(`window.__ct.미리보기클릭()`);
-    await 잠깐(1500);
-    const 글 = await 표기다리기(90);
+
+    const 새잡 = await 새미리보기기다리기(이전잡, 90);
+    check("V-PRE-15a", "두 번째 미리보기가 **실제로 접수되고 끝났다** (새 job_id)",
+      새잡 !== null && 새잡 !== 이전잡,
+      `1차 ${String(이전잡).slice(0, 8)} / 2차 ${새잡 ? String(새잡).slice(0, 8) : "(안 바뀜)"} · 화면오류 "${await 평가(`window.__ct.오류()`)}"`);
+
+    const 글 = 새잡 === null ? null : await 표기다리기(30);
     check("V-PRE-15", "같은 선택으로 두 번 눌러도 결과가 같다 (dry-run 은 이력을 안 건드린다)",
-      글 !== null && 글 === 첫결과,
+      새잡 !== null && 글 !== null && 글 === 첫결과,
       글 === 첫결과 ? "동일" : `1차: ${(첫결과 || "").slice(0, 70)} / 2차: ${(글 || "").slice(0, 70)}`);
 
     const 스트림 = await 평가(`window.__ct.스트림수()`);

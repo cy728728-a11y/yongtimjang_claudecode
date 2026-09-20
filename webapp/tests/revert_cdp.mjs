@@ -46,12 +46,23 @@ await send("Page.enable"); await send("Runtime.enable");
 await send("Page.navigate", {url: `${base}/?run_dir=${runDir}`});
 await 잠깐(3500);
 
-// ── 사전 상태: 되돌리기 잡이 하나도 없다 ────────────────────────────────────
-// 이 수가 마지막에 그대로여야 "아무것도 안 보냈다" 가 증명된다.
+// ── 사전 상태: 되돌리기 잡의 **id 집합** ────────────────────────────────────
+//
+// **개수를 세면 안 된다** (WR-05). `GET /jobs` 는 최근 20건만 준다. 창 안에 이미
+// revert_* 잡이 1건 이상 있는 상태에서 하네스가 진짜로 되돌리기를 접수해 버리면,
+// 새 잡이 들어오면서 제일 오래된 revert 잡이 창 밖으로 밀려 **개수가 그대로**다
+// → "한 건도 안 나갔다" 가 거짓인데 초록이 된다. 이 하네스의 제일 강한 주장이
+// 하필 그 자리였다. 어제 472건을 실제로 되돌린 뒤라 레지스트리에 revert 잡이
+// 있는 지금이 정확히 그 조건이다.
+//
+// 그래서 id 집합으로 본다. 판정은 **"사전에 없던 revert 잡 id 가 0개"** 다 —
+// 창 밖으로 밀려난 것(사전에만 있는 id)은 새 요청이 나갔다는 증거가 아니므로
+// 그것 때문에 빨개지지 않고, 새로 생긴 것은 무조건 잡힌다.
+const 되돌리기id = `j => j.jobs.filter(x=>/^revert_/.test(x.kind)).map(x=>x.id).sort()`;
 const 사전 = await 평가(`fetch("/jobs",{headers:{"Accept":"application/json"}}).then(r=>r.json())
-  .then(j => ({ 되돌리기: j.jobs.filter(x=>/^revert_/.test(x.kind)).length,
+  .then(j => ({ 되돌리기: (${되돌리기id})(j),
                 실행잡: (j.jobs.find(x=>x.kind==="bids_commit")||{}).id || null }))`);
-console.log(`기준: 되돌리기 잡 ${사전.되돌리기}건 · 최근 실행 잡 ${사전.실행잡 || "없음"}`);
+console.log(`기준: 되돌리기 잡 ${사전.되돌리기.length}건 [${사전.되돌리기.map(x=>x.slice(0,8)).join(" ")}] · 최근 실행 잡 ${사전.실행잡 || "없음"}`);
 
 // ── 위험 구역 (D-14 / T-1-43) ───────────────────────────────────────────────
 const 위험 = await 평가(`(() => {
@@ -148,9 +159,13 @@ check("V-RVT-15", "확인 문구의 건수 == 서버가 센 수",
       Number(확인.수) === 서버건수, `화면 ${확인.수} / 서버 ${서버건수}`);
 check("V-RVT-16", "확인 문구가 '방금 누른 작업만이 아니다' 를 말한다",
       /방금 누른 작업만이 아니다/.test(확인.글), 확인.글);
+// V-RVT-26 과 **같은 잣대**를 쓴다 — 개수가 아니라 id 집합이다(WR-05).
+const 확인단계잡 = await 평가(`fetch("/jobs",{headers:{"Accept":"application/json"}})
+  .then(r=>r.json()).then(${되돌리기id})`);
+const 확인단계새것 = 확인단계잡.filter(id => 사전.되돌리기.indexOf(id) === -1);
 check("V-RVT-17", "확인 단계가 떠도 아직 아무 잡도 안 생겼다",
-      (await 평가(`fetch("/jobs",{headers:{"Accept":"application/json"}}).then(r=>r.json())
-        .then(j=>j.jobs.filter(x=>/^revert_/.test(x.kind)).length)`)) === 사전.되돌리기);
+      확인단계새것.length === 0,
+      `새로 생긴 것 ${확인단계새것.length}건`);
 
 // 취소 — **아무 요청도 보내지 않는다.**
 await 평가(`document.getElementById("revert-round-cancel").click()`);
@@ -234,9 +249,12 @@ await 평가(`window.fetch = window.__원래fetch`);
 // ── 사후 확인: 되돌리기 잡이 한 건도 안 생겼다 ──────────────────────────────
 await 잠깐(500);
 const 사후 = await 평가(`fetch("/jobs",{headers:{"Accept":"application/json"}}).then(r=>r.json())
-  .then(j => j.jobs.filter(x=>/^revert_/.test(x.kind)).length)`);
+  .then(${되돌리기id})`);
+const 새로생긴것 = 사후.filter(id => 사전.되돌리기.indexOf(id) === -1);
 check("V-RVT-26", "**되돌리기 잡이 한 건도 안 생겼다** (실제 광고 API 호출 0)",
-      사후 === 사전.되돌리기, `전 ${사전.되돌리기} / 후 ${사후}`);
+      새로생긴것.length === 0,
+      `전 ${사전.되돌리기.length}건 / 후 ${사후.length}건 · 새로 생긴 것 ${새로생긴것.length}건` +
+      (새로생긴것.length ? ` [${새로생긴것.map(x=>x.slice(0,8)).join(" ")}]` : ""));
 
 console.log("----");
 console.log(실패 ? "되돌리기 CDP 검증 실패"
