@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-09-20T08:52:20.201Z"
+stopped_at: Completed 01-06-PLAN.md (진행 로그 SSE)
+last_updated: "2026-09-20T09:35:18.543Z"
 last_activity: 2026-09-20
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 01 (board-bid-raise) — EXECUTING
-Plan: 6 of 9
+Plan: 7 of 9
 Status: Ready to execute
 Last activity: 2026-09-20
 
-Progress: [██████░░░░] 56%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [██████░░░░] 56%
 | Phase 01 P03 | 22min | 3 tasks | 14 files |
 | Phase 01 P04 | 32min | 3 tasks | 8 files |
 | Phase 01 P05 | 47min | 3 tasks | 9 files |
+| Phase 01 P06 | 78min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,12 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-05 작업 생성은 HTTP 를 모르는 jobs.create_job 함수. 라우트는 예외를 상태코드로 번역만 (D-17/ENG-07)
 - [Phase 01]: 01-05 쓰기 잡(prep·bids_commit·revert_*)은 전역 1개. 가드+INSERT 를 BEGIN IMMEDIATE 로 원자 결합 (Pitfall 3)
 - [Phase 01]: 01-05 htmx 폼은 stdlib parse_qsl 로 직접 푼다 — python-multipart 의존성을 늘리지 않는다
+- [Phase ?]: 01-06 폴링과 SSE 를 조각 단위로 분리 — 패널 전체를 2초마다 outerHTML 로 교체하면 그 안의 EventSource 가 2초마다 끊겼다 붙는다. _job_status.html 만 폴링이 때린다
+- [Phase ?]: 01-06 진행 로그는 매 접속 오프셋 0 전량 재생. 재연결 헤더에 이어받기를 맡기지 않는다 — htmx-ext-sse 가 재연결 때 EventSource 를 새로 만들어 그 상태를 버린다 (T-1-27)
+- [Phase ?]: 01-06 sse-close 는 연결을 여는 엘리먼트에 붙인다(sse.js:235). 자식에 붙이면 조용히 무시돼 작업 종료 후 무한 재연결 — 리서치·플랜 예제가 틀렸다. vendoring 소스가 문서보다 정본
+- [Phase ?]: 01-06 SC-03 자동 테스트는 진짜 uvicorn 을 띄운다 — TestClient 는 ASGI 앱을 끝까지 돌린 뒤 BytesIO 로 주므로 부분 수신·끊김을 흉내조차 못 한다 (CT_DB_PATH/CT_JOB_LOG_DIR env 추가 이유)
+- [Phase ?]: 01-06 토큰 비교는 바이트로 — compare_digest 가 str 비ASCII 에서 TypeError 를 던져 403 자리에 500 이 났다
+- [Phase ?]: 01-06 V-SAFE-02c 를 c1/c2 로 분리 — c1 은 실재 라우트로 '가드를 통과해 앱 로직이 답한다'까지 보고, c2 는 미리보기 라우트가 생기면 자동으로 -lt 400 이 된다
 
 ### Pending Todos
 
@@ -100,6 +107,7 @@ None yet.
 - **[Phase 6 게이트]** 수정업로드가 상하단 안내이미지를 어느 시점 기준으로 올리는지 모순 미해결 — 1건 육안 확인으로 깬다 (MARKET-02)
 - **[Phase 4 미검증]** 홍보배너 식별은 기성 해법이 없는 가설. 100건 라벨링 미탐 0% 를 통과해야 실작업 투입
 - **[환경]** 이 맥북에 `bulsaja-yongssaem` MCP 서버 항목이 없다 — 용쌤 계정 전환 경로가 끊겨 있음 (ENG-08 착수 시 확인)
+- OQ-7: 회차마다 든 계정 수가 다른데 화면이 말하지 않는다. 실측 2026-08-29=2계정 · 2026-08-30=4계정 · 2026-09-20=1계정(판정 전). 신선도 배너(D-16)는 경과일만 보여준다 — 01-07/01-08 이 신선도만 보고 회차를 고르면 빠진 계정의 소재가 조용히 대상에서 사라진다(실제 광고비). 배너·드롭다운에 계정 수를 노출할지 01-07 에서 결정할 것
 
 ## Deferred Items
 
@@ -111,6 +119,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T08:52:04.571Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-09-20T09:35:18.538Z
+Stopped at: Completed 01-06-PLAN.md (진행 로그 SSE)
 Resume file: None
