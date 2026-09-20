@@ -13,6 +13,9 @@ updated: 2026-09-20
 > Per-phase validation contract for feedback sampling during execution.
 > 근거: `01-RESEARCH.md` § Validation Architecture (전부 이 맥북에서 실측).
 > **2026-09-20 갱신:** PLAN 확정에 따라 `Plan`·`Wave` 열을 실제 값으로 채웠고, 명령을 `.venv-web/bin/pytest` 로 실행 가능한 형태로 고쳤다. 행 6개를 추가했다(표시: ✚).
+> **2026-09-20 실행(01-06):** 행 1개 추가(✚SSE-CDP). `보안-curl` 이 8종 → **9종**이 됐다
+> (V-SAFE-02c 를 c1/c2 로 쪼개 조였다). Manual-Only 의 SC-03 행은 **자동화됐다** —
+> 헤드리스 크롬으로 탭을 진짜 닫았다 여는 `sse_cdp.sh` 가 육안 확인보다 정확하다.
 > **2026-09-20 재검(plan-checker 반영):** `Automated Command` 를 **파일 단위**로 통일하고 노드 ID 는 `(핵심 노드: …)` 로 병기했다 — 태스크의 `<verify>` 가 실제로 파일 전체를 돌리기 때문이다(주장과 실행의 불일치 제거).
 > BID-01 · BOARD-04 는 대상 테스트가 `test_board.py` → **`test_flow.py`(01-07 Task 2)** 로 옮겨졌다 — 그 테스트들이 부르는 `webapp/flow.py` 가 Task 2 에서 처음 생겨, Task 1 에 두면 collect 단계에서 깨진다.
 
@@ -35,7 +38,7 @@ updated: 2026-09-20
 | **Config file** | CLI: 없음(파일 직접 실행) · 웹앱: `webapp/pytest.ini` — **Plan 01-01 Task 1 이 만든다** |
 | **Quick run command** | `.venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_bids.py` |
 | **Full suite command** | `for t in nvad reports ads_rules ledger bids prune; do .venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_$t.py \|\| exit 1; done && .venv-web/bin/pytest webapp/tests -q` |
-| **Estimated runtime** | CLI 100 tests ~0.02초 · 웹앱 전체 ~10초 (합성 잡 포함) |
+| **Estimated runtime** | CLI 100 tests ~0.02초 · 웹앱 전체 **~10초** (합성 잡 + 진짜 uvicorn 1회 포함, 01-06 실측 10.2초) · `sse_cdp.sh` ~35초 |
 | **Baseline (2026-09-19 실측)** | CLI **100 tests, 6 파일 전부 exit=0** (7+7+21+21+28+16) |
 
 ---
@@ -69,7 +72,7 @@ updated: 2026-09-20
 | SAFE-01 | 01-03 | 1 | Host `evil.com` → 400 / Origin `evil.com` → 403 | T-1-01, T-1-01b | DNS rebinding·타 탭 CSRF 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_security.py -x -q` | ❌ W0 | ⬜ pending |
 | SAFE-02 | 01-03 | 1 | 토큰 없음·틀림 → 403, 맞음 → 200 | T-1-02, T-1-16 | 부팅 토큰 없이는 쓰기 불가 | unit | `.venv-web/bin/pytest webapp/tests/test_security.py -x -q` | ❌ W0 | ⬜ pending |
 | SAFE-03 | 01-03 | 1 | 응답·로그·템플릿 어디에도 시크릿 문자열이 없다 | T-1-03 | 광고 시크릿·불사자 토큰 미노출 | unit | `.venv-web/bin/pytest webapp/tests/test_security.py -x -q` (핵심 노드: `::test_시크릿이_새지_않는다`) | ❌ W0 | ⬜ pending |
-| ✚보안-curl | 01-03 | 1 | 실행 중인 서버에 대한 보안 8종 | T-1-01, T-1-02, T-1-03 | 바인드·Host·Origin·토큰·시크릿 | integration | `CT_DEV_TOKEN=devtoken123 bash webapp/tests/security_curl.sh` | ❌ W0 | ⬜ pending |
+| ✚보안-curl | 01-03 | 1 | 실행 중인 서버에 대한 보안 **9종** (01-06 에서 V-SAFE-02c 를 c1/c2 로 조였다) | T-1-01, T-1-02, T-1-03 | 바인드·Host·Origin·토큰·시크릿 + **정상 쓰기가 앱 로직에 닿는다** | integration | `CT_DEV_TOKEN=devtoken123 bash webapp/tests/security_curl.sh` | ✅ 존재 | ✅ green (9/9) |
 | ✚보드-CDP | 01-04 | 2 | 필터 전환 시 건수 배지가 **직전 값이 아니라** 현재 값이다 | T-1-32 (선행) | 실행 규모를 사람이 오독하지 않는다 | integration | `CT_DEV_TOKEN=devtoken123 bash webapp/tests/board_cdp.sh` | ❌ W0 | ⬜ pending |
 | BOARD-01 | 01-04 | 2 | ①행에 `imp` 가 없어도 접기가 안 깨진다 | T-1-21 | 지표 중복 계상 없음 | unit | `.venv-web/bin/pytest webapp/tests/test_board.py -x -q` | ❌ W0 | ⬜ pending |
 | BOARD-02 | 01-04 | 2 | 계정 alias 가 `result.json` 에서만 온다 (가짜 5번째 계정 픽스처) | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_board.py -x -q` (핵심 노드: `::test_계정을_코드에_박지_않는다`) | ❌ W0 | ⬜ pending |
@@ -80,8 +83,9 @@ updated: 2026-09-20
 | ✚라우터-01 | 01-05 | 3 | 작업 생성이 전부 POST · kind 를 클라이언트가 못 고른다 · 409/400 번역 | T-1-01b, T-1-23, T-1-09 | 임의 argv·작업종류 주입 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_routes_jobs.py -x -q` | ✅ 존재 | ✅ green |
 | ENG-02 | 01-06 | 4 | 서버가 죽어도 자식이 산다 (`start_new_session=True`) | — | N/A | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_자식은_서버_종료를_견딘다`) | ✅ 존재 | ✅ green — **01-05 가 미리 충족**(잡 엔진이 이 플랜에서 태어났다) |
 | ENG-03 | 01-06 | 4 | 작업 **중간 시점**에 로그파일이 이미 커져 있다 (`PYTHONUNBUFFERED=1`) | T-1-25 | 진행 로그 은폐 방지 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_로그가_실시간으로_쌓인다`) | ✅ 존재 | ✅ green — **01-05 가 미리 충족** |
-| SC-03 | 01-06 | 4 | 탭 닫았다 열어도 로그를 처음부터 이어본다 | T-1-26, T-1-27 | Last-Event-ID 미의존 · 중복 미표시 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_재접속하면_처음부터_이어본다`) | ❌ W0 | ⬜ pending |
-| ✚로그tail-01 | 01-06 | 4 | 오프셋 읽기가 멀티바이트 절단·파일 부재를 버틴다 | T-1-03d, T-1-17b | 스크러버 + escape 통과 | unit | `.venv-web/bin/pytest webapp/tests/test_logtail.py -x -q` | ❌ W0 | ⬜ pending |
+| SC-03 | 01-06 | 4 | 탭 닫았다 열어도 로그를 처음부터 이어본다 | T-1-26, T-1-27 | 재연결 헤더 미의존 · 중복 미표시 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_재접속하면_처음부터_이어본다` — **진짜 uvicorn 을 띄운다.** TestClient 는 ASGI 앱을 끝까지 돌린 뒤 본문을 통째로 주므로 "0.8초 받고 끊는다"를 흉내조차 못 한다) | ✅ 존재 | ✅ green |
+| ✚SSE-CDP | 01-06 | 4 | 브라우저에서 **탭을 진짜로 닫았다 다시 연다** — 로그가 1번 줄부터 다시 흐르고 누락·중복 0, EventSource 는 1개, done 이면 닫힌다 | T-1-24, T-1-26, T-1-27 | 커넥션이 쌓이지 않는다 · 로그 중복 표시 없음 | integration | `bash webapp/tests/sse_cdp.sh` (임시 포트·임시 레지스트리·합성 잡 — 광고 API 0) | ✅ 존재 | ✅ green (12/12) |
+| ✚로그tail-01 | 01-06 | 4 | 오프셋 읽기가 멀티바이트 절단·파일 부재를 버틴다 | T-1-03d, T-1-17b | 스크러버 + escape 통과 | unit | `.venv-web/bin/pytest webapp/tests/test_logtail.py -x -q` | ✅ 존재 | ✅ green (14/14) |
 | FLOW-02 | 01-07 | 5 | 실행이 미리보기와 **같은 targets 파일**을 지목 | T-1-06 | 화면 상태에서 대상을 다시 만들지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_targets_파일이_하나다`) | ❌ W0 | ⬜ pending |
 | BID-01 | 01-07 | 5 | ①만 대상으로 잡힌다 (②③ 소재 제외) | T-1-30 | 대상 규칙 오염 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_대상은_규칙1_소재만`) — **01-07 Task 2**. `flow.collect_rule1_ads` 가 태어나는 태스크에 테스트가 같이 있다 | ❌ W0 | ⬜ pending |
 | BID-02 | 01-07 | 5 | 그룹입찰 행의 `from` 이 `groupBid` 다 (웹앱은 **계산하지 않는다**) | T-1-07 | 진실이 둘이 되지 않는다 | unit | **기존** `.venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_bids.py` + `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_웹앱은_입찰가를_계산하지_않는다`) | ✅ 존재 / ❌ W0 | ⬜ pending |
@@ -180,7 +184,7 @@ grep -rq "$S" webapp-logs/ && echo FAIL || echo PASS
 |----------|-------------|-------------|------------|-------------------|
 | 보이는 선택 vs 필터 전체 선택이 다른 건수를 준다 | BOARD-03 | 01-07 Task 3 (3번) | Tabulator 선택 API 가 브라우저 JS 안에서만 산다 | 보드에서 계정 필터를 건 뒤 헤더 체크박스 → 건수 확인 → "필터 전체 N건 선택" 배너 → 건수가 커지는지 확인 |
 | 필터 전체 선택 시 확인 배너가 한 번 더 뜬다 | FLOW-04 | 01-07 Task 3 (4·5번) | 같음 | 위 배너가 실제로 뜨고, 취소하면 선택이 안 넘어가는지. 건수 타이핑 입력칸이 없는지 |
-| 탭 닫았다 열어 진행 로그 이어보기 (실작업) | SC-03 | 01-06 Task 3 (6·7번) | 실제 브라우저 생명주기 | `prep --account cy728` 실행 → 탭 닫기 → 30초 뒤 다시 열기 → 처음부터 로그가 다시 흐르고 진행이 이어지는지. **합성 잡 테스트가 자동 커버하므로 이건 최종 1회 확인용** |
+| 탭 닫았다 열어 진행 로그 이어보기 | SC-03 | 01-06 — **자동화됨** | ~~실제 브라우저 생명주기~~ → **기계가 더 정확하다** | 헤드리스 크롬으로 탭을 진짜 닫고(CDP `/json/close`) 새 탭을 연다: `bash webapp/tests/sse_cdp.sh`. 실측 25줄 → 닫고 5초 → 41줄, 첫 줄이 **정확히 `[1/40] tick`**, 누락 0 중복 0. 육안으로는 "로그가 보인다" 까지밖에 못 본다 — 이어받기 설계로 되돌리면 첫 줄이 `[39/40]` 이 되는데 그것도 "로그가 흐른다"로 보인다(음성 대조군 실측) |
 | 회차 신선도 배너 | D-16 | 01-04 Task 3 (2번) | 시각 확인 | 보드 상단에 `2026-08-30 회차 · N일 전 · 통계 기간 08-22~08-28` 이 뜨고, 오래되면 경고색인지 |
 | 보드 건수 배지가 필터를 정확히 따라온다 | (BOARD-01 부수) | 01-04 — **자동화됨** | ~~시각 확인~~ → **육안으로는 못 잡는다** | 필터를 한 번만 바꾸면 숫자가 *움직이긴 해서* 사람은 PASS 를 준다. **두 번 연속 바꿔 직전 값과 대조해야만** 랙이 드러난다(2026-09-20 실제 버그). 그래서 수동 항목에서 빼고 `webapp/tests/board_cdp.sh` 로 옮겼다. 보드 JS 를 건드리면 그걸 돌려라 |
 | 그룹입찰 행의 현재가가 그룹 기본가다 | BID-03 | 01-07 Task 3 (8번) | 실데이터 대조 | `nad-a001-02-000000495390006` 이 70 → 80 인지. **50 → 60 이면 웹앱이 재계산한 것** |
@@ -200,6 +204,7 @@ grep -rq "$S" webapp-logs/ && echo FAIL || echo PASS
 - [ ] 테스트에 `--commit` 리터럴 0건 (실행 중 `no_commit_guard.sh` 로 상시 확인)
 - [ ] CLI 100 tests 여전히 exit=0 (회귀 기준선 불변)
 - [ ] 보드 JS 수정 시 `bash webapp/tests/board_cdp.sh` 전량 PASS (pytest 가 못 덮는 계층)
+- [ ] 진행 로그·작업 패널 수정 시 `bash webapp/tests/sse_cdp.sh` 전량 PASS (같은 계층)
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** planned (2026-09-20) — 실행은 `/gsd:execute-phase 1`
