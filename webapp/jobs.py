@@ -287,6 +287,47 @@ def _write_targets(job_id: str, run_dir: str, ad_ids: list[str]) -> Path:
     return path
 
 
+def _override_targets(run_dir: str | None, path: str | Path) -> Path:
+    """이미 있는 대상 파일을 **그대로** 가리킨다 — 새로 쓰지 않는다 (D-11 / FLOW-02).
+
+    실행(`bids_commit`)·되돌리기(`revert_only`)가 미리보기가 만든 그 파일을 재사용하는
+    통로다. 새로 쓰면 그 순간 '같은 파일' 이 아니게 되고, 미리보기와 실행 사이에
+    화면 필터가 바뀐 만큼 **본 것과 다른 게 실행된다.**
+
+    받은 경로를 그대로 믿지 않는다. 회차의 `web/` 밑인지 · 실제로 있는지 두 가지를
+    보고, 아니면 `ValueError` 다. **빈 목록으로 폴백하지 않는다** — 폴백하면
+    "아무것도 안 했는데 성공" 이 되어 사용자는 올라간 줄 안다.
+    """
+    if not run_dir:
+        raise ValueError("대상 파일을 재사용하려면 회차가 필요하다")
+    p = Path(path).expanduser()
+    if not p.is_absolute():
+        raise ValueError("대상 파일 경로가 절대경로가 아니다")
+    p = p.resolve()
+    # 부모 디렉터리 비교다. 접두 비교(`startswith`)로 하면 `web-남의것/` 같은
+    # 형제 디렉터리가 통과한다 — 경계를 글자가 아니라 경로로 본다.
+    if p.parent != _web_dir(run_dir).resolve():
+        raise ValueError("회차 밖 대상 파일은 쓸 수 없다")
+    if not p.is_file():
+        raise ValueError("대상 파일이 사라졌다 — 미리보기부터 다시 해라")
+    return p
+
+
+def _count_targets(path: Path) -> int | None:
+    """대상 파일을 **읽어서** 센다. 화면이 준 수를 믿지 않는다.
+
+    모양 두 가지를 받는다(`run_ads._load_only_ads` 와 같은 계약):
+    배열 `["nad-…"]` 과 `{"adIds": [...]}`. 못 읽으면 지어내지 않고 `None` 이다 —
+    0 으로 적으면 "대상이 없다" 와 "못 셌다" 가 같은 화면이 된다.
+    """
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    ids = raw if isinstance(raw, list) else raw.get("adIds")
+    return len(ids) if isinstance(ids, list) else None
+
+
 def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str],
                 targets_path: Path | None, result_path: Path | None,
                 commit: bool) -> list[str]:
@@ -320,6 +361,7 @@ def create_job(kind: str, *, run_dir: str | None = None,
                only_ads: list[str] | None = None,
                commit: bool = False,
                parent_job_id: str | None = None,
+               targets_path_override: str | Path | None = None,
                argv_override: list[str] | None = None) -> str:
     """작업을 만들고 자식을 띄운 뒤 `job_id` 를 즉시 돌려준다. **블로킹하지 않는다.**
 
@@ -335,12 +377,20 @@ def create_job(kind: str, *, run_dir: str | None = None,
       ⑤ jobs 행 INSERT (status='running')
       ⑥ spawn → pid UPDATE
 
+    `only_ads` 와 `targets_path_override` 는 **상호배타**다. 전자는 목록을 받아 파일을
+    새로 쓰고, 후자는 이미 있는 파일을 그대로 가리킨다 — 둘을 같이 주면 어느 쪽이
+    진짜 대상인지 모르는 상태가 된다. 대상 파일은 하나다 (D-11 / FLOW-02 / T-1-06).
+
     `argv_override` 는 **테스트 전용**이다. 합성 잡(`kind="synthetic"`)처럼 임의 argv 를
     태우는 유일한 경로라, 운영 라우트에는 절대 노출하지 않는다 (T-1-23).
     라우트는 kind 가 경로마다 고정이고 클라이언트가 kind 를 문자열로 넘기지 못한다.
     """
     if kind not in KINDS:
         raise ValueError(f"모르는 작업 종류다: {kind}")
+    # 상호배타 가드. 이 한 줄이 "대상 파일은 하나" 를 코드로 강제한다 —
+    # 주석이나 관례가 아니라 호출하는 순간 터지는 규칙이어야 한다.
+    if only_ads is not None and targets_path_override is not None:
+        raise ValueError("only_ads 와 targets_path_override 를 같이 줄 수 없다 — 대상 파일은 하나다")
     if kind == "synthetic" and not argv_override:
         raise ValueError("합성 잡은 argv_override 가 필요하다 (테스트 전용 경로)")
 
@@ -383,11 +433,17 @@ def create_job(kind: str, *, run_dir: str | None = None,
         #    그걸 "전량" 으로 읽는다(`_load_only_ads` 가 None 이면 전량이다).
         #    0건이 조용히 2,242건이 되는 길이라, 대상 파일 없이 입찰가 명령을
         #    만들지 않는다 (T-1-05 와 같은 종류의 사고).
+        #
+        #    `targets_path_override` 는 그 반대다 — **새로 쓰지 않고** 미리보기가 만든
+        #    파일을 그대로 가리킨다(D-11). 실행이 화면 상태에서 목록을 다시 만들면,
+        #    미리보기와 실행 사이에 필터가 바뀐 만큼 본 것과 다른 게 실행된다.
         targets_path = None
         if only_ads is not None:
             if not run_dir:
                 raise ValueError("대상 목록을 쓰려면 회차가 필요하다")
             targets_path = _write_targets(job_id, run_dir, list(only_ads))
+        elif targets_path_override is not None:
+            targets_path = _override_targets(run_dir, targets_path_override)
 
         result_path = None
         if run_dir and kind in BIDS_KINDS:
@@ -412,7 +468,10 @@ def create_job(kind: str, *, run_dir: str | None = None,
              str(targets_path) if targets_path else None,
              str(result_path) if result_path else None,
              parent_job_id,
-             len(only_ads) if only_ads is not None else None,
+             # 대상 수: 목록을 받았으면 그 길이, 파일을 가리켰으면 **그 파일을 읽어** 센다.
+             # 화면이 "5건" 이라고 말해도 파일에 2,242건이 들어 있으면 실행되는 건 2,242건이다.
+             (len(only_ads) if only_ads is not None
+              else (_count_targets(targets_path) if targets_path else None)),
              _now()))
         cx.commit()
     finally:

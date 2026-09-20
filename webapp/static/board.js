@@ -354,20 +354,29 @@
     작업오류.hidden = false;
   }
 
-  /** 작업이 끝날 때까지 상태를 물어본 뒤 결과 표를 갈아끼운다. */
-  function 결과기다리기(job_id, 남은) {
+  /**
+   * 작업이 끝날 때까지 상태를 물어본 뒤 결과 표를 갈아끼운다.
+   *
+   * `자리id`/`몸통id` 로 미리보기와 실행이 같은 함수를 쓴다 — FLOW-01 이
+   * "모든 버튼이 3단을 **똑같은 모양으로** 지난다" 이므로 화면 흐름도 하나여야 한다.
+   * `끝났을때` 는 미리보기일 때만 쓰는 후처리다(실행 버튼 열기).
+   */
+  function 결과기다리기(job_id, 남은, 자리id, 몸통id, 끝났을때) {
     fetch("/jobs/" + encodeURIComponent(job_id), { headers: { "Accept": "application/json" } })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (j.status === "running" && 남은 > 0) {
-          setTimeout(function () { 결과기다리기(job_id, 남은 - 1); }, 400);
+          setTimeout(function () {
+            결과기다리기(job_id, 남은 - 1, 자리id, 몸통id, 끝났을때);
+          }, 400);
           return;
         }
-        var 자리 = document.getElementById("preview");
+        var 자리 = document.getElementById(자리id);
         if (자리) { 자리.hidden = false; }
         // htmx 로 갈아끼운다 — 서버가 만든 조각을 그대로 쓴다(표를 JS 로 짓지 않는다).
         htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/result",
-                  { target: "#preview-body", swap: "innerHTML" });
+                  { target: "#" + 몸통id, swap: "innerHTML" });
+        if (끝났을때) { 끝났을때(j); }
       })
       .catch(function (e) { 오류표시("작업 상태를 못 읽었다: " + e); });
   }
@@ -404,10 +413,107 @@
         var job_id = JSON.parse(res.본문).job_id;
         htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/panel",
                   { target: "#job-panel", swap: "outerHTML" });
-        결과기다리기(job_id, 150);
+        // 새 미리보기를 접수하는 순간 지난 실행 결과와 실행 버튼을 닫는다.
+        // 안 닫으면 새 표 밑에 **지난 실행의 결과**가 남아 지금 것으로 읽힌다.
+        실행닫기();
+        결과기다리기(job_id, 150, "preview", "preview-body", function (상태) {
+          실행열기(job_id, 상태);
+        });
       }).catch(function (e) {
         미리보기버튼.disabled = false;
         오류표시("미리보기 요청이 실패했다: " + e);
+      });
+    });
+  }
+
+  // ── 실행 (FLOW-01 / D-11) ─────────────────────────────────────────────────
+  //
+  // **실행 버튼은 끝난 미리보기 job_id 가 있어야만 열린다.** 그리고 요청에 실리는
+  // 것은 그 job_id 하나뿐이다 — 대상 목록을 여기서 다시 만들지 않는다. 화면 상태로
+  // 목록을 재구성하면, 미리보기를 본 뒤 필터를 바꾼 만큼 **본 것과 다른 게 실행된다**
+  // (D-11 / FLOW-02 / T-1-06). 서버도 같은 것을 다시 검사한다 — 화면만 믿지 않는다.
+  var 실행칸 = document.getElementById("commit-wrap");
+  var 실행버튼 = document.getElementById("commit-btn");
+  var 실행요약 = document.getElementById("commit-summary");
+  var 실행예상 = document.getElementById("commit-eta");
+  var 실행잡칸 = document.getElementById("commit-preview-job");
+
+  // CLI 의 페이싱. `bids.py` 가 항목마다 잠깐 쉰다 — 초당 12건이 그 결과다.
+  // 진행률이 없는 작업이라(OQ-3) 이 수로 "얼마나 걸릴지" 를 미리 말해 준다.
+  var 초당건수 = 12;
+
+  function 실행닫기() {
+    if (실행칸) { 실행칸.hidden = true; }
+    if (실행버튼) { 실행버튼.disabled = true; }
+    if (실행잡칸) { 실행잡칸.value = ""; }
+    var 결과자리 = document.getElementById("result");
+    if (결과자리) { 결과자리.hidden = true; }
+  }
+
+  /** 미리보기가 끝났다 → 실행 버튼을 연다. 산출물 집계는 서버에서 받아 넣는다. */
+  function 실행열기(job_id, 상태) {
+    if (!실행칸 || !실행버튼) { return; }
+    if (!상태 || 상태.status !== "done") {
+      // 미리보기가 실패했으면 실행을 열지 않는다 — 본 것이 없는데 실행할 수는 없다.
+      실행닫기();
+      return;
+    }
+    if (실행잡칸) { 실행잡칸.value = job_id; }
+    실행칸.hidden = false;
+    실행버튼.disabled = false;
+
+    // 요약 숫자는 **서버가 CLI 산출물에서 낸 값**이다. 여기서 세지도 계산하지도 않는다.
+    fetch("/jobs/" + encodeURIComponent(job_id) + "/result?format=json",
+          { headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var 인상 = (j.counts && j.counts["인상"]) || 0;
+        if (실행요약) {
+          실행요약.textContent = "대상 " + 콤마(j.total || 0) + "건 · 인상 "
+            + 콤마(인상) + "건 · 예상 인상액 합계 +" + 콤마(j.raise_total || 0) + "원";
+        }
+        if (실행예상) {
+          var 초 = Math.ceil((j.total || 0) / 초당건수);
+          실행예상.textContent = "멈춘 게 아니다 — 초당 " + 초당건수
+            + "건씩 돈다. " + 콤마(j.total || 0) + "건이면 약 " + 콤마(초)
+            + "초. 그동안 로그에는 실패 줄 말고 아무것도 안 찍힌다.";
+        }
+        // 인상이 0건이면 누를 이유가 없다 — 쿨다운으로 전부 빠진 상태다.
+        if (!인상) { 실행버튼.disabled = true; }
+      })
+      .catch(function (e) { 오류표시("미리보기 집계를 못 읽었다: " + e); });
+  }
+
+  if (실행버튼) {
+    실행버튼.addEventListener("click", function () {
+      var 부모 = 실행잡칸 ? 실행잡칸.value : "";
+      if (!부모) { 오류표시("미리보기부터 해라 — 실행할 대상이 없다"); return; }
+      if (작업오류) { 작업오류.hidden = true; }
+      실행버튼.disabled = true;
+
+      fetch("/jobs/bids/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CT-Token": 토큰() },
+        body: JSON.stringify({ preview_job_id: 부모 })
+      }).then(function (r) {
+        return r.text().then(function (본문) { return { ok: r.ok, code: r.status, 본문: 본문 }; });
+      }).then(function (res) {
+        if (!res.ok) {
+          실행버튼.disabled = false;
+          var 사유 = res.본문;
+          try { 사유 = JSON.parse(res.본문).detail || res.본문; } catch (e) { /* 원문 그대로 */ }
+          오류표시("실행을 못 만들었다 (" + res.code + ") — " + 사유);
+          return;
+        }
+        var job_id = JSON.parse(res.본문).job_id;
+        htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/panel",
+                  { target: "#job-panel", swap: "outerHTML" });
+        // 실행은 1,200건이면 100초쯤 걸린다 — 폴링 한도를 넉넉히 준다(0.4초 × 3000).
+        // **종료코드로 성공을 판단하지 않는다.** 결과 표가 항목별 result 를 읽어 그린다.
+        결과기다리기(job_id, 3000, "result", "result-body", null);
+      }).catch(function (e) {
+        실행버튼.disabled = false;
+        오류표시("실행 요청이 실패했다: " + e);
       });
     });
   }

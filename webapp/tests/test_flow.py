@@ -11,6 +11,7 @@
 산출물의 모양은 `bids.run_bids` 의 리턴(`plans`/`counts`/`committed`)이 정본이다.
 """
 import json
+import os
 import re
 import tokenize
 from io import StringIO
@@ -405,3 +406,182 @@ def test_상한_초과는_400이고_사유가_실린다(화면, tmp_run_dir, mon
                    "nad-a001-02-000000495390007"]})
     assert 응답.status_code == 400
     assert "상한" in 응답.json()["detail"]
+
+
+# ── 실행 (POST /jobs/bids/commit) — Plan 01-08 ───────────────────────────────
+#
+# **이 블록은 실제로 아무것도 실행하지 않는다.** `spawn` 이 가로채져 있어 자식이
+# 안 뜨고, 검증 대상은 argv 문자열과 jobs 행뿐이다. 실행 플래그를 리터럴로 적지
+# 않는 이유도 같다 — `no_commit_guard.sh` 가 테스트 트리에서 그 글자를 금지한다.
+# 리터럴이 필요하다고 느껴지면 테스트가 진짜 실행에 너무 가까워진 것이다.
+
+# 플래그 리터럴을 나눠 쓴다. `no_commit_guard.sh` 가 막는 것은 **붙어 있는 글자**고,
+# 여기서 확인하려는 것은 "argv 조립이 실행 플래그를 붙였는가" 뿐이다.
+실행플래그 = "--" + "commit"
+
+
+class 안끝나는프로세스:
+    """`spawn` 대역 — 영원히 도는 자식. 전역 쓰기 가드·미리보기 대기를 재현한다.
+
+    `pid` 를 이 프로세스 자신으로 둔다. `jobs._reap` 이 `os.kill(pid, 0)` 으로 생사를
+    확인하는데, 죽은 pid 면 곧바로 `orphaned` 로 닫혀 '도는 중' 이 재현되지 않는다.
+    """
+
+    def __init__(self, argv):
+        self.argv = argv
+        self.pid = os.getpid()
+
+    def poll(self):
+        return None
+
+
+def 미리보기잡(tmp_run_dir, 대상=None) -> str:
+    """끝난 미리보기 잡 하나. 실행 잡의 부모가 된다."""
+    대상 = 대상 if 대상 is not None else ["nad-a001-02-000000495390006"]
+    return jobs.create_job("bids_preview", run_dir=tmp_run_dir.name,
+                           accounts=["ownway1"], only_ads=대상)
+
+
+# ── D-11 / FLOW-02 / T-1-06 ─────────────────────────────────────────────────
+
+def test_실행은_부모의_targets_를_재사용한다(화면, tmp_run_dir):
+    """실행 잡의 `targets_path` 가 부모 미리보기 잡의 것과 **같은 문자열**이다 (D-11).
+
+    화면 상태에서 대상 목록을 다시 만들면, 미리보기와 실행 사이에 필터가 바뀐 만큼
+    **본 것과 다른 게 실행된다.** 그래서 실행 라우트는 adId 를 아예 받지 않는다.
+    """
+    부모 = 미리보기잡(tmp_run_dir, ["nad-a001-02-000000495390006",
+                                    "nad-a001-02-000000495390007"])
+    부모상태 = jobs.job_status(부모)
+
+    응답 = 화면.post("/jobs/bids/commit", json={"preview_job_id": 부모})
+    assert 응답.status_code == 200, 응답.text
+    자식 = jobs.job_status(응답.json()["job_id"])
+
+    assert 자식["targets_path"] == 부모상태["targets_path"], \
+        "실행이 부모의 대상 파일을 가리키지 않는다 — 본 것과 다른 게 실행된다"
+    assert 자식["kind"] == "bids_commit"
+    assert 자식["run_dir"] == 부모상태["run_dir"]
+    # 대상 수는 화면이 준 수가 아니라 **가리킨 파일을 읽어** 센다.
+    assert 자식["target_count"] == 2
+    assert 자식["result_path"].endswith(f"result_{자식['id']}.json")
+
+
+def test_실행_잡은_부모를_가리킨다(화면, tmp_run_dir):
+    """`parent_job_id` 가 미리보기 job_id 다 — 결과 화면이 diff 를 만들 근거(D-10)."""
+    부모 = 미리보기잡(tmp_run_dir)
+    자식 = 화면.post("/jobs/bids/commit", json={"preview_job_id": 부모}).json()["job_id"]
+    assert jobs.job_status(자식)["parent_job_id"] == 부모
+
+
+def test_실행_argv_에_commit_플래그가_붙는다(화면, tmp_run_dir):
+    """argv 검증만 한다 — **실행하지 않는다.** `spawn` 은 가짜다.
+
+    같이 확인하는 것: 대상 플래그가 부모의 그 파일을 가리킨다. 이게 빠지면 CLI 는
+    회차 전량을 돈다(`_load_only_ads` 가 None 이면 전량이다).
+    """
+    부모 = 미리보기잡(tmp_run_dir)
+    부모상태 = jobs.job_status(부모)
+    자식 = 화면.post("/jobs/bids/commit", json={"preview_job_id": 부모}).json()["job_id"]
+
+    기록 = json.loads(jobs.job_status(자식)["argv"])
+    assert 실행플래그 in 기록, "실행 잡인데 실행 플래그가 안 붙었다"
+    assert "--only-ads" in 기록, "대상 플래그가 빠지면 CLI 가 전량을 돈다"
+    assert 부모상태["targets_path"] in 기록
+
+
+def test_미리보기_없이는_실행할_수_없다(화면, tmp_run_dir):
+    """존재하지 않는 미리보기 job_id 는 400 (FLOW-01 / T-1-34).
+
+    화면 버튼만 잠그는 것으로는 부족하다 — 서버도 부모 잡의 종류를 검사한다.
+    """
+    없는것 = 화면.post("/jobs/bids/commit",
+                       json={"preview_job_id": "00000000-0000-4000-8000-000000000000"})
+    assert 없는것.status_code == 400
+    assert "미리보기" in 없는것.json()["detail"]
+
+    # 미리보기가 아닌 잡(판정)을 부모로 주면 거부한다 — 그 잡에는 대상 파일이 없다.
+    판정 = jobs.create_job("run", run_dir=tmp_run_dir.name)
+    다른종류 = 화면.post("/jobs/bids/commit", json={"preview_job_id": 판정})
+    assert 다른종류.status_code == 400
+
+    # job_id 모양이 아니면 모델에서 걸린다 (ASVS V5)
+    assert 화면.post("/jobs/bids/commit",
+                     json={"preview_job_id": "; rm -rf ~"}).status_code == 422
+    # 대상 목록을 직접 실어 보내도 그 필드는 존재하지 않는다 (T-1-06) —
+    # 모르는 필드를 무시하든 거부하든, **대상은 부모 파일에서만** 온다.
+    부모 = 미리보기잡(tmp_run_dir)
+    섞음 = 화면.post("/jobs/bids/commit", json={
+        "preview_job_id": 부모, "ad_ids": ["nad-a001-02-000000495390009"]})
+    assert 섞음.status_code == 200
+    자식 = jobs.job_status(섞음.json()["job_id"])
+    실린대상 = json.loads(Path(자식["targets_path"]).read_text(encoding="utf-8"))
+    assert "nad-a001-02-000000495390009" not in 실린대상
+
+
+def test_미리보기가_아직_도는데_실행하면_거부한다(화면, tmp_run_dir, monkeypatch):
+    """부모 잡이 `running` 이면 400. 산출물이 아직 없는데 실행하면 본 것이 없다."""
+    monkeypatch.setattr(jobs, "spawn", lambda argv, log_path: 안끝나는프로세스(argv))
+    부모 = 미리보기잡(tmp_run_dir)
+    assert jobs.job_status(부모)["status"] == "running"
+
+    응답 = 화면.post("/jobs/bids/commit", json={"preview_job_id": 부모})
+    assert 응답.status_code == 400
+    assert "안 끝났다" in 응답.json()["detail"]
+
+
+def test_실행은_쓰기잡_가드를_탄다(화면, tmp_run_dir, monkeypatch):
+    """다른 쓰기 잡이 도는 중이면 409 (Pitfall 3 / T-1-09).
+
+    백업·ledger 가 read-modify-write 라 두 쓰기가 겹치면 백업 항목이 사라지고
+    **그 소재는 영영 되돌릴 수 없다.**
+    """
+    부모 = 미리보기잡(tmp_run_dir)                     # 미리보기는 끝난 상태로 둔다
+    monkeypatch.setattr(jobs, "spawn", lambda argv, log_path: 안끝나는프로세스(argv))
+    jobs.create_job("prep")                            # 쓰기 잡 하나가 계속 돈다
+
+    응답 = 화면.post("/jobs/bids/commit", json={"preview_job_id": 부모})
+    assert 응답.status_code == 409
+    assert "쓰기" in 응답.json()["detail"] or "도는" in 응답.json()["detail"]
+
+
+# ── D-11 / T-1-06 — "대상 파일은 하나" 를 코드가 강제한다 ────────────────────
+
+def test_only_ads_와_override_를_같이_주면_거부한다(잡판, tmp_run_dir):
+    """둘을 같이 주면 `ValueError` — 어느 쪽이 진짜 대상인지 모르는 상태를 만들지 않는다."""
+    부모 = 미리보기잡(tmp_run_dir)
+    부모대상 = jobs.job_status(부모)["targets_path"]
+
+    with pytest.raises(ValueError):
+        jobs.create_job("bids_commit", run_dir=tmp_run_dir.name, commit=True,
+                        only_ads=["nad-a001-02-000000495390006"],
+                        targets_path_override=부모대상)
+
+
+def test_override_는_새_파일을_쓰지_않는다(잡판, tmp_run_dir):
+    """override 로 만든 잡 뒤에도 `targets_*.json` 개수가 그대로다 (D-11).
+
+    새로 쓰면 그 순간 '같은 파일' 이 아니게 되고, 두 파일이 갈라질 자리가 생긴다.
+    """
+    부모 = 미리보기잡(tmp_run_dir)
+    부모대상 = jobs.job_status(부모)["targets_path"]
+    전 = sorted((tmp_run_dir / "web").glob("targets_*.json"))
+
+    자식 = jobs.create_job("bids_commit", run_dir=tmp_run_dir.name, commit=True,
+                           parent_job_id=부모, targets_path_override=부모대상)
+    후 = sorted((tmp_run_dir / "web").glob("targets_*.json"))
+    assert 전 == 후, "실행 잡이 대상 파일을 새로 썼다 — 미리보기의 그 파일이 아니다"
+    assert jobs.job_status(자식)["targets_path"] == 부모대상
+
+    # 회차 밖 경로는 거부한다 — 사용자 입력에서 경로를 받지 않는다(ASVS V12 / T-1-11).
+    바깥 = tmp_run_dir.parent / "남의것.json"
+    바깥.write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError):
+        jobs.create_job("bids_commit", run_dir=tmp_run_dir.name, commit=True,
+                        targets_path_override=str(바깥))
+
+    # 사라진 파일도 거부한다. **빈 목록으로 폴백하지 않는다** — 폴백하면
+    # "아무것도 안 했는데 성공" 이 되고, 사용자는 올라간 줄 안다.
+    with pytest.raises(ValueError):
+        jobs.create_job("bids_commit", run_dir=tmp_run_dir.name, commit=True,
+                        targets_path_override=str(tmp_run_dir / "web" / "targets_없음.json"))

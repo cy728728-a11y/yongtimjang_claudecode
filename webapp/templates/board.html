@@ -194,6 +194,43 @@
   <section id="preview" hidden>
     <h2>미리보기</h2>
     <div id="preview-body"></div>
+
+    {# ── 실행 (FLOW-01 / Plan 01-08) ──────────────────────────────────────────
+       **미리보기 없이는 이 블록이 아예 안 보인다.** board.js 가 미리보기 잡이
+       끝난 뒤에만 hidden 을 풀고 버튼을 연다. 화면만 믿지 않는다 —
+       서버(POST /jobs/bids/commit)도 부모 잡의 종류·상태를 다시 검사한다.
+
+       대상 목록은 여기서 만들지 않는다. 실행 요청에 실리는 것은 **미리보기 job_id
+       하나뿐**이고, 서버가 그 잡의 targets 파일을 그대로 재사용한다 (D-11 / FLOW-02).
+       그래서 미리보기를 본 뒤 보드 필터를 바꿔도 실행되는 건 본 그대로다. #}
+    <div id="commit-wrap" hidden>
+      <div class="stale">
+        <p><strong>이건 진짜 입찰가를 바꾼다.</strong>
+          되돌리기 버튼이 있지만 그 사이 광고비는 나간다.</p>
+        {# Pitfall 4 / OQ-2 — CLI 의 ledger 가 '인상 당일' 에만 reverted 를 찍는다.
+           Phase 1 에서 CLI 로직을 고치지 않기로 했으므로(OQ-2 확정) 화면 경고로만 다룬다. #}
+        <p><strong>되돌리기는 인상한 당일에 눌러야</strong> 이력에 정확히 반영된다.
+          날짜를 넘기면 이력의 되돌림 표시가 안 찍혀서 쿨다운 6일 동안 재인상이 막힌다.</p>
+      </div>
+
+      {# 항상 보이는 요약 (BOARD-04). 숫자는 전부 서버가 CLI 산출물에서 낸 값이다 —
+         board.js 는 받아서 넣기만 한다. #}
+      <p id="commit-summary">대상 0건 · 인상 0건 · 예상 인상액 합계 +0원</p>
+      <p id="commit-eta"><small></small></p>
+
+      {# 미리보기 버튼과 시각적으로 갈라 둔다(Pico 의 contrast). 문구도 명확하게 —
+         "실행" 은 무엇을 실행하는지 안 말한다. #}
+      <button type="button" id="commit-btn" class="contrast" disabled>진짜 올린다</button>
+      <input type="hidden" id="commit-preview-job" value="">
+      <p><small>누르는 즉시 접수된다 — 확인 창은 없다. 위 표가 곧 확인 창이다.</small></p>
+    </div>
+  </section>
+
+  {# 실행 결과 자리 (FLOW-05 / D-10). 미리보기와 같은 방식으로 비워 둔다 —
+     새로고침했을 때 지난 실행 결과가 되살아나면 "지금 그 상태" 로 읽힌다. #}
+  <section id="result" hidden>
+    <h2>실행 결과</h2>
+    <div id="result-body"></div>
   </section>
 
   <section>

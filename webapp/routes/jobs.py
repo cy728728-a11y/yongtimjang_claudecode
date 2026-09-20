@@ -114,6 +114,11 @@ async def 요청_풀기(request: Request) -> JobReq:
 # argv 길이 폭발과 `ps` 노출을 동시에 막는 구조다.
 AdId = Annotated[str, StringConstraints(pattern=r"^nad-[A-Za-z0-9_-]{1,64}$")]
 
+# 작업 id 의 모양(uuid4). 모양이 아니면 DB 를 만지기 전에 모델에서 걸린다.
+JobId = Annotated[str, StringConstraints(
+    pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+            r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")]
+
 
 class BidsPreviewReq(BaseModel):
     """미리보기 요청. **경로도, 작업 종류도, 실행 플래그도 받지 않는다.**
@@ -137,6 +142,18 @@ class BidsPreviewReq(BaseModel):
         if len(v) > 한계:
             raise ValueError(f"대상이 너무 많다 ({len(v)}건 > {한계}건)")
         return v
+
+
+class BidsCommitReq(BaseModel):
+    """실행 요청. **받는 것은 부모 미리보기 job_id 하나뿐이다.**
+
+    `ad_ids` 를 받지 않는다 — 화면 상태에서 대상 목록을 다시 만드는 순간
+    D-11 / FLOW-02 / T-1-06 이 깨지고, **본 것과 다른 게 실행된다.** 대상은
+    부모 잡의 targets 파일에서만 온다. 모델에 그 필드가 아예 없는 것이
+    "받지 않는다" 의 구조적 구현이다.
+    """
+
+    preview_job_id: JobId
 
 
 def _판정읽기(run_dir_name: str) -> dict:
@@ -246,6 +263,58 @@ def post_bids_preview(request: Request, req: BidsPreviewReq):
         raise HTTPException(status_code=500, detail=str(e))
 
     # 화면은 이 id 로 작업 패널과 미리보기 표를 갈아끼운다.
+    return {"job_id": job_id}
+
+
+@router.post("/jobs/bids/commit")
+def post_bids_commit(request: Request, req: BidsCommitReq):
+    """입찰가 인상 **실행**. 여기서 처음으로 진짜 광고 입찰가가 바뀐다.
+
+    **대상을 받지 않는다.** 부모 미리보기 잡의 targets 파일을 그대로 재사용한다
+    (D-11 / FLOW-02). 화면이 다시 목록을 만들면, 미리보기를 본 뒤 필터를 바꾼
+    만큼 본 것과 다른 게 실행된다 — 그 경로를 아예 만들지 않는다.
+
+    순서에 의미가 있다:
+      ① 부모 잡이 **미리보기** 인가 (아니면 대상 파일의 의미가 다르다)
+      ② 부모 잡이 **끝났는가** (도는 중이면 사용자가 본 산출물이 아직 없다)
+      ③ 부모의 대상 파일이 **아직 있는가** — 없으면 거부한다.
+         **빈 목록으로 폴백하지 않는다**: 폴백하면 "아무것도 안 했는데 성공" 이 된다
+      ④ `create_job` — 쓰기 잡 전역 가드·회차 화이트리스트는 전부 거기 안에 있다
+
+    `bids_commit` 은 `WRITE_KINDS` 라 다른 쓰기 잡이 도는 중이면 409 다 (Pitfall 3).
+    """
+    부모 = jobs.job_status(req.preview_job_id)
+    if 부모 is None or 부모.get("kind") != "bids_preview":
+        # 404 가 아니라 400 이다 — 요청한 자원이 없는 게 아니라 **요청이 성립하지 않는다**.
+        raise HTTPException(status_code=400,
+                            detail="미리보기 작업이 아니다 — 먼저 미리보기부터 해라")
+    if 부모.get("status") == "running":
+        raise HTTPException(status_code=400,
+                            detail="미리보기가 아직 안 끝났다 — 끝나고 다시 눌러라")
+    if 부모.get("status") != "done":
+        raise HTTPException(
+            status_code=400,
+            detail=f"미리보기가 정상으로 안 끝났다({부모.get('status')}) — 다시 미리보기부터 해라")
+
+    대상파일 = 부모.get("targets_path")
+    if not 대상파일 or not Path(대상파일).is_file():
+        raise HTTPException(status_code=400,
+                            detail="미리보기의 대상 파일이 없다 — 다시 미리보기부터 해라")
+
+    try:
+        job_id = jobs.create_job(
+            "bids_commit", run_dir=부모.get("run_dir"),
+            accounts=json.loads(부모.get("accounts") or "[]"),
+            commit=True, parent_job_id=req.preview_job_id,
+            targets_path_override=대상파일)
+    except jobs.BusyError as e:
+        raise HTTPException(status_code=409,
+                            detail=f"이미 도는 쓰기 작업이 있다 — 끝나고 다시 눌러라 ({e})")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
     return {"job_id": job_id}
 
 
