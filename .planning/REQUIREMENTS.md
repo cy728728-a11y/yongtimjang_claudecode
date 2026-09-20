@@ -44,7 +44,7 @@
 
 ### 보드 (BOARD)
 
-- [ ] **BOARD-01**: 광고 판정 결과를 한 줄 = 상품 1개로 보여준다 (상품명·계정·노출·클릭·구매완료·규칙번호)
+- [x] **BOARD-01**: 광고 판정 결과를 한 줄 = 상품 1개로 보여준다 (상품명·계정·노출·클릭·구매완료·규칙번호)
 - [x] **BOARD-02**: 계정·규칙·상태로 거르고, 정렬하고, 검색한다 (계정 수를 화면·코드에 박지 않는다)
 - [ ] **BOARD-03**: 다중 선택 시 **"보이는 것만"과 "필터 전체"를 명시적으로 구분**한다 — 헤더 체크박스는 현재 페이지만 고르고, 전체 선택은 별도 확인을 거친다
 - [ ] **BOARD-04**: 선택한 항목 수와 예상 비용이 실행 버튼 옆에 항상 보인다
@@ -171,7 +171,7 @@
 | FLOW-05 | Phase 1 | Complete |
 | FLOW-06 | Phase 2 | Pending |
 | FLOW-07 | Phase 2 | Pending |
-| BOARD-01 | Phase 1 | Pending |
+| BOARD-01 | Phase 1 | Complete |
 | BOARD-02 | Phase 1 | Complete |
 | BOARD-03 | Phase 1 | Pending |
 | BOARD-04 | Phase 1 | Pending |
