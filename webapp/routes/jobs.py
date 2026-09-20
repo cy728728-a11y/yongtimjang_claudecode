@@ -501,7 +501,7 @@ def post_revert_job(request: Request, req: RevertJobReq):
         범위 = flow.revert_dry_run(부모.get("run_dir"),
                                  accounts=json.loads(부모.get("accounts") or "[]"),
                                  only_ads=대상파일)
-        flow.check_revert_scope(기대, 범위["targets"])
+        flow.check_revert_scope(기대, 범위["targets"], 범위.get("by_account"))
         job_id = jobs.create_job(
             "revert_only", run_dir=부모.get("run_dir"),
             accounts=json.loads(부모.get("accounts") or "[]"),
@@ -551,7 +551,7 @@ def post_revert_round(request: Request, req: RevertRoundReq):
 
     try:
         범위 = flow.revert_dry_run(req.run_dir)
-        flow.check_revert_scope(서버가센수, 범위["targets"])
+        flow.check_revert_scope(서버가센수, 범위["targets"], 범위.get("by_account"))
         job_id = jobs.create_job("revert_all", run_dir=req.run_dir, commit=True)
     except flow.ScopeError as e:
         raise HTTPException(status_code=409, detail=f"되돌리기를 막았다 — {e}")

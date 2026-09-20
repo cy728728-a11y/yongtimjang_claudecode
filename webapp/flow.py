@@ -522,7 +522,8 @@ def revert_dry_run(run_dir: str, accounts=None, only_ads: Path | None = None,
     return {"targets": sum(계정별.values()), "by_account": 계정별}
 
 
-def check_revert_scope(expected: int, dry_run_targets: int) -> None:
+def check_revert_scope(expected: int, dry_run_targets: int,
+                       by_account: dict[str, int] | None = None) -> None:
     """되돌릴 대상 수가 기대와 다르면 `ScopeError` — **Pitfall 2 의 마지막 방어선이다.**
 
     조기 신호는 이렇게 생겼다: revert dry-run 의 `targets` 수가 방금 실행한 건수보다
@@ -531,8 +532,24 @@ def check_revert_scope(expected: int, dry_run_targets: int) -> None:
     전부 뚫렸을 때 여기서 멈춘다.
 
     작은 쪽도 막는다 — 기대보다 적으면 백업이 손상됐거나 다른 회차를 짚은 것이다.
+
+    **`by_account` 를 받으면 계정별 내역을 사유에 싣는다.** 방향은 fail-closed 가 맞는데
+    (막는 게 옳다) 화면에 "472 vs 0" 만 뜨면 사용자가 풀 길이 없다. `run_revert` 은 소재
+    스냅샷을 못 읽으면 그 계정을 통째로 0 으로 세는데(`bids.py` 의 "소재 읽기 실패"),
+    그건 `prep` 을 다시 돌리면 풀리는 상태다. **어느 계정이 0 이라서 막혔는지**가
+    화면에 있어야 사용자가 그 판단을 한다. 없으면 남는 길은 "이 회차 전체 되돌리기" —
+    D-14 가 "절대 실수로 누르면 안 된다" 고 페이지 맨 아래 접어 둔 그 버튼뿐이다.
+    정밀한 도구가 막히면 사람은 무딘 도구를 쓴다.
     """
-    if expected != dry_run_targets:
-        raise ScopeError(
-            f"되돌릴 대상이 {dry_run_targets:,}건인데 이 작업의 성공 건수는 "
-            f"{expected:,}건이다 — 범위가 안 맞는다")
+    if expected == dry_run_targets:
+        return
+    사유 = (f"되돌릴 대상이 {dry_run_targets:,}건인데 이 작업의 성공 건수는 "
+          f"{expected:,}건이다 — 범위가 안 맞는다")
+    if by_account:
+        내역 = " / ".join(f"{alias} {n:,}건" for alias, n in sorted(by_account.items()))
+        사유 += f". 계정별: {내역}"
+        빈것 = sorted(a for a, n in by_account.items() if not n)
+        if 빈것:
+            사유 += (f". {', '.join(빈것)} 이(가) 0건이다 — 그 계정의 소재 스냅샷을 "
+                   f"못 읽은 것이다. 새로 수집(prep)부터 다시 해라")
+    raise ScopeError(사유)

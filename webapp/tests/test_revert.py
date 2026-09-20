@@ -521,6 +521,44 @@ def test_범위가_다르면_막는다():
     assert isinstance(e.value, ValueError), "라우트가 ValueError 로도 잡을 수 있어야 한다"
 
 
+def test_막힐_때_어느_계정이_0인지를_말한다():
+    """WR-04 — fail-closed 는 맞는데, **풀 길**이 화면에 있어야 한다.
+
+    인상 성공 472건짜리 실행 잡이 있는데 그 뒤에 prep 이 돌아 소재 스냅샷이 갈리면,
+    `run_revert` 이 그 계정을 통째로 0 으로 센다(`bids.py` 의 "소재 읽기 실패").
+    → expected=472 · dry_run=0 → "이 작업분만 되돌리기" 가 영구히 409.
+    그 상태에서 남는 수단은 "이 회차 전체 되돌리기" — D-14 가 절대 실수로 누르면
+    안 된다고 접어 둔 그 버튼뿐이다. 정밀한 도구가 막히면 사람은 무딘 도구를 쓴다.
+
+    그래서 **어느 계정이 0 이라서 막혔는지**를 사유에 싣는다.
+    """
+    # 인상 성공 472건(ownway1 300 · pogeunae 172)인데, prep 이 돌아 ownway1 의 소재
+    # 스냅샷이 갈렸다 → dry-run 이 ownway1 을 0 으로 센다 → 합계 172 ≠ 472.
+    with pytest.raises(flow.ScopeError) as e:
+        flow.check_revert_scope(472, 172, {"ownway1": 0, "pogeunae": 172})
+    문구 = str(e.value)
+    assert "ownway1 0건" in 문구, 문구
+    assert "pogeunae 172건" in 문구, 문구
+    assert "prep" in 문구, "무엇을 해야 풀리는지가 없다"
+
+    # 음성 대조군 1 — 0 인 계정이 없으면 "prep 부터 다시" 안내를 붙이지 않는다.
+    #   (안 그러면 어떤 불일치에나 같은 처방을 붙이는 문구가 된다)
+    with pytest.raises(flow.ScopeError) as e2:
+        flow.check_revert_scope(3, 5, {"ownway1": 2, "pogeunae": 3})
+    assert "ownway1 2건" in str(e2.value)
+    assert "prep" not in str(e2.value), str(e2.value)
+
+    # 음성 대조군 2 — by_account 를 안 주면 예전 문구 그대로다(호출부 호환).
+    with pytest.raises(flow.ScopeError) as e3:
+        flow.check_revert_scope(3, 2242)
+    assert "계정별" not in str(e3.value)
+
+    # 음성 대조군 3 — 같으면 여전히 안 막는다. 배너를 항상 띄우는 게 아니다.
+    flow.check_revert_scope(472, 472, {"ownway1": 0, "pogeunae": 472})
+
+
+
+
 def test_dry_run_이_진짜_CLI_에게_범위를_물어본다(tmp_path, monkeypatch):
     """T-1-42 — 쓰기 전에 **CLI 가 직접 센 수**를 받는다. 웹앱이 추정하지 않는다.
 
@@ -618,6 +656,25 @@ def test_작업분_되돌리기는_대상파일을_싣는다(웹회차, 자식�
     대상 = av[av.index("--only-ads") + 1]
     assert 대상.endswith(f"targets_revert_{부모}.json")
     assert json.loads(Path(대상).read_text(encoding="utf-8")) == ["ad00", "ad01"]
+
+
+def test_범위가_막히면_409_사유에_계정별_내역이_실린다(웹회차, 자식금지, client, monkeypatch):
+    """WR-04 — 위 문구가 **화면까지** 온다. 함수만 고치고 라우트가 안 넘기면 소용없다.
+
+    인상 성공 2건인데 dry-run 이 그 계정을 0 으로 센 상황(= prep 이 돌아 소재
+    스냅샷이 갈린 상태)을 만든다. 막는 건 맞다. 다만 **왜 막혔고 뭘 해야 풀리는지**가
+    화면에 있어야 사용자가 "이 회차 전체 되돌리기" 로 도망가지 않는다.
+    """
+    monkeypatch.setattr(flow, "revert_dry_run",
+                        lambda *a, **k: {"targets": 0, "by_account": {ALIAS: 0}})
+    부모 = _실행잡(웹회차, ["ad00", "ad01"])
+
+    r = client.post("/jobs/revert/job", json={"commit_job_id": 부모})
+    assert r.status_code == 409, r.text
+    사유 = r.json()["detail"]
+    assert f"{ALIAS} 0건" in 사유, 사유
+    assert "prep" in 사유, 사유
+    assert not _되돌리기가_떴나(자식금지), "막혔는데 되돌리기 자식이 떴다"
 
 
 def test_회차전체_되돌리기는_대상파일이_없다(웹회차, 자식금지, client, monkeypatch):
