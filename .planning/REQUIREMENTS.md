@@ -73,7 +73,7 @@
 
 ### 상세페이지 상태 판정 (STATE)
 
-- [ ] **STATE-01**: `detail_batch.py` 의 윈도 경로 하드코딩을 고쳐 이 맥북에서 돌게 한다 (로직 무변경 shim)
+- [x] **STATE-01**: `detail_batch.py` 의 윈도 경로 하드코딩을 고쳐 이 맥북에서 돌게 한다 (로직 무변경 shim)
 - [ ] **STATE-02**: `imageTranslated` 를 **타입 안전하게** 해석한다 — 실측 4종(`'0'` `'1'` `False` `1`)을 모두 올바로 처리한다
 - [ ] **STATE-03**: 상품 상태를 3단계로 판정한다 — 🔴 중국어 원본 / 🟡 단순번역만 / ⚪ AI 가공 완료
 - [ ] **STATE-04**: 불사자 외부 경로로 상세를 반영해도 `aiImageGenerated` 가 찍히는지 **1건 실측으로 확인**하고, 안 찍히면 보완 인덱스를 둔다 (안 하면 크레딧 무한 루프)
@@ -188,7 +188,7 @@
 | JOIN-02 | Phase 3 | Pending |
 | JOIN-03 | Phase 3 | Pending |
 | JOIN-04 | Phase 3 | Pending |
-| STATE-01 | Phase 3 | Pending |
+| STATE-01 | Phase 3 | Complete |
 | STATE-02 | Phase 3 | Pending |
 | STATE-03 | Phase 3 | Pending |
 | STATE-04 | Phase 3 | Pending |
