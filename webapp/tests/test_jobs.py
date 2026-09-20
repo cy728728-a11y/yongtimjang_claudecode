@@ -601,7 +601,12 @@ def test_작업패널이_로그를_붙이지_않고_교체한다():
     assert "beforeend" not in 본문
     assert 'hx-ext="sse"' in 본문
     assert 'sse-swap="log"' in 본문
-    assert 'sse-close="done"' in 본문
+    # **닫기 속성은 연결을 여는 그 엘리먼트에 있어야 한다.** 확장이 EventSource 를
+    # 만든 엘리먼트에서만 이 속성을 읽는다(sse.js:235). 자식에 붙이면 조용히 무시되고
+    # 작업이 끝난 뒤 브라우저가 영원히 재연결한다 (헤드리스 크롬 실측).
+    연결줄 = [줄 for 줄 in 본문.splitlines() if "sse-connect" in 줄]
+    assert len(연결줄) == 1
+    assert 'sse-close="done"' in 연결줄[0], f"닫기 속성이 연결 엘리먼트에 없다: {연결줄[0]}"
     assert "/stream" in 본문
     # 스트림은 **활성 잡 하나만** 연다 (T-1-24: HTTP/1.1 호스트당 6 커넥션)
     assert 본문.count("sse-connect") == 1

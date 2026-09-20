@@ -25,7 +25,14 @@
    (T-1-24). 다른 작업의 진행은 상태 폴링으로 충분하다.
 
    `sse-close="done"` 이 `done` 이벤트를 받는 순간 EventSource 를 닫는다. 이게 없으면
-   서버 제너레이터가 끝날 때 브라우저가 "끊겼다" 로 보고 자동 재연결해 무한 루프가 된다.
+   서버 제너레이터가 끝날 때 브라우저가 "끊겼다" 로 보고 **자동 재연결**한다 —
+   그러면 서버가 로그 전량을 다시 흘리고 done 을 또 보내는 무한 루프가 된다.
+
+   **그 속성은 연결을 여는 바깥 div 에 붙어야 한다.** 확장 소스(`sse.js:235`)가
+   `getAttributeValue(elt, "sse-close")` 를 **EventSource 를 만든 그 엘리먼트에서만**
+   읽는다. 자식에 붙이면 조용히 무시된다 — 화면상 아무 증상이 없고, 백그라운드에서
+   재연결만 계속 돈다. 리서치·플랜의 예제 스니펫은 자식에 붙여 뒀는데 그건 틀렸다
+   (헤드리스 크롬 실측: readyState 가 2(CLOSED)가 아니라 0(CONNECTING)으로 남았다).
 
    로그 박스는 `flex-direction: column-reverse` 로 **아래에 붙는다**(board.html 의
    스타일). 자동 스크롤을 위해 JS 를 넣지 않으려는 것이다. #}
@@ -36,9 +43,9 @@
 
   {% include "_job_status.html" %}
 
-  <div hx-ext="sse" sse-connect="/jobs/{{ job.id }}/stream">
+  <div hx-ext="sse" sse-connect="/jobs/{{ job.id }}/stream" sse-close="done">
     <div id="job-log-box"><pre id="job-log" sse-swap="log">작업 로그를 기다리는 중…</pre></div>
-    <div id="job-done" sse-swap="done" sse-close="done"></div>
+    <div id="job-done" sse-swap="done"></div>
   </div>
 </section>
 {% else %}
