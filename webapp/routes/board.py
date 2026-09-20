@@ -22,7 +22,6 @@
 이벤트 루프가 멈춰 SSE 진행 로그가 같이 끊긴다(Anti-Patterns).
 """
 import json
-import secrets
 
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
@@ -56,9 +55,15 @@ def home(request: Request, t: str | None = None, run_dir: str | None = None):
 
     토큰을 쿼리스트링에 남기면 주소창·브라우저 히스토리·스크린샷에 영구히 남는다
     (T-1-16). 303 으로 즉시 털어내면 사용자가 보는 URL 에는 토큰이 없다.
-    비교는 `secrets.compare_digest` — `==` 를 쓰지 않는다.
+    비교는 `security.토큰이같나` — **`secrets.compare_digest` 를 직접 쓰지 않는다.**
+    그 함수는 str 두 개를 받으면 ASCII 인코딩을 시도해서, 비ASCII 가 한 글자라도
+    있으면 `TypeError` 를 던진다. 토큰을 **처음 받는 자리**가 바로 여기인데 여기만
+    직접 쓰고 있었다 — 실측으로 `?t=<한글>` 이 403 이 아니라 **500** 이었다.
+    주소창에 한글이 섞여 붙여넣어지기만 해도 난다. 403 이어야 할 자리에 500 이 나오면
+    ① 거부 경로가 에러 핸들러로 새고 ② 로그가 트레이스백으로 더럽혀진다
+    (`security.토큰이같나` 의 docstring 이 말하는 그대로다).
     """
-    if t and secrets.compare_digest(t, security.BOOT_TOKEN):
+    if t and security.토큰이같나(t, security.BOOT_TOKEN):
         r = RedirectResponse("/", status_code=303)
         # httponly: JS 가 못 읽는다(XSS 가 나도 쿠키는 안 샌다)
         # samesite=strict: 다른 사이트에서 넘어온 요청에는 아예 안 붙는다

@@ -193,3 +193,20 @@ def test_비ascii_토큰은_403_이지_500_이_아니다(client):
 
     # 쿠키 쪽(`page_cookie_ok`)도 같은 비교 함수를 쓴다. httpx 가 비ASCII 쿠키 값을
     # 클라이언트에서 막아 HTTP 로는 못 쏘므로, 위의 순수 함수 검증이 그 층을 덮는다.
+
+
+def test_비ascii_부팅토큰_쿼리도_403_이지_500_이_아니다(client):
+    """WR-01 — **토큰을 처음 받는 자리**가 `compare_digest` 를 직접 쓰고 있었다.
+
+    `GET /?t=<한글>` 실측이 500 이었다. 위 테스트가 헤더·쿠키 층만 덮고 있어서
+    이 한 자리가 통째로 비어 있었다 — 주소창에 한글이 섞여 붙여넣어지기만 해도 난다.
+
+    쿼리스트링은 헤더와 달라서 httpx 가 막지 않는다. 그대로 쏠 수 있다.
+    """
+    비ascii = client.get("/", params={"t": "한글토큰입니다"})
+    assert 비ascii.status_code == 403, f"토큰 비교가 터졌다 ({비ascii.status_code})"
+
+    # 대조군 — 틀린 토큰도 403, 맞는 토큰은 303. 셋이 같은 층을 지난다는 것까지 고정한다.
+    assert client.get("/", params={"t": "wrong"}).status_code == 403
+    맞는것 = client.get("/", params={"t": security.BOOT_TOKEN}, follow_redirects=False)
+    assert 맞는것.status_code == 303
