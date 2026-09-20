@@ -23,6 +23,11 @@ updated: 2026-09-20
 프레임워크를 **섞는다.** CLI 테스트를 pytest 로 옮기는 것 자체가 회귀 위험이라, CLI 는 `unittest` 그대로 두고 웹앱만 pytest 로 간다.
 (PATTERNS.md §C-1 충돌은 이 결정으로 해소됐다.)
 
+> **브라우저 JS 계층은 pytest 에 없다.** Tabulator 동작(정렬·필터·건수 배지·가상 DOM)은
+> `TestClient` 가 JS 를 한 줄도 실행하지 않아 자동 스위트로 못 덮는다. 흉내 내면
+> "우리가 짠 가짜 Tabulator" 를 검증하게 되므로 **만들지 않았다.** 대신 `security_curl.sh` 와
+> 같은 계층에 `webapp/tests/board_cdp.sh`(헤드리스 크롬 + CDP)를 두고, 보드 JS 를 고치면 손으로 돌린다.
+
 | Property | Value |
 |----------|-------|
 | **Framework (CLI 회귀 방어)** | stdlib `unittest` — 러너는 파일 직접 실행 |
@@ -65,6 +70,7 @@ updated: 2026-09-20
 | SAFE-02 | 01-03 | 1 | 토큰 없음·틀림 → 403, 맞음 → 200 | T-1-02, T-1-16 | 부팅 토큰 없이는 쓰기 불가 | unit | `.venv-web/bin/pytest webapp/tests/test_security.py -x -q` | ❌ W0 | ⬜ pending |
 | SAFE-03 | 01-03 | 1 | 응답·로그·템플릿 어디에도 시크릿 문자열이 없다 | T-1-03 | 광고 시크릿·불사자 토큰 미노출 | unit | `.venv-web/bin/pytest webapp/tests/test_security.py -x -q` (핵심 노드: `::test_시크릿이_새지_않는다`) | ❌ W0 | ⬜ pending |
 | ✚보안-curl | 01-03 | 1 | 실행 중인 서버에 대한 보안 8종 | T-1-01, T-1-02, T-1-03 | 바인드·Host·Origin·토큰·시크릿 | integration | `CT_DEV_TOKEN=devtoken123 bash webapp/tests/security_curl.sh` | ❌ W0 | ⬜ pending |
+| ✚보드-CDP | 01-04 | 2 | 필터 전환 시 건수 배지가 **직전 값이 아니라** 현재 값이다 | T-1-32 (선행) | 실행 규모를 사람이 오독하지 않는다 | integration | `CT_DEV_TOKEN=devtoken123 bash webapp/tests/board_cdp.sh` | ❌ W0 | ⬜ pending |
 | BOARD-01 | 01-04 | 2 | ①행에 `imp` 가 없어도 접기가 안 깨진다 | T-1-21 | 지표 중복 계상 없음 | unit | `.venv-web/bin/pytest webapp/tests/test_board.py -x -q` | ❌ W0 | ⬜ pending |
 | BOARD-02 | 01-04 | 2 | 계정 alias 가 `result.json` 에서만 온다 (가짜 5번째 계정 픽스처) | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_board.py -x -q` (핵심 노드: `::test_계정을_코드에_박지_않는다`) | ❌ W0 | ⬜ pending |
 | ✚신선도-01 | 01-04 | 2 | 회차 날짜·경과일·통계기간이 함께 나오고 임계값 초과를 stale 로 본다 (D-16) | T-1-20 | 낡은 판정으로 실행하는 것을 경고한다 | manual | 브라우저 확인 (Plan 01-04 Task 3 의 2번 단계) | — | ⬜ pending |
@@ -175,6 +181,7 @@ grep -rq "$S" webapp-logs/ && echo FAIL || echo PASS
 | 필터 전체 선택 시 확인 배너가 한 번 더 뜬다 | FLOW-04 | 01-07 Task 3 (4·5번) | 같음 | 위 배너가 실제로 뜨고, 취소하면 선택이 안 넘어가는지. 건수 타이핑 입력칸이 없는지 |
 | 탭 닫았다 열어 진행 로그 이어보기 (실작업) | SC-03 | 01-06 Task 3 (6·7번) | 실제 브라우저 생명주기 | `prep --account cy728` 실행 → 탭 닫기 → 30초 뒤 다시 열기 → 처음부터 로그가 다시 흐르고 진행이 이어지는지. **합성 잡 테스트가 자동 커버하므로 이건 최종 1회 확인용** |
 | 회차 신선도 배너 | D-16 | 01-04 Task 3 (2번) | 시각 확인 | 보드 상단에 `2026-08-30 회차 · N일 전 · 통계 기간 08-22~08-28` 이 뜨고, 오래되면 경고색인지 |
+| 보드 건수 배지가 필터를 정확히 따라온다 | (BOARD-01 부수) | 01-04 — **자동화됨** | ~~시각 확인~~ → **육안으로는 못 잡는다** | 필터를 한 번만 바꾸면 숫자가 *움직이긴 해서* 사람은 PASS 를 준다. **두 번 연속 바꿔 직전 값과 대조해야만** 랙이 드러난다(2026-09-20 실제 버그). 그래서 수동 항목에서 빼고 `webapp/tests/board_cdp.sh` 로 옮겼다. 보드 JS 를 건드리면 그걸 돌려라 |
 | 그룹입찰 행의 현재가가 그룹 기본가다 | BID-03 | 01-07 Task 3 (8번) | 실데이터 대조 | `nad-a001-02-000000495390006` 이 70 → 80 인지. **50 → 60 이면 웹앱이 재계산한 것** |
 | 실제 광고 입찰가가 +10 됐다 | FLOW-01 | 01-08 Task 3 (8번) | 외부 시스템(네이버 광고 관리 화면) | 소재 하나를 직접 열어 입찰가 확인. 이게 유일한 최종 진실 |
 | 되돌리기가 그 작업분만 내린다 / 백업 불변 | BID-04 | 01-09 Task 3 (4·5·6번) | 외부 시스템 + 디스크 상태 대조 | 되돌린 건수 == 성공 건수, `before_bids_*.json` 전후 건수 동일, 광고 화면에서 원복 확인 |
@@ -191,6 +198,7 @@ grep -rq "$S" webapp-logs/ && echo FAIL || echo PASS
 - [x] Feedback latency < 15s — 웹앱 전체 ~10초
 - [ ] 테스트에 `--commit` 리터럴 0건 (실행 중 `no_commit_guard.sh` 로 상시 확인)
 - [ ] CLI 100 tests 여전히 exit=0 (회귀 기준선 불변)
+- [ ] 보드 JS 수정 시 `bash webapp/tests/board_cdp.sh` 전량 PASS (pytest 가 못 덮는 계층)
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** planned (2026-09-20) — 실행은 `/gsd:execute-phase 1`
