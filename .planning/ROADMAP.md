@@ -117,7 +117,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — 기반: 설정 8키 + `workspace.toml [webapp]` + 픽스처·가드 확장 + `detail_batch.py` shim (STATE-01)
+- [x] 03-01-PLAN.md — 기반: 설정 8키 + `workspace.toml [webapp]` + 픽스처·가드 확장 + `detail_batch.py` shim (STATE-01)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -214,7 +214,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 9/9 | Complete   | 2026-09-20 |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
-| 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 0/7 | Planned | - |
+| 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 1/7 | In Progress|  |
 | 4. 홍보배너 식별 | 0/TBD | Not started | - |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 0/TBD | Not started | - |
 | 6. 마켓 수정업로드 | 0/TBD | Not started | - |
