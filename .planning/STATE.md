@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-06-PLAN.md (진행 로그 SSE)
-last_updated: "2026-09-20T09:35:18.543Z"
+stopped_at: Completed 01-07-PLAN.md (Skeleton A — 선택 → 미리보기 70→80)
+last_updated: "2026-09-20T10:13:32.692Z"
 last_activity: 2026-09-20
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 01 (board-bid-raise) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-09-20
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 78%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [███████░░░] 67%
 | Phase 01 P04 | 32min | 3 tasks | 8 files |
 | Phase 01 P05 | 47min | 3 tasks | 9 files |
 | Phase 01 P06 | 78min | 3 tasks | 17 files |
+| Phase 01 P07 | 26min | 4 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,7 @@ None yet.
 - **[Phase 4 미검증]** 홍보배너 식별은 기성 해법이 없는 가설. 100건 라벨링 미탐 0% 를 통과해야 실작업 투입
 - **[환경]** 이 맥북에 `bulsaja-yongssaem` MCP 서버 항목이 없다 — 용쌤 계정 전환 경로가 끊겨 있음 (ENG-08 착수 시 확인)
 - OQ-7: 회차마다 든 계정 수가 다른데 화면이 말하지 않는다. 실측 2026-08-29=2계정 · 2026-08-30=4계정 · 2026-09-20=1계정(판정 전). 신선도 배너(D-16)는 경과일만 보여준다 — 01-07/01-08 이 신선도만 보고 회차를 고르면 빠진 계정의 소재가 조용히 대상에서 사라진다(실제 광고비). 배너·드롭다운에 계정 수를 노출할지 01-07 에서 결정할 것
+- OQ-8: 수집만 되고 판정 안 된 회차가 있을 때 화면이 알리지 않는다 — 보드의 '새로 수집' 버튼 때문에 재발 구조다. 01-08 이 실행 흐름을 만들 때 자리가 생길 수 있다(지금 고치지 않는다)
 
 ## Deferred Items
 
@@ -119,6 +121,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T09:35:18.538Z
-Stopped at: Completed 01-06-PLAN.md (진행 로그 SSE)
+Last session: 2026-09-20T10:13:49.650Z
+Stopped at: Completed 01-07-PLAN.md (Skeleton A — 선택 → 미리보기 70→80)
 Resume file: None

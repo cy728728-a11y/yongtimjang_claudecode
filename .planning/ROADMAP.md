@@ -67,7 +67,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-07-PLAN.md — Wave 5: 선택 UI(보이는 것만 vs 필터 전체) + 입찰가 인상 미리보기 (Skeleton A)
+- [x] 01-07-PLAN.md — Wave 5: 선택 UI(보이는 것만 vs 필터 전체) + 입찰가 인상 미리보기 (Skeleton A)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
@@ -185,7 +185,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 6/9 | In Progress|  |
+| 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 7/9 | In Progress|  |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 0/TBD | Not started | - |
 | 4. 홍보배너 식별 | 0/TBD | Not started | - |
