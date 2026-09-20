@@ -19,6 +19,17 @@ HTTP 요청을 쏘는 모양이 되면 그때 다시 짜야 한다.
 | `revert_all`   | `bids --revert`   | ledger      | **PUT**       | **탄다** |
 | `synthetic`    | (없음)            | 로그만      | 없음          | 안 탄다   |
 
+불사자 작업 3종 (Phase 3). **광고 API 가 아니라 불사자 MCP 를 부르고, 셋 다 읽기 전용이다:**
+
+| kind              | 스크립트            | 디스크 쓰기        | 불사자 쓰기 | 전역 가드 |
+|-------------------|---------------------|--------------------|-------------|-----------|
+| `bulsaja_profile` | `--profile-only`    | 프로필 파일        | 없음(조회) | 안 탄다   |
+| `bulsaja_index`   | `ss_index_build.py` | `ss_index` 테이블  | 없음(조회) | 안 탄다   |
+| `bulsaja_scan`    | `bulsaja_scan.py`   | `join_*.json`      | 없음(조회) | 안 탄다   |
+
+셋이 전역 가드를 **안 타는** 이유는 `WRITE_KINDS` 주석에 있다. 대신 `bulsaja_index`·
+`bulsaja_scan` 은 `SINGLETON_KINDS` 로 **같은 kind 끼리만** 겹치는 걸 막는다(레이트리밋).
+
 `prep` 이 가드를 타는 이유: 같은 회차 디렉터리에 스냅샷을 통째로 다시 쓰는데,
 그 사이에 `bids` 가 돌면 읽는 스냅샷이 발밑에서 바뀐다.
 
@@ -35,16 +46,21 @@ from pathlib import Path
 from typing import Literal
 
 from webapp import argv as argv_mod
-from webapp import paths, settings
+from webapp import bulsaja_index, paths, settings
 
 # 모듈 이름을 짧게 한 번 더 노출한다 — 테스트·라우트가 `jobs.argv.PY_CLI` 로 집는다.
 argv = argv_mod
 
+# **`JobKind` 와 `KINDS` 는 항상 같이 고친다.** 하나만 고치면 타입 검사는 통과하는데
+# `create_job` 첫 줄의 `kind not in KINDS` 가 런타임에 거부한다 — "코드상 맞는데 화면에서만
+# 안 되는" 부류의 고장이다.
 JobKind = Literal["prep", "run", "bids_preview", "bids_commit",
-                  "revert_only", "revert_all", "synthetic"]
+                  "revert_only", "revert_all", "synthetic",
+                  "bulsaja_profile", "bulsaja_index", "bulsaja_scan"]
 
 KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
-                          "revert_only", "revert_all", "synthetic")
+                          "revert_only", "revert_all", "synthetic",
+                          "bulsaja_profile", "bulsaja_index", "bulsaja_scan")
 
 # 전역 1개 가드의 대상. **왜 전역인가:**
 # ENG-04(대상별 잠금)는 Phase 2 지만 **위험은 Phase 1 에 있다.** `run_bids` 가
@@ -54,6 +70,14 @@ KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
 # Phase 2 가 이걸 대상별 락으로 좁힌다. 미리보기·판정은 아무것도 안 쓰므로 뺀다 —
 # 쓰기가 아닌 것까지 막는 가드는 사람이 가드를 끄게 만든다.
 WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "revert_all"})
+# **불사자 잡 3종을 여기 넣지 마라.** 셋 다 불사자에 아무것도 안 쓴다(workdata·프로필 조회는
+# 읽기 전용이다). 넣으면 3시간 32분짜리 인덱스가 도는 동안 입찰가 인상·되돌리기가 전부
+# 409 가 된다 — 위 "쓰기가 아닌 것까지 막는 가드는 사람이 가드를 끄게 만든다" 가 바로 이 경우다.
+
+# ENG-08 사전 점검 대상. **불사자 MCP 를 부르는 잡**이다.
+# `bulsaja_profile` 은 **일부러 뺐다** — 그 잡이 프로필을 만드는 잡이라, 가드 대상에 넣으면
+# 프로필이 없을 때 프로필을 만들 수 없다(닭·달걀). 계정 확인은 그 자체로 읽기 조회 1회다.
+BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan"})
 
 # **살아 있는 잡의 상태 두 가지.** `starting` 은 "행은 들어갔는데 자식이 아직 안 떴다" 다.
 # 왜 둘로 쪼갰나: 예전에는 INSERT 가 바로 `running` 이었는데, 그 행의 `pid` 는 spawn 뒤에야
@@ -425,6 +449,43 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
                                 only_ads=targets_path if kind == "revert_only" else None,
                                 preview_out=result_path).build()
 
+    if kind in ("bulsaja_profile", "bulsaja_index", "bulsaja_scan"):
+        # 대상 파일 규약은 광고 쪽과 같다 — `_write_targets` 가 쓰는 **JSON 배열** 하나다.
+        # 담기는 내용만 다르다:
+        #   · 인덱스 → groupId 문자열 리스트
+        #   · 스캔   → "<계정alias>|<mallProductId>" 문자열 리스트 (`board.js` 의 Tabulator
+        #     index 와 같은 모양이라 화면이 고른 행을 그대로 담을 수 있다)
+        #
+        # **둘 다 대상 파일이 필수다.** `revert_only` 와 **똑같은 이유**로 그렇다:
+        # 없으면 자식이 그걸 "전량" 으로 읽는다. 빈 값이 전량으로 해석되는 경로는
+        # 조립이 아니라 여기서 터뜨린다 (`BulsajaArgv.build()` 주석이 이 자리를 가리킨다).
+        if kind == "bulsaja_index" and targets_path is None:
+            raise ValueError("인덱스 잡에는 그룹 목록 파일이 반드시 있어야 한다 — "
+                             "없으면 전 그룹(실측 75,335건 · 5시간 39분)이다")
+        if kind == "bulsaja_scan" and targets_path is None:
+            raise ValueError("스캔 잡에는 대상 목록 파일이 반드시 있어야 한다 (FLOW-02 / D-11)")
+
+        하위 = {"bulsaja_profile": "profile", "bulsaja_index": "index",
+                "bulsaja_scan": "scan"}[kind]
+        # 설정값은 **전부 호출부에서 읽어 넘긴다.** 모델·CLI 에 기본값을 두면
+        # workspace.toml 을 고쳐도 동작이 안 바뀌는 가짜 설정이 된다 (T-1-12).
+        return argv_mod.BulsajaArgv(
+            subcommand=하위,
+            db=db_path(),
+            out=result_path if result_path else bulsaja_index.profile_path(),
+            profile_out=bulsaja_index.profile_path(),
+            expect_nick=settings.cfg("expected_bulsaja_nick", required=True),
+            min_interval=float(settings.cfg("mcp_min_interval",
+                                            settings.DEFAULTS["mcp_min_interval"])),
+            retry_after=int(settings.cfg("mcp_retry_after",
+                                         settings.DEFAULTS["mcp_retry_after"])),
+            batch_size=int(settings.cfg("mcp_batch_size",
+                                        settings.DEFAULTS["mcp_batch_size"])),
+            run_dir=run_dir if kind == "bulsaja_scan" else None,
+            groups=targets_path if kind == "bulsaja_index" else None,
+            targets=targets_path if kind == "bulsaja_scan" else None,
+        ).build()
+
     raise ValueError(f"argv 를 조립할 수 없는 작업 종류다: {kind}")
 
 
@@ -471,6 +532,9 @@ def create_job(kind: str, *, run_dir: str | None = None,
     job_id = str(uuid.uuid4())
     log_path = log_path_of(job_id)
     BIDS_KINDS = ("bids_preview", "bids_commit", "revert_only", "revert_all")
+    # 불사자 산출물 파일명 접두. `BIDS_KINDS` 와 **나란히** 둔다 (아래 result_path 분기).
+    BULSAJA_접두 = {"bulsaja_scan": "join", "bulsaja_index": "index",
+                    "bulsaja_profile": "profile"}
 
     cx = _conn()
     try:
@@ -525,6 +589,24 @@ def create_job(kind: str, *, run_dir: str | None = None,
         if run_dir and kind in BIDS_KINDS:
             접두 = "preview" if kind == "bids_preview" else "result"
             result_path = _web_dir(run_dir) / f"{접두}_{job_id}.json"
+        elif kind in BULSAJA_접두:
+            # `BIDS_KINDS` 를 건드리지 않고 나란한 집합을 하나 더 둔다 — 두 계열의
+            # 산출물 규칙이 한 조건문에 섞이면 한쪽을 고칠 때 다른 쪽이 따라 바뀐다.
+            #
+            # **`bulsaja_profile` 은 `run_dir` 이 없어도 돌아야 한다.** 계정 확인은 회차와
+            # 무관하고, 오히려 회차를 고르기 전에 눌러야 하는 버튼이다. 그 산출물은
+            # 설정이 정한 프로필 파일 한 자리다(`bulsaja_index.profile_path()` — 읽는 쪽과
+            # 같은 계산을 본다).
+            #
+            # 인덱스·스캔은 회차가 있으면 회차의 `web/` 밑에, 없으면 잡 로그 옆에 둔다.
+            # 인덱스는 회차를 넘어 사는 기록이라 회차가 없는 호출이 정상이고, 그때 새
+            # 디렉터리를 파지 않는다 — 로그 루트는 이미 있고 이미 `.gitignore` 대상이다.
+            if kind == "bulsaja_profile":
+                result_path = bulsaja_index.profile_path()
+            elif run_dir:
+                result_path = _web_dir(run_dir) / f"{BULSAJA_접두[kind]}_{job_id}.json"
+            else:
+                result_path = log_dir() / f"{BULSAJA_접두[kind]}_{job_id}.json"
 
         # ④ argv
         if argv_override:
@@ -648,6 +730,41 @@ def active_job() -> dict | None:
     except sqlite3.Error:
         return None
     return 도는것[0] if 도는것 else None
+
+
+def latest_done(kind: str, run_dir: str | None = None) -> dict | None:
+    """그 종류의 **가장 최근 성공 잡** 1건. 없으면 None.
+
+    03-05·03-06 이 "마지막 조인 산출물" 을 찾는 **유일한 길**이다.
+    `web/join_*.json` 을 glob 으로 뒤지지 마라 — 파일이 있다는 것과 그 잡이 성공했다는 것은
+    다르다(중간에 죽은 잡도 반쯤 쓴 파일을 남긴다). 어느 잡이 성공했는지는 레지스트리가 정본이다.
+
+    `run_dir` 을 주면 그 회차로 좁힌다. 인덱스 잡처럼 회차를 넘어 사는 종류는 안 주면 된다.
+
+    레지스트리가 아직 없으면 **만들지 않고** None 이다 — `active_job()` 과 같은 규율(T-1-01b).
+    """
+    if kind not in KINDS:
+        raise ValueError(f"모르는 작업 종류다: {kind}")
+    if not db_path().is_file():
+        return None
+    cx = _conn()
+    try:
+        cx.execute("BEGIN IMMEDIATE")
+        _reap(cx)
+        cx.commit()
+        조건 = "kind = ? AND status = 'done'"
+        인자: tuple = (kind,)
+        if run_dir:
+            조건 += " AND run_dir = ?"
+            인자 = (kind, run_dir)
+        row = cx.execute(
+            f"SELECT * FROM jobs WHERE {조건} ORDER BY started_at DESC, rowid DESC LIMIT 1",
+            인자).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        cx.close()
+    return _as_dict(row) if row else None
 
 
 def recent_jobs(limit: int = 20) -> list[dict]:

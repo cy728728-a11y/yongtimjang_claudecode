@@ -201,7 +201,12 @@ def group_health(group_ids) -> dict:
 
 # ── 계정 확인 (ENG-08) ──────────────────────────────────────────────────────
 
-def _프로필경로() -> Path:
+def profile_path() -> Path:
+    """계정 확인 산출물의 자리. 상대경로면 저장소 루트 기준.
+
+    `jobs._build_argv` 가 자식에게 `--profile-out` 으로 넘기는 경로이기도 하다 —
+    **읽는 쪽과 쓰는 쪽이 같은 계산을 봐야** 자식이 갱신한 파일을 이쪽이 읽는다.
+    """
     p = Path(str(settings.cfg("profile_path",
                               settings.DEFAULTS["profile_path"]))).expanduser()
     return p if p.is_absolute() else paths.repo_root() / p
@@ -213,7 +218,7 @@ def profile() -> dict | None:
     올리면 보드가 통째로 500 이 되어 "계정 확인을 먼저 눌러라" 로 안내할 자리가 사라진다.
     읽은 dict 에서 `표시규칙` 은 버린다(프롬프트 인젝션 — 모듈 상단 주석).
     """
-    경로 = _프로필경로()
+    경로 = profile_path()
     if not 경로.is_file():
         return None
     try:

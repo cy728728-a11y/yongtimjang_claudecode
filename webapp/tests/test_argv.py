@@ -185,3 +185,192 @@ def test_sys_executable_을_쓰지_않는다():
             continue
         assert "sys.executable" not in f.read_text(encoding="utf-8", errors="ignore"), \
             f"{f} 에 sys.executable 이 있다 — .venv-web 으로 CLI 를 띄우게 된다"
+
+
+# ── 불사자 argv (Phase 3) ───────────────────────────────────────────────────
+#
+# 여기서도 서브프로세스를 띄우지 않는다. 불사자 MCP 는 **조회만** 하는 잡이지만
+# 레이트리밋 예산(240;w=60)은 공유 자원이라, 테스트가 실수로 자식을 띄우면 그 예산을 갉아먹는다.
+
+from webapp import jobs as J          # noqa: E402
+from webapp import settings as S      # noqa: E402
+
+
+def _불사자(하위="index", **덮기):
+    """`BulsajaArgv` 를 최소 인자로 만든다.
+
+    설정값은 **테스트가 직접 넘긴다** — 모델에 기본값이 없다는 게 검증 대상이라,
+    여기서 기본값을 흉내 내면 그 성질이 가려진다.
+    """
+    기본 = dict(subcommand=하위, db=Path("/tmp/zz.db"), out=Path("/tmp/zz-out.json"),
+                profile_out=Path("/tmp/zz-profile.json"), expect_nick="zz닉",
+                min_interval=0.26, retry_after=21, batch_size=50)
+    기본.update(덮기)
+    return A.BulsajaArgv(**기본)
+
+
+def test_불사자_argv_도_cli_인터프리터를_쓴다():
+    """웹앱 venv 로 불사자 CLI 를 띄우면 import 단계에서 죽는다 (ENG-01 / T-1-10)."""
+    av = _불사자().build()
+
+    assert av[0] == str(A.PY_CLI)
+    assert av[0].endswith("/.venv/bin/python3")
+    assert "/.venv-web/" not in av[0]
+    assert av[1] == str(A.SS_INDEX_BUILD)
+    assert Path(av[1]).is_absolute()
+
+
+def test_서브커맨드가_스크립트를_고른다():
+    """`profile` 과 `scan` 은 **같은 스크립트의 두 모드**다."""
+    assert _불사자("index").build()[1] == str(A.SS_INDEX_BUILD)
+    assert _불사자("scan").build()[1] == str(A.BULSAJA_SCAN)
+
+    계정확인 = _불사자("profile").build()
+    assert 계정확인[1] == str(A.BULSAJA_SCAN)
+    assert "--profile-only" in 계정확인
+    # 계정 확인에는 산출물이 없다 — 자식은 `--profile-out` 만 갱신한다
+    assert "--out" not in 계정확인
+    assert "--profile-out" in 계정확인
+
+
+def test_caffeinate_프리픽스가_앞에_붙는다():
+    """3시간 32분짜리 인덱스가 맥북 idle sleep 에 끊기지 않게 (ENG-06).
+
+    자리는 `AdsArgv.prefix` 와 같다 — 프리픽스 다음이 인터프리터, 그 다음이 스크립트다.
+    """
+    av = _불사자(prefix=["/usr/bin/caffeinate", "-i"]).build()
+
+    assert av[:2] == ["/usr/bin/caffeinate", "-i"]
+    assert av[2] == str(A.PY_CLI)
+    assert av[3] == str(A.SS_INDEX_BUILD)
+
+    assert _불사자().build()[0] == str(A.PY_CLI)      # 기본은 비어 있다
+
+
+def test_limit_0_이면_플래그가_없다():
+    """0 은 "상한 없음" 이다. `--limit 0` 을 넘기면 자식이 "0건만" 으로 읽을 수 있다."""
+    assert "--limit" not in _불사자().build()
+    assert "--limit" in _불사자(limit=5).build()
+
+
+def test_groups_None_이면_플래그가_없다():
+    """조립 단계는 그냥 안 붙인다.
+
+    **터뜨리는 자리는 `jobs._build_argv` 한 곳**이다 — 같은 규칙이 두 곳에 있으면
+    둘이 어긋났을 때 어느 쪽이 진짜 가드인지 모른다.
+    """
+    assert "--groups" not in _불사자().build()
+    assert "--targets" not in _불사자("scan").build()
+
+    붙은것 = _불사자(groups=Path("/tmp/zz-groups.json")).build()
+    assert 붙은것[붙은것.index("--groups") + 1] == "/tmp/zz-groups.json"
+
+
+def test_닉네임에_플래그모양은_거부된다():
+    """닉네임이 `--force` 모양이면 자식의 argparse 가 그걸 **옵션으로** 파싱한다 (T-3-13).
+
+    리스트 argv 라 셸은 안 거치지만, 셸을 안 거치는 것과 파서를 안 거치는 것은 다르다.
+    """
+    for 나쁜값 in ["--force", "-x", "닉 네임", "닉\t네임", "", " "]:
+        with pytest.raises(ValidationError):
+            _불사자(expect_nick=나쁜값)
+
+    # 한글은 통과한다 — `Alias` 의 영숫자 화이트리스트를 그대로 쓸 수 없는 이유다
+    통과 = _불사자(expect_nick="가나다라").build()
+    assert 통과[통과.index("--expect-nick") + 1] == "가나다라"
+
+
+def test_불사자_경로_인자도_문자열로_붙는다():
+    """`Path` 가 섞이면 jobs 테이블의 argv 컬럼(JSON 배열) 직렬화가 터진다."""
+    av = _불사자(groups=Path("/tmp/zz-groups.json"), limit=3).build()
+    assert all(isinstance(a, str) for a in av)
+
+
+# ── jobs 쪽 계약 ────────────────────────────────────────────────────────────
+
+def test_불사자_kind_3종이_등록돼_있다():
+    """`JobKind` 만 고치고 `KINDS` 를 빠뜨리면 런타임이 거부한다 — 둘 다 본다."""
+    for k in ("bulsaja_profile", "bulsaja_index", "bulsaja_scan"):
+        assert k in J.KINDS
+        assert k in J.JobKind.__args__
+
+
+def test_불사자잡은_전역_쓰기가드에_안_들어간다():
+    """넣으면 3시간 32분 동안 입찰가 인상·되돌리기가 전부 409 다."""
+    assert not (set(J.WRITE_KINDS) & {"bulsaja_index", "bulsaja_scan", "bulsaja_profile"})
+    # 계정 확인 잡은 ENG-08 가드 대상이 **아니다** — 프로필을 만드는 잡이라 닭·달걀이 된다
+    assert "bulsaja_profile" not in J.BULSAJA_KINDS
+    assert J.BULSAJA_KINDS == frozenset({"bulsaja_index", "bulsaja_scan"})
+
+
+def test_인덱스잡은_그룹파일이_없으면_터진다():
+    """빈 값이 '전 그룹' 으로 해석되는 경로를 예외로 터뜨린다 (T-3-12).
+
+    `revert_only` 와 **똑같은 모양**이다 — 그쪽은 회차 전체 2,242건이 풀리는 사고였고,
+    이쪽은 다섯 시간 넘게 타는 사고다.
+    """
+    with pytest.raises(ValueError) as 터진것:
+        J._build_argv("bulsaja_index", "zzjob", None, [], None,
+                      Path("/tmp/zz-out.json"), False)
+    assert "그룹" in str(터진것.value)
+
+
+def test_스캔잡은_대상파일이_없으면_터진다():
+    """대상 파일은 하나이고, 없으면 만들지 않는다 (FLOW-02 / D-11)."""
+    with pytest.raises(ValueError) as 터진것:
+        J._build_argv("bulsaja_scan", "zzjob", "2026-08-30", [], None,
+                      Path("/tmp/zz-out.json"), False)
+    assert "대상" in str(터진것.value)
+
+
+def test_계정확인잡은_대상파일이_필요없다():
+    """계정 확인에 대상이 없다 — 여기까지 필수로 만들면 첫 확인을 영영 못 한다."""
+    av = J._build_argv("bulsaja_profile", "zzjob", None, [], None,
+                       Path("/tmp/zz-profile.json"), False)
+    assert "--profile-only" in av
+    assert "--groups" not in av and "--targets" not in av
+
+
+def test_설정값이_argv_로_흐른다(tmp_path, monkeypatch):
+    """`workspace.toml` 을 고치면 자식에게 가는 값이 **실제로** 바뀐다.
+
+    모델이나 CLI 에 기본값이 있으면 이 테스트가 빨개진다 — 그게 "있는 척만 하는 설정" 이다.
+    """
+    from webapp import paths as P
+
+    (tmp_path / "workspace.toml").write_text(
+        '[webapp]\n'
+        'expected_bulsaja_nick = "zz기대계정"\n'
+        'mcp_min_interval = 1.5\n'
+        'mcp_retry_after = 99\n'
+        'mcp_batch_size = 7\n',
+        encoding="utf-8")
+    monkeypatch.setattr(P, "repo_root", lambda: tmp_path)
+    S.reload()
+    try:
+        av = J._build_argv("bulsaja_index", "zzjob", None, [], tmp_path / "zzg.json",
+                           tmp_path / "zzout.json", False)
+    finally:
+        monkeypatch.undo()
+        S.reload()
+
+    assert av[av.index("--min-interval") + 1] == "1.5"
+    assert av[av.index("--retry-after") + 1] == "99"
+    assert av[av.index("--batch-size") + 1] == "7"
+    assert av[av.index("--expect-nick") + 1] == "zz기대계정"
+
+
+def test_기대닉네임이_비면_argv_조립이_터진다(tmp_path, monkeypatch):
+    """`required=True` — 값이 비면 KeyError 다. 조용히 폴백하면 ENG-08 가드가 사라진다."""
+    from webapp import paths as P
+
+    (tmp_path / "workspace.toml").write_text('[webapp]\n', encoding="utf-8")
+    monkeypatch.setattr(P, "repo_root", lambda: tmp_path)
+    S.reload()
+    try:
+        with pytest.raises(KeyError):
+            J._build_argv("bulsaja_index", "zzjob", None, [], tmp_path / "zzg.json",
+                          tmp_path / "zzout.json", False)
+    finally:
+        monkeypatch.undo()
+        S.reload()
