@@ -43,15 +43,24 @@ templates = Jinja2Templates(directory=str(BASE / "templates"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """기동 시 붙여넣을 URL 한 줄을 찍는다. 이 줄이 사실상의 로그인 화면이다."""
+    """기동 시 붙여넣을 URL 한 줄을 찍는다. 이 줄이 사실상의 로그인 화면이다.
+
+    **두 print 모두 `flush=True` 가 필수다.** stdout 이 tty 면 줄 단위로 흘러
+    바로 보이지만, 파일 리다이렉트(`> ct-server.log`)나 파이프면 블록 버퍼링(8KB)이
+    걸린다. 서버 프로세스는 끝나지 않으므로 그 버퍼는 **영원히 비워지지 않는다** —
+    로그 파일에 URL 줄이 통째로 안 나온다(실측). 토큰은 재시작마다 바뀌고 디스크에
+    안 남기므로 이 줄이 유일한 입구다. 상시 기동 수단인 launchd LaunchAgent 는
+    stdout 을 파일로 돌리므로, 이게 없으면 올리는 순간 들어갈 길이 사라진다.
+    저장소 관례이기도 하다 — `detail_batch.py` 도 줄 출력에 flush=True 를 쓴다.
+    """
     conc = os.environ.get("WEB_CONCURRENCY")
     if conc is not None and conc != "1":
         # Pitfall 9 — 워커가 갈라지면 잡 레지스트리와 SSE 구독자 집합이 프로세스별로
         # 나뉜다. 잡을 띄운 워커와 스트림 요청을 받은 워커가 다르면 진행 로그가 안 뜬다.
         # 재현이 어려운 "가끔 안 보임" 버그로 나타나므로 기동 때 크게 경고한다.
         print(f"[경고] WEB_CONCURRENCY={conc} — 워커는 반드시 1이어야 한다. "
-              f"진행 로그가 간헐적으로 안 뜬다")
-    print(f"→ http://127.0.0.1:{settings.PORT}/?t={security.BOOT_TOKEN}")
+              f"진행 로그가 간헐적으로 안 뜬다", flush=True)
+    print(f"→ http://127.0.0.1:{settings.PORT}/?t={security.BOOT_TOKEN}", flush=True)
     yield
 
 

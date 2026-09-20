@@ -19,9 +19,11 @@ if [ ! -x "$PY" ]; then
   exit 1
 fi
 
-# 포트를 여기 박지 않는다 — settings 가 유일한 출처다(workspace.toml [webapp] port 로 바뀐다).
-# 포트를 두 곳에 적으면 한쪽만 고쳤을 때 Origin 화이트리스트가 조용히 깨진다.
-PORT="${CT_PORT:-$("$PY" -c 'from webapp import settings; print(settings.PORT)')}"
+# 포트를 여기 박지 않는다 — settings 가 유일한 출처다.
+# 우선순위는 settings 안에 있다: CT_PORT 환경변수 > workspace.toml [webapp] port > 기본값.
+# **여기서 CT_PORT 를 직접 읽으면 안 된다.** 그러면 uvicorn 이 바인드하는 포트만 바뀌고
+# settings.PORT 를 쓰는 Origin 화이트리스트·기동 안내 URL 은 옛 포트에 남아 어긋난다.
+PORT="$("$PY" -c 'from webapp import settings; print(settings.PORT)')"
 
 # --host 127.0.0.1 : 인증이 없는 앱이다. 0.0.0.0 으로 열면 같은 와이파이의 아무나
 #                    내 광고 입찰가를 올릴 수 있다.

@@ -11,6 +11,8 @@
 "계정이 이상하게 불어났다" 는 사고만 잡는다. **다른 파일에 이 숫자를 복사하지 마라** —
 설정을 고쳐도 동작이 안 바뀌면 가드가 있는 척만 하는 것이다.
 """
+import os
+
 from webapp import paths
 
 DEFAULTS = {
@@ -69,7 +71,11 @@ def reload() -> dict:
     """
     global PORT, PER_ACCOUNT_LIMIT, STALE_DAYS, POLL_INTERVAL, JOB_LOG_DIR, DB_PATH
     load(force=True)
-    PORT = int(cfg("port", DEFAULTS["port"]))
+    # CT_PORT 가 workspace.toml 보다 우선한다. 기동 스크립트가 이 환경변수로 포트를
+    # 바꾸는데, 그때 settings.PORT 가 따라오지 않으면 **바인드 포트와 Origin 화이트리스트·
+    # 기동 URL 이 어긋난다** — 서버는 9999 에 떠 있는데 8765 를 허용하고 8765 를 안내하는
+    # 상태가 되어, 모든 쓰기가 403 이 되거나 방어가 엉뚱한 포트를 지킨다.
+    PORT = int(os.environ.get("CT_PORT") or cfg("port", DEFAULTS["port"]))
     PER_ACCOUNT_LIMIT = int(cfg("per_account_limit", DEFAULTS["per_account_limit"]))
     STALE_DAYS = int(cfg("stale_days", DEFAULTS["stale_days"]))
     POLL_INTERVAL = float(cfg("poll_interval", DEFAULTS["poll_interval"]))
