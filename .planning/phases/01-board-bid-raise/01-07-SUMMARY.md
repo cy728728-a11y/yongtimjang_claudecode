@@ -265,3 +265,8 @@ scan_run_dirs()  ['2026-09-20', '2026-08-30', '2026-08-29']
 ## Threat Flags
 
 없음. 새로 생긴 표면(`POST /jobs/bids/preview` · `GET /jobs/{id}/panel|result`)은 전부 플랜 `<threat_model>` 의 T-1-06/07/29/30/31/32/33 안에 있고, 각각 mitigate 로 처리됐다.
+
+## Self-Check: PASSED
+
+- 산출물 6개 전부 디스크에 존재 (`flow.py` · `_preview_table.html` · `test_flow.py` · `preview_cdp.sh` · `preview_cdp.mjs` · 이 파일)
+- 커밋 8개 전부 git 에 존재 (abc6e5c · a3ff6c7 · bd4f3b2 · c357758 · 6b416cb · 313bbd2 · 0b58f08 · f3be3fd)
