@@ -352,3 +352,198 @@ def test_자식은_표준입력을_기다리지_않는다(잡판, tmp_path):
 
     assert proc.returncode == 0
     assert 로그.read_text(encoding="utf-8").strip() == "''"
+
+
+# ── 진행 로그 스트림 (Plan 01-06) ───────────────────────────────────────────
+#
+# 여기서부터는 **HTTP 를 탄다.** 위쪽 엔진 테스트와 달리 증명 대상이
+# "커넥션의 생명주기" 이기 때문이다 — 붙었다 끊겼다 다시 붙는 동안 무엇이 보이는가.
+# 함수를 직접 불러서는 그걸 만들어 낼 수 없다. 그래도 **실제 CLI 는 여전히 0번**
+# 뜬다: 전부 합성 잡이다.
+
+def 이벤트들(원문: str) -> list[tuple[str, str]]:
+    """SSE 원문을 `[(event, data)]` 로 푼다. **잘린 마지막 블록은 버린다.**
+
+    끊긴 지점에서 반쪽짜리 이벤트가 남는데, 그걸 세면 "몇 줄 받았나" 가 흔들린다.
+    빈 줄 두 개로 끝난 블록만 완결로 본다.
+    """
+    정규 = 원문.replace("\r\n", "\n")
+    블록들 = 정규.split("\n\n")
+    if not 정규.endswith("\n\n"):
+        블록들 = 블록들[:-1]              # 잘린 꼬리
+    나온것 = []
+    for 블록 in 블록들:
+        ev, 데이터 = None, []
+        for 줄 in 블록.split("\n"):
+            if 줄.startswith("event: "):
+                ev = 줄[len("event: "):]
+            elif 줄.startswith("data: "):
+                데이터.append(줄[len("data: "):])
+        if ev:
+            나온것.append((ev, "\n".join(데이터)))
+    return 나온것
+
+
+def 마지막로그줄(원문: str) -> list[str]:
+    """마지막 `log` 이벤트가 담은 로그 줄 목록."""
+    로그 = [d for e, d in 이벤트들(원문) if e == "log"]
+    if not 로그:
+        return []
+    return [줄 for 줄 in 로그[-1].split("\n") if 줄.strip()]
+
+
+def 잠깐붙기(화면, job_id: str, 초: float) -> str:
+    """스트림에 붙어 `초` 동안 받고 끊는다. 브라우저 탭을 닫는 것과 같은 일이다."""
+    받은 = b""
+    시작 = time.time()
+    with 화면.stream("GET", f"/jobs/{job_id}/stream") as r:
+        assert r.status_code == 200, r.status_code
+        for 덩어리 in r.iter_raw():
+            받은 += 덩어리
+            if time.time() - 시작 >= 초:
+                break
+    return 받은.decode("utf-8", "replace")
+
+
+@pytest.fixture
+def 화면(잡판, client):
+    """보드에서 온 것처럼 쿠키까지 붙인 클라이언트 + tmp 잡 DB."""
+    from webapp import security
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+    return client
+
+
+def test_재접속하면_처음부터_이어본다(화면, synthetic_job):
+    """**SC-03.** 탭을 닫았다 다시 열면 로그가 처음부터 흐르고 끊긴 사이까지 이어진다.
+
+    합성 잡 12줄 × 0.2초(2.4초)를 띄우고:
+      0.0~0.8초  붙어서 본다        → 앞부분만 보인다
+      0.8~1.6초  끊겨 있다          → 그동안에도 자식은 계속 찍는다
+      1.6~2.4초  다시 붙는다        → **1번 줄부터** 다시 흐르고 끊긴 사이 줄까지 온다
+
+    판정 기준을 "줄이 더 많아졌다" 로 쓰지 않는다 — 그건 오프셋 이어받기 설계에서도
+    통과한다. **첫 줄이 정확히 `[1/12] tick` 이고, 받은 줄이 1번부터 빠짐없이
+    연속이며, 중복이 없다**는 것까지 본다 (01-04 의 교훈: "숫자가 움직인다"는 근거가 아니다).
+    """
+    스펙 = synthetic_job(lines=12, delay=0.2)
+    job_id = jobs.create_job("synthetic", argv_override=스펙["argv"])
+
+    앞 = 잠깐붙기(화면, job_id, 0.8)
+    앞줄 = 마지막로그줄(앞)
+    assert 앞줄[0] == "[1/12] tick"
+    assert len(앞줄) < 12, f"1차 접속이 다 받아 버렸다 ({len(앞줄)}줄) — 측정이 무의미"
+
+    time.sleep(0.8)                                # 탭이 닫혀 있는 동안
+
+    뒤 = 잠깐붙기(화면, job_id, 0.8)
+    뒤줄 = 마지막로그줄(뒤)
+
+    assert 뒤줄[0] == "[1/12] tick", "재접속했더니 첫 줄이 없다 (전량 재생이 아니다)"
+    assert 뒤줄[:len(앞줄)] == 앞줄, "재접속 페이로드가 1차와 어긋난다"
+    assert len(뒤줄) > len(앞줄), "끊긴 사이에 찍힌 줄이 안 왔다 (파이프를 읽고 있다)"
+    assert 뒤줄 == [f"[{i}/12] tick" for i in range(1, len(뒤줄) + 1)], \
+        f"줄이 빠졌거나 중복됐다: {뒤줄}"
+
+
+def test_스트림은_event_stream_이고_gzip_으로_묶이지_않는다(화면, synthetic_job):
+    """gzip 이 걸리면 압축 버퍼에 고여서 **로그가 끝날 때까지 안 보인다.**
+
+    Starlette 1.6.0 의 GZipMiddleware 가 `text/event-stream` 을 기본 제외 목록에
+    두고 있어서 지금은 안전하다. 그 기본값은 우리 것이 아니므로 기계로 지킨다.
+    """
+    job_id = jobs.create_job("synthetic", argv_override=synthetic_job(lines=2, delay=0.05)["argv"])
+    with 화면.stream("GET", f"/jobs/{job_id}/stream") as r:
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/event-stream")
+        assert "content-encoding" not in r.headers, "SSE 가 압축됐다 — 로그가 고인다"
+        assert r.headers.get("cache-control", "").find("no-cache") >= 0
+        r.close()
+
+
+def test_모르는_잡의_스트림은_404(화면):
+    assert 화면.get("/jobs/그런거없음/stream").status_code == 404
+
+
+def test_쿠키_없이는_스트림을_못_연다(잡판, client, synthetic_job):
+    job_id = jobs.create_job("synthetic", argv_override=synthetic_job(lines=1, delay=0.05)["argv"])
+    client.cookies.clear()
+    assert client.get(f"/jobs/{job_id}/stream").status_code == 403
+
+
+def test_끝난_잡의_스트림은_전량재생후_즉시_닫힌다(화면, synthetic_job):
+    """작업이 끝난 뒤 붙어도 로그를 전부 보여주고 `done` 으로 스스로 닫는다."""
+    job_id = jobs.create_job("synthetic", argv_override=synthetic_job(lines=2, delay=0.05)["argv"])
+    끝날때까지(job_id)
+
+    받은 = 화면.get(f"/jobs/{job_id}/stream").text       # 스스로 닫히니 통째로 받힌다
+    종류 = [e for e, _ in 이벤트들(받은)]
+    assert 종류.count("done") == 1
+    assert 종류[-1] == "done", f"done 뒤에 더 보냈다: {종류}"
+    assert 마지막로그줄(받은) == ["[1/2] tick", "[2/2] tick", "합성 잡 완료"]
+
+
+def test_스트림_GET_은_작업을_만들지_않는다(화면, synthetic_job):
+    """T-1-01b — 읽기 라우트가 부수효과를 가지면 Origin 방어의 전제가 무너진다."""
+    job_id = jobs.create_job("synthetic", argv_override=synthetic_job(lines=1, delay=0.05)["argv"])
+    끝날때까지(job_id)
+    처음 = len(jobs.recent_jobs(50))
+
+    for _ in range(3):
+        assert 화면.get(f"/jobs/{job_id}/stream").status_code == 200
+
+    assert len(jobs.recent_jobs(50)) == 처음
+
+
+def test_라우트_중_async_는_스트림_하나다():
+    """T-1-28 — `async def` 라우트 안의 blocking IO 는 이벤트 루프를 통째로 세운다.
+
+    나머지 핸들러는 `def` 로 둬서 Starlette 스레드풀이 sqlite·파일 IO 를 받는다.
+    `grep -c 'async def'` 로는 못 센다 — 라우트가 아닌 의존성 함수도 async 라서.
+    데코레이터가 붙은 def 만 골라서 본다.
+    """
+    본문 = Path(jobs.__file__).parent.joinpath("routes/jobs.py").read_text(encoding="utf-8")
+    줄들 = 본문.splitlines()
+    async_라우트 = []
+    for i, 줄 in enumerate(줄들):
+        if not 줄.startswith("@router."):
+            continue
+        for 뒤 in 줄들[i + 1:i + 4]:
+            if 뒤.startswith("async def "):
+                async_라우트.append(뒤.split("(")[0].replace("async def ", ""))
+            if 뒤.startswith(("def ", "async def ")):
+                break
+    assert len(async_라우트) == 1, f"async 라우트가 여럿이다: {async_라우트}"
+    assert "stream" in async_라우트[0]
+
+
+def test_작업패널이_로그를_붙이지_않고_교체한다():
+    """T-1-26 — `beforeend` 를 쓰면 재연결 때 로그가 두 번 찍힌다.
+
+    서버가 누적본을 보내므로 클라이언트는 기본 swap(innerHTML 전량 교체)을 써야 맞다.
+    """
+    패널 = Path(jobs.__file__).parent.joinpath("templates/_job_panel.html")
+    본문 = 패널.read_text(encoding="utf-8")
+    assert "beforeend" not in 본문
+    assert 'hx-ext="sse"' in 본문
+    assert 'sse-swap="log"' in 본문
+    assert 'sse-close="done"' in 본문
+    assert "/stream" in 본문
+    # 스트림은 **활성 잡 하나만** 연다 (T-1-24: HTTP/1.1 호스트당 6 커넥션)
+    assert 본문.count("sse-connect") == 1
+
+
+def test_보드가_도는_작업을_들고_있다(잡판, synthetic_job):
+    """탭을 닫았다 다시 열었을 때 패널이 비어 있으면 SC-03 자체가 성립하지 않는다.
+
+    페이지를 새로 그리는 것은 `GET /` 이고, 그때 도는 작업을 컨텍스트에 실어야
+    패널이 나오고 그 패널이 스트림을 연다.
+    """
+    assert jobs.active_job() is None
+    job_id = jobs.create_job("synthetic", argv_override=synthetic_job(lines=40, delay=0.2)["argv"])
+
+    도는것 = jobs.active_job()
+    assert 도는것 and 도는것["id"] == job_id
+
+    jobs._PROCS[job_id].kill()
+    끝날때까지(job_id)
+    assert jobs.active_job() is None, "끝난 작업이 계속 패널에 남는다"
