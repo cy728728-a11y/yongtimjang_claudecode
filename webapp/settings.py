@@ -79,8 +79,15 @@ def reload() -> dict:
     PER_ACCOUNT_LIMIT = int(cfg("per_account_limit", DEFAULTS["per_account_limit"]))
     STALE_DAYS = int(cfg("stale_days", DEFAULTS["stale_days"]))
     POLL_INTERVAL = float(cfg("poll_interval", DEFAULTS["poll_interval"]))
-    JOB_LOG_DIR = str(cfg("job_log_dir", DEFAULTS["job_log_dir"]))
-    DB_PATH = str(cfg("db_path", DEFAULTS["db_path"]))
+    # 잡 레지스트리·로그 경로도 환경변수를 먼저 본다. 이유는 하나다:
+    # **스트리밍은 진짜 서버를 띄워야만 검증된다.** `TestClient` 는 ASGI 앱을
+    # 끝까지 돌린 뒤 통째로 돌려주므로(실측: testclient.py 가 BytesIO 에 모은다)
+    # "0.8초 받고 끊는다" 를 흉내조차 못 낸다. 그 서버는 별도 프로세스라
+    # monkeypatch 가 닿지 않고, 저장소 루트의 진짜 webapp.db 를 쓰면 테스트가
+    # 화면에 유령 작업을 남긴다. env 가 유일한 통로다.
+    # 부수효과로 두 번째 인스턴스를 나란히 띄우는 것도 공짜가 된다.
+    JOB_LOG_DIR = str(os.environ.get("CT_JOB_LOG_DIR") or cfg("job_log_dir", DEFAULTS["job_log_dir"]))
+    DB_PATH = str(os.environ.get("CT_DB_PATH") or cfg("db_path", DEFAULTS["db_path"]))
     return load()
 
 

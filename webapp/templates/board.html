@@ -32,6 +32,25 @@
     .board-filters > label { margin-bottom: 0; flex: 1 1 12rem; }
     .board-filters select[multiple] { height: 6.5rem; }
     #board-count { font-variant-numeric: tabular-nums; }
+
+    /* 경과시간은 이 화면의 유일한 진행 표시다 (OQ-3) — 크게 띄운다. */
+    .job-elapsed { margin-bottom: .2rem; font-size: 1.6rem; line-height: 1.2; }
+    .job-elapsed strong { font-variant-numeric: tabular-nums; }
+
+    /* 진행 로그. column-reverse 가 스크롤을 **아래에 붙여** 새 줄이 올 때마다
+       따라 내려간다 — 자동 스크롤에 JS 를 한 줄도 쓰지 않으려는 배치다.
+       overflow-wrap 이 없으면 긴 URL 한 줄이 박스를 가로로 늘린다. */
+    #job-log-box {
+      display: flex; flex-direction: column-reverse;
+      max-height: 22rem; overflow: auto;
+      background: var(--pico-code-background-color, #f4f4f4);
+      border-radius: .25rem;
+    }
+    #job-log {
+      margin: 0; padding: .6rem .8rem; background: none;
+      font-size: .82rem; line-height: 1.45;
+      white-space: pre-wrap; overflow-wrap: anywhere;
+    }
   </style>
 </head>
 {# 이 한 줄이 모든 htmx 쓰기 요청에 X-CT-Token 을 붙인다.
@@ -146,7 +165,9 @@
     </article>
   {% endif %}
 
-  {# 실행 중인 작업 패널 (SSE 진행 로그) — Plan 01-05 #}
+  {# 실행 중인 작업 패널 + SSE 진행 로그 (Plan 01-05 / 01-06).
+     `job` 은 라우트가 넣는 **도는 작업**이다. 탭을 닫았다 다시 열었을 때 이게
+     비어 있으면 패널이 안 뜨고, 스트림도 안 열려 성공기준 3 이 성립하지 않는다. #}
   {% include "_job_panel.html" %}
 
   {# 실행 전 미리보기 표 (dry-run 결과) — Plan 01-06 #}

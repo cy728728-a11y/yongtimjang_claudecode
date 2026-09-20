@@ -2,10 +2,11 @@
 # -*- coding: utf-8 -*-
 """작업(잡) 라우터 — `webapp/jobs.py` 를 얇게 감싼다.
 
-    POST /jobs/prep      새로 수집 (계정당 ~3분, 쓰기 가드를 탄다)      [쓰기 — 토큰 필요]
-    POST /jobs/run       판정 다시 (디스크만, 초 단위)                  [쓰기 — 토큰 필요]
-    GET  /jobs/{id}      작업 상태 (폴링용)                             [읽기 — 쿠키]
-    GET  /jobs           최근 작업 목록                                 [읽기 — 쿠키]
+    POST /jobs/prep        새로 수집 (계정당 ~3분, 쓰기 가드를 탄다)    [쓰기 — 토큰 필요]
+    POST /jobs/run         판정 다시 (디스크만, 초 단위)                [쓰기 — 토큰 필요]
+    GET  /jobs/{id}        작업 상태 조각 (2초 폴링용)                  [읽기 — 쿠키]
+    GET  /jobs/{id}/stream 진행 로그 SSE (전량 재생 + tail)             [읽기 — 쿠키]
+    GET  /jobs             최근 작업 목록                               [읽기 — 쿠키]
 
 **모든 작업 생성은 POST 다 — GET 으로 만들면 Origin 방어가 통째로 무력화된다.**
 교차 사이트 단순 GET(`<img src="http://127.0.0.1:.../jobs/bids/run">`)에는
@@ -23,8 +24,11 @@ v2 의 APScheduler 는 이 라우터를 거치지 않고 같은 함수를 직접
 **클라이언트가 작업 종류를 문자열로 넘기지 못한다.** 경로마다 kind 가 고정이고,
 임의 argv 를 태우는 `argv_override`(합성 잡)는 여기서 아예 닿지 않는다 (T-1-23).
 
-핸들러를 `async def` 가 아니라 `def` 로 선언한다 — SQLite 와 파일 IO 가 동기라
-async 로 두면 이벤트 루프를 막아 Plan 01-06 의 진행 로그 스트림이 같이 멈춘다.
+**핸들러는 `async def` 가 아니라 `def` 다 — 스트림 하나만 빼고.** SQLite 와 파일 IO 가
+동기라서 async 로 두면 이벤트 루프를 막고, 그러면 진행 로그 스트림이 같이 멈춘다(T-1-28).
+스트림만 async 인 이유는 그게 **오래 살아 있는 커넥션**이라 스레드풀 자리를 몇 분씩
+차지하면 안 되기 때문이다. 그 안에서도 sqlite 는 직접 만지지 않는다(`logtail` 이
+스레드로 밀어낸다).
 """
 import json
 from urllib.parse import parse_qsl
@@ -32,8 +36,9 @@ from urllib.parse import parse_qsl
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ValidationError
+from sse_starlette import EventSourceResponse
 
-from webapp import jobs, security
+from webapp import jobs, logtail, security
 from webapp.argv import Alias
 
 router = APIRouter()
@@ -98,19 +103,26 @@ def _투영(상태: dict) -> dict:
     return {k: 상태.get(k) for k in 공개필드}
 
 
-def _응답(request: Request, 상태: dict):
-    """htmx 요청이면 작업 패널 조각을, 아니면 JSON 을 돌려준다.
+def _응답(request: Request, 상태: dict, 전체: bool = True):
+    """htmx 요청이면 HTML 조각을, 아니면 JSON 을 돌려준다.
 
     같은 엔드포인트가 두 모양을 내는 이유: 화면은 HTML 조각을 그대로 갈아끼우면
     되고(JS 0줄), 스케줄러·`curl` 은 JSON 이 편하다. 판단 기준은 htmx 가 붙이는
     `HX-Request` 헤더 하나다.
+
+    **`전체` 가 조각의 크기를 가른다. 이게 SSE 와 폴링이 안 싸우게 하는 장치다.**
+    작업을 새로 만들 때(POST)는 패널 전체를 준다 — 그래야 새 작업의 스트림이 열린다.
+    2초 폴링(GET)에는 **상태 문단만** 준다: 폴링이 패널 전체를 갈아끼우면 그 안의
+    SSE 커넥션이 2초마다 끊기고 다시 붙어, 로그가 계속 처음부터 다시 그려지고
+    커넥션이 쌓인다(T-1-24). 폴링은 경과시간만 갱신하면 된다.
     """
     if not request.headers.get("hx-request"):
         return _투영(상태)
 
     from webapp.main import templates  # 지연 import — main 이 이 모듈을 먼저 부른다
 
-    return templates.TemplateResponse(request, "_job_panel.html", {"job": 상태})
+    조각 = "_job_panel.html" if 전체 else "_job_status.html"
+    return templates.TemplateResponse(request, 조각, {"job": 상태})
 
 
 def _작업만들기(request: Request, kind: str, req: JobReq):
@@ -171,4 +183,31 @@ def get_job(job_id: str, request: Request):
     상태 = jobs.job_status(job_id)
     if 상태 is None:
         raise HTTPException(status_code=404, detail="그런 작업이 없다")
-    return _응답(request, 상태)
+    return _응답(request, 상태, 전체=False)
+
+
+@router.get("/jobs/{job_id}/stream")
+async def get_job_stream(job_id: str, request: Request):
+    """진행 로그 SSE. 붙을 때마다 **처음부터** 흘리고 그 뒤를 tail 한다 (SC-03).
+
+    **이 파일에서 유일한 `async def` 라우트다.** 수 분씩 살아 있는 커넥션이라
+    스레드풀 자리를 차지하면 안 된다. 대신 이 안에서 sqlite·파일을 직접 만지지
+    않는다 — `logtail.sse_generator` 가 blocking 호출을 스레드로 밀어낸다(T-1-28).
+
+    **아무것도 쓰지 않는다.** `security_curl.sh` 의 V-SAFE-01d 가 GET 핸들러 본문을
+    훑어 이걸 기계로 집행한다. 여기에 작업 생성이 끼어들면 Origin 방어가 통째로
+    무너진다(T-1-01b) — 교차 사이트 단순 GET 에는 Origin 헤더가 없기 때문이다.
+
+    `ping=15` 는 keepalive, `send_timeout=30` 은 죽은 클라이언트를 30초 넘게
+    붙잡지 않기 위함이다. `Cache-Control: no-cache` 가 없으면 중간 캐시가 스트림을
+    통째로 삼킨다(로컬엔 중간 캐시가 없지만, 이 헤더는 SSE 의 관례다).
+    """
+    if not security.page_cookie_ok(request):
+        return PlainTextResponse("토큰이 필요하다", status_code=403)
+    if jobs.job_status(job_id) is None:
+        raise HTTPException(status_code=404, detail="그런 작업이 없다")
+
+    return EventSourceResponse(
+        logtail.sse_generator(job_id, request),
+        ping=15, send_timeout=30,
+        headers={"Cache-Control": "no-cache"})

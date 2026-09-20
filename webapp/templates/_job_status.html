@@ -1,0 +1,72 @@
+{# 작업 상태 문단 — **2초 폴링이 갈아끼우는 것은 이 조각뿐이다.**
+
+   왜 패널에서 떼어 냈는가: 진행 로그(SSE)는 패널 안에 살아 있는 커넥션이다.
+   폴링이 패널 전체를 outerHTML 로 교체하면 그 커넥션이 2초마다 끊기고 다시 붙어
+   ① 로그가 2초마다 처음부터 다시 그려지고 ② 죽은 커넥션이 쌓인다
+   (HTTP/1.1 은 호스트당 6개다 — T-1-24). 그래서 **폴링은 이 작은 조각만** 때리고,
+   패널 전체는 작업을 새로 만들 때(POST)만 교체된다.
+
+   폴링은 상태가 running 일 때만 건다. done/failed/orphaned 응답에는 hx-trigger 가
+   아예 없으므로 그 순간 멈춘다 — 끄는 코드를 따로 쓰지 않는다.
+
+   자동 이스케이프를 끄는 필터를 쓰지 마라. 여기 들어오는 값은 전부 서버가 만든
+   화이트리스트 필드(`webapp/routes/jobs.py` 의 `공개필드`)다 (T-1-17). #}
+
+{% set 작업이름 = {
+  "prep": "새로 수집",
+  "run": "판정 다시",
+  "bids_preview": "입찰가 미리보기",
+  "bids_commit": "입찰가 인상",
+  "revert_only": "이 작업분 되돌리기",
+  "revert_all": "이 회차 전체 되돌리기",
+  "synthetic": "합성 작업"
+} %}
+{% set 상태이름 = {
+  "running": "도는 중",
+  "done": "끝남",
+  "failed": "실패",
+  "orphaned": "결과 미상"
+} %}
+
+<div id="job-status"
+     {% if job.status == "running" %}
+     hx-get="/jobs/{{ job.id }}"
+     hx-trigger="every 2s"
+     hx-target="this"
+     hx-swap="outerHTML"
+     {% endif %}>
+
+  {# 경과시간을 크게 띄우는 것이 이 화면의 진행 표시다 (OQ-3 확정).
+     `bids --commit` 은 1,200건을 100초 동안 도는데 실패 줄 말고는 아무것도 안 찍는다.
+     CLI 에 진행률을 주입하면 stdout 파싱이 진실의 두 번째 원천이 되므로(D-02/D-03)
+     그렇게 하지 않고, 화면의 시계로 덮는다. #}
+  {% if job.elapsed_sec is not none %}
+    <p class="job-elapsed"><strong>{{ (job.elapsed_sec // 60) | int }}분 {{ (job.elapsed_sec % 60) | int }}초</strong>
+      <small>{% if job.status == "running" %}째 도는 중{% else %} 걸렸다{% endif %}</small></p>
+  {% endif %}
+
+  <p>
+    <strong>{{ 작업이름.get(job.kind, job.kind) }}</strong>
+    — {{ 상태이름.get(job.status, job.status) }}
+    {% if job.run_dir %} · {{ job.run_dir }} 회차{% endif %}
+    {% if job.target_count %} · 대상 {{ job.target_count }}건{% endif %}
+  </p>
+
+  {% if job.status == "running" %}
+    <p><small>
+      <strong>멈춘 게 아니다.</strong> 진행률은 안 나온다 — CLI 가 몇 번째인지 알려주지
+      않아서 있는 척하면 거짓말이 된다. 입찰가 인상은 초당 12건쯤 돈다.
+      브라우저를 닫아도 작업은 계속 돌고, 다시 열면 로그가 처음부터 이어서 보인다.
+    </small></p>
+  {% elif job.status == "failed" %}
+    <p class="stale">
+      <strong>실패했다 (종료코드 {{ job.exit_code }}).</strong>
+      아래 로그에서 사유를 봐라. 광고 설정이 바뀐 건 없다 — 실패한 항목은 건너뛴 것이다.
+    </p>
+  {% elif job.status == "orphaned" %}
+    <p class="stale">
+      <strong>결과를 모른다.</strong> 작업이 도는 중에 서버가 재시작됐다.
+      종료코드를 지어내지 않고 이렇게 남긴다 — 산출물 파일로 확인해라.
+    </p>
+  {% endif %}
+</div>

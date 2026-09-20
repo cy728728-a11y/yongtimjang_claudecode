@@ -5,6 +5,10 @@
     GET /                토큰(쿼리) → 쿠키 교환 후 보드 렌더                  [읽기]
     GET /?run_dir=<회차>  다른 회차로 갈아타기                                 [읽기]
 
+화면에는 보드 말고 **도는 작업 패널**도 실린다. 그 패널이 진행 로그 스트림을 여는
+유일한 자리라, 새로고침·재접속 때 여기서 작업을 실어 주지 않으면 성공기준 3
+("탭을 닫았다 열어도 로그를 처음부터 이어서 본다")이 화면에서 성립하지 않는다.
+
 **이 라우트는 GET 이지만 서버 상태를 바꾸지 않는다.** 쿠키를 심는 것은 *브라우저*
 상태를 바꾸는 것이고, 디스크·광고 API·잡 레지스트리에는 아무 일도 일어나지 않는다.
 그 구분이 중요한 이유: "GET 은 상태를 안 바꾼다" 가 `security.guard` 의 Origin 방어를
@@ -23,7 +27,7 @@ import secrets
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
 
-from webapp import board, paths, security
+from webapp import board, jobs, paths, security
 
 router = APIRouter()
 
@@ -87,6 +91,11 @@ def home(request: Request, t: str | None = None, run_dir: str | None = None):
 
     ctx = {
         "token": security.BOOT_TOKEN,
+        # 도는 작업. **탭을 닫았다 다시 열었을 때 패널이 살아나는 지점이다** (SC-03).
+        # 이게 없으면 새로고침한 순간 진행 로그가 사라지고, 사용자는 작업이
+        # 죽은 줄 안다 — 실제로는 자식이 세션 분리되어 잘 돌고 있는데.
+        # 읽기만 한다: 레지스트리가 없으면 만들지 않고 None 이다.
+        "job": jobs.active_job(),
         "run_dirs": 회차들,
         "run_dir": 선택,
         "freshness": None,

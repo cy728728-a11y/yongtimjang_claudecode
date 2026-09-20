@@ -16,6 +16,7 @@
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
 import uuid
@@ -392,19 +393,6 @@ def 마지막로그줄(원문: str) -> list[str]:
     return [줄 for 줄 in 로그[-1].split("\n") if 줄.strip()]
 
 
-def 잠깐붙기(화면, job_id: str, 초: float) -> str:
-    """스트림에 붙어 `초` 동안 받고 끊는다. 브라우저 탭을 닫는 것과 같은 일이다."""
-    받은 = b""
-    시작 = time.time()
-    with 화면.stream("GET", f"/jobs/{job_id}/stream") as r:
-        assert r.status_code == 200, r.status_code
-        for 덩어리 in r.iter_raw():
-            받은 += 덩어리
-            if time.time() - 시작 >= 초:
-                break
-    return 받은.decode("utf-8", "replace")
-
-
 @pytest.fixture
 def 화면(잡판, client):
     """보드에서 온 것처럼 쿠키까지 붙인 클라이언트 + tmp 잡 DB."""
@@ -413,7 +401,84 @@ def 화면(잡판, client):
     return client
 
 
-def test_재접속하면_처음부터_이어본다(화면, synthetic_job):
+@pytest.fixture
+def 실서버(잡판):
+    """**진짜 uvicorn 을 띄운다.** `TestClient` 로는 스트리밍을 검증할 수 없다.
+
+    실측 근거: `starlette/testclient.py` 의 전송 계층은 `portal.call(app, ...)` 로
+    ASGI 앱을 **끝까지 돌린 뒤** 본문을 `io.BytesIO` 에 모아 한 번에 돌려준다.
+    그래서 "0.8초 받고 끊는다" 를 흉내조차 못 내고, 서버 쪽 `is_disconnected()` 도
+    영원히 False 다. 이 파일의 다른 스트림 테스트(헤더·404·즉시 done)는 앱을 끝까지
+    돌려도 답이 같아서 TestClient 로 충분하지만, **재접속만은 진짜 소켓이 필요하다.**
+
+    레지스트리·로그 경로는 환경변수로 넘긴다 — 별도 프로세스라 monkeypatch 가
+    닿지 않고, 저장소 루트의 진짜 `webapp.db` 를 쓰면 테스트가 화면에 유령 작업을 남긴다.
+    """
+    import httpx
+
+    포트 = _빈포트()
+    토큰 = "ct-test-" + uuid.uuid4().hex   # 쿠키 헤더는 ASCII 만 받는다
+    env = {
+        **os.environ,
+        "CT_PORT": str(포트),
+        "CT_DEV_TOKEN": 토큰,
+        "CT_DB_PATH": str(잡판 / "jobs.db"),
+        "CT_JOB_LOG_DIR": str(잡판 / "logs"),
+        "PYTHONUNBUFFERED": "1",
+    }
+    서버 = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "webapp.main:app",
+         "--host", "127.0.0.1", "--port", str(포트), "--workers", "1",
+         "--log-level", "warning"],
+        cwd=str(Path(jobs.__file__).resolve().parent.parent),
+        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    주소 = f"http://127.0.0.1:{포트}"
+    try:
+        한계 = time.time() + 15
+        while time.time() < 한계:
+            try:
+                if httpx.get(f"{주소}/healthz", timeout=1).status_code == 200:
+                    break
+            except Exception:
+                time.sleep(0.1)
+        else:
+            pytest.fail("uvicorn 이 15초 안에 안 떴다")
+        yield 주소, 토큰
+    finally:
+        서버.terminate()
+        try:
+            서버.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            서버.kill()
+
+
+def _빈포트() -> int:
+    import socket
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    포트 = s.getsockname()[1]
+    s.close()
+    return 포트
+
+
+def 잠깐붙기(주소: str, 토큰: str, job_id: str, 초: float) -> str:
+    """스트림에 붙어 `초` 동안 받고 **끊는다.** 브라우저 탭을 닫는 것과 같은 일이다."""
+    import httpx
+
+    받은 = b""
+    시작 = time.time()
+    with httpx.stream("GET", f"{주소}/jobs/{job_id}/stream",
+                      headers={"Cookie": f"ct_session={토큰}"}, timeout=10) as r:
+        assert r.status_code == 200, r.status_code
+        for 덩어리 in r.iter_raw():
+            받은 += 덩어리
+            if time.time() - 시작 >= 초:
+                break
+    return 받은.decode("utf-8", "replace")
+
+
+def test_재접속하면_처음부터_이어본다(실서버, synthetic_job):
     """**SC-03.** 탭을 닫았다 다시 열면 로그가 처음부터 흐르고 끊긴 사이까지 이어진다.
 
     합성 잡 12줄 × 0.2초(2.4초)를 띄우고:
@@ -424,18 +489,23 @@ def test_재접속하면_처음부터_이어본다(화면, synthetic_job):
     판정 기준을 "줄이 더 많아졌다" 로 쓰지 않는다 — 그건 오프셋 이어받기 설계에서도
     통과한다. **첫 줄이 정확히 `[1/12] tick` 이고, 받은 줄이 1번부터 빠짐없이
     연속이며, 중복이 없다**는 것까지 본다 (01-04 의 교훈: "숫자가 움직인다"는 근거가 아니다).
+
+    잡은 이 테스트 프로세스가 만든다 — 합성 잡은 운영 라우트로 못 만든다(T-1-23).
+    서버는 같은 레지스트리 파일을 읽어 그 작업을 본다.
     """
+    주소, 토큰 = 실서버
     스펙 = synthetic_job(lines=12, delay=0.2)
     job_id = jobs.create_job("synthetic", argv_override=스펙["argv"])
 
-    앞 = 잠깐붙기(화면, job_id, 0.8)
+    앞 = 잠깐붙기(주소, 토큰, job_id, 0.8)
     앞줄 = 마지막로그줄(앞)
+    assert 앞줄, "1차 접속에서 아무것도 못 받았다"
     assert 앞줄[0] == "[1/12] tick"
     assert len(앞줄) < 12, f"1차 접속이 다 받아 버렸다 ({len(앞줄)}줄) — 측정이 무의미"
 
     time.sleep(0.8)                                # 탭이 닫혀 있는 동안
 
-    뒤 = 잠깐붙기(화면, job_id, 0.8)
+    뒤 = 잠깐붙기(주소, 토큰, job_id, 0.8)
     뒤줄 = 마지막로그줄(뒤)
 
     assert 뒤줄[0] == "[1/12] tick", "재접속했더니 첫 줄이 없다 (전량 재생이 아니다)"
@@ -547,3 +617,21 @@ def test_보드가_도는_작업을_들고_있다(잡판, synthetic_job):
     jobs._PROCS[job_id].kill()
     끝날때까지(job_id)
     assert jobs.active_job() is None, "끝난 작업이 계속 패널에 남는다"
+
+
+def test_새로고침하면_도는_작업_패널이_다시_뜬다(화면, tmp_run_dir, synthetic_job):
+    """**탭을 다시 여는 것 = `GET /` 이다.** 그 응답에 패널과 스트림 주소가 있어야 한다.
+
+    이게 비면 재접속 스트림이 아무리 완벽해도 화면에서는 성공기준 3 이 성립하지 않는다 —
+    열 스트림이 없으니까.
+    """
+    빈보드 = 화면.get("/").text
+    assert "/stream" not in 빈보드, "도는 작업이 없는데 패널이 떴다"
+
+    job_id = jobs.create_job("synthetic", argv_override=synthetic_job(lines=40, delay=0.2)["argv"])
+
+    본문 = 화면.get("/").text
+    assert '<section id="job-panel">' in 본문
+    assert f'/jobs/{job_id}/stream' in 본문
+    assert 본문.count("sse-connect") == 1, "스트림을 여럿 연다 (HTTP/1.1 6 커넥션 한계)"
+    assert 'id="job-log"' in 본문

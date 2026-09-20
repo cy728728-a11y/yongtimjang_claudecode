@@ -479,6 +479,29 @@ def job_status(job_id: str) -> dict | None:
     return _as_dict(row) if row else None
 
 
+def active_job() -> dict | None:
+    """지금 도는 작업 하나. 없으면 None.
+
+    **화면이 스트림을 하나만 열게 하는 장치다** (T-1-24). 페이지를 새로 그릴 때
+    "무엇을 보여줄까" 를 여기서 한 번에 정한다 — 목록에서 running 을 골라내는
+    판단이 템플릿·라우트 두 곳에 흩어지면 둘이 어긋난다.
+
+    끝난 작업은 돌려주지 않는다. 새로고침할 때마다 지난 작업 패널이 되살아나면
+    "아직 도는 중인가?" 로 읽힌다 — 이 화면에서 제일 비싼 오해다.
+
+    레지스트리가 아직 없으면 **만들지 않고** None 을 준다. 이 함수를 부르는 건
+    `GET /` 인데, 읽기 라우트가 파일을 만들기 시작하면 "GET 은 상태를 안 바꾼다"는
+    방어의 전제가 흐려진다(T-1-01b). 첫 작업을 누르는 순간 `create_job` 이 만든다.
+    """
+    if not db_path().is_file():
+        return None
+    try:
+        도는것 = [j for j in recent_jobs(50) if j.get("status") == "running"]
+    except sqlite3.Error:
+        return None
+    return 도는것[0] if 도는것 else None
+
+
 def recent_jobs(limit: int = 20) -> list[dict]:
     """최근 작업 목록(최신순). 같은 초에 만들어진 것끼리는 입력 순서의 역순이다."""
     cx = _conn()

@@ -136,13 +136,29 @@ def test_상태_JSON_은_화이트리스트다(화면):
 
 
 def test_htmx_요청에는_화면조각이_온다(화면):
-    """같은 엔드포인트가 htmx 에는 HTML, 그 외에는 JSON 을 준다."""
+    """같은 엔드포인트가 htmx 에는 HTML, 그 외에는 JSON 을 준다.
+
+    **폴링이 받는 조각은 패널 전체가 아니라 상태 문단이다** (Plan 01-06 에서 바뀌었다).
+    패널 전체를 2초마다 갈아끼우면 그 안의 SSE 커넥션이 2초마다 끊겼다 붙어
+    로그가 계속 처음부터 다시 그려진다 — 조각을 쪼갠 이유가 그거다.
+    """
     job_id = jobs.create_job("synthetic", argv_override=합성)
     조각 = 화면.get(f"/jobs/{job_id}", headers={"HX-Request": "true"}).text
 
-    assert '<section id="job-panel"' in 조각
+    assert '<div id="job-status"' in 조각
+    assert '<section id="job-panel"' not in 조각, "폴링이 패널 전체를 갈아끼운다 — SSE 가 끊긴다"
+    assert "sse-connect" not in 조각, "폴링 조각이 스트림을 다시 연다"
     assert f'hx-get="/jobs/{job_id}"' in 조각      # 도는 동안 2초 폴링
     assert 'hx-trigger="every 2s"' in 조각
+
+
+def test_작업을_만들면_패널_전체가_온다(화면, 엿듣기):
+    """POST 응답은 패널 전체다 — 그래야 **새 작업의** 스트림이 열린다."""
+    조각 = 화면.post("/jobs/prep", json={}, headers={"HX-Request": "true"}).text
+
+    assert '<section id="job-panel"' in 조각
+    assert '<div id="job-status"' in 조각
+    assert 조각.count("sse-connect") == 1
 
 
 def test_끝난_작업은_폴링을_멈춘다(화면):
