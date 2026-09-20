@@ -288,3 +288,78 @@ def test_상한_숫자가_settings_밖에_리터럴로_박혀있지_않다():
         본문 = f.read_text(encoding="utf-8", errors="ignore")
         for 숫자 in 금지:
             assert 숫자 not in 본문, f"{f} 에 {숫자} 가 리터럴로 박혀 있다 — settings 를 써라"
+
+
+# ── 8. 문자열 설정값 리터럴 가드 (ENG-08 / D-18) ─────────────────────────
+#
+# 기존 `test_상한_숫자가_settings_밖에_리터럴로_박혀있지_않다` 의 `금지` 집합에는
+# **아무것도 더하지 않는다.** `50`·`21` 같은 작은 정수를 넣으면 `width: 50` 처럼
+# 무관한 코드가 전부 걸려 오탐이 난다(PATTERNS §공유 2(b)). 문자열 값은 안전하므로
+# 아래처럼 **전용 가드**를 따로 둔다.
+
+def _런타임_파일들():
+    """`webapp/**` 의 런타임 소스만. 숫자 가드와 **같은 제외 규칙**을 쓴다.
+
+    `settings.py`(값이 사는 곳) · `tests`(픽스처를 단언하려면 값을 적어야 한다) ·
+    `vendor`(우리가 안 쓴 코드) 를 뺀다.
+    """
+    루트 = Path(paths.__file__).resolve().parent
+    for f in list(루트.rglob("*.py")) + list(루트.rglob("*.html")) + list(루트.rglob("*.js")):
+        if f.name == "settings.py" or "tests" in f.parts or "vendor" in f.parts:
+            continue
+        yield f
+
+
+def test_불사자_기대닉네임이_리터럴로_박혀있지_않다():
+    """ENG-08: 기대 계정 닉네임은 `workspace.toml [webapp]` 에만 산다.
+
+    **값이 비어 있으면 여기서 KeyError 로 터지는 게 맞다.** 그게 T-1-12 의 정신이다 —
+    가드가 지켜야 할 값이 없는데 테스트가 조용히 통과하면, 그 가드는 있는 척만 하는 것이다.
+    `required=True` 가 그 사실을 기동 시점에도 똑같이 드러낸다.
+    """
+    닉 = settings.cfg("expected_bulsaja_nick", required=True)
+    for f in _런타임_파일들():
+        본문 = f.read_text(encoding="utf-8", errors="ignore")
+        assert 닉 not in 본문, f"{f} 에 기대 닉네임이 리터럴로 박혀 있다 — settings.cfg 를 써라"
+
+
+def test_제외그룹이_리터럴로_박혀있지_않다():
+    """D-18: 인덱스에서 뺄 마켓번호는 설정값이다.
+
+    그룹 번호를 코드나 주석에 박으면, 제외 목록을 고쳐도 동작이 안 바뀐다.
+    기본값이 빈 리스트라 설정이 비면 이 테스트는 그냥 통과한다 — 그건 "제외 없음" 이
+    정상 상태이기 때문이다 (빈 리스트가 전량 제외로 읽히면 안 된다).
+    """
+    제외 = settings.cfg("index_excluded_groups", settings.DEFAULTS["index_excluded_groups"])
+    assert isinstance(제외, list), f"index_excluded_groups 는 리스트여야 한다: {제외!r}"
+    for f in _런타임_파일들():
+        본문 = f.read_text(encoding="utf-8", errors="ignore")
+        for 번호 in 제외:
+            assert str(번호) not in 본문, \
+                f"{f} 에 제외 마켓번호 '{번호}' 가 리터럴로 박혀 있다 (D-18)"
+
+
+def test_새_설정키가_workspace_toml_로_덮인다(tmp_path, monkeypatch):
+    """Phase 3 키도 `[webapp]` 로 덮인다 — 그리고 덮지 않은 키는 DEFAULTS 가 산다.
+
+    `test_계정별_상한은_workspace_toml_로_덮인다` 와 같은 모양이다. 새 키를 모듈 상수로
+    올리지 않았으므로 `reload()` 는 캐시만 비우고, 값은 `cfg()` 로 읽는다.
+    """
+    (tmp_path / "workspace.toml").write_text(
+        '[webapp]\n'
+        'mcp_min_interval = 1.5\n'
+        'index_excluded_groups = ["zz9-9"]\n',
+        encoding="utf-8")
+    monkeypatch.setattr(paths, "repo_root", lambda: tmp_path)
+    settings.reload()
+
+    assert settings.cfg("mcp_min_interval") == 1.5
+    assert settings.cfg("index_excluded_groups") == ["zz9-9"]
+    # 덮지 않은 키는 DEFAULTS 가 그대로 산다 (얕은 병합)
+    assert settings.cfg("mcp_retry_after") == settings.DEFAULTS["mcp_retry_after"]
+    assert settings.cfg("mcp_batch_size") == settings.DEFAULTS["mcp_batch_size"]
+    assert settings.cfg("done_tags") == settings.DEFAULTS["done_tags"]
+    # 기대 닉네임은 DEFAULTS 가 빈 문자열이므로 여기선 required 가 터져야 한다 (ENG-08)
+    assert settings.DEFAULTS["expected_bulsaja_nick"] == ""
+    with pytest.raises(KeyError):
+        settings.cfg("expected_bulsaja_nick", required=True)

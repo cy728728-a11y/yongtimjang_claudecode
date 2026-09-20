@@ -46,6 +46,7 @@ workspace.toml
 # 웹앱(셀러 관제탑) — 로컬 전용 산출물
 .venv-web/
 webapp.db*
+webapp-profile.json
 webapp-logs/
 # 이 프로젝트는 npm 을 쓰지 않는다. 정적파일은 webapp/static/vendor/ 에 curl 로 박아 둔다.
 package.json

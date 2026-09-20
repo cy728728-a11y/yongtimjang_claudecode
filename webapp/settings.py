@@ -22,6 +22,23 @@ DEFAULTS = {
     "poll_interval": 0.4,          # 로그 tail 폴링 간격(초)
     "job_log_dir": "webapp-logs",  # 잡 로그 루트 (.gitignore 대상)
     "db_path": "webapp.db",        # 잡 레지스트리 (.gitignore 대상)
+
+    # ── Phase 3 (조인 · 상세 상태) 에서 더한 키 ───────────────────────────
+    # **이 8키는 일부러 모듈 상수로 올리지 않는다.** 상수를 늘리면 아래 reload() 의
+    # `global` 목록을 같이 고쳐야 하는데, 그걸 빠뜨리면 테스트가 workspace.toml 을
+    # 갈아끼워도 값이 안 따라온다(있는 척만 하는 설정). 전부 아래 형태로만 읽어라:
+    #     settings.cfg("키", settings.DEFAULTS["키"])
+    "expected_bulsaja_nick": "",   # ENG-08 기대 불사자 계정 닉네임. **빈 문자열이 정답이다** —
+                                   # cfg(..., required=True) 가 ""을 "비었다"로 보고 KeyError 를
+                                   # 던지는 게 가드의 작동 원리다. 실값은 workspace.toml [webapp] 에만
+    "profile_path": "webapp-profile.json",  # 계정 확인 산출물(저장소 루트 상대). .gitignore 대상
+    "profile_max_age_min": 120,    # 이보다 오래된 계정 확인은 안 믿는다 (ENG-08 사전점검)
+    "mcp_min_interval": 0.26,      # 불사자 MCP 호출 최소 간격(초). RateLimit-Policy 240;w=60 실측 = 초당 4회
+    "mcp_retry_after": 21,         # 429 뒤 대기(초). 서버가 Retry-After: 20 을 준다 — 1초 여유
+    "mcp_batch_size": 50,          # find_by_code 배치 상한 · 목록 페이지 크기 (실측 상한)
+    "index_excluded_groups": [],   # D-18 인덱스에서 뺄 **마켓번호 문자열** 리스트.
+                                   # **빈 리스트 = 제외 없음** (전량 제외가 아니다). 실값은 workspace.toml 에만
+    "done_tags": ["구매_가공완료"],  # D-08 기작업 태그. 늘어날 수 있으므로 리스트로 둔다
 }
 
 _cache = None
