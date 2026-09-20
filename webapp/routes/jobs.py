@@ -2,11 +2,18 @@
 # -*- coding: utf-8 -*-
 """작업(잡) 라우터 — `webapp/jobs.py` 를 얇게 감싼다.
 
-    POST /jobs/prep        새로 수집 (계정당 ~3분, 쓰기 가드를 탄다)    [쓰기 — 토큰 필요]
-    POST /jobs/run         판정 다시 (디스크만, 초 단위)                [쓰기 — 토큰 필요]
-    GET  /jobs/{id}        작업 상태 조각 (2초 폴링용)                  [읽기 — 쿠키]
-    GET  /jobs/{id}/stream 진행 로그 SSE (전량 재생 + tail)             [읽기 — 쿠키]
-    GET  /jobs             최근 작업 목록                               [읽기 — 쿠키]
+    POST /jobs/prep         새로 수집 (계정당 ~3분, 쓰기 가드를 탄다)   [쓰기 — 토큰 필요]
+    POST /jobs/run          판정 다시 (디스크만, 초 단위)               [쓰기 — 토큰 필요]
+    POST /jobs/bids/preview 입찰가 인상 미리보기 (dry-run, 0.066초)     [쓰기 — 토큰 필요]
+    GET  /jobs/{id}         작업 상태 조각 (2초 폴링용)                 [읽기 — 쿠키]
+    GET  /jobs/{id}/panel   작업 패널 조각 (SSE 배선 포함)              [읽기 — 쿠키]
+    GET  /jobs/{id}/result  미리보기 표 조각 / JSON                     [읽기 — 쿠키]
+    GET  /jobs/{id}/stream  진행 로그 SSE (전량 재생 + tail)            [읽기 — 쿠키]
+    GET  /jobs              최근 작업 목록                              [읽기 — 쿠키]
+
+**미리보기 라우트와 실행 라우트를 물리적으로 갈라 둔다** (T-1-06). 미리보기 경로에는
+실행 플래그를 넘길 인자 자체가 없다 — 한 라우트가 플래그 하나로 갈리는 설계면,
+그 플래그를 채우는 경로가 언젠가 생긴다. 실행은 Plan 01-08 의 **다른 라우트**다.
 
 **모든 작업 생성은 POST 다 — GET 으로 만들면 Origin 방어가 통째로 무력화된다.**
 교차 사이트 단순 GET(`<img src="http://127.0.0.1:.../jobs/bids/run">`)에는
@@ -31,14 +38,16 @@ v2 의 APScheduler 는 이 라우터를 거치지 않고 같은 함수를 직접
 스레드로 밀어낸다).
 """
 import json
+from pathlib import Path
+from typing import Annotated
 from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, StringConstraints, ValidationError, field_validator
 from sse_starlette import EventSourceResponse
 
-from webapp import jobs, logtail, security
+from webapp import board, flow, jobs, logtail, paths, security, settings
 from webapp.argv import Alias
 
 router = APIRouter()
@@ -97,6 +106,50 @@ async def 요청_풀기(request: Request) -> JobReq:
         # 트레이스백·모델 내부 구조를 화면에 싣지 않는다 (ASVS V7). 건수만 알린다.
         raise HTTPException(status_code=400,
                             detail=f"요청 값이 잘못됐다 ({len(e.errors())}건)")
+
+
+# adId 의 모양. `nad-` 로 시작하는 영숫자·`_`·`-` 만 (ASVS V5 / T-1-31).
+# 길이 상한을 함께 둔다 — 패턴만 있으면 1MB 짜리 문자열이 그대로 통과한다.
+# adId 는 **argv 에 직접 들어가지 않고 파일로** 건너간다(`_write_targets`).
+# argv 길이 폭발과 `ps` 노출을 동시에 막는 구조다.
+AdId = Annotated[str, StringConstraints(pattern=r"^nad-[A-Za-z0-9_-]{1,64}$")]
+
+
+class BidsPreviewReq(BaseModel):
+    """미리보기 요청. **경로도, 작업 종류도, 실행 플래그도 받지 않는다.**
+
+    `run_dir` 검증은 `jobs.create_job` 안의 화이트리스트가 본다(입구가 늘어나도
+    한 곳에서 막히게). 여기서는 모양만 본다.
+    """
+
+    run_dir: str
+    ad_ids: list[AdId] = []
+
+    @field_validator("ad_ids")
+    @classmethod
+    def _개수상한(cls, v):
+        """리스트 길이 상한. **설정에서 읽는다** — 상수로 굳히면 설정을 고쳐도 안 따라온다.
+
+        계정별 상한(D-08)의 계정 수만큼 여유를 둔다. 진짜 거부는 `flow.check_limits`
+        가 계정별로 하고, 이건 그 앞단의 거친 방어선이다(본문 파싱 비용 제한).
+        """
+        한계 = settings.PER_ACCOUNT_LIMIT * 8
+        if len(v) > 한계:
+            raise ValueError(f"대상이 너무 많다 ({len(v)}건 > {한계}건)")
+        return v
+
+
+def _판정읽기(run_dir_name: str) -> dict:
+    """회차의 판정 결과. **회차 이름은 화이트리스트를 통과한 것만** 경로가 된다.
+
+    읽기 실패를 빈 dict 로 삼키지 않는다 — 그러면 "이 회차엔 대상이 없다" 가 되어
+    사용자가 고른 것이 조용히 0건으로 바뀐다.
+    """
+    p = paths.run_dir_path(run_dir_name) / "result.json"
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise ValueError(f"판정 결과를 못 읽었다 — 먼저 판정부터 해라: {type(e).__name__}")
 
 
 def _투영(상태: dict) -> dict:
@@ -158,6 +211,44 @@ def post_run(request: Request, req: JobReq = Depends(요청_풀기)):
     return _작업만들기(request, "run", req)
 
 
+@router.post("/jobs/bids/preview")
+def post_bids_preview(request: Request, req: BidsPreviewReq):
+    """입찰가 인상 **미리보기**. dry-run 이라 광고 API 를 한 번도 안 부른다.
+
+    `--commit` 을 넘길 인자가 이 경로에 **없다** — 실행은 Plan 01-08 의 다른
+    라우트다(T-1-06 의 구조적 방어). 여기서 하는 일은 셋뿐이다:
+
+      ① 회차의 판정 결과를 읽어 **대상이 정말 규칙① 소재인지 다시 확인** (T-1-30)
+      ② 계정별 상한 검사 (D-08)
+      ③ `jobs.create_job` 호출 — 대상 파일 쓰기·argv 조립·가드는 전부 거기 안에 있다
+
+    브라우저 선택 상태는 신뢰 경계 밖이다. ①이 없으면 화면을 고친 사람이 ②③ 소재나
+    남의 계정 소재를 섞어 보낼 수 있고, CLI 는 그걸 조용히 버린다(화면은 "N건 처리"
+    라고 말하는데 실제로는 M건인 상태).
+    """
+    try:
+        rows = board.fold_products(_판정읽기(req.run_dir))
+        계정별 = flow.collect_targets(rows, req.ad_ids)
+        flow.check_limits(계정별)
+        대상 = [adId for ids in 계정별.values() for adId in ids]
+        job_id = jobs.create_job("bids_preview", run_dir=req.run_dir,
+                                 accounts=sorted(계정별), only_ads=대상)
+    except jobs.BusyError as e:
+        raise HTTPException(status_code=409,
+                            detail=f"이미 도는 작업이 있다 — 끝나고 다시 눌러라 ({e})")
+    except flow.LimitError as e:
+        # 400 이고 사유를 그대로 싣는다. 숫자를 숨기면 사용자가 "왜 거부됐지" 를
+        # 코드에서 찾아야 한다 — 상한은 설정에서 바꿀 수 있는 값이다(D-08).
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # 화면은 이 id 로 작업 패널과 미리보기 표를 갈아끼운다.
+    return {"job_id": job_id}
+
+
 # ── 여기서부터 읽기 전용 ─────────────────────────────────────────────────────
 # 아래 GET 들은 작업을 **만들지 않는다.** 상태를 읽어 화면에 옮길 뿐이다.
 # 이 파일에서 GET 핸들러를 맨 아래 모아 두는 이유는 V-SAFE-01d 스캐너가
@@ -184,6 +275,60 @@ def get_job(job_id: str, request: Request):
     if 상태 is None:
         raise HTTPException(status_code=404, detail="그런 작업이 없다")
     return _응답(request, 상태, 전체=False)
+
+
+@router.get("/jobs/{job_id}/panel")
+def get_job_panel(job_id: str, request: Request):
+    """작업 패널 조각(진행 로그 배선 포함). 화면이 새 작업을 띄울 때 갈아끼운다.
+
+    **아무것도 만들지 않는다.** 이미 있는 작업의 상태를 읽어 조각으로 그릴 뿐이다.
+    `fetch` 로 접수한 작업은 htmx 응답 조각을 못 받으므로(POST 는 JSON 을 준다)
+    화면이 이 창으로 패널을 가져간다.
+    """
+    if not security.page_cookie_ok(request):
+        return PlainTextResponse("토큰이 필요하다", status_code=403)
+    상태 = jobs.job_status(job_id)
+    if 상태 is None:
+        raise HTTPException(status_code=404, detail="그런 작업이 없다")
+    return _응답(request, 상태, 전체=True)
+
+
+@router.get("/jobs/{job_id}/result")
+def get_job_result(job_id: str, request: Request):
+    """미리보기 산출물 → 소재 단위 표 (BID-03 / D-05). **읽기 전용이다.**
+
+    값은 CLI 산출물에서 읽어 **그대로** 표시한다. 웹앱이 입찰가를 다시 계산하면
+    진실이 둘이 되고, ①행의 92%가 그룹입찰이라 거의 전량이 틀린다(T-1-07).
+
+    작업이 아직 도는 중이면 표 대신 "도는 중" 을 준다 — 없는 파일을 읽어
+    "0건" 으로 보여주면 사용자가 그걸 결과로 읽는다.
+    """
+    if not security.page_cookie_ok(request):
+        return PlainTextResponse("토큰이 필요하다", status_code=403)
+    상태 = jobs.job_status(job_id)
+    if 상태 is None:
+        raise HTTPException(status_code=404, detail="그런 작업이 없다")
+
+    경로 = 상태.get("result_path")
+    미리보기 = (flow.read_preview(Path(경로)) if 경로 else
+                {"accounts": {}, "blind": [], "error": "이 작업에는 산출물이 없다"})
+
+    ctx = {
+        "job": _투영(상태),
+        "rows": flow.preview_rows(미리보기),
+        "total": flow.total_rows(미리보기),
+        "counts": flow.summarize_counts(미리보기),
+        "raise_total": flow.raise_total(미리보기),
+        "blind": 미리보기.get("blind") or [],
+        "error": 미리보기.get("error"),
+        "limit": flow.PREVIEW_ROW_LIMIT,
+    }
+    if not request.headers.get("hx-request"):
+        return ctx
+
+    from webapp.main import templates  # 지연 import — main 이 이 모듈을 먼저 부른다
+
+    return templates.TemplateResponse(request, "_preview_table.html", ctx)
 
 
 @router.get("/jobs/{job_id}/stream")

@@ -1,13 +1,89 @@
-<!-- 실행 전 미리보기 표 (dry-run) — Plan 01-06 이 채운다.
+{# 실행 전 미리보기 표 (dry-run 산출물 투영) — Plan 01-07.
 
-     여기에 들어올 것:
-       · 현재가 → 인상 후 가격, 선택 건수, 예상 인상액 합계 (BID-03 / BOARD-04)
-       · 값은 CLI 의 --preview-out 산출물을 **그대로** 표시한다.
-         웹앱이 입찰가를 다시 계산하면 진실이 둘이 된다 (BID-02)
-       · 미리보기를 거치지 않으면 실행 버튼이 열리지 않는다 (FLOW-01, dry-run 선행)
+   **표 줄은 소재(adId) 다** (D-05). 보드 줄은 상품이고 여기는 소재다 —
+   실제로 가격이 바뀌는 단위가 소재라, 화면과 실행이 1:1 로 맞아야 사람이
+   무엇이 바뀌는지 셀 수 있다.
 
-     지금은 자리만 있다. -->
-<section id="preview" hidden>
-  <h2>미리보기</h2>
-  <div id="preview-body"></div>
-</section>
+   **값은 CLI 산출물 그대로다.** `from`/`to`/`useGroupBid` 를 여기서 계산하지
+   않는다 — ①행의 92%가 그룹입찰이라 재계산하면 올리려다 내린다(T-1-07 / BID-02).
+   잠자던 bidAmt 50 vs 실제 적용 70 이 그 차이다.
+
+   **집계 줄은 인상이 0건이어도 띄운다** (Pitfall 6 / T-1-32). 같은 날 두 번째
+   미리보기가 전부 `최근인상` 이 되는 건 쿨다운 6일이 정상 작동하는 것이다.
+   빈 표만 보이면 사람은 고장으로 읽고 다시 누른다.
+
+   자동 이스케이프에 기댄다 — 상품명에 중국어 원문·특수문자가 섞여 들어온다(T-1-17).
+   `| safe` 를 쓰지 마라. #}
+
+{% if error %}
+  <p class="stale"><strong>미리보기를 못 읽었다 — {{ error }}</strong><br>
+    산출물이 없거나 깨졌다. 빈 표를 결과로 읽지 않게 표를 그리지 않는다.</p>
+
+{% elif job.status == "running" %}
+  <p>미리보기를 만드는 중이다… 위 진행 로그를 봐라.</p>
+
+{% else %}
+  {# 집계 줄 — 항상 먼저. 사용자가 표를 훑기 전에 규모를 읽는다. #}
+  <p>
+    <strong>대상 {{ total }}건</strong>
+    {% if counts %}
+      → {% for action, n in counts.items() %}{{ action }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}
+    {% else %}
+      — 판정이 하나도 없다
+    {% endif %}
+  </p>
+  <p>예상 인상액 합계 <strong>+{{ "{:,}".format(raise_total) }}원</strong>
+    <small>(입찰가는 크레딧이 0 이라 비용 대신 인상액을 센다 · 광고비는 실제 클릭에서 나간다)</small></p>
+
+  {% if counts and not counts.get("인상") %}
+    <p class="stale">오늘 이미 올린 소재다 — 쿨다운 6일이 지나야 다시 오른다. 고장 아니다.</p>
+  {% endif %}
+
+  {% if blind %}
+    {# `run_bids` 가 소재 스냅샷을 못 읽으면 `{}` 를 돌려준다. 그건 "대상 0건" 이
+       아니라 "측정조차 못 했다" 다 — 둘을 같은 화면으로 보여주지 않는다(T-1-33). #}
+    <p class="stale"><strong>소재 스냅샷을 못 읽은 계정이 있다:
+      {{ blind | join(", ") }}</strong><br>
+      이 계정들은 대상이 0건인 게 아니라 <strong>측정이 안 됐다</strong>. 새로 수집부터 해라.</p>
+  {% endif %}
+
+  {% if total == 0 %}
+    <p>고른 상품에 규칙① 소재가 없다 — ②③⑤ 소재는 입찰가 인상 대상이 아니다(D-06).</p>
+  {% else %}
+    {% if total > rows | length %}
+      {# 잘렸으면 **반드시 말한다** — `report_md._count_label` 관례. #}
+      <p><small>{{ "{:,}".format(total) }}건 중 상위 {{ rows | length }}건만 그린다
+        (판정 순서 · 인상이 위). 전체는
+        <a href="/jobs/{{ job.id }}/result">JSON</a> 으로 받아라.</small></p>
+    {% endif %}
+    <div style="max-height: 24rem; overflow: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>계정</th><th>상품명</th><th>소재ID</th><th>판정</th>
+            <th>현재가</th><th></th><th>인상 후</th><th>그룹입찰따름</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.acct }}</td>
+              <td title="{{ r.title }}">{{ r.title[:40] }}</td>
+              <td><small>{{ r.adId }}</small></td>
+              <td>{{ r.action }}</td>
+              <td style="text-align:right">{% if r["from"] is not none %}{{ r["from"] }}{% endif %}</td>
+              <td>→</td>
+              <td style="text-align:right">{% if r.to is not none %}{{ r.to }}{% endif %}</td>
+              {# **bool 을 먼저 분기한다.** 숫자 서식에 태우면 1/0 이 되어 사람이 못 읽는다
+                 (`report_md.py:17-40` 의 함정). None 은 빈칸 — 예/아니오 로 지어내지 않는다. #}
+              <td>{% if r.useGroupBid is true %}예{% elif r.useGroupBid is false %}아니오{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  <p><small>여기까지는 <strong>미리보기</strong>다 — 광고 입찰가는 아직 하나도 안 바뀌었다.
+    실제로 올리는 버튼은 다음 플랜에서 붙는다.</small></p>
+{% endif %}

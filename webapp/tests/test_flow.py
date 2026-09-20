@@ -100,7 +100,7 @@ def test_대상이_0건이어도_전량으로_번지지_않는다(잡판, tmp_ru
 
     `--only-ads` 가 argv 에서 빠지면 CLI 는 회차 전량을 돈다. 즉 "아무것도 안 골랐다"
     가 조용히 "2,242건 전부" 가 된다. dry-run 이라 돈은 안 나가지만, 같은 경로를
-    Plan 01-08 이 `--commit` 으로 재사용한다 — 여기서 못박아 둔다.
+    Plan 01-08 이 실행 플래그를 붙여 재사용한다 — 여기서 못박아 둔다.
     """
     job_id = jobs.create_job("bids_preview", run_dir=tmp_run_dir.name, only_ads=[])
     상태 = jobs.job_status(job_id)

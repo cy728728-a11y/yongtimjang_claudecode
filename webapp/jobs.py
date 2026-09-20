@@ -378,8 +378,13 @@ def create_job(kind: str, *, run_dir: str | None = None,
 
         # ③ 대상 목록 → 파일. **경로는 웹앱이 만든다** — 사용자 입력에서 경로를 받지
         #    않는다(ASVS V12 / T-1-11).
+        #    **`is not None` 이다 — 빈 목록도 파일로 떨군다.** `if only_ads:` 로 두면
+        #    "아무것도 안 골랐다" 가 argv 에서 `--only-ads` 자체를 없애고, CLI 는
+        #    그걸 "전량" 으로 읽는다(`_load_only_ads` 가 None 이면 전량이다).
+        #    0건이 조용히 2,242건이 되는 길이라, 대상 파일 없이 입찰가 명령을
+        #    만들지 않는다 (T-1-05 와 같은 종류의 사고).
         targets_path = None
-        if only_ads:
+        if only_ads is not None:
             if not run_dir:
                 raise ValueError("대상 목록을 쓰려면 회차가 필요하다")
             targets_path = _write_targets(job_id, run_dir, list(only_ads))
@@ -407,7 +412,7 @@ def create_job(kind: str, *, run_dir: str | None = None,
              str(targets_path) if targets_path else None,
              str(result_path) if result_path else None,
              parent_job_id,
-             len(only_ads) if only_ads else None,
+             len(only_ads) if only_ads is not None else None,
              _now()))
         cx.commit()
     finally:
