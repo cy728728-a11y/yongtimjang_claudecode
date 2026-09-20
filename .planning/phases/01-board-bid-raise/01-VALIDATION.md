@@ -16,6 +16,13 @@ updated: 2026-09-20
 > **2026-09-20 실행(01-06):** 행 1개 추가(✚SSE-CDP). `보안-curl` 이 8종 → **9종**이 됐다
 > (V-SAFE-02c 를 c1/c2 로 쪼개 조였다). Manual-Only 의 SC-03 행은 **자동화됐다** —
 > 헤드리스 크롬으로 탭을 진짜 닫았다 여는 `sse_cdp.sh` 가 육안 확인보다 정확하다.
+> **2026-09-20 실행(01-07):** 행 2개 추가(✚미리보기-CDP · ✚OQ7-계정수). **BOARD-03 · FLOW-04 · BID-03 이
+> 수동에서 자동으로 옮겨졌다** — `webapp/tests/preview_cdp.sh` 가 헤드리스 크롬에서 선택 UI 를 실제로
+> 조작하고 미리보기를 실제로 접수한다(31종). 육안으로는 **절대** 못 잡는 게 있었기 때문이다:
+> 헤더 체크박스에 `rowRange` 를 안 주면 Tabulator 가 필터를 무시하고 전체 행을 고르는데,
+> 화면에는 걸러진 행만 보인다(음성 대조군 실측: 화면 89줄 · 실제 선택 2,637줄 · 대상 9건 → 2,242건).
+> 같은 하네스가 요약 줄의 **한 스텝 랙**도 잡았다(01-04 건수 배지와 같은 원인).
+>
 > **2026-09-20 재검(plan-checker 반영):** `Automated Command` 를 **파일 단위**로 통일하고 노드 ID 는 `(핵심 노드: …)` 로 병기했다 — 태스크의 `<verify>` 가 실제로 파일 전체를 돌리기 때문이다(주장과 실행의 불일치 제거).
 > BID-01 · BOARD-04 는 대상 테스트가 `test_board.py` → **`test_flow.py`(01-07 Task 2)** 로 옮겨졌다 — 그 테스트들이 부르는 `webapp/flow.py` 가 Task 2 에서 처음 생겨, Task 1 에 두면 collect 단계에서 깨진다.
 
@@ -38,7 +45,7 @@ updated: 2026-09-20
 | **Config file** | CLI: 없음(파일 직접 실행) · 웹앱: `webapp/pytest.ini` — **Plan 01-01 Task 1 이 만든다** |
 | **Quick run command** | `.venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_bids.py` |
 | **Full suite command** | `for t in nvad reports ads_rules ledger bids prune; do .venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_$t.py \|\| exit 1; done && .venv-web/bin/pytest webapp/tests -q` |
-| **Estimated runtime** | CLI 100 tests ~0.02초 · 웹앱 전체 **~10초** (합성 잡 + 진짜 uvicorn 1회 포함, 01-06 실측 10.2초) · `sse_cdp.sh` ~35초 |
+| **Estimated runtime** | CLI 100 tests ~0.02초 · 웹앱 전체 **~11초** (01-07 실측, 130 tests) · `sse_cdp.sh` ~35초 · `board_cdp.sh` ~20초 · `preview_cdp.sh` ~60초(실제 미리보기 접수 포함) |
 | **Baseline (2026-09-19 실측)** | CLI **100 tests, 6 파일 전부 exit=0** (7+7+21+21+28+16) |
 
 ---
@@ -86,14 +93,16 @@ updated: 2026-09-20
 | SC-03 | 01-06 | 4 | 탭 닫았다 열어도 로그를 처음부터 이어본다 | T-1-26, T-1-27 | 재연결 헤더 미의존 · 중복 미표시 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_재접속하면_처음부터_이어본다` — **진짜 uvicorn 을 띄운다.** TestClient 는 ASGI 앱을 끝까지 돌린 뒤 본문을 통째로 주므로 "0.8초 받고 끊는다"를 흉내조차 못 한다) | ✅ 존재 | ✅ green |
 | ✚SSE-CDP | 01-06 | 4 | 브라우저에서 **탭을 진짜로 닫았다 다시 연다** — 로그가 1번 줄부터 다시 흐르고 누락·중복 0, EventSource 는 1개, done 이면 닫힌다 | T-1-24, T-1-26, T-1-27 | 커넥션이 쌓이지 않는다 · 로그 중복 표시 없음 | integration | `bash webapp/tests/sse_cdp.sh` (임시 포트·임시 레지스트리·합성 잡 — 광고 API 0) | ✅ 존재 | ✅ green (12/12) |
 | ✚로그tail-01 | 01-06 | 4 | 오프셋 읽기가 멀티바이트 절단·파일 부재를 버틴다 | T-1-03d, T-1-17b | 스크러버 + escape 통과 | unit | `.venv-web/bin/pytest webapp/tests/test_logtail.py -x -q` | ✅ 존재 | ✅ green (14/14) |
-| FLOW-02 | 01-07 | 5 | 실행이 미리보기와 **같은 targets 파일**을 지목 | T-1-06 | 화면 상태에서 대상을 다시 만들지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_targets_파일이_하나다`) | ❌ W0 | ⬜ pending |
-| BID-01 | 01-07 | 5 | ①만 대상으로 잡힌다 (②③ 소재 제외) | T-1-30 | 대상 규칙 오염 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_대상은_규칙1_소재만`) — **01-07 Task 2**. `flow.collect_rule1_ads` 가 태어나는 태스크에 테스트가 같이 있다 | ❌ W0 | ⬜ pending |
-| BID-02 | 01-07 | 5 | 그룹입찰 행의 `from` 이 `groupBid` 다 (웹앱은 **계산하지 않는다**) | T-1-07 | 진실이 둘이 되지 않는다 | unit | **기존** `.venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_bids.py` + `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_웹앱은_입찰가를_계산하지_않는다`) | ✅ 존재 / ❌ W0 | ⬜ pending |
-| BID-03 | 01-07 | 5 | 미리보기가 현재가 → 인상 후 가격을 보여준다 | T-1-07 | 산출물 값 그대로 표시 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_미리보기_표`) | ❌ W0 | ⬜ pending |
-| BOARD-04 | 01-07 | 5 | 선택 건수·예상 인상액 합계가 맞는다 | T-1-32 | 0건이어도 집계를 보여준다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_예상_인상액_합계`) — **01-07 Task 2**. `flow.raise_total` 이 태어나는 태스크에 테스트가 같이 있다 | ❌ W0 | ⬜ pending |
-| ✚상한-01 | 01-07 | 5 | 계정별 1,500건 상한을 넘으면 거부된다 (D-08) | T-1-29 | 의도치 않은 대량 쓰기 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_계정별_상한을_넘으면_거부한다`) | ❌ W0 | ⬜ pending |
-| BOARD-03 | 01-07 | 5 | 보이는 선택 vs 필터 전체가 다른 수를 준다 | T-1-29 | 대량 선택을 한 번 더 확인 | manual | 브라우저 확인 (Tabulator API 는 JS) — Plan 01-07 Task 3 의 3번 단계 | — | ⬜ pending |
-| FLOW-04 | 01-07 | 5 | 필터 전체 선택은 별도 배너로 한 번 더 확인 (건수 타이핑 없음) | T-1-29 | 되돌릴 수 있는 작업은 타이핑을 받지 않는다 | manual | 브라우저 확인 — Plan 01-07 Task 3 의 4·5번 단계 | — | ⬜ pending |
+| FLOW-02 | 01-07 | 5 | 실행이 미리보기와 **같은 targets 파일**을 지목 | T-1-06 | 화면 상태에서 대상을 다시 만들지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_targets_파일이_하나다` · `::test_대상이_0건이어도_전량으로_번지지_않는다`) | ✅ 존재 | ✅ green |
+| BID-01 | 01-07 | 5 | ①만 대상으로 잡힌다 (②③ 소재 제외) | T-1-30 | 대상 규칙 오염 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_대상은_규칙1_소재만`) — **01-07 Task 2**. 서버가 화면이 보낸 adId 를 다시 검증한다(오염 시 400) | ✅ 존재 | ✅ green |
+| BID-02 | 01-07 | 5 | 그룹입찰 행의 `from` 이 `groupBid` 다 (웹앱은 **계산하지 않는다**) | T-1-07 | 진실이 둘이 되지 않는다 | unit | **기존** `.venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_bids.py` + `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_웹앱은_입찰가를_계산하지_않는다` — 산출물에 70→**999** 를 넣어 재계산을 탐지한다) | ✅ 존재 | ✅ green |
+| BID-03 | 01-07 | 5 | 미리보기가 현재가 → 인상 후 가격을 보여준다 | T-1-07 | 산출물 값 그대로 표시 | unit + integration | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_미리보기_표`) + `CT_DEV_TOKEN=… bash webapp/tests/preview_cdp.sh` (V-PRE-12a/b: 실데이터 **70 → 80**) | ✅ 존재 | ✅ green |
+| BOARD-04 | 01-07 | 5 | 선택 건수·예상 인상액 합계가 맞는다 | T-1-32 | 0건이어도 집계를 보여준다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_예상_인상액_합계`) — **01-07 Task 2**. 스킵 액션은 안 더한다 | ✅ 존재 | ✅ green |
+| ✚상한-01 | 01-07 | 5 | 계정별 1,500건 상한을 넘으면 거부된다 (D-08) | T-1-29 | 의도치 않은 대량 쓰기 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_계정별_상한을_넘으면_거부한다` — 상한을 3으로 낮춰 동작이 **설정을 따라오는지**까지 본다) | ✅ 존재 | ✅ green |
+| BOARD-03 | 01-07 | 5 | 보이는 선택 vs 필터 전체가 다른 수를 준다 | T-1-29 | 대량 선택을 한 번 더 확인 | integration | `CT_DEV_TOKEN=… bash webapp/tests/preview_cdp.sh` (V-PRE-03b/c/d — 실측 선택 15 < 필터전체 89, 선택 계정이 필터 계정 하나뿐) | ✅ 존재 | ✅ green |
+| FLOW-04 | 01-07 | 5 | 필터 전체 선택은 별도 배너로 한 번 더 확인 (건수 타이핑 없음) | T-1-29 | 되돌릴 수 있는 작업은 타이핑을 받지 않는다 | integration | `CT_DEV_TOKEN=… bash webapp/tests/preview_cdp.sh` (V-PRE-02 타이핑칸 0개 · V-PRE-06a/b/c 배너·취소·확인) | ✅ 존재 | ✅ green |
+| ✚미리보기-CDP | 01-07 | 5 | 헤더 체크박스가 **필터 밖 행을 고르지 않는다** · 요약 줄이 한 스텝 뒤처지지 않는다 · 오염된 대상이 400 으로 거부된다 | T-1-29, T-1-30, T-1-31 | 고른 적 없는 소재가 대상에 섞이지 않는다 | integration | `CT_DEV_TOKEN=devtoken123 bash webapp/tests/preview_cdp.sh` (31종 · 실제 미리보기 접수 · 광고 API 0) | ✅ 존재 | ✅ green (31/31) |
+| ✚OQ7-계정수 | 01-07 | 5 | 회차마다 들어 있는 **계정 수·목록**이 드롭다운과 신선도 배너에 나온다 | T-1-20 | 측정 안 된 계정 위에서 올리는 것을 화면이 숨기지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_paths.py -x -q` (핵심 노드: `::test_회차마다_들어있는_계정수를_같이_준다` · `::test_신선도에_계정수와_빠진계정이_실린다`) | ✅ 존재 | ✅ green |
 | FLOW-01 | 01-08 | 6 | 미리보기 → 실행이 한 흐름으로 이어진다 (미리보기 없이 실행 불가) | T-1-34 | dry-run 선행 강제 | integration | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` | ❌ W0 | ⬜ pending |
 | FLOW-05 (화면) | 01-08 | 6 | 항목별 성공/실패/스킵+사유가 화면에 투영된다 | T-1-37 | 스킵·실패를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_항목단위_결과가_화면투영된다`) | ❌ W0 | ⬜ pending |
 | ✚diff-01 | 01-08 | 6 | 미리보기와 달라진 N건을 사유와 함께 보고한다 (D-10) | T-1-36 | 재계산 차이를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_미리보기와_달라진건을_보고한다`) | ❌ W0 | ⬜ pending |
@@ -182,12 +191,12 @@ grep -rq "$S" webapp-logs/ && echo FAIL || echo PASS
 
 | Behavior | Requirement | Plan / Task | Why Manual | Test Instructions |
 |----------|-------------|-------------|------------|-------------------|
-| 보이는 선택 vs 필터 전체 선택이 다른 건수를 준다 | BOARD-03 | 01-07 Task 3 (3번) | Tabulator 선택 API 가 브라우저 JS 안에서만 산다 | 보드에서 계정 필터를 건 뒤 헤더 체크박스 → 건수 확인 → "필터 전체 N건 선택" 배너 → 건수가 커지는지 확인 |
-| 필터 전체 선택 시 확인 배너가 한 번 더 뜬다 | FLOW-04 | 01-07 Task 3 (4·5번) | 같음 | 위 배너가 실제로 뜨고, 취소하면 선택이 안 넘어가는지. 건수 타이핑 입력칸이 없는지 |
+| 보이는 선택 vs 필터 전체 선택이 다른 건수를 준다 | BOARD-03 | 01-07 — **자동화됨** | ~~Tabulator 선택 API 가 브라우저 JS 안에서만 산다~~ → **기계가 더 정확하다** | `bash webapp/tests/preview_cdp.sh`. 육안으론 못 잡는다: 헤더 체크박스에 `rowRange` 를 안 주면 화면엔 89줄만 보이는데 **2,637줄 전부**(계정 4개)가 선택된다 — 표시상 아무 차이가 없다(음성 대조군 실측) |
+| 필터 전체 선택 시 확인 배너가 한 번 더 뜬다 | FLOW-04 | 01-07 — **자동화됨** | 같음 | `preview_cdp.sh` V-PRE-06b 가 **취소 전후 선택 수가 정확히 같은지**를 본다("배너가 떴다" 로는 취소가 동작하는지 모른다) |
 | 탭 닫았다 열어 진행 로그 이어보기 | SC-03 | 01-06 — **자동화됨** | ~~실제 브라우저 생명주기~~ → **기계가 더 정확하다** | 헤드리스 크롬으로 탭을 진짜 닫고(CDP `/json/close`) 새 탭을 연다: `bash webapp/tests/sse_cdp.sh`. 실측 25줄 → 닫고 5초 → 41줄, 첫 줄이 **정확히 `[1/40] tick`**, 누락 0 중복 0. 육안으로는 "로그가 보인다" 까지밖에 못 본다 — 이어받기 설계로 되돌리면 첫 줄이 `[39/40]` 이 되는데 그것도 "로그가 흐른다"로 보인다(음성 대조군 실측) |
 | 회차 신선도 배너 | D-16 | 01-04 Task 3 (2번) | 시각 확인 | 보드 상단에 `2026-08-30 회차 · N일 전 · 통계 기간 08-22~08-28` 이 뜨고, 오래되면 경고색인지 |
 | 보드 건수 배지가 필터를 정확히 따라온다 | (BOARD-01 부수) | 01-04 — **자동화됨** | ~~시각 확인~~ → **육안으로는 못 잡는다** | 필터를 한 번만 바꾸면 숫자가 *움직이긴 해서* 사람은 PASS 를 준다. **두 번 연속 바꿔 직전 값과 대조해야만** 랙이 드러난다(2026-09-20 실제 버그). 그래서 수동 항목에서 빼고 `webapp/tests/board_cdp.sh` 로 옮겼다. 보드 JS 를 건드리면 그걸 돌려라 |
-| 그룹입찰 행의 현재가가 그룹 기본가다 | BID-03 | 01-07 Task 3 (8번) | 실데이터 대조 | `nad-a001-02-000000495390006` 이 70 → 80 인지. **50 → 60 이면 웹앱이 재계산한 것** |
+| 그룹입찰 행의 현재가가 그룹 기본가다 | BID-03 | 01-07 — **자동화됨** | 실데이터 대조 | `preview_cdp.sh` V-PRE-12a/b 가 실데이터로 대조한다. 2026-09-20 실측: `nad-a001-02-000000495390006` **70 → 80 · 그룹입찰따름 예**. 50 → 60 이면 웹앱이 재계산한 것 |
 | 실제 광고 입찰가가 +10 됐다 | FLOW-01 | 01-08 Task 3 (8번) | 외부 시스템(네이버 광고 관리 화면) | 소재 하나를 직접 열어 입찰가 확인. 이게 유일한 최종 진실 |
 | 되돌리기가 그 작업분만 내린다 / 백업 불변 | BID-04 | 01-09 Task 3 (4·5·6번) | 외부 시스템 + 디스크 상태 대조 | 되돌린 건수 == 성공 건수, `before_bids_*.json` 전후 건수 동일, 광고 화면에서 원복 확인 |
 | 광고 API 자격증명 유효성 | (OQ-6) | 01-06 Task 3 (2번) | 리서치가 광고 API 를 한 번도 호출하지 않았다 | `run_ads.py prep --account cy728` 가 401/403 없이 완주하는지. 실패하면 자격증명 갱신부터 |
@@ -201,9 +210,10 @@ grep -rq "$S" webapp-logs/ && echo FAIL || echo PASS
 - [x] Wave 0 covers all ❌ W0 references above — Plan 01-01 이 전부 만든다
 - [x] No watch-mode flags — `-x -q` 만 쓴다
 - [x] Feedback latency < 15s — 웹앱 전체 ~10초
-- [ ] 테스트에 `--commit` 리터럴 0건 (실행 중 `no_commit_guard.sh` 로 상시 확인)
-- [ ] CLI 100 tests 여전히 exit=0 (회귀 기준선 불변)
-- [ ] 보드 JS 수정 시 `bash webapp/tests/board_cdp.sh` 전량 PASS (pytest 가 못 덮는 계층)
+- [x] 테스트에 `--commit` 리터럴 0건 (01-07 에서 재확인 — 주석 한 줄이 실제로 걸려서 고쳤다)
+- [x] CLI 100 tests 여전히 exit=0 (01-07 재확인: 7+7+21+21+28+16)
+- [x] 보드 JS 수정 시 `bash webapp/tests/board_cdp.sh` 전량 PASS (01-07 재확인 — 선택 컬럼 40px 을 벌려고 숫자 열 폭을 깎았다. 표 1448 / 컨테이너 1448 로 가로 스크롤 없음)
+- [ ] 선택·미리보기 수정 시 `bash webapp/tests/preview_cdp.sh` 전량 PASS (같은 계층)
 - [ ] 진행 로그·작업 패널 수정 시 `bash webapp/tests/sse_cdp.sh` 전량 PASS (같은 계층)
 - [x] `nyquist_compliant: true` set in frontmatter
 
