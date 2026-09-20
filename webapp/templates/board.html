@@ -206,6 +206,38 @@
     <p><strong id="board-count">0</strong> / {{ rows | length }}건
       <small>(보이는 줄 / 이 회차 전체 · 한 줄 = 상품 1개)</small></p>
 
+    {# ── 선택 요약 + 실행 (BOARD-03 / BOARD-04 / D-06 / D-07) ────────────────
+       요약 줄은 **항상** 보인다. 0개일 때도 "0개 선택 — 먼저 상품을 골라라" 를
+       띄워야, 버튼이 왜 안 눌리는지를 화면에서 읽는다. 숫자는 전부 board.js 가
+       서버가 넘긴 rule1_count 를 더해 채운다 — 여기 숫자를 박지 않는다.
+
+       "필터 전체 N건 선택" 은 더 고를 게 남았을 때만 나타나고, 누르면 아래
+       배너가 한 번 더 확인한다. 취소하면 선택이 안 넘어간다. #}
+    <div id="sel-bar">
+      <p id="sel-summary">상품 0개 선택 · 대상 0건 — 먼저 상품을 골라라</p>
+
+      <p id="sel-all-wrap" hidden>
+        <button type="button" id="sel-all" class="secondary outline">
+          필터 전체 <strong id="sel-all-n">0</strong>건 선택
+        </button>
+      </p>
+
+      <div id="sel-banner" class="stale" hidden>
+        <p id="sel-banner-msg"></p>
+        <div role="group">
+          <button type="button" id="sel-banner-ok">그래, 전부 고른다</button>
+          <button type="button" id="sel-banner-cancel" class="secondary">취소</button>
+        </div>
+      </div>
+
+      {% if run_dir %}
+        {# 미리보기는 dry-run 이다 — 광고 API 를 부르지 않고 크레딧도 광고비도 0 이다.
+           실제로 바꾸는 버튼은 이 플랜에 없다(Plan 01-08). #}
+        <button type="button" id="preview-btn" disabled>입찰가 인상 미리보기</button>
+        <p><small>미리보기는 광고를 바꾸지 않는다 — 고른 소재가 얼마에서 얼마로 오를지만 계산해 본다.</small></p>
+      {% endif %}
+    </div>
+
     <div id="board"></div>
   </section>
 

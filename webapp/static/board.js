@@ -8,9 +8,14 @@
  * 을 켜지 마라 — 2,637행은 Tabulator 클라이언트 사이드 한계(약 5,000행) 안이고,
  * 켜는 순간 필터 조작마다 서버 왕복이 생겨 즉시 반응이 사라진다(Out of Scope).
  *
- * 선택(체크박스) 컬럼은 여기 없다. Plan 01-06/01-07 이 "보이는 것만 vs 필터 전체"
- * (BOARD-03/D-07) 확인 배너와 **같이** 붙인다. 지금 넣으면 확인 없는 전체 선택이
- * 먼저 생긴다.
+ * 선택(체크박스) 컬럼은 Plan 01-07 이 "보이는 것만 vs 필터 전체"(BOARD-03/D-07)
+ * 확인 배너와 **같이** 붙였다. 둘은 한 쌍이다 — 체크박스만 먼저 넣으면 확인 없는
+ * 전체 선택이 생긴다.
+ *
+ * **건수 타이핑 확인 입력칸을 만들지 마라** (FLOW-04 / D-07). 입찰가 인상은
+ * 되돌릴 수 있는 작업이라 배너 한 번이면 충분하다. 글자를 받아 대조하는 확인은
+ * Phase 2 의 **삭제** 버튼 몫이다 — 삭제는 되돌릴 수 없다. 되돌릴 수 있는 것과
+ * 없는 것에 같은 마찰을 걸면 사람이 양쪽 다 기계적으로 통과시킨다.
  *
  * 계정 alias 를 이 파일에 박지 마라 — 계정은 설정에 항목을 더하는 것만으로 늘어난다.
  * 필터 옵션은 서버가 그린 <select> 에서만 온다 (BOARD-02).
@@ -82,6 +87,18 @@
   // 가로 스크롤을 없앴다(실측 1,520 → 컨테이너 안). 상품명 전문이 상시 필요해지는 건
   // 상세페이지 판정(Phase 3)이고, 그때는 목록이 아니라 상세 패널이 맡을 일이다.
   var columns = [
+    // 선택 체크박스. **`titleFormatterParams.rowRange` 를 비워 두지 마라** —
+    // 헤더 체크박스 핸들러는 `table.selectRow(params.rowRange)` 를 부르고,
+    // `selectRows(undefined)` 는 `rowManager.rows`, 즉 **필터를 무시한 전체 행**을
+    // 고른다(벤더 소스 실측: `case "undefined": t=this.table.rowManager.rows`).
+    // 계정을 하나로 좁혀 놓고 헤더를 누르면 화면엔 그 계정만 보이는데 실제로는
+    // 다른 계정까지 전부 선택된다 — 화면상 증상이 전혀 없고, 고른 적 없는 소재의
+    // 입찰가가 올라간다. "visible" 은 **지금 뷰포트에 그려진 행**이다(D-07 의 '보이는 것').
+    // 필터 통과 전체는 아래 `필터 전체 N건 선택` 배너가 따로 맡는다.
+    { title: "", width: 40, hozAlign: "center", headerSort: false,
+      formatter: "rowSelection", titleFormatter: "rowSelection",
+      titleFormatterParams: { rowRange: "visible" },
+      cellClick: function (e, cell) { cell.getRow().toggleSelect(); } },
     { title: "계정", field: "acct", width: 95 },
     { title: "규칙", field: "rules", width: 85 },
     { title: "상품명", field: "title", minWidth: 200, widthGrow: 5, tooltip: true },
@@ -93,11 +110,11 @@
       sorter: "number", sorterParams: 빈칸아래, formatter: 비율 },
     { title: "구매완료", field: "purCnt", hozAlign: "right", width: 90,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "구매금액", field: "purAmt", hozAlign: "right", width: 105,
+    { title: "구매금액", field: "purAmt", hozAlign: "right", width: 95,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
     // `cost` 는 **광고비**다. 원본 필드가 salesAmt 라서 헷갈리기 쉬운데
     // 광고에 쓴 돈이지 벌어들인 돈이 아니다 (ads_rules._with_stat:50 주석).
-    { title: "광고비", field: "cost", hozAlign: "right", width: 100,
+    { title: "광고비", field: "cost", hozAlign: "right", width: 95,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
     { title: "현재입찰", field: "bid", hozAlign: "right", width: 90,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
@@ -105,7 +122,7 @@
       formatter: 예아니오 },
     { title: "①소재수", field: "rule1_count", hozAlign: "right", width: 90,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "상품ID", field: "mallProductId", width: 130, tooltip: true }
+    { title: "상품ID", field: "mallProductId", width: 105, tooltip: true }
   ];
 
   var table = new Tabulator("#board", {
@@ -116,6 +133,11 @@
     // 높이를 고정해야 가상 DOM 이 켜진다. 안 켜지면 2,637행을 전부 그리느라 멈춘다.
     height: "60vh",
     placeholder: "조건에 맞는 상품이 없다",
+    // 행 선택을 켠다. **기본값은 "highlight" 라 선택 자체가 안 된다** — 이 한 줄이
+    // 없으면 체크박스 컬럼이 그려지긴 해도 눌러도 아무 일이 없다(증상이 조용하다).
+    // 숫자(상한)를 주지 않는다: 상한은 화면이 아니라 서버 `flow.check_limits` 가
+    // 설정값으로 건다(D-08). 여기 숫자를 박으면 설정을 고쳐도 화면이 안 따라온다.
+    selectableRows: true,
     // 기본 정렬: 규칙 → 노출 내림차순. 배열의 첫 항목이 1차 정렬키다.
     initialSort: [
       { column: "rules", dir: "asc" },
@@ -199,6 +221,176 @@
   table.on("tableBuilt", function () {
     건수표시(table.getDataCount("active"));
   });
+
+  // ── 선택 → 대상 (BOARD-03 / BOARD-04 / D-06 / D-07) ───────────────────────
+  //
+  // 두 수를 **갈라서** 보여주는 게 이 블록의 전부다:
+  //   · `table.getSelectedData()` — 지금 실제로 고른 행
+  //   · `table.getData("active")` — 지금 필터를 통과한 전체(페이지 무관)
+  // 둘이 다를 때 D-07 이 발동한다. 헤더 체크박스는 뷰포트에 그려진 행만 잡으므로
+  // ①행 1,195건짜리 계정에서는 이 둘이 반드시 다른 수가 된다(BOARD-03).
+  //
+  // 숫자를 여기서 **만들지 않는다.** `rule1_count`·`rule1_ads` 는 서버(`board.fold_products`)가
+  // 이미 접어서 넘긴 값이고, 예상 인상액 합계는 CLI 산출물에서 서버가 낸다
+  // (`flow.raise_total`). 화면은 더하기만 한다 — 입찰가 산술은 한 줄도 없다(T-1-07).
+  var 요약칸 = document.getElementById("sel-summary");
+  var 전체링크칸 = document.getElementById("sel-all-wrap");
+  var 전체링크 = document.getElementById("sel-all");
+  var 전체수칸 = document.getElementById("sel-all-n");
+  var 배너 = document.getElementById("sel-banner");
+  var 배너말 = document.getElementById("sel-banner-msg");
+  var 배너확인 = document.getElementById("sel-banner-ok");
+  var 배너취소 = document.getElementById("sel-banner-cancel");
+  var 미리보기버튼 = document.getElementById("preview-btn");
+  var 회차칸값 = document.getElementById("job-run-dir");
+  var 작업오류 = document.getElementById("job-error");
+
+  function 콤마(n) { return Number(n).toLocaleString("ko-KR"); }
+
+  /** 행 목록의 ①소재 수 합. 대상 정의는 규칙①뿐이다 (D-06 / BID-01). */
+  function 대상수(행들) {
+    var n = 0;
+    행들.forEach(function (r) { n += (r.rule1_count || 0); });
+    return n;
+  }
+
+  function 요약갱신() {
+    if (!요약칸) { return; }
+    var 고른것 = table.getSelectedData();
+    var 활성 = table.getData("active");
+    var 대상 = 대상수(고른것);
+    var 규칙1있는상품 = 고른것.filter(function (r) { return (r.rule1_count || 0) > 0; }).length;
+
+    // 필터를 바꿔도 선택은 남는다(Tabulator 기본 selectableRowsPersistence).
+    // 그래서 "지금 화면 밖에 고른 게 몇 개 있다" 를 **반드시 말해야** 한다 —
+    // 안 말하면 계정을 바꿔 놓고 미리보기를 눌러 안 보이던 계정의 소재가 딸려간다.
+    // 저장소 관례: 스킵도 은폐도 조용히 하지 않는다.
+    var 활성키 = {};
+    활성.forEach(function (r) { 활성키[r.key] = 1; });
+    var 필터밖 = 고른것.filter(function (r) { return !활성키[r.key]; }).length;
+
+    var 말 = "상품 " + 콤마(고른것.length) + "개 선택";
+    if (고른것.length && 규칙1있는상품 !== 고른것.length) {
+      말 += " · 그중 규칙① 소재가 있는 건 " + 콤마(규칙1있는상품) + "개";
+    }
+    말 += " · 대상 " + 콤마(대상) + "건";
+    if (필터밖) { 말 += " · 그중 " + 콤마(필터밖) + "개는 지금 필터 밖이다"; }
+    if (!고른것.length) { 말 += " — 먼저 상품을 골라라"; }
+    else if (!대상) { 말 += " — 고른 상품에 규칙① 소재가 없다(②③⑤ 소재는 인상 대상이 아니다)"; }
+    요약칸.textContent = 말;
+
+    if (미리보기버튼) { 미리보기버튼.disabled = 고른것.length === 0; }
+
+    // "필터 전체 N건 선택" 은 **더 고를 게 남았을 때만** 띄운다.
+    if (전체링크칸) {
+      var 더있나 = 활성.length > 고른것.length;
+      전체링크칸.hidden = !더있나;
+      if (더있나 && 전체수칸) { 전체수칸.textContent = 콤마(활성.length); }
+    }
+  }
+
+  table.on("rowSelectionChanged", 요약갱신);
+  table.on("dataFiltered", function () { 배너닫기(); 요약갱신(); });
+  table.on("tableBuilt", 요약갱신);
+
+  function 배너닫기() { if (배너) { 배너.hidden = true; } }
+
+  // 필터 전체 선택은 **배너를 한 번 더 거친다** (D-07 / FLOW-04 / T-1-29).
+  // 취소하면 선택이 안 넘어간다 — 배너를 띄우는 시점에 아무것도 고르지 않는다.
+  if (전체링크) {
+    전체링크.addEventListener("click", function () {
+      var 활성 = table.getData("active");
+      if (!배너 || !배너말) { return; }
+      배너말.textContent =
+        "지금 필터를 통과한 상품 " + 콤마(활성.length) + "개 전부를 고른다 — 대상 소재 "
+        + 콤마(대상수(활성)) + "건. 진행할래?";
+      배너.hidden = false;
+    });
+  }
+  if (배너취소) { 배너취소.addEventListener("click", 배너닫기); }
+  if (배너확인) {
+    배너확인.addEventListener("click", function () {
+      배너닫기();
+      // 행 객체를 통째로 넘긴다 — 한 번에 넘겨야 선택 변경 이벤트가 한 번만 돈다.
+      table.selectRow(table.getRows("active"));
+      요약갱신();
+    });
+  }
+
+  // ── 미리보기 접수 ─────────────────────────────────────────────────────────
+  //
+  // **`fetch` 에는 토큰이 자동으로 안 붙는다.** `<body hx-headers>` 는 htmx 가 보내는
+  // 요청에만 헤더를 얹는다. 여기서 헤더를 빠뜨리면 `security.guard` 가 403 을 주고,
+  // 증상은 "버튼을 눌러도 아무 일이 없다" 로만 보인다. 토큰의 출처를 두 곳으로
+  // 늘리지 않으려고 body 속성에서 **읽어 온다** — 템플릿에 또 박지 않는다.
+  function 토큰() {
+    try { return JSON.parse(document.body.getAttribute("hx-headers"))["X-CT-Token"]; }
+    catch (e) { return ""; }
+  }
+
+  function 오류표시(말) {
+    if (!작업오류) { return; }
+    작업오류.textContent = 말;
+    작업오류.hidden = false;
+  }
+
+  /** 작업이 끝날 때까지 상태를 물어본 뒤 결과 표를 갈아끼운다. */
+  function 결과기다리기(job_id, 남은) {
+    fetch("/jobs/" + encodeURIComponent(job_id), { headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j.status === "running" && 남은 > 0) {
+          setTimeout(function () { 결과기다리기(job_id, 남은 - 1); }, 400);
+          return;
+        }
+        var 자리 = document.getElementById("preview");
+        if (자리) { 자리.hidden = false; }
+        // htmx 로 갈아끼운다 — 서버가 만든 조각을 그대로 쓴다(표를 JS 로 짓지 않는다).
+        htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/result",
+                  { target: "#preview-body", swap: "innerHTML" });
+      })
+      .catch(function (e) { 오류표시("작업 상태를 못 읽었다: " + e); });
+  }
+
+  if (미리보기버튼) {
+    미리보기버튼.addEventListener("click", function () {
+      var 고른것 = table.getSelectedData();
+      var ids = [];
+      고른것.forEach(function (r) {
+        (r.rule1_ads || []).forEach(function (a) { ids.push(a); });
+      });
+      if (작업오류) { 작업오류.hidden = true; }
+      미리보기버튼.disabled = true;
+
+      fetch("/jobs/bids/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CT-Token": 토큰() },
+        body: JSON.stringify({
+          run_dir: 회차칸값 ? 회차칸값.value : "",
+          ad_ids: ids
+        })
+      }).then(function (r) {
+        return r.text().then(function (본문) { return { ok: r.ok, code: r.status, 본문: 본문 }; });
+      }).then(function (res) {
+        미리보기버튼.disabled = false;
+        if (!res.ok) {
+          // 사유를 그대로 보여준다. 400 은 상한 초과·대상 오염처럼 **사람이 읽어야 하는**
+          // 거부고, 409 는 "지금은 안 된다" 다. 숫자만 띄우면 둘을 구분 못 한다.
+          var 사유 = res.본문;
+          try { 사유 = JSON.parse(res.본문).detail || res.본문; } catch (e) { /* 원문 그대로 */ }
+          오류표시("미리보기를 못 만들었다 (" + res.code + ") — " + 사유);
+          return;
+        }
+        var job_id = JSON.parse(res.본문).job_id;
+        htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/panel",
+                  { target: "#job-panel", swap: "outerHTML" });
+        결과기다리기(job_id, 150);
+      }).catch(function (e) {
+        미리보기버튼.disabled = false;
+        오류표시("미리보기 요청이 실패했다: " + e);
+      });
+    });
+  }
 
   // 회차 드롭다운은 고르는 즉시 이동한다. GET 폼이라 서버 상태를 바꾸지 않는다.
   var 회차칸 = document.getElementById("rundir-select");
