@@ -45,6 +45,23 @@ def _붙인다(result_traps, join_traps, join_doc=..., **kw):
     return join.attach(rows, result_traps, doc, **kw)
 
 
+def _표시규칙_키가_남았나(obj, 경로="$"):
+    """중첩 구조 어디에도 `표시규칙` **키**가 없는지 재귀로 훑는다.
+
+    값(설명 문장)이 아니라 키를 본다 — 지워야 할 것은 모델 대상 지시문이 담긴 필드다.
+    """
+    남은 = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == "표시규칙":
+                남은.append(f"{경로}.{k}")
+            남은 += _표시규칙_키가_남았나(v, f"{경로}.{k}")
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            남은 += _표시규칙_키가_남았나(v, f"{경로}[{i}]")
+    return 남은
+
+
 def _행(rows, mpid):
     """붙인 행 하나를 `mallProductId` 로 집어 온다. 없으면 테스트를 세운다."""
     found = [r for r in rows if r.get("mallProductId") == mpid]
@@ -424,7 +441,10 @@ def test_표시규칙은_버린다(result_traps, join_traps):
     # 그리고 **원본을 고치지 않는다** — 호출부가 같은 dict 를 다시 쓴다
     assert "표시규칙" in join_traps
     깨끗 = join.strip_display_rules(join_traps)
-    assert "표시규칙" not in json.dumps(깨끗, ensure_ascii=False)
+    # ⚠️ 여기서는 **키**만 본다. 픽스처의 `_주석` 본문이 그 단어를 설명으로 적고 있어서
+    #    전문 문자열 검사를 걸면 "설명을 지웠는가" 를 묻게 된다 — 지울 것은 키다.
+    #    (`attach()` 결과에는 `_주석` 이 안 실리므로 위쪽 전문 검사는 그대로 유효하다)
+    assert _표시규칙_키가_남았나(깨끗) == [], _표시규칙_키가_남았나(깨끗)
     assert "표시규칙" in join_traps, "strip_display_rules 가 원본을 mutate 했다"
     # 나머지 내용은 그대로 살아 있다 (통째로 버리는 게 아니다)
     assert len(깨끗["행"]) == len(join_traps["행"])
