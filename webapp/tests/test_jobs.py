@@ -394,6 +394,44 @@ def test_대상_목록이_파일로_떨어지고_argv_가_그_파일을_지목�
     assert not any("commit" in a for a in 기록)
 
 
+def test_대상_없는_revert_only_는_만들어지지_않는다(잡판, tmp_run_dir, monkeypatch):
+    """WR-02 — **kind 이름은 `revert_only` 인데 동작이 `revert_all` 이 되는 경로를 막는다.**
+
+    대상 파일이 없으면 `AdsArgv` 가 `--only-ads` 를 안 붙이고, CLI 는 그걸 "백업 전량"
+    으로 읽는다. 지금 운영 라우트는 항상 대상 파일을 넘기므로 안 나지만, v2 의
+    APScheduler 가 `create_job("revert_only", run_dir=X, commit=True)` 로 부르는 순간
+    회차 전체(실측 2,242건)가 풀린다. **빈 값이 '전량' 이 되는 경로는 예외로 터뜨린다.**
+    """
+    만든argv = []
+    monkeypatch.setattr(jobs, "spawn",
+                        lambda argv, log_path: (만든argv.append(argv), 가짜프로세스(argv))[1])
+
+    with pytest.raises(ValueError) as e:
+        jobs.create_job("revert_only", run_dir=tmp_run_dir.name, commit=True)
+    assert "회차 전체" in str(e.value), "사유가 '왜 위험한지' 를 말해야 한다"
+    assert 만든argv == [], "거부했는데 자식이 떴다"
+
+    # 음성 대조군 — 대상 파일을 주면 통과하고 argv 에 --only-ads 가 붙는다.
+    # (이게 없으면 "그냥 revert_only 를 전부 막는다" 로도 위 assert 가 초록이다)
+    부모 = jobs.create_job("bids_preview", run_dir=tmp_run_dir.name,
+                          only_ads=["nad-a001-02-000000495390006"])
+    대상파일 = jobs.job_status(부모)["targets_path"]
+    좁힌것 = jobs.create_job("revert_only", run_dir=tmp_run_dir.name, commit=True,
+                           targets_path_override=대상파일)
+    기록 = json.loads(jobs.job_status(좁힌것)["argv"])
+    assert 기록[기록.index("--only-ads") + 1] == 대상파일
+
+    # `revert_all` 은 대상 파일 없이도 만들어진다 — 이름 그대로 회차 전체이므로
+    # 여기서 막으면 D-14 의 두 번째 버튼이 사라진다.
+    jobs._PROCS.clear()
+    cx = jobs._conn()
+    cx.execute("UPDATE jobs SET status='done' WHERE status IN ('running','starting')")
+    cx.commit(); cx.close()
+    전체 = jobs.create_job("revert_all", run_dir=tmp_run_dir.name, commit=True)
+    전체argv = json.loads(jobs.job_status(전체)["argv"])
+    assert "--only-ads" not in 전체argv
+
+
 def test_최근_작업_목록이_최신순이다(잡판, monkeypatch):
     monkeypatch.setattr(jobs, "spawn", lambda argv, log_path: 가짜프로세스(argv))
     만든것 = [jobs.create_job("run") for _ in range(3)]

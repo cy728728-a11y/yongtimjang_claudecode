@@ -382,6 +382,17 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
     if kind in ("revert_only", "revert_all"):
         # `revert_only` 는 대상 목록으로 좁힌다(D-13 — 이 작업분만).
         # `revert_all` 은 좁히지 않는다(회차 전체). 대상 파일 유무가 그 차이의 전부다.
+        #
+        # **그래서 대상 파일이 없는 `revert_only` 는 존재할 수 없다.** 없으면
+        # `AdsArgv` 가 `--only-ads` 를 안 붙이고 CLI 는 그걸 "백업 전량" 으로 읽는다
+        # (`bids.run_revert` — `only_ads is None or ...`). kind 이름은 `revert_only`
+        # 인데 동작은 `revert_all` 이 된다. 지금 운영 라우트는 항상 대상 파일을
+        # 넘기므로 안 나지만, v2 의 APScheduler 가 인자 하나를 빼먹는 순간 회차
+        # 전체(실측 2,242건)가 풀린다. **빈 값이 '전량' 으로 해석되는 경로는 예외로
+        # 터뜨린다** — 이 페이즈에서 같은 부류가 두 번 사고 직전까지 갔다.
+        if kind == "revert_only" and targets_path is None:
+            raise ValueError("revert_only 에는 대상 파일이 반드시 있어야 한다 — "
+                             "대상 없는 되돌리기는 회차 전체다(D-12)")
         return argv_mod.AdsArgv(subcommand="bids", run_dir=run_dir, accounts=accounts,
                                 revert=True, commit=commit,
                                 only_ads=targets_path if kind == "revert_only" else None,
