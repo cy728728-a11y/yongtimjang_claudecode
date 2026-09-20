@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-07-PLAN.md (Skeleton A — 선택 → 미리보기 70→80)
-last_updated: "2026-09-20T10:13:32.692Z"
+stopped_at: Completed 01-08-PLAN.md (첫 실제 인상 — cy728 472건 성공 · 되돌리기 미완)
+last_updated: "2026-09-20T12:05:13.000Z"
 last_activity: 2026-09-20
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 7
-  percent: 0
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 01 (board-bid-raise) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
 Last activity: 2026-09-20
 
-Progress: [████████░░] 78%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [████████░░] 78%
 | Phase 01 P05 | 47min | 3 tasks | 9 files |
 | Phase 01 P06 | 78min | 3 tasks | 17 files |
 | Phase 01 P07 | 26min | 4 tasks | 13 files |
+| Phase 01 P08 | 140min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,9 @@ Recent decisions affecting current work:
 - [Phase ?]: 01-06 SC-03 자동 테스트는 진짜 uvicorn 을 띄운다 — TestClient 는 ASGI 앱을 끝까지 돌린 뒤 BytesIO 로 주므로 부분 수신·끊김을 흉내조차 못 한다 (CT_DB_PATH/CT_JOB_LOG_DIR env 추가 이유)
 - [Phase ?]: 01-06 토큰 비교는 바이트로 — compare_digest 가 str 비ASCII 에서 TypeError 를 던져 403 자리에 500 이 났다
 - [Phase ?]: 01-06 V-SAFE-02c 를 c1/c2 로 분리 — c1 은 실재 라우트로 '가드를 통과해 앱 로직이 답한다'까지 보고, c2 는 미리보기 라우트가 생기면 자동으로 -lt 400 이 된다
+- [Phase 01]: 01-08 실행 라우트는 대상을 받지 않는다 — 부모 미리보기의 targets 파일만 가리킨다 (D-11)
+- [Phase 01]: 01-08 첫 실제 인상은 cy728 472건(+4,720원) — 08-30 미되돌림 겹침 3건으로 두 번째 +10 위험 최소
+- [Phase 01]: 01-08 되돌릴 수단을 샌드박스 revert dry-run 으로 먼저 증명하고 방아쇠를 당긴다
 
 ### Pending Todos
 
@@ -121,6 +125,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T10:13:49.650Z
-Stopped at: Completed 01-07-PLAN.md (Skeleton A — 선택 → 미리보기 70→80)
+Last session: 2026-09-20T12:05:13.000Z
+Stopped at: Completed 01-08-PLAN.md (첫 실제 인상 — cy728 472건 성공 · 되돌리기 미완)
 Resume file: None
