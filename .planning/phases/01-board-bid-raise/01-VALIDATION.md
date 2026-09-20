@@ -74,11 +74,12 @@ updated: 2026-09-20
 | BOARD-01 | 01-04 | 2 | ①행에 `imp` 가 없어도 접기가 안 깨진다 | T-1-21 | 지표 중복 계상 없음 | unit | `.venv-web/bin/pytest webapp/tests/test_board.py -x -q` | ❌ W0 | ⬜ pending |
 | BOARD-02 | 01-04 | 2 | 계정 alias 가 `result.json` 에서만 온다 (가짜 5번째 계정 픽스처) | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_board.py -x -q` (핵심 노드: `::test_계정을_코드에_박지_않는다`) | ❌ W0 | ⬜ pending |
 | ✚신선도-01 | 01-04 | 2 | 회차 날짜·경과일·통계기간이 함께 나오고 임계값 초과를 stale 로 본다 (D-16) | T-1-20 | 낡은 판정으로 실행하는 것을 경고한다 | manual | 브라우저 확인 (Plan 01-04 Task 3 의 2번 단계) | — | ⬜ pending |
-| ENG-01 | 01-05 | 3 | argv 가 `.venv/bin/python3` + `run_ads.py` 로 조립된다 | T-1-10 | shell=False · Literal 화이트리스트 | unit | `.venv-web/bin/pytest webapp/tests/test_argv.py -x -q` | ❌ W0 | ⬜ pending |
-| ENG-07 | 01-05 | 3 | `create_job` 이 HTTP 없이 호출된다 | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_create_job_은_http_없이_돈다`) | ❌ W0 | ⬜ pending |
-| ✚동시쓰기-01 | 01-05 | 3 | 쓰기 잡은 전역에서 한 번에 하나만 돈다 (Pitfall 3) | T-1-09 | 백업·ledger read-modify-write 레이스 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_쓰기잡은_동시에_두개가_안된다`) | ❌ W0 | ⬜ pending |
-| ENG-02 | 01-06 | 4 | 서버가 죽어도 자식이 산다 (`start_new_session=True`) | — | N/A | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_자식은_서버_종료를_견딘다`) | ❌ W0 | ⬜ pending |
-| ENG-03 | 01-06 | 4 | 작업 **중간 시점**에 로그파일이 이미 커져 있다 (`PYTHONUNBUFFERED=1`) | T-1-25 | 진행 로그 은폐 방지 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_로그가_실시간으로_쌓인다`) | ❌ W0 | ⬜ pending |
+| ENG-01 | 01-05 | 3 | argv 가 `.venv/bin/python3` + `run_ads.py` 로 조립된다 | T-1-10 | shell=False · Literal 화이트리스트 | unit | `.venv-web/bin/pytest webapp/tests/test_argv.py -x -q` | ✅ 존재 | ✅ green |
+| ENG-07 | 01-05 | 3 | `create_job` 이 HTTP 없이 호출된다 | — | N/A | unit | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_create_job_은_http_없이_돈다`) | ✅ 존재 | ✅ green |
+| ✚동시쓰기-01 | 01-05 | 3 | 쓰기 잡은 전역에서 한 번에 하나만 돈다 (Pitfall 3) | T-1-09 | 백업·ledger read-modify-write 레이스 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_쓰기잡은_동시에_두개가_안된다`) | ✅ 존재 | ✅ green |
+| ✚라우터-01 | 01-05 | 3 | 작업 생성이 전부 POST · kind 를 클라이언트가 못 고른다 · 409/400 번역 | T-1-01b, T-1-23, T-1-09 | 임의 argv·작업종류 주입 차단 | unit | `.venv-web/bin/pytest webapp/tests/test_routes_jobs.py -x -q` | ✅ 존재 | ✅ green |
+| ENG-02 | 01-06 | 4 | 서버가 죽어도 자식이 산다 (`start_new_session=True`) | — | N/A | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_자식은_서버_종료를_견딘다`) | ✅ 존재 | ✅ green — **01-05 가 미리 충족**(잡 엔진이 이 플랜에서 태어났다) |
+| ENG-03 | 01-06 | 4 | 작업 **중간 시점**에 로그파일이 이미 커져 있다 (`PYTHONUNBUFFERED=1`) | T-1-25 | 진행 로그 은폐 방지 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_로그가_실시간으로_쌓인다`) | ✅ 존재 | ✅ green — **01-05 가 미리 충족** |
 | SC-03 | 01-06 | 4 | 탭 닫았다 열어도 로그를 처음부터 이어본다 | T-1-26, T-1-27 | Last-Event-ID 미의존 · 중복 미표시 | integration | `.venv-web/bin/pytest webapp/tests/test_jobs.py -x -q` (핵심 노드: `::test_재접속하면_처음부터_이어본다`) | ❌ W0 | ⬜ pending |
 | ✚로그tail-01 | 01-06 | 4 | 오프셋 읽기가 멀티바이트 절단·파일 부재를 버틴다 | T-1-03d, T-1-17b | 스크러버 + escape 통과 | unit | `.venv-web/bin/pytest webapp/tests/test_logtail.py -x -q` | ❌ W0 | ⬜ pending |
 | FLOW-02 | 01-07 | 5 | 실행이 미리보기와 **같은 targets 파일**을 지목 | T-1-06 | 화면 상태에서 대상을 다시 만들지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_targets_파일이_하나다`) | ❌ W0 | ⬜ pending |

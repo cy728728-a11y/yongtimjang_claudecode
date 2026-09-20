@@ -59,7 +59,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-05-PLAN.md — Wave 3: 작업 엔진(argv · jobs SQLite · subprocess · 쓰기 잡 전역 가드) + "새로 수집" 버튼
+- [x] 01-05-PLAN.md — Wave 3: 작업 엔진(argv · jobs SQLite · subprocess · 쓰기 잡 전역 가드) + "새로 수집" 버튼
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -185,7 +185,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 4/9 | In Progress|  |
+| 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 5/9 | In Progress|  |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 0/TBD | Not started | - |
 | 4. 홍보배너 식별 | 0/TBD | Not started | - |

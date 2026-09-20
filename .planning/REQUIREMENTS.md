@@ -11,14 +11,14 @@
 
 ### 기반 — 실행 엔진 (ENG)
 
-- [ ] **ENG-01**: 기존 CLI 를 **서브프로세스로** 실행한다 — 같은 프로세스에 올리지 않는다
+- [x] **ENG-01**: 기존 CLI 를 **서브프로세스로** 실행한다 — 같은 프로세스에 올리지 않는다
       (`run_ads.py` 가 네임스페이스 없는 이름을 `sys.path.insert` 로 import 하고, `run_yong.py` 가 토큰을 환경변수로 주입한다. in-process 면 계정 자격증명이 작업 간에 섞인다)
 - [ ] **ENG-02**: 실행한 작업이 브라우저를 닫아도 계속 돌고, 재접속하면 그동안의 출력을 처음부터 이어서 볼 수 있다
 - [ ] **ENG-03**: 자식 프로세스의 출력을 append-only 로그 파일에 쌓고, 화면은 그 파일의 오프셋부터 재생한다 (스트림 직결 금지 — 닫힌 사이 출력이 사라진다)
 - [ ] **ENG-04**: 같은 대상에 같은 작업이 동시에 두 번 돌지 않는다 (작업 잠금)
 - [ ] **ENG-05**: 서버를 재시작하면 고아가 된 작업을 감지해 상태를 정리한다
 - [ ] **ENG-06**: 수십 분짜리 작업 중 맥북이 절전으로 자지 않는다 (`caffeinate -i`)
-- [ ] **ENG-07**: 작업 생성이 HTTP 핸들러가 아니라 **호출 가능한 함수**로 존재한다 (3단계 스케줄 자동화가 같은 경로를 쓰게 하기 위함)
+- [x] **ENG-07**: 작업 생성이 HTTP 핸들러가 아니라 **호출 가능한 함수**로 존재한다 (3단계 스케줄 자동화가 같은 경로를 쓰게 하기 위함)
 - [ ] **ENG-08**: 작업 시작 전 `bulsaja_my_profile` 로 계정을 확인하고, 기대 계정(부킹/용쌤)이 아니면 실행을 거부한다
       — 화면에 현재 계정이 항상 표시된다 (토큰을 바꿔 끼우는 구조라 틀린 계정으로 도는 걸 알아챌 방법이 이것뿐이다)
 
@@ -149,13 +149,13 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | Phase 1 | Pending |
+| ENG-01 | Phase 1 | Complete |
 | ENG-02 | Phase 1 | Pending |
 | ENG-03 | Phase 1 | Pending |
 | ENG-04 | Phase 2 | Pending |
 | ENG-05 | Phase 2 | Pending |
 | ENG-06 | Phase 2 | Pending |
-| ENG-07 | Phase 1 | Pending |
+| ENG-07 | Phase 1 | Complete |
 | ENG-08 | Phase 3 | Pending |
 | SAFE-01 | Phase 1 | Complete |
 | SAFE-02 | Phase 1 | Complete |

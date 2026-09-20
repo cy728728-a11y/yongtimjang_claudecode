@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-09-20T08:30:37.903Z"
+last_updated: "2026-09-20T08:52:20.201Z"
 last_activity: 2026-09-20
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 01 (board-bid-raise) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-09-20
 
-Progress: [████░░░░░░] 44%
+Progress: [██████░░░░] 56%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [████░░░░░░] 44%
 | Phase 01 P02 | 14min | 3 tasks | 3 files |
 | Phase 01 P03 | 22min | 3 tasks | 14 files |
 | Phase 01 P04 | 32min | 3 tasks | 8 files |
+| Phase 01 P05 | 47min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,9 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-04 템플릿 컨텍스트 키 rows_json(문자열) → rows(리스트). 문자열은 자동 이스케이프를 꺼야 script 에 들어가고 그게 XSS 방어를 무너뜨린다. Plan 01-06/01-07 이 이 이름을 전제
 - [Phase 01]: 01-04 Tabulator dataFiltered 안에서 getDataCount('active') 금지 — activeRows 커밋 전에 발화해 건수가 한 스텝 뒤처진다. 이벤트 2번째 인자만 믿는다
 - [Phase 01]: 01-04 브라우저 JS 회귀는 pytest 로 흉내 내지 않는다. board_cdp.sh(헤드리스 크롬+CDP)를 security_curl.sh 와 같은 계층에 둔다
+- [Phase 01]: 01-05 작업 생성은 HTTP 를 모르는 jobs.create_job 함수. 라우트는 예외를 상태코드로 번역만 (D-17/ENG-07)
+- [Phase 01]: 01-05 쓰기 잡(prep·bids_commit·revert_*)은 전역 1개. 가드+INSERT 를 BEGIN IMMEDIATE 로 원자 결합 (Pitfall 3)
+- [Phase 01]: 01-05 htmx 폼은 stdlib parse_qsl 로 직접 푼다 — python-multipart 의존성을 늘리지 않는다
 
 ### Pending Todos
 
@@ -107,6 +111,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T08:30:37.898Z
+Last session: 2026-09-20T08:52:04.571Z
 Stopped at: Completed 01-04-PLAN.md
 Resume file: None
