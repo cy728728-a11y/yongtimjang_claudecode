@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+import pathlib
 from datetime import date
 from pathlib import Path
 
@@ -265,6 +266,58 @@ class TestRunBidsBackupMerge(unittest.TestCase):
         self.assertIn("a", bk2, "1회차 원본 백업이 2회차에서 사라지면 안 된다")
         self.assertEqual(bk2["a"], {"bidAmt": 100, "useGroupBidAmt": False})
         self.assertEqual(bk2["b"], {"bidAmt": 100, "useGroupBidAmt": False})
+
+
+    def test_백업이_깨져_있으면_덮어쓰지_않고_중단한다(self):
+        """Critical — 읽기 실패를 삼키면 앞 회차 원본이 영구히 사라진다.
+
+        예전에는 except 에서 existing_bk = {} 로 새로 만들었다. 그러면 merged_bk 에
+        이번 plans 만 담겨 파일을 덮어쓰고, 앞서 올린 소재의 원본 adAttr 가 사라진다
+        — Important 1 이 파일 한 번 깨지는 것으로 통째로 무효가 된다.
+        """
+        bk_path = self.run_dir / "before_bids_cy728.json"
+        bk_path.write_text('{"a": {"bidAmt": 70, ', encoding="utf-8")   # 반쪽 JSON
+        깨진원본 = bk_path.read_text(encoding="utf-8")
+
+        불렸나 = []
+        bids.nvad.call = lambda *a, **k: (불렸나.append(a), (200, {}))[1]
+        out = bids.run_bids(self.acct, self.run_dir, [row(ad_id="b", bid=100)],
+                            commit=True, log=lambda *a, **k: None)
+
+        self.assertEqual(out.get("aborted"), "backup_unreadable")
+        self.assertEqual(out.get("committed"), 0)
+        self.assertEqual(불렸나, [], "백업을 못 읽었는데 PUT 이 나갔다")
+        self.assertEqual(bk_path.read_text(encoding="utf-8"), 깨진원본,
+                         "못 읽은 백업을 덮어썼다 — 앞 회차 원본이 사라진다")
+
+    def test_백업은_원자적으로_쓴다(self):
+        """tmp → os.replace. 쓰는 도중에 죽어도 기존 백업이 반쪽으로 남지 않는다."""
+        본것 = {}
+        원래replace = bids.os.replace
+
+        def 가짜replace(src, dst):
+            # 바꿔치기 직전 — 기존 백업은 아직 **온전한 예전 내용**이어야 한다
+            본것["직전"] = pathlib.Path(dst).read_text(encoding="utf-8")
+            본것["tmp"] = str(src)
+            return 원래replace(src, dst)
+
+        bk_path = self.run_dir / "before_bids_cy728.json"
+        bk_path.write_text(json.dumps({"z": {"bidAmt": 55}}), encoding="utf-8")
+        bids.nvad.call = lambda *a, **k: (200, {})
+        bids.os.replace = 가짜replace
+        try:
+            bids.run_bids(self.acct, self.run_dir, [row(ad_id="a", bid=100)],
+                          commit=True, log=lambda *a, **k: None)
+        finally:
+            bids.os.replace = 원래replace
+
+        self.assertIn("직전", 본것, "os.replace 를 안 거쳤다 — 비원자적 쓰기다")
+        self.assertEqual(json.loads(본것["직전"]), {"z": {"bidAmt": 55}},
+                         "바꿔치기 전에 기존 백업이 이미 건드려졌다")
+        self.assertTrue(본것["tmp"].endswith(".tmp"))
+        self.assertFalse(pathlib.Path(본것["tmp"]).exists(), "tmp 가 회차에 남았다")
+        self.assertEqual(json.loads(bk_path.read_text(encoding="utf-8"))["z"],
+                         {"bidAmt": 55}, "기존 키가 사라졌다")
 
 
 class TestStreaks(unittest.TestCase):

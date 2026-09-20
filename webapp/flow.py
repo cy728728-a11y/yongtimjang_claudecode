@@ -320,6 +320,30 @@ def cli_totals(result: dict) -> dict[str, int]:
     return 합
 
 
+# CLI 가 실어 보내는 중단 사유 → 화면 문구. **웹앱이 사유를 지어내지 않는다** —
+# CLI 가 모르는 코드를 새로 보내면 그 코드를 그대로 띄운다(조용히 삼키지 않는다).
+중단사유 = {
+    "backup_unreadable": "기존 백업을 못 읽어 중단했다 — 덮어쓰지 않았다. "
+                         "회차의 before_bids_*.json 이 깨졌는지 먼저 봐라",
+    "backup_failed": "백업을 못 써서 중단했다 — 되돌릴 수단 없이 광고비를 건드리지 않는다",
+}
+
+
+def aborted_accounts(result: dict) -> dict[str, str]:
+    """계정별 중단 사유. **CLI 가 실은 `aborted` 를 읽어 옮기기만 한다.**
+
+    이게 화면에 없으면 "대상 N건 · 성공 0건" 으로만 보여서 사용자는 "올릴 게
+    없었구나" 로 읽는다. 실제로는 **백업이 깨져서 한 건도 안 올린 것**이고,
+    그건 사람이 회차 파일을 손봐야 하는 상태다. 둘을 같은 화면으로 만들지 않는다.
+    """
+    나온것 = {}
+    for alias, v in _계정들(result).items():
+        사유 = (v or {}).get("aborted")
+        if 사유:
+            나온것[alias] = 중단사유.get(사유, str(사유))
+    return 나온것
+
+
 def result_rows(result: dict, limit: int | None = PREVIEW_ROW_LIMIT) -> list[dict]:
     """결과 표의 줄 — **실패·스킵이 위**다 (T-1-37).
 

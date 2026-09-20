@@ -664,6 +664,41 @@ def test_항목단위_결과가_화면투영된다(화면, tmp_run_dir):
     assert [r["result"] for r in j["rows"]] == ["실패", "스킵", "성공"]
 
 
+def test_CLI_가_중단했으면_그_사유가_화면에_뜬다(화면, tmp_run_dir):
+    """CR-02 짝 — "성공 0건" 과 "백업이 깨져서 아예 안 올렸다" 는 다른 화면이다.
+
+    `run_bids` 가 기존 백업을 못 읽으면 덮어쓰지 않고 `aborted: backup_unreadable`
+    로 중단한다(CLI 쪽 방어). 그 사실이 화면에 없으면 사용자는 "올릴 게 없었구나" 로
+    읽고 넘어간다 — 실제로는 사람이 회차 파일을 손봐야 하는 상태다.
+    """
+    중단 = 실행계정([])
+    중단["aborted"] = "backup_unreadable"
+    산 = 산출물(ownway1=중단)
+
+    assert flow.aborted_accounts({"accounts": 산}) == {
+        "ownway1": flow.중단사유["backup_unreadable"]}
+
+    job_id = 실행잡(화면, tmp_run_dir, 산출물(ownway1=계정([])), 산)
+    본문 = 화면.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+    assert "ownway1 — 중단했다" in 본문, "중단한 계정이 화면에 없다"
+    assert "덮어쓰지 않았다" in 본문, "왜 중단했는지가 화면에 없다"
+
+    j = 화면.get(f"/jobs/{job_id}/result?format=json").json()
+    assert list(j["aborted"]) == ["ownway1"]
+
+    # 음성 대조군 — 중단이 없으면 배너가 뜨지 않는다.
+    # (이게 없으면 "항상 배너를 띄운다" 로도 위 assert 가 초록이다)
+    멀쩡 = 실행잡(화면, tmp_run_dir, 산출물(ownway1=계정([])),
+                산출물(ownway1=실행계정([])))
+    멀쩡본문 = 화면.get(f"/jobs/{멀쩡}/result", headers={"HX-Request": "true"}).text
+    assert "중단했다" not in 멀쩡본문
+    assert 화면.get(f"/jobs/{멀쩡}/result?format=json").json()["aborted"] == {}
+
+    # 모르는 코드는 삼키지 않고 그대로 띄운다 — 웹앱이 사유를 지어내지 않는다
+    모름 = 실행계정([]); 모름["aborted"] = "새로운사유"
+    assert flow.aborted_accounts({"accounts": 산출물(x=모름)}) == {"x": "새로운사유"}
+
+
 def test_종료코드가_0이어도_전량_실패면_실패로_보인다(화면, tmp_run_dir):
     """`bids` 는 PUT 이 전량 실패해도 exit 0 이다 — 화면이 초록으로 끝내면 안 된다."""
     plans = [결과계획("nad-a001-02-000000495390006", "인상", 70, 80, "실패", "HTTP 500")]

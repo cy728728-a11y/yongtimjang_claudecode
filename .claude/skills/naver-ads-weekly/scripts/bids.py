@@ -13,6 +13,7 @@
 쓰기 방법(실측): PUT /ncc/ads/{adId}?fields=adAttr, body = 조회한 소재 객체 전체
 """
 import json
+import os
 import time
 from datetime import date
 
@@ -199,19 +200,36 @@ def run_bids(acct, run_dir, rows, commit=False, log=print, only_ads=None):
     # 그리고 이게 D-12~D-14("이 작업분만 되돌리기")가 성립하는 근거다: 백업은 회차
     # 전체의 원본 창고이고, 되돌릴 범위는 run_revert 의 only_ads 가 정한다.
     bk = run_dir / f"before_bids_{alias}.json"
+    # Critical: **읽기 실패를 삼키지 않는다.** 예전에는 여기서 existing_bk = {} 로
+    # 새로 만들었는데, 그러면 파일이 한 번 깨지는 순간 Important 1("같은 키는 먼저
+    # 것을 유지한다")이 통째로 무효가 된다 — merged_bk 에 이번 plans 만 담겨 앞서
+    # 올린 소재들의 원본 adAttr 가 영구히 사라지고, 그 소재는 영영 못 되돌린다.
+    # 원본을 잃는 쪽이 이번 회차를 못 올리는 쪽보다 훨씬 비싸다. 그래서 중단한다
+    # (백업 없이 PUT 이 나가는 경로를 안 만드는 aborted:backup_failed 와 같은 태도).
     try:
         existing_bk = json.loads(bk.read_text(encoding="utf-8")) if bk.exists() else {}
     except Exception as e:
-        log(f"  ⚠ 기존 백업 읽기 실패(새로 만든다): {type(e).__name__}: {e}")
-        existing_bk = {}
+        log(f"  ✗ 기존 백업을 못 읽었다 — 덮어쓰지 않고 중단한다: {type(e).__name__}: {e}")
+        return {"plans": plans, "counts": counts, "committed": 0,
+                "aborted": "backup_unreadable"}
     merged_bk = dict(existing_bk)
     for p in plans:
         if p["action"] == "인상" and p["adId"] not in merged_bk:
             merged_bk[p["adId"]] = ad_by_id.get(p["adId"], {}).get("adAttr")
+    # **원자적으로 쓴다** (run_ads._dump_preview · run_coupang 의 tmp→os.replace 관례).
+    # write_text 는 truncate 후 write 라, 쓰는 도중에 프로세스가 죽으면 그 회차 백업이
+    # 반쪽 JSON 으로 남는다 → run_revert 가 파싱 실패 → 그 계정은 되돌리기 불가.
+    # 제일 잃으면 안 되는 파일만 이 관례를 안 쓰고 있었다.
+    tmp = bk.with_suffix(".json.tmp")
     try:
-        bk.write_text(json.dumps(merged_bk, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp.write_text(json.dumps(merged_bk, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, bk)
     except Exception as e:
         log(f"  ✗ 백업 실패 — 인상을 중단한다: {type(e).__name__}: {e}")
+        try:
+            tmp.unlink()        # 반쪽 tmp 를 회차에 남기지 않는다
+        except Exception:
+            pass
         return {"plans": plans, "counts": counts, "committed": 0, "aborted": "backup_failed"}
     log(f"  백업 → {bk.name}")
 

@@ -245,6 +245,8 @@ def _실행표ctx(상태: dict) -> dict:
         "result_counts": flow.result_counts(결과),
         "cli_totals": flow.cli_totals(결과),
         "succeeded": len(flow.succeeded_ad_ids(결과)),
+        # CLI 가 중단한 계정. "성공 0건" 과 "백업이 깨져서 아예 안 올렸다" 는 다른 화면이다.
+        "aborted": flow.aborted_accounts(결과),
         "diff": flow.diff_preview(미리보기, 결과),
         "preview_error": 미리보기.get("error"),
         "blind": 결과.get("blind") or [],
@@ -289,6 +291,7 @@ def _되돌리기표ctx(상태: dict) -> dict:
         "result_counts": flow.result_counts(결과),
         "cli_totals": flow.cli_totals(결과),
         "succeeded": len(flow.succeeded_ad_ids(결과)),
+        "aborted": flow.aborted_accounts(결과),
         "전체되돌리기": 상태.get("kind") == "revert_all",
         "blind": 결과.get("blind") or [],
         "error": 결과.get("error"),
