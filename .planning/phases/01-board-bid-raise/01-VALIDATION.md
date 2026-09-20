@@ -45,7 +45,7 @@ updated: 2026-09-20
 | **Config file** | CLI: 없음(파일 직접 실행) · 웹앱: `webapp/pytest.ini` — **Plan 01-01 Task 1 이 만든다** |
 | **Quick run command** | `.venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_bids.py` |
 | **Full suite command** | `for t in nvad reports ads_rules ledger bids prune; do .venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_$t.py \|\| exit 1; done && .venv-web/bin/pytest webapp/tests -q` |
-| **Estimated runtime** | CLI 100 tests ~0.02초 · 웹앱 전체 **~11초** (01-07 실측, 130 tests) · `sse_cdp.sh` ~35초 · `board_cdp.sh` ~20초 · `preview_cdp.sh` ~60초(실제 미리보기 접수 포함) |
+| **Estimated runtime** | CLI 100 tests ~0.02초 · 웹앱 전체 **~12초** (01-08 실측, 147 tests) · `sse_cdp.sh` ~35초 · `board_cdp.sh` ~20초 · `preview_cdp.sh` ~60초 · `commit_cdp.sh` ~25초(미리보기 접수 포함) |
 | **Baseline (2026-09-19 실측)** | CLI **100 tests, 6 파일 전부 exit=0** (7+7+21+21+28+16) |
 
 ---
@@ -103,9 +103,11 @@ updated: 2026-09-20
 | FLOW-04 | 01-07 | 5 | 필터 전체 선택은 별도 배너로 한 번 더 확인 (건수 타이핑 없음) | T-1-29 | 되돌릴 수 있는 작업은 타이핑을 받지 않는다 | integration | `CT_DEV_TOKEN=… bash webapp/tests/preview_cdp.sh` (V-PRE-02 타이핑칸 0개 · V-PRE-06a/b/c 배너·취소·확인) | ✅ 존재 | ✅ green |
 | ✚미리보기-CDP | 01-07 | 5 | 헤더 체크박스가 **필터 밖 행을 고르지 않는다** · 요약 줄이 한 스텝 뒤처지지 않는다 · 오염된 대상이 400 으로 거부된다 | T-1-29, T-1-30, T-1-31 | 고른 적 없는 소재가 대상에 섞이지 않는다 | integration | `CT_DEV_TOKEN=devtoken123 bash webapp/tests/preview_cdp.sh` (31종 · 실제 미리보기 접수 · 광고 API 0) | ✅ 존재 | ✅ green (31/31) |
 | ✚OQ7-계정수 | 01-07 | 5 | 회차마다 들어 있는 **계정 수·목록**이 드롭다운과 신선도 배너에 나온다 | T-1-20 | 측정 안 된 계정 위에서 올리는 것을 화면이 숨기지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_paths.py -x -q` (핵심 노드: `::test_회차마다_들어있는_계정수를_같이_준다` · `::test_신선도에_계정수와_빠진계정이_실린다`) | ✅ 존재 | ✅ green |
-| FLOW-01 | 01-08 | 6 | 미리보기 → 실행이 한 흐름으로 이어진다 (미리보기 없이 실행 불가) | T-1-34 | dry-run 선행 강제 | integration | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` | ❌ W0 | ⬜ pending |
-| FLOW-05 (화면) | 01-08 | 6 | 항목별 성공/실패/스킵+사유가 화면에 투영된다 | T-1-37 | 스킵·실패를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_항목단위_결과가_화면투영된다`) | ❌ W0 | ⬜ pending |
-| ✚diff-01 | 01-08 | 6 | 미리보기와 달라진 N건을 사유와 함께 보고한다 (D-10) | T-1-36 | 재계산 차이를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_미리보기와_달라진건을_보고한다`) | ❌ W0 | ⬜ pending |
+| FLOW-01 | 01-08 | 6 | 미리보기 → 실행이 한 흐름으로 이어진다 (미리보기 없이 실행 불가) | T-1-34 | dry-run 선행 강제 | integration | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (서버 쪽: `::test_미리보기_없이는_실행할_수_없다` · `::test_미리보기가_아직_도는데_실행하면_거부한다`) + `CT_DEV_TOKEN=… bash webapp/tests/commit_cdp.sh` (화면 쪽: V-CMT-01/02/07/08/15 — 버튼은 누르지 않는다) | ✅ 존재 | ✅ green |
+| FLOW-05 (화면) | 01-08 | 6 | 항목별 성공/실패/스킵+사유가 화면에 투영된다 | T-1-37 | 스킵·실패를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_항목단위_결과가_화면투영된다` · 실패·스킵이 위인지까지 본다) | ✅ 존재 | ✅ green |
+| ✚diff-01 | 01-08 | 6 | 미리보기와 달라진 N건을 사유와 함께 보고한다 (D-10) | T-1-36 | 재계산 차이를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_미리보기와_달라진건을_보고한다` · 0건이면 "미리보기 그대로 실행됐다" 한 줄) | ✅ 존재 | ✅ green |
+| ✚실행안됨-01 | 01-08 | 6 | `result` 키가 없는 항목을 **성공으로 세지 않는다** | T-1-35 | 안 올라간 소재가 되돌리기 대상에 안 든다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_결과가_안_적힌_항목은_성공이_아니다` · `::test_종료코드가_0이어도_전량_실패면_실패로_보인다`) | ✅ 존재 | ✅ green |
+| ✚실행버튼-CDP | 01-08 | 6 | 실행 버튼이 **미리보기가 끝나야** 열리고, 새로고침하면 다시 잠긴다 · 요약 숫자가 산출물과 같다 | T-1-34 | 미리보기 없이 실행 불가를 화면에서도 본다 | integration | `CT_DEV_TOKEN=devtoken123 bash webapp/tests/commit_cdp.sh` (15종 · 미리보기만 접수 · **실행 버튼은 안 누른다** · 광고비 0) | ✅ 존재 | ✅ green (15/15) |
 | BID-04 | 01-09 | 7 | 되돌리기가 **그 작업분만** 되돌린다 (백업 파일 불변) | T-1-08, T-1-40 | 회차 전체가 풀리지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_revert.py -x -q` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -213,7 +215,8 @@ grep -rq "$S" webapp-logs/ && echo FAIL || echo PASS
 - [x] 테스트에 `--commit` 리터럴 0건 (01-07 에서 재확인 — 주석 한 줄이 실제로 걸려서 고쳤다)
 - [x] CLI 100 tests 여전히 exit=0 (01-07 재확인: 7+7+21+21+28+16)
 - [x] 보드 JS 수정 시 `bash webapp/tests/board_cdp.sh` 전량 PASS (01-07 재확인 — 선택 컬럼 40px 을 벌려고 숫자 열 폭을 깎았다. 표 1448 / 컨테이너 1448 로 가로 스크롤 없음)
-- [ ] 선택·미리보기 수정 시 `bash webapp/tests/preview_cdp.sh` 전량 PASS (같은 계층)
+- [x] 선택·미리보기 수정 시 `bash webapp/tests/preview_cdp.sh` 전량 PASS (01-08 재확인 — board.js 실행 배선 추가 후 31/31)
+- [x] 실행 버튼 배선 수정 시 `bash webapp/tests/commit_cdp.sh` 전량 PASS (01-08 신설 — 15/15, 버튼은 누르지 않는다)
 - [ ] 진행 로그·작업 패널 수정 시 `bash webapp/tests/sse_cdp.sh` 전량 PASS (같은 계층)
 - [x] `nyquist_compliant: true` set in frontmatter
 
