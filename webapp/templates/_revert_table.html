@@ -1,0 +1,116 @@
+{# 되돌리기 결과 표 (BID-04 / D-12~D-14) — Plan 01-09.
+
+   **인상 결과 표를 재사용하지 않는다.** 저쪽 컬럼은 `현재가 → 인상 후` 인데
+   되돌리기에는 "인상 후" 가 없다. 같은 표로 그리면 복원값이 인상값으로 읽힌다 —
+   내린 것을 올린 것처럼 보여주는 화면이 이 단계에서 제일 비싼 오해다.
+
+   **되돌리기 직전의 실제 입찰가(`from`)는 여기 없다.** 소재 스냅샷은 인상 **전**에
+   찍힌 것이라 지금 값이 아니고, 웹앱이 없는 숫자를 만들지 않는다(T-1-07 과 같은 규칙).
+   말할 수 있는 것은 "무엇으로 되돌렸는가" 뿐이다.
+
+   **종료코드로 성공을 판단하지 않는다.** 이 명령은 PUT 이 전량 실패해도 exit 0 이다.
+
+   자동 이스케이프에 기댄다 — `| safe` 를 쓰지 마라 (T-1-17). #}
+
+{% import "_bid_macros.html" as 표 %}
+
+{% if error %}
+  <p class="stale"><strong>되돌리기 결과를 못 읽었다 — {{ error }}</strong><br>
+    산출물이 없거나 깨졌다. <strong>되돌리기가 안 됐다는 뜻은 아니다</strong> —
+    터미널에서 회차의 <code>before_bids_*.json</code> 과 ledger 를 먼저 봐라.
+    <strong>백업은 되돌리기가 지우지 않으므로</strong> 그대로 다시 돌릴 수 있다.</p>
+
+{% elif job.status == "running" %}
+  <p>되돌리는 중이다… 위 경과시간을 봐라. 진행률은 안 나온다.</p>
+
+{% else %}
+  {# ① 무엇을 되돌렸나 — 범위를 맨 위에 못박는다. "이 작업분만" 과 "회차 전체" 는
+     같은 표로 그려지므로, 어느 쪽이었는지를 화면이 **말해야** 한다 (D-14). #}
+  {% if 전체되돌리기 %}
+    <p class="stale"><strong>이 회차 전체 되돌리기였다.</strong>
+      방금 누른 작업분만이 아니라 이 회차의 인상분 전부가 대상이었다.</p>
+  {% else %}
+    <p><strong>이 작업분만 되돌렸다</strong> — 부모 실행 작업에서 인상 성공한 소재만 대상이었다.</p>
+  {% endif %}
+
+  <p>
+    <strong>대상 {{ "{:,}".format(total) }}건</strong>
+    {% set 보일것 = result_counts.items() | rejectattr("0", "equalto", "실행 안 됨") | list %}
+    {% if result_counts.get("실행 안 됨") %}{% set 보일것 = result_counts.items() | list %}{% endif %}
+    → {% for 결과, n in 보일것 %}{{ 결과 }} {{ "{:,}".format(n) }}{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+
+  {# CLI 가 스스로 센 수와 대조한다. 어긋나면 **그 사실도 적는다** — 둘 중 하나를
+     고르지 않는다(Pitfall 6 과 같은 판단). #}
+  {% if cli_totals.committed != result_counts.get("성공", 0)
+        or cli_totals.failed != result_counts.get("실패", 0) %}
+    <p class="stale"><strong>CLI 가 센 수와 표의 수가 다르다</strong> —
+      CLI: 성공 {{ cli_totals.committed }} · 실패 {{ cli_totals.failed }} /
+      표: 성공 {{ result_counts.get("성공", 0) }} · 실패 {{ result_counts.get("실패", 0) }}.
+      결과 파일을 직접 열어 확인해라.</p>
+  {% endif %}
+
+  {% if result_counts.get("실패") %}
+    <p class="stale"><strong>되돌리지 못한 소재가 {{ result_counts["실패"] }}건 있다.</strong>
+      그 소재는 <strong>아직 인상된 상태</strong>다. 백업은 안 지워졌으니 같은 버튼을
+      다시 눌러 재시도할 수 있다 — 이미 되돌아간 소재는 원본값으로 한 번 더 쓰일 뿐이라
+      무해하다.</p>
+  {% endif %}
+
+  {% if blind %}
+    <p class="stale"><strong>소재 스냅샷을 못 읽은 계정이 있다: {{ blind | join(", ") }}</strong><br>
+      이 계정들은 0건이 아니라 <strong>되돌리기가 시도조차 안 됐다</strong>.</p>
+  {% endif %}
+
+  {# ② Pitfall 4 / OQ-2 — 인상일과 되돌린 날이 다르면 이력에 안 남는다. #}
+  {% if date_mismatch %}
+    <p class="stale"><strong>인상일 {{ raise_date }} · 오늘 {{ today }} — 날짜를 넘겼다.</strong><br>
+      입찰가는 <strong>정상적으로 복원됐다</strong>(PUT 은 날짜와 무관하다). 다만 이력에
+      되돌림 표시가 안 찍혀서, 그 소재는 쿨다운 6일 동안 재인상이 막힌다.
+      Phase 1 은 이 동작을 고치지 않고 알리기만 한다(OQ-2).</p>
+  {% endif %}
+
+  {% if total == 0 %}
+    <p>결과 파일에 항목이 하나도 없다. 되돌릴 대상이 없었거나 접수 전에 끝났다 — 로그를 봐라.</p>
+  {% else %}
+    {# ③ 항목 표. **실패가 위다** — 봐야 할 것은 성공이 아니라 아직 안 내려간 것들이다. #}
+    {{ 표.잘렸다고말하기(total, rows | length, job.id, "실패가 위") }}
+    <div style="max-height: 24rem; overflow: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>계정</th><th>상품명</th><th>소재ID</th><th>결과</th><th>사유</th>
+            <th>되돌린 입찰가</th><th>그룹입찰따름</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.acct }}</td>
+              <td title="{{ r.title }}">{{ r.title[:40] }}</td>
+              <td><small>{{ r.adId }}</small></td>
+              <td>{{ r.result }}</td>
+              <td>
+                {{ r.error }}
+                {% if r.error == "스냅샷에 소재 없음" %}
+                  <br><small>prep 이후에 소재가 지워졌다 — 되돌릴 소재 자체가 없다.</small>
+                {% endif %}
+              </td>
+              {# 복원값은 백업에 담긴 원본 그대로다. 없으면 빈칸 — 0 으로 대체하면
+                 "0원으로 되돌렸다" 는 없는 판정이 생긴다. #}
+              <td style="text-align:right">{% if r.to is not none %}{{ r.to }}{% endif %}</td>
+              <td>{{ 표.예아니오(r.useGroupBid) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p><small><strong>그룹입찰따름 「예」</strong>는 인상이 만든 그룹→개별 전환까지 함께
+      취소됐다는 뜻이다. 그 소재의 실제 적용가는 이제 그룹 기본가를 다시 따른다 —
+      표의 숫자가 아니라 <strong>그룹 기본가가 지금 값</strong>이다.</small></p>
+  {% endif %}
+
+  <p><small><strong>백업 파일은 그대로다.</strong>
+    <code>before_bids_*.json</code> 은 되돌리기가 읽기만 한다 — 재시도도, 나머지
+    작업분 되돌리기도 그대로 살아 있다 (D-13).</small></p>
+{% endif %}

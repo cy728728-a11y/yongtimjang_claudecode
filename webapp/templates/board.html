@@ -46,6 +46,11 @@
       background: var(--pico-code-background-color, #f4f4f4);
       border-radius: .25rem;
     }
+    /* 위험 구역 (D-14 / T-1-43). 결과 표의 되돌리기 버튼과 **생김새가 달라야** 한다 —
+       거리만으로는 부족하고, 눈이 "여기는 다른 종류의 버튼" 이라고 읽어야 한다. */
+    #danger-zone { margin-top: 3rem; border-top: .2rem solid var(--pico-del-color, #d93526); padding-top: 1rem; }
+    #danger-zone summary { color: var(--pico-del-color, #d93526); cursor: pointer; }
+
     #job-log {
       margin: 0; padding: .6rem .8rem; background: none;
       font-size: .82rem; line-height: 1.45;
@@ -300,6 +305,41 @@
 
     <div id="board"></div>
   </section>
+
+  {# ── 위험 구역: 이 회차 전체 되돌리기 (D-14 / T-1-43) ─────────────────────
+     **결과 표의 "이 작업분만 되돌리기" 와 절대 나란히 두지 않는다.** 실수로 옆
+     버튼을 누르는 게 이 화면의 최대 위험이라, 셋을 겹쳐 막는다:
+       ① 페이지 맨 아래 — 결과 표와 보드 전체를 사이에 둔다
+       ② 기본이 접힘(`<details>`) — 한 번 더 펼쳐야 보인다
+       ③ 건수 확인 단계 — 서버가 **그 순간** 센 수를 보여주고 승인을 받는다
+
+     건수는 여기 박지 않는다. 버튼을 누르는 순간 서버에 물어본다 — 페이지를 연 뒤에
+     다른 작업이 인상을 더했으면 승인하는 규모가 달라진다. #}
+  {% if run_dir %}
+    <section id="danger-zone">
+      <h2>위험 구역</h2>
+      <details id="danger-details">
+        <summary><strong>{{ run_dir }} 회차 전체 되돌리기</strong> — 펼치기</summary>
+        <div class="stale">
+          <p><strong>이건 방금 누른 작업분이 아니라 이 회차의 인상분 전부를 푼다.</strong>
+            같은 회차에서 여러 번 올렸다면 그 전부가 원래 입찰가로 돌아간다 —
+            <code>before_bids_*.json</code> 백업은 회차 안에서 누적되기 때문이다.</p>
+          <p>특정 실행만 되돌리려면 <strong>이 버튼이 아니라</strong> 실행 결과 표 아래의
+            <strong>이 작업분만 되돌리기</strong> 를 써라.</p>
+        </div>
+        <button type="button" id="revert-round-btn" class="contrast">이 회차 전체 되돌리기</button>
+
+        <div id="revert-round-confirm" class="stale" hidden>
+          <p id="revert-round-msg"></p>
+          <input type="hidden" id="revert-round-count" value="">
+          <div role="group">
+            <button type="button" id="revert-round-ok" class="contrast">그래, 전부 되돌린다</button>
+            <button type="button" id="revert-round-cancel" class="secondary">취소</button>
+          </div>
+        </div>
+      </details>
+    </section>
+  {% endif %}
 
 </main>
 

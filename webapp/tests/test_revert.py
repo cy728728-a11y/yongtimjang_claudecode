@@ -363,3 +363,480 @@ def test_되돌리기_dry_run_은_판정결과가_없어도_돈다(tmp_path):
     p = _cli(env, "bids", "--run-dir", "2026-08-30", "--revert", "--account", alias)
     assert p.returncode == 0, p.stdout + p.stderr
     assert "판정 결과가 없다" not in p.stdout
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 웹앱 쪽 (Plan 01-09 Task 2) — flow 함수 · 라우트 · 범위 가드
+#
+# **여기서는 진짜 CLI 를 `--revert` 쓰기로 태우지 않는다.** 자식 프로세스는 in-process
+# monkeypatch 를 상속하지 않으므로, 회차 이름을 그대로 넘기면 자식이 **실제 데이터
+# 루트**의 회차를 짚는다. 그래서 두 가지로 갈라 둔다:
+#   · dry-run 검증 → `EROOM_WORKSPACE_TOML` 을 env 로 갈아끼워 자식도 tmp 를 보게 한다
+#   · 쓰기 경로 검증 → `jobs.spawn` 을 가짜로 바꿔 **아무것도 안 띄운다**
+# ─────────────────────────────────────────────────────────────────────────────
+import sqlite3  # noqa: E402
+
+from webapp import flow, jobs, paths, security, settings  # noqa: E402
+
+회차이름 = "2026-08-30"
+
+
+@pytest.fixture
+def 웹회차(tmp_path, monkeypatch):
+    """웹앱과 **자식 프로세스가 같은 tmp 회차를 보게** 세운다.
+
+    `paths.data_root` 만 바꾸면 in-process 만 tmp 를 보고 자식은 실제 루트를 본다 —
+    그 상태로 되돌리기를 태우면 실제 회차의 백업을 읽는다. `EROOM_WORKSPACE_TOML` 을
+    같이 갈아끼워 그 간극을 없앤다.
+    """
+    toml = tmp_path / "workspace.toml"
+    toml.write_text(f'[paths]\ndata_root = "{tmp_path}"\n', encoding="utf-8")
+    monkeypatch.setenv("EROOM_WORKSPACE_TOML", str(toml))
+    monkeypatch.setattr(paths, "data_root", lambda: tmp_path)
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setattr(settings, "JOB_LOG_DIR", str(tmp_path / "logs"))
+
+    run_dir = tmp_path / "naver-ads" / "runs" / 회차이름
+    acc = run_dir / "accounts" / ALIAS
+    acc.mkdir(parents=True)
+    아이디들 = [f"ad{i:02d}" for i in range(백업건수)]
+    (acc / "ads.json").write_text(json.dumps({"ads": [
+        {"nccAdId": i, "nccAdgroupId": "g", "adAttr": _adattr(120),
+         "referenceData": {"productTitle": f"상품{i}"}} for i in 아이디들
+    ]}, ensure_ascii=False), encoding="utf-8")
+    (run_dir / f"before_bids_{ALIAS}.json").write_text(
+        json.dumps({i: _adattr(70, group=True) for i in 아이디들},
+                   ensure_ascii=False, indent=1), encoding="utf-8")
+    # `paths.scan_run_dirs` 는 result.json 이 있어야 회차로 친다(화이트리스트 관문).
+    (run_dir / "result.json").write_text(json.dumps(
+        {"generated": 회차이름, "accounts": {ALIAS: {"summary": {}, "rules": {"①노출0": []}}}},
+        ensure_ascii=False), encoding="utf-8")
+    return run_dir
+
+
+def _실행잡(run_dir, 성공들, 실패들=()):
+    """끝난 `bids_commit` 잡 하나를 레지스트리에 세우고 산출물을 써 둔다.
+
+    실제 CLI 를 띄우지 않는다 — `argv_override` 로 아무것도 안 하는 명령을 태운다.
+    이 잡의 **산출물**이 되돌리기 대상의 유일한 근거다(D-13).
+    """
+    job_id = jobs.create_job("bids_commit", run_dir=회차이름, accounts=[ALIAS],
+                             argv_override=[sys.executable, "-c", ""])
+    상태 = jobs.job_status(job_id)
+    plans = ([{"adId": i, "action": "인상", "from": 70, "to": 80, "result": "성공", "error": ""}
+              for i in 성공들]
+             + [{"adId": i, "action": "인상", "from": 70, "to": 80,
+                 "result": "실패", "error": "500"} for i in 실패들])
+    Path(상태["result_path"]).write_text(json.dumps(
+        {ALIAS: {"plans": plans, "counts": {"인상": len(plans)},
+                 "committed": len(성공들), "failed": len(실패들)}},
+        ensure_ascii=False), encoding="utf-8")
+    return job_id
+
+
+# ── flow: 대상 추리기 (D-13) ────────────────────────────────────────────────
+
+def test_되돌리기_대상은_성공한_소재만이다(웹회차):
+    """D-13 — 실패한 소재를 되돌리려 들면 안 올라간 것을 내리려는 것이다."""
+    job_id = _실행잡(웹회차, ["ad00", "ad01"], 실패들=["ad02"])
+
+    대상파일 = flow.revert_targets_for_job(job_id)
+    담긴것 = json.loads(대상파일.read_text(encoding="utf-8"))
+
+    assert 담긴것 == ["ad00", "ad01"]
+    assert "ad02" not in 담긴것, "실패한 소재가 되돌리기 대상에 들었다"
+
+
+def test_되돌리기_대상파일은_회차_web_밑이다(웹회차):
+    """`jobs._override_targets` 가 회차 밖 파일을 거부한다 — 같은 규약을 지킨다."""
+    job_id = _실행잡(웹회차, ["ad00"])
+    대상파일 = flow.revert_targets_for_job(job_id)
+    assert 대상파일.parent == (웹회차 / "web").resolve()
+    assert 대상파일.name == f"targets_revert_{job_id}.json"
+
+
+def test_성공이_0건이면_되돌릴_게_없다(웹회차):
+    """전량 실패한 실행에는 되돌릴 대상이 없다. 빈 파일을 만들어 '전량' 이 되게 두지 않는다."""
+    job_id = _실행잡(웹회차, [], 실패들=["ad00", "ad01"])
+    with pytest.raises(ValueError, match="되돌릴 게 없다"):
+        flow.revert_targets_for_job(job_id)
+
+
+def test_결과가_안_적힌_항목은_되돌리기_대상이_아니다(웹회차):
+    """T-1-35 연장 — 실행 안 된 소재를 내리려 들면 남의 원본을 덮는다."""
+    job_id = jobs.create_job("bids_commit", run_dir=회차이름, accounts=[ALIAS],
+                             argv_override=[sys.executable, "-c", ""])
+    상태 = jobs.job_status(job_id)
+    Path(상태["result_path"]).write_text(json.dumps(
+        {ALIAS: {"plans": [{"adId": "ad00", "action": "인상", "from": 70, "to": 80}],
+                 "counts": {"인상": 1}}}, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="되돌릴 게 없다"):
+        flow.revert_targets_for_job(job_id)
+
+
+# ── flow: 회차 전체 건수 (D-14 / T-1-40) ────────────────────────────────────
+
+def test_회차전체_건수는_백업의_키수다(웹회차):
+    """D-14 — 버튼을 누르기 전에 사용자에게 보여줄 수. 계정별로 센다."""
+    assert flow.revert_round_targets(회차이름) == {ALIAS: 백업건수}
+
+
+def test_회차전체_건수는_백업을_읽기만_한다(웹회차):
+    """T-1-40 — 건수를 세려고 연 파일을 쓰지 않는다."""
+    bk = 웹회차 / f"before_bids_{ALIAS}.json"
+    원본 = bk.read_bytes()
+    flow.revert_round_targets(회차이름)
+    assert bk.read_bytes() == 원본
+
+
+def test_되돌릴_수_없는_항목은_안_센다(웹회차):
+    """백업 값이 `None` 인 키는 원본을 못 남긴 소재다 — 되돌릴 수 없으니 건수에서 뺀다."""
+    bk = 웹회차 / f"before_bids_{ALIAS}.json"
+    백업 = json.loads(bk.read_text(encoding="utf-8"))
+    백업["ad00"] = None
+    bk.write_text(json.dumps(백업, ensure_ascii=False), encoding="utf-8")
+    assert flow.revert_round_targets(회차이름) == {ALIAS: 백업건수 - 1}
+
+
+def test_백업이_깨졌으면_건수를_지어내지_않는다(웹회차):
+    """0 으로 돌려주면 '되돌릴 게 없다' 와 '못 셌다' 가 같은 화면이 된다."""
+    (웹회차 / f"before_bids_{ALIAS}.json").write_text("{깨짐", encoding="utf-8")
+    with pytest.raises(ValueError):
+        flow.revert_round_targets(회차이름)
+
+
+def test_백업이_없는_회차는_0건이다(웹회차):
+    (웹회차 / f"before_bids_{ALIAS}.json").unlink()
+    assert flow.revert_round_targets(회차이름) == {}
+
+
+# ── flow: 범위 가드 (Pitfall 2 / T-1-08) ────────────────────────────────────
+
+def test_범위가_다르면_막는다():
+    """Pitfall 2 의 마지막 방어선. 조기 신호는 '대상 수가 방금 실행한 건수보다 크다' 다."""
+    flow.check_revert_scope(3, 3)
+    with pytest.raises(flow.ScopeError) as e:
+        flow.check_revert_scope(3, 2242)
+    assert "2,242" in str(e.value) or "2242" in str(e.value)
+    assert isinstance(e.value, ValueError), "라우트가 ValueError 로도 잡을 수 있어야 한다"
+
+
+def test_dry_run_이_진짜_CLI_에게_범위를_물어본다(tmp_path, monkeypatch):
+    """T-1-42 — 쓰기 전에 **CLI 가 직접 센 수**를 받는다. 웹앱이 추정하지 않는다.
+
+    여기만 계정 alias 를 진짜로 쓴다 — `--account` 는 자격증명 파일에 있는 이름만
+    통과하고, 없는 이름을 주면 계정이 0개가 되어 **targets 0 이 조용히 나온다**.
+    그 0 을 "되돌릴 게 없다" 로 읽으면 이 가드는 있는 척만 한다. 이름은 박지 않고
+    `run_ads.py accounts` 에게 물어본다(BOARD-02).
+
+    자식이 tmp 회차를 보도록 `EROOM_WORKSPACE_TOML` 을 갈아끼운다. 광고 API 는
+    안 탄다 — dry-run 이다.
+    """
+    toml = tmp_path / "workspace.toml"
+    toml.write_text(f'[paths]\ndata_root = "{tmp_path}"\n', encoding="utf-8")
+    monkeypatch.setenv("EROOM_WORKSPACE_TOML", str(toml))
+    monkeypatch.setattr(paths, "data_root", lambda: tmp_path)
+
+    계정 = json.loads(_cli(dict(os.environ), "accounts").stdout)
+    assert 계정, "자격증명이 없으면 이 테스트는 의미가 없다"
+    alias = 계정[0]["alias"]
+    run_dir = _샌드박스_회차(tmp_path, alias, [f"ad{i:02d}" for i in range(백업건수)])
+
+    대상파일 = run_dir / "web" / "targets_revert_test.json"
+    대상파일.parent.mkdir(parents=True, exist_ok=True)
+    대상파일.write_text(json.dumps(["ad00", "ad01", "ad02"]), encoding="utf-8")
+
+    좁힘 = flow.revert_dry_run(회차이름, accounts=[alias], only_ads=대상파일)
+    전체 = flow.revert_dry_run(회차이름, accounts=[alias])
+
+    assert 좁힘["targets"] == 3
+    assert 전체["targets"] == 백업건수
+    assert 좁힘["by_account"][alias] == 3
+    # 이 대비가 D-12 다 — 같은 명령에 대상 파일 하나 차이로 3 과 10 이 갈린다.
+    flow.check_revert_scope(3, 좁힘["targets"])
+    with pytest.raises(flow.ScopeError):
+        flow.check_revert_scope(3, 전체["targets"])
+
+
+# ── 라우트 (D-13 / D-14 / Pitfall 3) ────────────────────────────────────────
+
+@pytest.fixture
+def 자식금지(monkeypatch):
+    """`jobs.spawn` 을 막는다. **되돌리기 쓰기를 테스트에서 절대 띄우지 않는다.**
+
+    자식은 in-process monkeypatch 를 상속하지 않아서, 한 번 새면 실제 회차의 백업을
+    읽고 실제 광고 API 에 PUT 을 낸다. 여기가 이 파일에서 제일 중요한 한 줄이다.
+    """
+    띄운것 = []
+
+    class 가짜프로세스:
+        pid = 999999
+
+        def poll(self):
+            return 0
+
+    def 가짜spawn(argv_list, log_path):
+        띄운것.append(list(argv_list))
+        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(log_path).write_text("", encoding="utf-8")
+        return 가짜프로세스()
+
+    monkeypatch.setattr(jobs, "spawn", 가짜spawn)
+    return 띄운것
+
+
+def _되돌리기가_떴나(띄운것):
+    """**되돌리기** 자식이 떴는지만 본다.
+
+    `자식금지` 는 픽스처 준비용 잡(실행 잡·미리보기 잡)까지 전부 기록한다 —
+    "아무것도 안 떴다" 로 단언하면 준비 단계 때문에 늘 빨갛다. 여기서 막고 싶은 것은
+    되돌리기 명령이 나가는 것뿐이다.
+    """
+    return any("--revert" in av for av in 띄운것)
+
+
+def _argv(job_id):
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        return json.loads(cx.execute("SELECT argv FROM jobs WHERE id=?", (job_id,)).fetchone()[0])
+    finally:
+        cx.close()
+
+
+def test_작업분_되돌리기는_대상파일을_싣는다(웹회차, 자식금지, client, monkeypatch):
+    """D-13 — argv 에 되돌리기 플래그와 **그 작업분 대상 파일**이 둘 다 있다."""
+    monkeypatch.setattr(flow, "revert_dry_run",
+                        lambda *a, **k: {"targets": 2, "by_account": {ALIAS: 2}})
+    부모 = _실행잡(웹회차, ["ad00", "ad01"])
+
+    r = client.post("/jobs/revert/job", json={"commit_job_id": 부모})
+    assert r.status_code == 200, r.text
+
+    av = _argv(r.json()["job_id"])
+    assert "--revert" in av
+    assert "--only-ads" in av
+    대상 = av[av.index("--only-ads") + 1]
+    assert 대상.endswith(f"targets_revert_{부모}.json")
+    assert json.loads(Path(대상).read_text(encoding="utf-8")) == ["ad00", "ad01"]
+
+
+def test_회차전체_되돌리기는_대상파일이_없다(웹회차, 자식금지, client, monkeypatch):
+    """D-12/D-14 — 이쪽은 좁히지 않는다. 대상 파일 유무가 두 버튼의 차이 전부다."""
+    monkeypatch.setattr(flow, "revert_dry_run",
+                        lambda *a, **k: {"targets": 백업건수, "by_account": {ALIAS: 백업건수}})
+
+    r = client.post("/jobs/revert/round",
+                    json={"run_dir": 회차이름, "confirmed_count": 백업건수})
+    assert r.status_code == 200, r.text
+
+    av = _argv(r.json()["job_id"])
+    assert "--revert" in av
+    assert "--only-ads" not in av
+
+
+def test_화면이_본_건수와_다르면_거부한다(웹회차, 자식금지, client, monkeypatch):
+    """D-14 — 화면이 9건을 보여줬는데 서버가 10건을 세면 그 클릭은 무효다.
+
+    **범위 가드를 일부러 통과시켜 놓고 본다.** dry-run 을 실제 값으로 고정하지 않으면
+    이 테스트는 "confirmed_count 대조" 가 아니라 그 **뒤의** `check_revert_scope` 가
+    내는 409 를 보고 초록이 된다 — 대조를 통째로 지워도 통과하는 가짜 초록이다
+    (음성 대조군에서 실제로 걸렸다).
+    """
+    부른적 = []
+    monkeypatch.setattr(flow, "revert_dry_run",
+                        lambda *a, **k: 부른적.append(1) or
+                        {"targets": 백업건수, "by_account": {ALIAS: 백업건수}})
+
+    r = client.post("/jobs/revert/round",
+                    json={"run_dir": 회차이름, "confirmed_count": 백업건수 - 1})
+
+    assert r.status_code == 409
+    assert "화면이 본 건수" in r.json()["detail"]
+    assert str(백업건수) in r.json()["detail"]
+    assert 부른적 == [], "대조에서 막혔어야 하는데 dry-run 까지 갔다"
+    assert not _되돌리기가_떴나(자식금지)
+
+
+def test_범위가_안_맞으면_실행_전에_막힌다(웹회차, 자식금지, client, monkeypatch):
+    """Pitfall 2 — dry-run 이 부모 성공 건수보다 큰 수를 내면 접수 자체를 거부한다."""
+    monkeypatch.setattr(flow, "revert_dry_run",
+                        lambda *a, **k: {"targets": 2242, "by_account": {ALIAS: 2242}})
+    부모 = _실행잡(웹회차, ["ad00", "ad01"])
+
+    r = client.post("/jobs/revert/job", json={"commit_job_id": 부모})
+    assert r.status_code == 409
+    assert "2,242" in r.json()["detail"] or "2242" in r.json()["detail"]
+    assert not _되돌리기가_떴나(자식금지), "범위가 안 맞는데 되돌리기가 떴다"
+
+
+def test_미리보기_잡은_되돌릴_수_없다(웹회차, 자식금지, client):
+    """되돌리기는 **실행한 작업**에만 건다. 미리보기 잡의 대상 파일은 의미가 다르다."""
+    job_id = jobs.create_job("bids_preview", run_dir=회차이름, accounts=[ALIAS],
+                             only_ads=["ad00"])
+    r = client.post("/jobs/revert/job", json={"commit_job_id": job_id})
+    assert r.status_code == 400
+    assert not _되돌리기가_떴나(자식금지)
+
+
+def test_실행이_아직_도는데_되돌리면_거부한다(웹회차, 자식금지, client):
+    """무엇이 올라갔는지 아직 모르는 상태다 — 산출물이 확정되기 전이다."""
+    job_id = jobs.create_job("bids_commit", run_dir=회차이름, accounts=[ALIAS],
+                             argv_override=[sys.executable, "-c", ""])
+    r = client.post("/jobs/revert/job", json={"commit_job_id": job_id})
+    assert r.status_code == 400
+    assert not _되돌리기가_떴나(자식금지), "도는 중인데 되돌리기가 떴다"
+
+
+def test_되돌리기_도는_중엔_다른_쓰기가_409다(웹회차, 자식금지, client, monkeypatch):
+    """Pitfall 3 / T-1-09 — 되돌리기도 쓰기 잡이라 전역 가드를 탄다.
+
+    겹치면 `before_bids_*.json` 과 ledger 가 read-modify-write 레이스로 서로를 덮는다.
+    백업 항목이 사라지면 **그 소재는 영영 되돌릴 수 없다.**
+    """
+    monkeypatch.setattr(flow, "revert_dry_run",
+                        lambda *a, **k: {"targets": 백업건수, "by_account": {ALIAS: 백업건수}})
+
+    r1 = client.post("/jobs/revert/round",
+                     json={"run_dir": 회차이름, "confirmed_count": 백업건수})
+    assert r1.status_code == 200
+
+    # 가짜 자식은 끝나지 않는다(poll()=0 을 주지만 _PROCS 에 없는 상태를 만든다).
+    # 실제로 도는 상태를 만들려고 pid 를 살아 있는 이 프로세스로 바꾼다 —
+    # `_reap` 이 "죽었다" 고 판단해 가드를 풀어 버리면 이 테스트가 의미를 잃는다.
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("UPDATE jobs SET status='running', pid=? WHERE id=?",
+                   (os.getpid(), r1.json()["job_id"]))
+        cx.commit()
+    finally:
+        cx.close()
+    jobs._PROCS.pop(r1.json()["job_id"], None)
+
+    r2 = client.post("/jobs/revert/round",
+                     json={"run_dir": 회차이름, "confirmed_count": 백업건수})
+    assert r2.status_code == 409, r2.text
+
+    r3 = client.post("/jobs/prep", json={"run_dir": 회차이름})
+    assert r3.status_code == 409, "되돌리기 중에 새로 수집이 떴다 — 백업이 깨진다"
+
+
+def test_되돌리기_결과는_되돌리기_표로_그린다(웹회차, 자식금지, client, monkeypatch):
+    """FLOW-05 연장 — 되돌리기 잡의 산출물을 인상 표로 그리면 '인상 후' 칸이 거짓말이 된다."""
+    monkeypatch.setattr(flow, "revert_dry_run",
+                        lambda *a, **k: {"targets": 백업건수, "by_account": {ALIAS: 백업건수}})
+    r = client.post("/jobs/revert/round",
+                    json={"run_dir": 회차이름, "confirmed_count": 백업건수})
+    job_id = r.json()["job_id"]
+
+    상태 = jobs.job_status(job_id)
+    Path(상태["result_path"]).write_text(json.dumps({ALIAS: {
+        "targets": 2, "committed": 1, "failed": 1,
+        "plans": [{"adId": "ad00", "action": "되돌리기", "to": 70, "useGroupBid": True,
+                   "result": "성공", "error": ""},
+                  {"adId": "ad01", "action": "되돌리기", "to": 70, "useGroupBid": True,
+                   "result": "실패", "error": "500 서버 오류"}]}},
+        ensure_ascii=False), encoding="utf-8")
+
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)   # 읽기 창은 쿠키 게이트다
+    ctx = client.get(f"/jobs/{job_id}/result?format=json").json()
+    assert ctx["result_counts"]["성공"] == 1
+    assert ctx["result_counts"]["실패"] == 1
+    assert ctx["succeeded"] == 1
+
+    조각 = client.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+    assert "되돌" in 조각
+    assert "인상 후" not in 조각, "되돌리기 결과에 인상 표를 그리면 안 된다"
+
+
+# ── 화면 (D-14 / T-1-43) ────────────────────────────────────────────────────
+
+def test_두_버튼은_같은_화면조각에_없다(웹회차, 자식금지, client):
+    """D-14 / T-1-43 — 실수로 옆 버튼을 누르는 게 이 화면의 최대 위험이다.
+
+    서버가 보장할 수 있는 절반: **두 버튼이 다른 조각에서 온다.** 보드 페이지에는
+    "이 작업분만" 버튼이 없고, 결과 표 조각에는 "회차 전체" 버튼이 없다.
+    화면상의 실제 거리는 `webapp/tests/revert_cdp.sh` 가 픽셀로 잰다.
+    """
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+    보드 = client.get(f"/?run_dir={회차이름}").text
+
+    assert 'id="revert-round-btn"' in 보드
+    assert 'id="revert-job-btn"' not in 보드, "회차 전체 버튼 옆에 작업분 버튼이 있다"
+    # 기본 접힘 — 한 번 더 펼쳐야 보인다.
+    assert "<details" in 보드.split('id="danger-zone"')[1].split("</section>")[0]
+
+
+def test_회차전체_버튼은_확인단계를_거친다(웹회차, 자식금지, client):
+    """D-14 — 누르는 즉시 접수되지 않는다. 건수를 보여주고 승인을 받는다."""
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+    위험구역 = client.get(f"/?run_dir={회차이름}").text.split('id="danger-zone"')[1]
+
+    assert 'id="revert-round-confirm"' in 위험구역
+    assert 'id="revert-round-ok"' in 위험구역
+    assert 'id="revert-round-cancel"' in 위험구역
+    # 건수를 템플릿에 박지 않는다 — 누르는 순간 서버에 물어본다.
+    assert str(백업건수) not in 위험구역.split("</section>")[0]
+
+
+def test_건수_조회는_읽기전용이다(웹회차, 자식금지, client):
+    """확인 단계가 쓰는 수. 백업을 **열어서 세기만** 한다 (T-1-40)."""
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+    bk = 웹회차 / f"before_bids_{ALIAS}.json"
+    원본 = bk.read_bytes()
+
+    j = client.get(f"/jobs/revert/round/count?run_dir={회차이름}").json()
+
+    assert j["total"] == 백업건수
+    assert j["by_account"] == {ALIAS: 백업건수}
+    assert bk.read_bytes() == 원본
+    assert 자식금지 == [], "읽기 창이 작업을 만들었다"
+
+
+def test_결과표에_되돌리기_버튼과_건수가_있다(웹회차, 자식금지, client):
+    """화면이 보여주는 수 == 서버가 되돌릴 수. 둘이 갈라지면 사람이 규모를 오독한다."""
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+    job_id = _실행잡(웹회차, ["ad00", "ad01"], 실패들=["ad02"])
+
+    조각 = client.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+
+    assert 'id="revert-job-btn"' in 조각
+    assert f'data-n="2"' in 조각, "실패 1건까지 세면 안 된다"
+    assert 'id="revert-round-btn"' not in 조각, "결과 표에 회차 전체 버튼을 두면 안 된다"
+
+
+def test_성공이_0건이면_버튼이_잠긴다(웹회차, 자식금지, client):
+    """되돌릴 게 없는데 열려 있으면 누르고 나서야 400 을 본다."""
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+    job_id = _실행잡(웹회차, [], 실패들=["ad00"])
+
+    조각 = client.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+
+    assert "disabled" in 조각.split('id="revert-job-btn"')[1].split(">")[0]
+    assert "되돌릴 게 없다" in 조각
+
+
+def test_인상일이_어제면_경고배너가_뜬다(웹회차, 자식금지, client, monkeypatch):
+    """Pitfall 4 / OQ-2 — 날짜를 넘겼다는 사실을 **누르기 전에** 말한다."""
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+    job_id = _실행잡(웹회차, ["ad00"])
+
+    어제 = (date.today() - timedelta(days=1)).isoformat()
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("UPDATE jobs SET started_at=? WHERE id=?", (어제 + "T21:00:00+09:00", job_id))
+        cx.commit()
+    finally:
+        cx.close()
+
+    조각 = client.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+    assert "날짜를 넘겼다" in 조각
+    assert 어제 in 조각
+    assert "쿨다운" in 조각
+
+
+def test_인상일이_오늘이면_배너가_없다(웹회차, 자식금지, client):
+    """대조군 — 배너가 **늘 떠 있으면** 경고가 아니라 배경이 된다."""
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+    job_id = _실행잡(웹회차, ["ad00"])
+    조각 = client.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+    assert "날짜를 넘겼다" not in 조각

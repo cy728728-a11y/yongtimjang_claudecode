@@ -21,9 +21,13 @@
 만들어내는 것과 구분해라 — 전자는 산출물 두 값의 차이고, 후자는 두 번째 정본이다.
 """
 import json
+import os
+import subprocess
+import tempfile
 from pathlib import Path
 
-from webapp import settings
+from webapp import argv as argv_mod
+from webapp import paths, settings
 
 # `ledger.bid_decision` 이 내는 판정 5종. 집계 줄의 **표시 순서**로만 쓴다 —
 # 여기 없는 판정이 생겨도 버리지 않고 뒤에 붙인다(스킵을 조용히 하지 않는다).
@@ -36,6 +40,15 @@ PREVIEW_ROW_LIMIT = 200
 
 class LimitError(ValueError):
     """1회 실행 계정별 상한 초과 (D-08). 라우트가 400 으로 번역한다."""
+
+
+class ScopeError(ValueError):
+    """되돌릴 범위가 기대와 다르다 (Pitfall 2 / T-1-08). 라우트가 409 로 번역한다.
+
+    `ValueError` 를 상속하는 이유: 라우트가 `except ValueError` 로 폭넓게 잡아도
+    **사고가 조용히 400 으로 새지 않게** — 다만 더 구체적인 이 예외를 **먼저** 잡아야
+    한다. 순서가 뒤집히면 "범위가 2,242건이다" 가 그냥 "잘못된 요청" 이 된다.
+    """
 
 
 def _키(row: dict) -> str:
@@ -258,6 +271,9 @@ def _결과줄(alias: str, p: dict) -> dict:
         "action": p.get("action"),
         "from": p.get("from"),
         "to": p.get("to"),
+        # 되돌리기 산출물은 `useGroupBid` 로 "그룹 입찰가를 다시 따르게 되는지" 를
+        # 말한다 — 인상이 만든 그룹→개별 전환이 함께 취소되는지가 여기 실린다.
+        "useGroupBid": p.get("useGroupBid"),
         "result": p.get("result") or "실행 안 됨",
         "error": p.get("error") or "",
     }
@@ -353,3 +369,143 @@ def diff_preview(preview: dict, result: dict) -> list[dict]:
                 "after": f'{r.get("action")} {r.get("from")}→{r.get("to")}',
             })
     return 갈림
+
+
+# ── 되돌리기 (Plan 01-09 / BID-04 / D-12~D-14) ───────────────────────────────
+#
+# 이 블록이 막는 사고는 구체적이다: `before_bids_<alias>.json` 은 회차 안에서
+# **누적 병합**된다(bids.py Important 1 — 같은 키는 먼저 것을 유지). 그래서 화면의
+# 되돌리기를 `--revert` 에 그냥 연결하면 5건 올리고 눌렀는데 그 회차 인상분 **전부**가
+# 풀린다. 실측으로 2,242건이 들어 있던 백업이 있다 (D-12).
+#
+# 해법은 대상을 좁히는 것이다 — "이번에 인상 **성공**한 adId" 만 파일로 떨궈
+# `--only-ads` 로 넘긴다 (D-13). 그리고 그 파일을 쓰기 전에 CLI 에게 범위를 한 번
+# 물어본다 (T-1-42).
+
+
+def revert_targets_for_job(commit_job_id: str) -> Path:
+    """실행 잡의 산출물 → **그 작업분** 되돌리기 대상 파일 (D-13).
+
+    산출물의 `result == "성공"` 인 adId 만 담는다. 실패·스킵·실행 안 됨을 섞으면
+    안 올라간 소재를 내리려 드는 것이고, 백업에 없는 키를 찾다가 끝나거나 더 나쁘면
+    남의 원본을 덮는다.
+
+    **백업 파일은 손대지 않는다.** `before_bids_<alias>.json` 의 최초 원본 보존 규칙
+    (bids.py Important 1: 같은 키는 먼저 것을 유지)을 웹앱이 깨면 그 소재는 영영 못
+    되돌린다 (T-1-40). 이 함수가 읽는 것은 실행 잡의 `result_*.json` 뿐이다.
+
+    파일은 회차의 `web/` 밑에 **원자적으로** 쓴다 — `jobs._override_targets` 가 회차
+    밖 파일을 거부하므로 위치가 계약의 일부다. 반쪽 JSON 이 남으면 자식이 그걸 깨진
+    대상 파일로 읽어 중단한다(그게 맞는 동작이다 — T-1-05).
+    """
+    from webapp import jobs   # 지연 import: flow 는 잡 엔진 없이도 import 돼야 한다
+
+    상태 = jobs.job_status(commit_job_id)
+    if 상태 is None:
+        raise ValueError("그런 작업이 없다")
+    경로 = 상태.get("result_path")
+    if not 경로 or not Path(경로).is_file():
+        raise ValueError("실행 산출물이 없다 — 무엇이 올라갔는지 모르는 채로 되돌릴 수 없다")
+
+    결과 = read_preview(Path(경로))
+    if 결과.get("error"):
+        raise ValueError(f"실행 산출물을 못 읽었다 — {결과['error']}")
+
+    ids = succeeded_ad_ids(결과)
+    if not ids:
+        raise ValueError("되돌릴 게 없다 — 이 작업에서 인상 성공한 소재가 없다")
+
+    run_dir = 상태.get("run_dir")
+    if not run_dir:
+        raise ValueError("이 작업에는 회차가 없다 — 되돌릴 자리를 찾을 수 없다")
+
+    web = paths.run_dir_path(run_dir) / "web"
+    web.mkdir(parents=True, exist_ok=True)
+    path = web / f"targets_revert_{commit_job_id}.json"
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(ids, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
+    return path
+
+
+def revert_round_targets(run_dir: str) -> dict[str, int]:
+    """이 회차를 통째로 되돌리면 몇 건인가 — 계정별 건수 (D-14).
+
+    **읽기만 한다.** `before_bids_<alias>.json` 을 열어 값이 `None` 이 아닌 키를 센다
+    (`None` 은 인상 직전 원본을 못 남긴 소재라 되돌릴 수단이 없다 — `run_revert` 의
+    대상 조건과 같다). 이 파일에 절대 쓰지 않는다 (T-1-40).
+
+    파일이 없으면 그 계정은 목록에 없다(0 이 아니라 아예 없다 — 되돌릴 게 없는 계정과
+    인상을 안 한 계정을 구분할 이유가 지금은 없다). **깨져 있으면 `ValueError` 다** —
+    0 으로 돌려주면 "되돌릴 게 없다" 와 "못 셌다" 가 같은 화면이 되고, 그 수를
+    확인 단계에 띄우면 사용자가 잘못된 규모를 승인한다.
+    """
+    d = paths.run_dir_path(run_dir)
+    계정별: dict[str, int] = {}
+    for p in sorted(d.glob("before_bids_*.json")):
+        alias = p.name[len("before_bids_"):-len(".json")]
+        try:
+            백업 = json.loads(p.read_text(encoding="utf-8"))
+        except Exception as e:
+            raise ValueError(f"{alias} 백업 파일을 못 읽었다 — 건수를 지어내지 않는다"
+                             f" ({type(e).__name__})")
+        if not isinstance(백업, dict):
+            raise ValueError(f"{alias} 백업 파일 모양이 다르다 — 건수를 지어내지 않는다")
+        계정별[alias] = sum(1 for v in 백업.values() if v is not None)
+    return 계정별
+
+
+def revert_dry_run(run_dir: str, accounts=None, only_ads: Path | None = None,
+                   timeout: float = 180) -> dict:
+    """되돌릴 범위를 **CLI 에게 직접 물어본다** — 쓰기 전에, 네트워크 0 으로 (T-1-42).
+
+    CLAUDE.md 제약("모든 쓰기 작업은 dry-run 선행")이고, Pitfall 2 를 실행 전에 잡는
+    유일한 방법이다. 웹앱이 백업 파일을 스스로 해석해 추정하면 진실이 둘이 된다 —
+    실제로 되돌릴 대상을 고르는 코드는 `bids.run_revert` 뿐이고, 여기서 하는 일은
+    그 함수를 쓰기 없이 한 번 돌려 **그 함수가 센 수**를 받아오는 것이다.
+
+    산출물을 회차 안에 남기지 않는다(임시 폴더에 쓰고 버린다) — 범위 확인은 감사
+    대상이 아니라 게이트고, `web/` 에 쌓이면 실제 실행 산출물과 섞인다.
+
+    돌려주는 모양: `{"targets": 총합, "by_account": {alias: n}}`
+    """
+    with tempfile.TemporaryDirectory(prefix="ct-revert-scope-") as td:
+        out = Path(td) / "scope.json"
+        av = argv_mod.AdsArgv(subcommand="bids", run_dir=run_dir,
+                              accounts=list(accounts or []),
+                              revert=True, only_ads=only_ads,
+                              preview_out=out).build()
+        try:
+            p = subprocess.run(av, cwd=str(paths.repo_root()),
+                               env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                               stdin=subprocess.DEVNULL,
+                               capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise ScopeError("되돌리기 범위 확인이 시간 안에 안 끝났다 — 확인 없이 실행하지 않는다")
+        if p.returncode != 0:
+            # 트레이스백을 통째로 싣지 않는다 (ASVS V7) — 꼬리만 잘라 담는다.
+            꼬리 = ((p.stdout or "") + (p.stderr or ""))[-300:]
+            raise ScopeError(f"되돌리기 범위를 못 읽었다(exit {p.returncode}) — {꼬리}")
+        if not out.is_file():
+            raise ScopeError("범위 확인이 산출물을 안 남겼다 — 모르는 채로 실행하지 않는다")
+        raw = json.loads(out.read_text(encoding="utf-8"))
+
+    계정별 = {a: int((v or {}).get("targets") or 0)
+            for a, v in (raw or {}).items() if isinstance(v, dict)}
+    return {"targets": sum(계정별.values()), "by_account": 계정별}
+
+
+def check_revert_scope(expected: int, dry_run_targets: int) -> None:
+    """되돌릴 대상 수가 기대와 다르면 `ScopeError` — **Pitfall 2 의 마지막 방어선이다.**
+
+    조기 신호는 이렇게 생겼다: revert dry-run 의 `targets` 수가 방금 실행한 건수보다
+    **크다.** 그건 `--only-ads` 가 안 걸렸거나 엉뚱한 파일을 가리켰다는 뜻이고, 그대로
+    두면 회차 전체가 풀린다(D-12). 앞단 3층(대상 파일 · 파일 위치 검증 · dry-run 선행)이
+    전부 뚫렸을 때 여기서 멈춘다.
+
+    작은 쪽도 막는다 — 기대보다 적으면 백업이 손상됐거나 다른 회차를 짚은 것이다.
+    """
+    if expected != dry_run_targets:
+        raise ScopeError(
+            f"되돌릴 대상이 {dry_run_targets:,}건인데 이 작업의 성공 건수는 "
+            f"{expected:,}건이다 — 범위가 안 맞는다")

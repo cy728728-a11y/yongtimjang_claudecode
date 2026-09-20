@@ -5,6 +5,10 @@
     POST /jobs/prep         새로 수집 (계정당 ~3분, 쓰기 가드를 탄다)   [쓰기 — 토큰 필요]
     POST /jobs/run          판정 다시 (디스크만, 초 단위)               [쓰기 — 토큰 필요]
     POST /jobs/bids/preview 입찰가 인상 미리보기 (dry-run, 0.066초)     [쓰기 — 토큰 필요]
+    POST /jobs/bids/commit  입찰가 인상 실행                            [쓰기 — 토큰 필요]
+    POST /jobs/revert/job   **이 작업분만** 되돌리기 (D-13)             [쓰기 — 토큰 필요]
+    POST /jobs/revert/round **이 회차 전체** 되돌리기 (D-14)            [쓰기 — 토큰 필요]
+    GET  /jobs/revert/round/count  회차 전체 되돌리기 예상 건수         [읽기 — 쿠키]
     GET  /jobs/{id}         작업 상태 조각 (2초 폴링용)                 [읽기 — 쿠키]
     GET  /jobs/{id}/panel   작업 패널 조각 (SSE 배선 포함)              [읽기 — 쿠키]
     GET  /jobs/{id}/result  미리보기 표 조각 / JSON                     [읽기 — 쿠키]
@@ -38,6 +42,7 @@ v2 의 APScheduler 는 이 라우터를 거치지 않고 같은 함수를 직접
 스레드로 밀어낸다).
 """
 import json
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import parse_qsl
@@ -156,6 +161,29 @@ class BidsCommitReq(BaseModel):
     preview_job_id: JobId
 
 
+class RevertJobReq(BaseModel):
+    """**이 작업분만** 되돌리기 (D-13). 받는 것은 실행 잡의 id 하나뿐이다.
+
+    `ad_ids` 를 받지 않는 이유는 `BidsCommitReq` 와 같다 — 대상은 그 실행 잡의
+    **산출물**에서만 온다. 화면이 목록을 주면 "올라가지도 않은 소재를 내려라" 가
+    성립해 버린다.
+    """
+
+    commit_job_id: JobId
+
+
+class RevertRoundReq(BaseModel):
+    """**이 회차 전체** 되돌리기 (D-14). 물리적으로 다른 라우트다.
+
+    `confirmed_count` 는 화면이 **사용자에게 보여준 건수**다. 서버가 다시 세서 다르면
+    409 — 사용자가 승인한 규모와 실제 규모가 갈라진 상태이기 때문이다. 타이핑을
+    받지 않는 대신 이 대조가 확인 단계의 실효를 진다(FLOW-04 와 같은 판단).
+    """
+
+    run_dir: str
+    confirmed_count: int
+
+
 def _판정읽기(run_dir_name: str) -> dict:
     """회차의 판정 결과. **회차 이름은 화이트리스트를 통과한 것만** 경로가 된다.
 
@@ -222,6 +250,50 @@ def _실행표ctx(상태: dict) -> dict:
         "blind": 결과.get("blind") or [],
         "error": 결과.get("error"),
         "limit": flow.PREVIEW_ROW_LIMIT,
+        **_되돌리기배너(상태),
+    }
+
+
+def _되돌리기배너(상태: dict) -> dict:
+    """Pitfall 4 / OQ-2 — 인상일과 오늘이 다르면 경고를 띄울 근거를 실어 보낸다.
+
+    **실행을 막지 않는다.** 입찰가 복원(PUT)은 날짜와 무관하게 동작한다 — 날짜 조건은
+    `ledger.record_reverted` 의 `reverted` 플래그에만 걸린다. 넘기면 이력에 되돌림이
+    안 남아 쿨다운 6일 동안 **재인상이 막히는 것**이지, 돈을 되돌리는 능력을 잃는 게
+    아니다. Phase 1 은 CLI 로직을 안 고치고 이 배너로만 다룬다(OQ-2 확정).
+
+    날짜는 잡의 `started_at` 에서 온다 — 웹앱이 따로 기록하지 않는다.
+    """
+    시작 = (상태 or {}).get("started_at") or ""
+    인상일 = 시작[:10] if len(시작) >= 10 else None
+    오늘 = date.today().isoformat()
+    return {"raise_date": 인상일, "today": 오늘,
+            "date_mismatch": bool(인상일) and 인상일 != 오늘}
+
+
+def _되돌리기표ctx(상태: dict) -> dict:
+    """되돌리기 결과 표가 쓰는 값 (BID-04 / FLOW-05 연장).
+
+    인상 결과 표를 재사용하지 않는다 — 그 표의 컬럼은 `현재가 → 인상 후` 인데
+    되돌리기에는 "인상 후" 가 없다. 같은 표로 그리면 **복원값이 인상값으로 읽힌다.**
+
+    `from`(되돌리기 직전의 실제 입찰가)은 산출물에 없다. 소재 스냅샷은 인상 전에
+    찍힌 것이라 지금 값이 아니고, 없는 숫자를 웹앱이 만들지 않는다(T-1-07 과 같은 규칙).
+    """
+    결과 = _산출물(상태, "이 작업에는 산출물이 없다")
+    부모 = jobs.job_status(상태["parent_job_id"]) if 상태.get("parent_job_id") else None
+    return {
+        "job": _투영(상태),
+        "rows": flow.result_rows(결과),
+        "total": flow.total_rows(결과),
+        "result_counts": flow.result_counts(결과),
+        "cli_totals": flow.cli_totals(결과),
+        "succeeded": len(flow.succeeded_ad_ids(결과)),
+        "전체되돌리기": 상태.get("kind") == "revert_all",
+        "blind": 결과.get("blind") or [],
+        "error": 결과.get("error"),
+        "limit": flow.PREVIEW_ROW_LIMIT,
+        **_되돌리기배너(부모 or 상태),
     }
 
 
@@ -370,6 +442,107 @@ def post_bids_commit(request: Request, req: BidsCommitReq):
     return {"job_id": job_id}
 
 
+@router.post("/jobs/revert/job")
+def post_revert_job(request: Request, req: RevertJobReq):
+    """**이 작업분만** 되돌리기 (D-13 / T-1-08). 화면의 되돌리기가 타는 경로다.
+
+    `--revert` 에 그냥 연결하지 않는다. `bids.run_revert` 는 `only_ads` 가 없으면
+    `before_bids_<alias>.json` **전량**을 되돌리는데 그 백업은 회차 안에서 누적
+    병합된다 — 5건 올리고 눌렀는데 회차 인상분 전부가 풀린다(D-12. 실측으로
+    2,242건이 들어 있던 백업이 있다).
+
+    순서에 의미가 있다:
+      ① 부모가 **실행 잡**인가 (미리보기 잡의 대상 파일은 의미가 다르다)
+      ② 부모가 아직 **도는 중**이면 거부 — 무엇이 올라갔는지 산출물이 아직 확정 전이다.
+         **`done` 은 요구하지 않는다** — `failed`·`orphaned` 야말로 되돌려야 하는
+         상태다(중간에 끊긴 실행). 산출물에 성공으로 적힌 것만 대상이 된다
+      ③ 산출물의 성공 adId 만 추려 `targets_revert_<job>.json` (D-13)
+      ④ **dry-run 선행** — CLI 에게 범위를 물어 `check_revert_scope` 를 통과시킨다.
+         생략하지 않는다: CLAUDE.md 제약이고, Pitfall 2 를 실행 전에 잡는 유일한
+         방법이다(0.07초, 네트워크 0 — T-1-42)
+      ⑤ `create_job` — 쓰기 잡 전역 가드는 거기 안에 있다(Pitfall 3)
+
+    **백업 파일은 읽지도 쓰지도 않는다** (T-1-40).
+    """
+    부모 = jobs.job_status(req.commit_job_id)
+    if 부모 is None or 부모.get("kind") != "bids_commit":
+        raise HTTPException(status_code=400,
+                            detail="실행 작업이 아니다 — 되돌리기는 실행한 작업에만 건다")
+    if 부모.get("status") == "running":
+        raise HTTPException(status_code=400,
+                            detail="실행이 아직 안 끝났다 — 무엇이 올라갔는지 모르는 채로 되돌릴 수 없다")
+
+    try:
+        대상파일 = flow.revert_targets_for_job(req.commit_job_id)
+        기대 = len(json.loads(대상파일.read_text(encoding="utf-8")))
+        범위 = flow.revert_dry_run(부모.get("run_dir"),
+                                 accounts=json.loads(부모.get("accounts") or "[]"),
+                                 only_ads=대상파일)
+        flow.check_revert_scope(기대, 범위["targets"])
+        job_id = jobs.create_job(
+            "revert_only", run_dir=부모.get("run_dir"),
+            accounts=json.loads(부모.get("accounts") or "[]"),
+            commit=True, parent_job_id=req.commit_job_id,
+            targets_path_override=대상파일)
+    except flow.ScopeError as e:
+        # **ValueError 보다 먼저 잡는다.** 순서가 뒤집히면 "범위가 2,242건이다" 가
+        # 그냥 "잘못된 요청" 으로 뭉개져 사고의 모양이 화면에서 사라진다.
+        raise HTTPException(status_code=409, detail=f"되돌리기를 막았다 — {e}")
+    except jobs.BusyError as e:
+        raise HTTPException(status_code=409,
+                            detail=f"이미 도는 쓰기 작업이 있다 — 끝나고 다시 눌러라 ({e})")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"job_id": job_id}
+
+
+@router.post("/jobs/revert/round")
+def post_revert_round(request: Request, req: RevertRoundReq):
+    """**이 회차 전체** 되돌리기 (D-14). 화면에서 물리적으로 떨어진 다른 버튼이다.
+
+    여기는 대상을 좁히지 않는다 — `--only-ads` 없이 `--revert` 다. 그래서 세 가지를
+    먼저 통과해야 한다:
+
+      ① 서버가 백업을 다시 세서 `confirmed_count` 와 같은가 (다르면 409 —
+         화면이 사용자에게 보여준 규모와 실제 규모가 갈라졌다)
+      ② dry-run 이 센 수와도 같은가 (다르면 409 — 웹앱이 읽은 백업과 CLI 가 고른
+         대상이 다르다는 뜻이고, 그 상태로 회차 전체를 풀 수는 없다)
+      ③ 쓰기 잡 전역 가드 (`create_job` 안)
+
+    ①과 ②는 겹쳐 보이지만 다른 것을 본다 — ①은 **화면 대 서버**, ②는 **웹앱 대 CLI** 다.
+    """
+    try:
+        계정별 = flow.revert_round_targets(req.run_dir)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    서버가센수 = sum(계정별.values())
+    if 서버가센수 != req.confirmed_count:
+        raise HTTPException(
+            status_code=409,
+            detail=(f"화면이 본 건수({req.confirmed_count:,})와 지금 건수"
+                    f"({서버가센수:,})가 다르다 — 다시 확인해라"))
+
+    try:
+        범위 = flow.revert_dry_run(req.run_dir)
+        flow.check_revert_scope(서버가센수, 범위["targets"])
+        job_id = jobs.create_job("revert_all", run_dir=req.run_dir, commit=True)
+    except flow.ScopeError as e:
+        raise HTTPException(status_code=409, detail=f"되돌리기를 막았다 — {e}")
+    except jobs.BusyError as e:
+        raise HTTPException(status_code=409,
+                            detail=f"이미 도는 쓰기 작업이 있다 — 끝나고 다시 눌러라 ({e})")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"job_id": job_id}
+
+
 # ── 여기서부터 읽기 전용 ─────────────────────────────────────────────────────
 # 아래 GET 들은 작업을 **만들지 않는다.** 상태를 읽어 화면에 옮길 뿐이다.
 # 이 파일에서 GET 핸들러를 맨 아래 모아 두는 이유는 V-SAFE-01d 스캐너가
@@ -433,15 +606,38 @@ def get_job_result(job_id: str, request: Request, format: str | None = None):
     if 상태 is None:
         raise HTTPException(status_code=404, detail="그런 작업이 없다")
 
-    실행 = 상태.get("kind") == "bids_commit"
-    ctx = _실행표ctx(상태) if 실행 else _미리보기표ctx(상태)
+    # 작업 종류마다 다른 표다. 되돌리기 결과를 인상 표로 그리면 "인상 후" 칸에
+    # 복원값이 들어가 **내린 것을 올린 것처럼** 보여준다.
+    kind = 상태.get("kind")
+    조각, ctx = {
+        "bids_commit": ("_result_table.html", _실행표ctx),
+        "revert_only": ("_revert_table.html", _되돌리기표ctx),
+        "revert_all": ("_revert_table.html", _되돌리기표ctx),
+    }.get(kind, ("_preview_table.html", _미리보기표ctx))
+    ctx = ctx(상태)
     if format == "json" or not request.headers.get("hx-request"):
         return ctx
 
     from webapp.main import templates  # 지연 import — main 이 이 모듈을 먼저 부른다
 
-    조각 = "_result_table.html" if 실행 else "_preview_table.html"
     return templates.TemplateResponse(request, 조각, ctx)
+
+
+@router.get("/jobs/revert/round/count")
+def get_revert_round_count(request: Request, run_dir: str):
+    """이 회차를 통째로 되돌리면 몇 건인가 (D-14 의 확인 단계). **읽기 전용이다.**
+
+    백업 파일을 **열어서 세기만** 한다 — 쓰지 않는다(T-1-40). 페이지 로드 때가 아니라
+    버튼을 누른 그 순간에 세는 이유는, 그 사이 다른 작업이 인상을 더했으면 사용자가
+    승인하는 규모가 달라지기 때문이다. 이 수가 그대로 `confirmed_count` 로 돌아온다.
+    """
+    if not security.page_cookie_ok(request):
+        return PlainTextResponse("토큰이 필요하다", status_code=403)
+    try:
+        계정별 = flow.revert_round_targets(run_dir)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"run_dir": run_dir, "by_account": 계정별, "total": sum(계정별.values())}
 
 
 @router.get("/jobs/{job_id}/stream")

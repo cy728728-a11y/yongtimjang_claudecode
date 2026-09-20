@@ -518,6 +518,114 @@
     });
   }
 
+  // ── 되돌리기 (BID-04 / D-13 / D-14) ───────────────────────────────────────
+  //
+  // 두 버튼은 **서로 다른 라우트**다. 여기서 플래그 하나로 갈리게 만들지 마라 —
+  // 그러면 "회차 전체" 가 되는 경로가 한 글자 차이로 열린다.
+  //   · 이 작업분만  → POST /jobs/revert/job   { commit_job_id }
+  //   · 이 회차 전체 → POST /jobs/revert/round { run_dir, confirmed_count }
+  //
+  // 대상 목록은 **어느 쪽도 화면이 만들지 않는다.** 앞쪽은 서버가 실행 잡의 산출물에서
+  // 성공 adId 를 추리고, 뒤쪽은 CLI 가 백업 전량을 고른다.
+
+  /** 되돌리기 잡을 접수하고 결과 표까지 이어 붙인다. 두 버튼이 같은 뒤처리를 쓴다. */
+  function 되돌리기접수(경로, 몸통, 버튼) {
+    if (작업오류) { 작업오류.hidden = true; }
+    if (버튼) { 버튼.disabled = true; }
+
+    fetch(경로, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CT-Token": 토큰() },
+      body: JSON.stringify(몸통)
+    }).then(function (r) {
+      return r.text().then(function (본문) { return { ok: r.ok, code: r.status, 본문: 본문 }; });
+    }).then(function (res) {
+      if (!res.ok) {
+        if (버튼) { 버튼.disabled = false; }
+        // 409 는 두 종류다 — "이미 도는 쓰기 작업" 과 **"범위가 안 맞아서 막았다"**.
+        // 후자가 이 화면에서 제일 중요한 메시지라 사유를 통째로 보여준다.
+        var 사유 = res.본문;
+        try { 사유 = JSON.parse(res.본문).detail || res.본문; } catch (e) { /* 원문 그대로 */ }
+        오류표시("되돌리기를 못 만들었다 (" + res.code + ") — " + 사유);
+        return;
+      }
+      var job_id = JSON.parse(res.본문).job_id;
+      htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/panel",
+                { target: "#job-panel", swap: "outerHTML" });
+      결과기다리기(job_id, 3000, "result", "result-body", null);
+    }).catch(function (e) {
+      if (버튼) { 버튼.disabled = false; }
+      오류표시("되돌리기 요청이 실패했다: " + e);
+    });
+  }
+
+  // "이 작업분만 되돌리기" 는 결과 표 **조각 안**에 있다. 조각은 htmx 가 갈아끼우므로
+  // 버튼을 직접 집으면 첫 렌더 뒤로는 못 잡는다 — 위임으로 듣는다.
+  document.addEventListener("click", function (ev) {
+    var 버튼 = ev.target.closest ? ev.target.closest("#revert-job-btn") : null;
+    if (!버튼 || 버튼.disabled) { return; }
+    되돌리기접수("/jobs/revert/job", { commit_job_id: 버튼.dataset.job }, 버튼);
+  });
+
+  // "이 회차 전체 되돌리기" — 건수 확인 단계를 반드시 거친다 (D-14).
+  var 전체버튼 = document.getElementById("revert-round-btn");
+  var 전체확인 = document.getElementById("revert-round-confirm");
+  var 전체문구 = document.getElementById("revert-round-msg");
+  var 전체건수칸 = document.getElementById("revert-round-count");
+  var 전체확인ok = document.getElementById("revert-round-ok");
+  var 전체취소 = document.getElementById("revert-round-cancel");
+
+  function 전체확인닫기() {
+    if (전체확인) { 전체확인.hidden = true; }
+    if (전체건수칸) { 전체건수칸.value = ""; }
+    if (전체버튼) { 전체버튼.disabled = false; }
+  }
+
+  if (전체버튼) {
+    전체버튼.addEventListener("click", function () {
+      if (작업오류) { 작업오류.hidden = true; }
+      전체버튼.disabled = true;
+      // **건수는 누르는 순간 서버에 물어본다.** 페이지를 연 뒤에 다른 작업이 인상을
+      // 더했으면 승인하는 규모가 달라진다. 이 수가 그대로 confirmed_count 로 돌아가고,
+      // 서버가 접수 시점에 다시 세서 다르면 409 다.
+      fetch("/jobs/revert/round/count?run_dir=" + encodeURIComponent(회차칸값 ? 회차칸값.value : ""),
+            { headers: { "Accept": "application/json" } })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          var n = j.total || 0;
+          if (전체건수칸) { 전체건수칸.value = String(n); }
+          if (전체문구) {
+            전체문구.textContent = (회차칸값 ? 회차칸값.value : "") + " 회차의 인상분 "
+              + 콤마(n) + "건을 전부 되돌린다. 방금 누른 작업만이 아니다.";
+          }
+          if (전체확인) { 전체확인.hidden = false; }
+          // 0건이면 승인할 게 없다 — 확인 버튼을 열지 않는다.
+          if (전체확인ok) { 전체확인ok.disabled = !n; }
+        })
+        .catch(function (e) {
+          전체버튼.disabled = false;
+          오류표시("되돌릴 건수를 못 읽었다: " + e);
+        });
+    });
+  }
+
+  if (전체취소) {
+    // 취소는 **아무 요청도 보내지 않는다.** 닫기만 한다.
+    전체취소.addEventListener("click", 전체확인닫기);
+  }
+
+  if (전체확인ok) {
+    전체확인ok.addEventListener("click", function () {
+      var n = parseInt(전체건수칸 ? 전체건수칸.value : "", 10);
+      if (!n) { 오류표시("되돌릴 건수를 확인하지 못했다 — 다시 눌러라"); return; }
+      전체확인ok.disabled = true;
+      되돌리기접수("/jobs/revert/round",
+                 { run_dir: 회차칸값 ? 회차칸값.value : "", confirmed_count: n },
+                 전체확인ok);
+      전체확인닫기();
+    });
+  }
+
   // 회차 드롭다운은 고르는 즉시 이동한다. GET 폼이라 서버 상태를 바꾸지 않는다.
   var 회차칸 = document.getElementById("rundir-select");
   if (회차칸 && 회차칸.form) {
