@@ -28,7 +28,7 @@
 사용:
   python detail_batch.py --run-dir <RUN> [--pages 10] [--quality standard]
         [--limit N] [--submit-only] [--poll-only] [--retry-failed] [--force]
-  용쌤 계정: python run_yong.py <python절대경로> detail_batch.py ...
+  불사자 MCP 항목이 하나뿐인 환경에서는 래퍼 없이 그대로 돌린다.
 """
 import argparse
 import json
@@ -42,8 +42,12 @@ try:
 except Exception:
     pass
 
-# 불사자 MCP 클라이언트는 카테고리 교정 스킬의 것을 재사용
-SKILL_SCRIPTS = r"C:\Users\workspace\.claude\skills\bulsaja-category-fix\scripts"
+# 불사자 MCP 클라이언트는 카테고리 교정 스킬의 것을 재사용.
+# **경로를 박지 않는다** — 이 파일 위치에서 스킬 루트를 거슬러 올라가 찾는다.
+# (같은 관용구: product-name/scripts/run_names.py:40-46)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SKILLS_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, "..", ".."))
+SKILL_SCRIPTS = os.path.join(SKILLS_DIR, "bulsaja-category-fix", "scripts")
 sys.path.insert(0, SKILL_SCRIPTS)
 from bulsaja_mcp import BulsajaMCP  # noqa: E402
 

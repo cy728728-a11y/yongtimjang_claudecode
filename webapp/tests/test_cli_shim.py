@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""CLI 가 **이 맥북에서 import 단계를 통과하는지**만 본다 — 크레딧 0, 쓰기 0, 네트워크 0.
+
+STATE-01 회귀. `detail_batch.py` 는 모듈 최상위에서 `bulsaja_mcp` 를 import 하는데,
+그 경로가 윈도 절대경로(`C:\\…`)로 박혀 있어서 맥에서는 `sys.path.insert` 가 no-op 이 되고
+import 가 `ModuleNotFoundError` 로 죽었다. 그래서 **`--help` 하나로 증명이 끝난다** —
+argparse 가 usage 를 찍었다는 건 최상위 import 가 전부 통과했다는 뜻이다.
+접수도 폴링도 일어나지 않으므로 크레딧이 나갈 여지가 없다.
+
+⚠️ 인터프리터는 `webapp.argv.PY_CLI`(= `.venv/bin/python3`) 를 쓴다.
+   이 테스트를 돌리는 `.venv-web` 으로 CLI 를 띄우면 검증이 무의미하다 —
+   두 venv 를 subprocess 경계로 갈라 둔 것이 설계고, CLI 는 `.venv` 에서 돈다.
+"""
+import subprocess
+
+import pytest
+
+from webapp import argv, paths
+
+DETAIL_BATCH = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
+                / "scripts" / "detail_batch.py")
+
+
+def _꼬리(텍스트: bytes, 줄수: int = 20) -> str:
+    """실패 메시지에 실을 stderr 마지막 N줄. 원인이 안 보이면 테스트가 쓸모없다."""
+    try:
+        줄들 = 텍스트.decode("utf-8", errors="replace").splitlines()
+    except Exception:
+        return "<stderr 를 디코드하지 못했다>"
+    return "\n".join(줄들[-줄수:]) or "<stderr 비어 있음>"
+
+
+def test_상세배치가_이_맥북에서_뜬다():
+    """`detail_batch.py --help` 가 exit 0 이고 usage 를 찍는다 (STATE-01).
+
+    Core Value 경로(유입은 있는데 상세가 중국어 원본인 상품을 고친다)의 첫 관문이다.
+    여기가 막혀 있으면 Phase 5 의 버튼이 아무리 잘 만들어져도 아무 일도 안 일어난다.
+    """
+    assert DETAIL_BATCH.is_file(), f"CLI 가 없다: {DETAIL_BATCH}"
+    assert argv.PY_CLI.is_file(), (
+        f"CLI 인터프리터가 없다: {argv.PY_CLI} — `.venv` 가 만들어져 있어야 한다")
+
+    try:
+        p = subprocess.run([str(argv.PY_CLI), str(DETAIL_BATCH), "--help"],
+                           capture_output=True, timeout=60)
+    except subprocess.TimeoutExpired:                       # pragma: no cover - 방어
+        pytest.fail("--help 가 60초 안에 안 끝났다 — 최상위에서 네트워크를 타고 있다")
+
+    assert p.returncode == 0, (
+        f"exit={p.returncode}\n--- stderr 끝 20줄 ---\n{_꼬리(p.stderr)}")
+
+    나온것 = p.stdout.decode("utf-8", errors="replace")
+    assert "--run-dir" in 나온것, f"usage 에 --run-dir 이 없다:\n{나온것[:500]}"
+
+
+def test_윈도_경로가_남아있지_않다():
+    """소스에 드라이브 문자 절대경로가 0건이다 — **경로 리터럴 재발 방지**다.
+
+    보통은 문자열 검사를 피하지만(주석에도 걸리니까), 이건 반대다. 여기서 막고 싶은 게
+    정확히 "소스에 박힌 경로 문자열" 이라서, 문자열 검사가 맞는 도구다.
+    주석에 예시로라도 다시 적히면 다음 사람이 그걸 복사한다.
+    """
+    본문 = DETAIL_BATCH.read_text(encoding="utf-8", errors="ignore")
+    드라이브 = ":" + "\\"          # 'C:\' 를 이 파일에 리터럴로 남기지 않으려고 조립한다
+    걸린줄 = [f"{i}: {줄}" for i, 줄 in enumerate(본문.splitlines(), 1) if 드라이브 in 줄]
+    assert not 걸린줄, "윈도 절대경로가 남아 있다:\n" + "\n".join(걸린줄)
+
+
+def test_죽은_래퍼_안내가_남아있지_않다():
+    """이 맥북에 없는 MCP 항목을 전제한 안내를 지웠다.
+
+    `run_yong.py` 는 `bulsaja-yongssaem` MCP 항목을 전제하는데 이 맥북에는 그 항목이 없다
+    (등록된 건 `aside`·`bulsaja` 둘뿐이고, 지금 붙은 `bulsaja` 가 곧 그 계정이다).
+    docstring 의 안내를 그대로 따라 하면 실패한다 — SKILL.md 는 이미 '죽은 경로'로 적어 뒀다.
+    """
+    본문 = DETAIL_BATCH.read_text(encoding="utf-8", errors="ignore")
+    죽은래퍼 = "run_" + "yong.py"   # 문자열 검사 대상을 이 파일에 통째로 남기지 않는다
+    assert 죽은래퍼 not in 본문, f"{DETAIL_BATCH.name} 에 죽은 래퍼 안내가 남아 있다"
