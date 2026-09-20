@@ -6,6 +6,11 @@
 `tmp_run_dir` 이 monkeypatch 로 `paths.data_root` 를 tmp_path 로 갈아끼우고,
 모든 파일 접근은 그 아래에서만 일어난다. 여기가 뚫리면 테스트 한 번에
 실제 회차의 `before_bids_*.json` 백업이나 ledger 가 오염될 수 있다.
+
+원칙 둘: **Phase 3 픽스처는 진짜 마켓그룹명·계정 닉네임을 담지 않는다.**
+담으면 리터럴 가드(`test_paths.py -k 리터럴` · `test_board.py::test_계정을_코드에_박지_않는다`)와
+충돌하고, 저장소가 공개될 때 영업 정보가 같이 나간다. 전부 `zz*` 가짜 이름이다.
+재생성 방법은 `fixtures/anonymize_join.py` 에 있다.
 """
 import json
 import shutil
@@ -20,6 +25,12 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 RESULT_MIN = FIXTURES / "result_min.json"
 SYNTHETIC_JOB = FIXTURES / "synthetic_job.py"
 
+# Phase 3 (조인 · 상세 상태) 픽스처. 함정 목록은 각 파일의 `_주석` 에 적혀 있다.
+RESULT_TRAPS = FIXTURES / "result_traps.json"
+BULSAJA_GROUPS_TRAPS = FIXTURES / "bulsaja_groups_traps.json"
+JOIN_TRAPS = FIXTURES / "join_traps.json"
+RESULT_JOIN_REAL = FIXTURES / "result_join_real.json"
+
 # 픽스처 회차명. `result_min.json` 의 `generated` 와 맞춰 둔다.
 RUN_NAME = "2026-08-30"
 
@@ -32,6 +43,37 @@ def fake_result_json() -> dict:
     매번 새로 파싱한다 — 테스트가 dict 를 고쳐도 다음 테스트에 안 샌다.
     """
     return json.loads(RESULT_MIN.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def result_traps() -> dict:
+    """광고 ③⑤ 함정 픽스처 (번호 추출 포맷 3종 + 미해소 3종 + 같은 번호 2개)."""
+    return json.loads(RESULT_TRAPS.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def bulsaja_groups_traps() -> dict:
+    """불사자 마켓그룹 목록 함정 픽스처 (`NN번_` 접두 · 하이픈 없는 그룹 · 9-9 부재)."""
+    return json.loads(BULSAJA_GROUPS_TRAPS.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def join_traps() -> dict:
+    """조인 잡 산출물 모양 + 상태 판정 함정 4종 + 미해소 3종 + 팬아웃 + `표시규칙`.
+
+    `조회`·`기대_상태`·`기대_사유` 는 **기대 판정(test oracle)** 이지 CLI 산출물 필드가 아니다.
+    """
+    return json.loads(JOIN_TRAPS.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def result_join_real() -> dict:
+    """실회차 ③⑤ 194행 익명화본 — 해상률 회귀의 모수.
+
+    ⚠️ 이 픽스처만으로는 해상률 기댓값을 계산할 수 없다. 불사자 마켓그룹 **번호 집합**이
+    있어야 하는데 그건 MCP 조회라 03-04 가 첫 스캔에서 가져온다.
+    """
+    return json.loads(RESULT_JOIN_REAL.read_text(encoding="utf-8"))
 
 
 @pytest.fixture

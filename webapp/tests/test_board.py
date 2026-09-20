@@ -23,11 +23,18 @@ WEBAPP = Path(__file__).resolve().parents[1]
 # 이 플랜이 만드는 **런타임 경로** 전부. 계정 alias 가 여기 한 글자라도 박히면
 # `~/.eroom/naver-ads.json` 에 계정을 더해도 화면이 안 따라온다 (BOARD-02).
 # 테스트 파일 자신은 대상이 아니다 — 픽스처를 단언하려면 alias 를 적어야 한다.
+# **파일보다 가드를 먼저 넣는다.** 아래 Phase 3 파일 3종은 아직 없지만 미리 적어 둔다 —
+# 나중에 넣으면 그 사이에 박힌 리터럴을 아무도 못 본다(가드가 있는 척만 한다, T-3-02).
+# 없는 파일은 아래 `f.is_file()` 이 조용히 건너뛰므로 지금 red 가 나지 않는다.
 런타임_파일들 = [
     WEBAPP / "board.py",
     WEBAPP / "routes" / "board.py",
     WEBAPP / "templates" / "board.html",
     WEBAPP / "static" / "board.js",
+    # ── Phase 3 (03-02 ~ 03-06 이 만든다) ──
+    WEBAPP / "join.py",
+    WEBAPP / "state.py",
+    WEBAPP / "bulsaja_index.py",
 ]
 
 

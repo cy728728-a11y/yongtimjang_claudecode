@@ -1,0 +1,168 @@
+{
+ "_주석": [
+  "광고 판정 결과(result.json)의 ③⑤ 축소판. 스키마는 result_min.json 과 같은 3층(accounts.<alias>.rules.<규칙키>[]).",
+  "계정 alias 는 **전부 가짜**(zzaa·zzbb)다 — 진짜 alias 를 넣으면 리터럴 가드와 충돌하고, 가짜여야 '코드에 안 박혔다'가 증명된다(BOARD-02).",
+  "광고그룹명 함정 (D-02 번호 추출 정규식의 입력 전수):",
+  "  (a) 판매상품_15-2_ — 언더바 접두 (가장 흔한 실측 포맷)",
+  "  (b) 20-3 (공백)   — 공백 접두",
+  "  (c) 1000개_22-1_  — 숫자 접두. **1000 이 마켓번호로 오탐되면 안 된다**",
+  "  (d) zzfake이동식오피스 — 번호가 아예 없다 → 미해소 사유 '추출실패' (광고 쪽 오류)",
+  "  (e) 판매상품_9-9_  — 번호는 있는데 불사자 마켓그룹에 그 번호가 없다 → '번호없음' (광고 쪽 오류)",
+  "  (f) 판매상품_13-2_ — D-18 제외 마켓번호 → '미조회' (우리가 안 본 것). (d)(e)와 절대 같은 칸에 담지 마라",
+  "  (g) 17-3 을 쓰는 광고그룹이 **2개**(zzaa 는 판매상품_ 접두, zzbb 는 공백 접두) → 번호 기준 중복제거 검증",
+  "mallProductId·title 은 지어낸 값이다. 조인 짝은 join_traps.json 의 '행' 과 (acct, mallProductId) 로 맞춰져 있다."
+ ],
+ "generated": "2026-09-20",
+ "accounts": {
+  "zzaa": {
+   "summary": {"ads": 6},
+   "rules": {
+    "③원인분석": [
+     {
+      "adId": "nad-zzaa-000000000000001",
+      "adGroup": "판매상품_15-2_zzfakecompany",
+      "title": "zz상품1",
+      "mallProductId": "19000000001",
+      "bid": 120,
+      "useGroupBid": false,
+      "groupBid": 70,
+      "imp": 12000,
+      "clk": 90,
+      "ctr": 0.75,
+      "rank": 6.1,
+      "cost": 8800
+     },
+     {
+      "adId": "nad-zzaa-000000000000002",
+      "adGroup": "20-3 zzfakecompany2",
+      "title": "zz상품2",
+      "mallProductId": "19000000002",
+      "bid": 90,
+      "useGroupBid": true,
+      "groupBid": 90,
+      "imp": 8400,
+      "clk": 51,
+      "ctr": 0.61,
+      "rank": 7.2,
+      "cost": 4300
+     },
+     {
+      "adId": "nad-zzaa-000000000000003",
+      "adGroup": "1000개_22-1_zzfakecompany3",
+      "title": "zz상품3",
+      "mallProductId": "19000000003",
+      "bid": 70,
+      "useGroupBid": true,
+      "groupBid": 70,
+      "imp": 5100,
+      "clk": 33,
+      "ctr": 0.65,
+      "rank": 8.0,
+      "cost": 2310
+     },
+     {
+      "adId": "nad-zzaa-000000000000004",
+      "adGroup": "판매상품_17-3_zzfakecompany6",
+      "title": "zz상품7",
+      "mallProductId": "19000000007",
+      "bid": 80,
+      "useGroupBid": true,
+      "groupBid": 80,
+      "imp": 3300,
+      "clk": 25,
+      "ctr": 0.76,
+      "rank": 7.9,
+      "cost": 1980
+     }
+    ],
+    "⑤효자확정": [
+     {
+      "adId": "nad-zzaa-000000000000005",
+      "adGroup": "zzfake이동식오피스",
+      "title": "zz상품4",
+      "mallProductId": "19000000004",
+      "bid": 150,
+      "useGroupBid": false,
+      "groupBid": 70,
+      "imp": 26000,
+      "clk": 310,
+      "ctr": 1.19,
+      "rank": 5.4,
+      "cost": 41000,
+      "purCnt": 3,
+      "purAmt": 612000
+     },
+     {
+      "adId": "nad-zzaa-000000000000006",
+      "adGroup": "판매상품_15-2_zzfakecompany",
+      "title": "zz상품9",
+      "mallProductId": "19000000009",
+      "bid": 110,
+      "useGroupBid": false,
+      "groupBid": 70,
+      "imp": 19000,
+      "clk": 205,
+      "ctr": 1.08,
+      "rank": 6.6,
+      "cost": 22550,
+      "purCnt": 2,
+      "purAmt": 318000
+     }
+    ]
+   }
+  },
+  "zzbb": {
+   "summary": {"ads": 3},
+   "rules": {
+    "③원인분석": [
+     {
+      "adId": "nad-zzbb-000000000000001",
+      "adGroup": "판매상품_9-9_zzfakecompany4",
+      "title": "zz상품5",
+      "mallProductId": "19000000005",
+      "bid": 70,
+      "useGroupBid": true,
+      "groupBid": 70,
+      "imp": 4200,
+      "clk": 29,
+      "ctr": 0.69,
+      "rank": 8.3,
+      "cost": 2030
+     },
+     {
+      "adId": "nad-zzbb-000000000000002",
+      "adGroup": "판매상품_13-2_zzfakecompany5",
+      "title": "zz상품6",
+      "mallProductId": "19000000006",
+      "bid": 70,
+      "useGroupBid": true,
+      "groupBid": 70,
+      "imp": 2600,
+      "clk": 18,
+      "ctr": 0.69,
+      "rank": 8.8,
+      "cost": 1260
+     }
+    ],
+    "⑤효자확정": [
+     {
+      "adId": "nad-zzbb-000000000000003",
+      "adGroup": "17-3 zzfakecompany7",
+      "title": "zz상품8",
+      "mallProductId": "19000000008",
+      "bid": 130,
+      "useGroupBid": false,
+      "groupBid": 70,
+      "imp": 15500,
+      "clk": 190,
+      "ctr": 1.23,
+      "rank": 6.0,
+      "cost": 24700,
+      "purCnt": 4,
+      "purAmt": 455000
+     }
+    ]
+   }
+  }
+ }
+}

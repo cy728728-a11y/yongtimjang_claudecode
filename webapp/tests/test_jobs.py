@@ -457,18 +457,27 @@ def test_고아_잡은_orphaned_로_남는다(잡판, synthetic_job):
     assert 상태["exit_code"] is None
 
 
-def test_보드캐시와_대상별락_테이블을_만들지_않는다(잡판):
-    """스키마는 jobs 하나뿐이다.
+def test_스키마는_jobs_와_ss_index_뿐이다(잡판):
+    """허용 테이블은 `jobs` 와 `ss_index` 둘뿐이다. **보드 캐시 금지는 여전히 유효하다.**
 
-    보드는 매번 `result.json` 을 투영한다(캐시를 두면 진실이 둘이 된다).
-    대상별 잠금 테이블은 Phase 2(ENG-04) — 지금 만들면 안 쓰는 스키마가 굳는다.
+    Phase 1 에서는 `jobs` 하나뿐이었다. Phase 3 이 `ss_index` 를 더하면서 이 가드를
+    **일부러** 넓혔다(D-20 / 위협 T-3-03). 조용히 고치면 다음 사람이 "보드 캐시 금지" 원칙이
+    통째로 풀린 줄 안다 — 그래서 예외 사유를 여기 못 박아 둔다.
+
+    왜 `ss_index` 는 되고 보드 캐시는 안 되는가 — **성격이 다르다**:
+      - 보드 캐시: `result.json` 에서 **언제든 재생성 가능한 투영**이다. 캐시를 두는 순간
+        진실이 둘이 되고, 회차를 다시 판정해도 화면이 안 따라오는 사고가 난다.
+      - `ss_index`: `smartstore번호 → productId` 는 **3시간 반을 태워야 다시 얻는 외부 관측
+        기록**이다(36그룹 / 47,105 상품, D-18). 재생성이 공짜가 아니면 그건 캐시가 아니라 기록이다.
+
+    **대상별 잠금 테이블은 여전히 Phase 2(ENG-04)다.** 지금 만들면 안 쓰는 스키마가 굳는다.
     """
     import sqlite3
     cx = sqlite3.connect(jobs.db_path())
     이름들 = {r[0] for r in cx.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     cx.close()
     assert "jobs" in 이름들
-    assert 이름들 - {"jobs"} == set(), f"예상 밖 테이블: {이름들}"
+    assert 이름들 - {"jobs", "ss_index"} == set(), f"예상 밖 테이블: {이름들}"
 
 
 def test_자식_환경에_버퍼링해제가_들어간다(잡판, tmp_path):
