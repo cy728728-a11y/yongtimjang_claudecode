@@ -17,9 +17,22 @@
 # "command not found" 로 죽는다(실측). 설명은 주석으로 한국어를 쓴다.
 set -uo pipefail
 
+# **저장소 루트에서 돈다.** 다른 하네스는 전부 이렇게 하는데 여기만 빠져 있어서,
+# 딴 데서 부르면 상대경로 검사(webapp-logs · webapp/*.py 스캔)가 조용히 건너뛰어졌다.
+cd "$(dirname "$0")/../.."
+ROOT="$(pwd)"
+
 PORT="${CT_PORT:-8765}"
 T="${CT_DEV_TOKEN:-}"
 B="http://127.0.0.1:$PORT"
+# **실재하는 회차를 아예 안 쓴다.** 예전엔 2026-08-30 이 박혀 있어서 그 회차가
+# 사라지면(정리했거나 다른 PC) 보안 검증이 보안과 무관한 이유로 빨개졌다 — 빨개진
+# 보안 스크립트는 곧 안 돌리는 스크립트가 된다. 환경변수로 빼는 것도 생각했지만,
+# 그러면 다른 하네스용으로 그 변수를 export 해 둔 세션에서 **실재 회차가 들어와
+# 부수효과가 되살아나고**(실측: 그 상태로 돌리면 c2 가 400 인데 사유가 회차가 아니라
+# 대상 검증이라 FAIL 한다) 검사의 뜻도 달라진다. 회차 의존 자체를 없애는 쪽이 맞다.
+# PID 를 붙여 실재 회차(ISO 날짜)와 절대 겹치지 않게 한다.
+NOSUCH_RUN="없는회차-$$"
 fails=0
 
 if [ -z "$T" ]; then
@@ -65,42 +78,87 @@ test "$(code -X POST -H "Origin: https://evil.com" -H "X-CT-Token: $T" \
 check V-SAFE-01c "Origin: evil.com + 올바른 토큰 → 403 (CSRF 차단)" $?
 
 # V-SAFE-01d  상태를 바꾸는 GET 이 없다 — Origin 방어의 전제
-#   ※ VALIDATION.md 원문은 grep 하나로 줄바꿈을 건너뛰려 했는데, grep 은 줄 단위라
-#      그 패턴은 **영원히 매치되지 않아 항상 PASS** 한다(빈 통과). 여기서는 GET 데코레이터
-#      아래 본문을 실제로 훑는 방식으로 바꿨다 — "전부 통과"를 성공으로 오독하지 않으려고.
+#   ※ 역사: VALIDATION.md 원문은 grep 하나로 줄바꿈을 건너뛰려 했는데 grep 은 줄
+#      단위라 그 패턴이 **영원히 매치되지 않아 항상 PASS** 했다(빈 통과 1세대).
+#      그 다음 판은 "GET 데코레이터 아래 60줄에서 위험 이름을 직접 찾는" 방식이었는데
+#      ① **래퍼 한 겹이면 통과**했고(이 저장소엔 이미 `_작업만들기` 라는 래퍼가 있다 —
+#      GET 핸들러가 그걸 부르면 스캐너는 통과시켰다) ② docstring 이 긴 핸들러에서는
+#      60줄 상한 너머가 아예 안 보였다. 문구("상태를 바꾸는 GET 0건")가 증명한 것보다
+#      셌다 — 빈 통과 2세대다.
+#
+#      지금 판은 **ast 로 호출 관계를 따라간다**: GET 핸들러에서 도달 가능한 함수
+#      집합을 전부 펼쳐서 그 안에 위험 이름이 있는지 본다. 줄 수 상한이 없고
+#      (함수 경계를 ast 가 정확히 안다), 래퍼를 몇 겹 끼워도 뚫리지 않는다.
 python3 - <<'PY'
-import re, sys
+import ast, sys
 from pathlib import Path
 
-DEC = re.compile(r'^\s*@(?:app|router)\.get\(')
-NEXT = re.compile(r'^\s*@|^\s*(?:async\s+)?def\s')
-# 쓰기를 일으키는 호출들. 여기에 CLI 플래그 리터럴은 넣지 않는다 —
+# 쓰기를 일으키는 이름들. 여기에 CLI 플래그 리터럴은 넣지 않는다 —
 # webapp/tests 트리에 그 문자열이 있으면 no_commit_guard.sh 가 막는다(그게 맞다).
-RISK = re.compile(r'\b(create_job|spawn|Popen|run_bids|run_revert)\b')
+RISK = {"create_job", "spawn", "Popen", "run_bids", "run_revert"}
+
+정의 = {}          # 함수이름 → 그 본문이 건드리는 이름 집합 (모듈을 가로질러 합친다)
+GET핸들러 = []      # (파일, 함수이름, 줄)
+
+
+def 건드리는이름(node) -> set:
+    """이 함수 본문이 언급하는 모든 이름. **호출만 보지 않는다** — 함수를 변수에
+    담아 넘기는 경로도 위험으로 본다. 보안 스캐너는 넘치게 잡는 쪽이 옳다."""
+    이름 = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name):
+            이름.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            이름.add(n.attr)
+    return 이름
+
+
+def GET인가(fn) -> bool:
+    for d in fn.decorator_list:
+        f = d.func if isinstance(d, ast.Call) else d
+        if isinstance(f, ast.Attribute) and f.attr == "get" \
+                and isinstance(f.value, ast.Name) and f.value.id in ("app", "router"):
+            return True
+    return False
+
+
+파일들 = [f for f in sorted(Path("webapp").rglob("*.py")) if "tests" not in f.parts]
+if not 파일들:
+    print("스캔할 파일이 0개다 — 저장소 루트에서 돌려라")
+    sys.exit(1)
+
+for f in 파일들:
+    tree = ast.parse(f.read_text(encoding="utf-8"))
+    for n in ast.walk(tree):
+        if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        정의.setdefault(n.name, set()).update(건드리는이름(n))
+        if GET인가(n):
+            GET핸들러.append((str(f), n.name, n.lineno))
+
+if not GET핸들러:
+    print("GET 핸들러를 0개 찾았다 — 스캐너가 눈이 멀었다")
+    sys.exit(1)
 
 bad = []
-for f in sorted(Path('webapp').rglob('*.py')):
-    if 'tests' in f.parts:
-        continue
-    lines = f.read_text(encoding='utf-8', errors='ignore').splitlines()
-    for i, l in enumerate(lines):
-        if not DEC.match(l):
+for 파일, 이름, 줄 in GET핸들러:
+    본것, 남은것 = set(), list(정의.get(이름, ()))
+    while 남은것:
+        n = 남은것.pop()
+        if n in 본것:
             continue
-        # 데코레이터 다음 def 부터, 다음 데코레이터/최대 60줄까지가 그 핸들러 본문이다
-        j = i + 1
-        while j < len(lines) and not NEXT.match(lines[j]):
-            j += 1
-        end = min(j + 60, len(lines))
-        for k in range(j + 1, end):
-            if DEC.match(lines[k]) or lines[k].startswith('@'):
-                break
-            if RISK.search(lines[k]):
-                bad.append(f"{f}:{k+1}")
+        본것.add(n)
+        남은것.extend(정의.get(n, ()))
+    걸린것 = sorted(본것 & RISK)
+    if 걸린것:
+        bad.append(f"{파일}:{줄} {이름}() → {' · '.join(걸린것)}")
+
 for b in bad:
     print("상태를 바꾸는 GET 의심:", b)
+print(f"(GET 핸들러 {len(GET핸들러)}개를 호출관계로 훑었다)")
 sys.exit(1 if bad else 0)
 PY
-check V-SAFE-01d "상태를 바꾸는 GET 엔드포인트 0건" $?
+check V-SAFE-01d "상태를 바꾸는 GET 엔드포인트 0건 (호출관계 추적)" $?
 
 # ── SAFE-02 ─────────────────────────────────────────────────────────────────
 
@@ -125,7 +183,7 @@ check V-SAFE-02b "틀린 토큰 POST → 403" $?
 #       기준이 `-lt 400` 으로 자동으로 조여진다. 그 전에는 "정확히 404" 를 요구한다
 #       ("403 이 아닐 것" 은 000·500 도 통과시켜서 느슨했다).
 c1=$(curl -s --max-time 10 -w '\n%{http_code}' -X POST -H "Origin: $B" -H "X-CT-Token: $T" \
-     -H 'Content-Type: application/json' -d '{"run_dir":"그런회차없음"}' "$B/jobs/run")
+     -H 'Content-Type: application/json' -d "{\"run_dir\":\"$NOSUCH_RUN\"}" "$B/jobs/run")
 c1_code=$(printf '%s' "$c1" | tail -1)
 c1_body=$(printf '%s' "$c1" | sed '$d')
 ok=1
@@ -134,16 +192,27 @@ if [ "$c1_code" = "400" ]; then
 fi
 check V-SAFE-02c1 "정상 쓰기가 가드 3층을 통과해 앱 로직에 닿는다 (400 + 사유, 현재 $c1_code)" "$ok"
 
-ok_code=$(code -X POST -H "Origin: $B" -H "X-CT-Token: $T" \
-          -H 'Content-Type: application/json' \
-          -d '{"run_dir":"2026-08-30","ad_ids":[]}' "$B/jobs/bids/preview")
-if grep -q '/jobs/bids/preview' webapp/routes/jobs.py 2>/dev/null; then
-  test "$ok_code" -lt 400
-  check V-SAFE-02c2 "입찰가 미리보기 POST → 2xx/3xx (현재 $ok_code)" $?
-else
-  test "$ok_code" = "404"
-  check V-SAFE-02c2 "입찰가 미리보기 라우트는 아직 없다 → 정확히 404 (현재 $ok_code) · Plan 01-07 이 만들면 -lt 400 으로 자동 강화" $?
+#   ※ c2 는 **부수효과가 0 이어야 한다.** 예전 판은 실재하는 회차에 빈 ad_ids 로
+#      쐈는데, 그건 진짜로 bids_preview 잡을 만들고 CLI 자식을 띄웠다
+#      (ad_ids:[] → accounts=[] → --account 없음 → 전 계정 dry-run). 광고비는 0 이지만
+#      보안 검증을 돌릴 때마다 회차 web/ 에 targets_*·preview_* 가 쌓이고 잡
+#      레지스트리에 유령 작업이 남았다 — c1 주석이 "부수효과 0" 이라고 적어 둔
+#      원칙을 c2 만 안 지켰다. 그리고 회차 `2026-08-30` 이 박혀 있어 그 회차가
+#      사라지면 보안 검증이 보안과 무관한 이유로 빨개졌다.
+#      지금 판은 **없는 회차 + 모양이 맞는 ad_ids** 를 보낸다. 가드 3층(Host·Origin·
+#      토큰)을 통과해 앱 로직이 400 + 사유로 답하는 것까지 똑같이 증명하면서,
+#      회차 화이트리스트에서 거부되므로 잡도 파일도 안 생긴다.
+c2=$(curl -s --max-time 10 -w '\n%{http_code}' -X POST -H "Origin: $B" -H "X-CT-Token: $T" \
+     -H 'Content-Type: application/json' \
+     -d "{\"run_dir\":\"$NOSUCH_RUN\",\"ad_ids\":[\"nad-a001-02-000000495390006\"]}" \
+     "$B/jobs/bids/preview")
+c2_code=$(printf '%s' "$c2" | tail -1)
+c2_body=$(printf '%s' "$c2" | sed '$d')
+ok=1
+if [ "$c2_code" = "400" ]; then
+  printf '%s' "$c2_body" | grep -q '회차' && ok=0
 fi
+check V-SAFE-02c2 "미리보기 라우트가 가드 3층을 통과해 앱 로직에 닿는다 (400 + 사유, 현재 $c2_code · 부수효과 0)" "$ok"
 
 # ── SAFE-03 ─────────────────────────────────────────────────────────────────
 
@@ -154,12 +223,27 @@ print(json.loads(p.read_text())['accounts'][0]['secret_key'] if p.is_file() else
 if [ -z "$S" ]; then
   echo "SKIP V-SAFE-03  광고 계정 설정이 없는 환경이다"
 else
-  leaked=0
-  curl -s --max-time 10 -H "Cookie: ct_session=$T" "$B/" | grep -q -- "$S" && leaked=1
-  if [ -d webapp-logs ]; then
-    grep -rq -- "$S" webapp-logs/ 2>/dev/null && leaked=1
+  # **먼저 "이게 진짜 보드다" 를 못박는다.** 예전 판은 응답 내용을 안 봤다 —
+  # 쿠키가 안 맞으면 본문이 403 안내문이고, 서버를 뽑아 놓으면 빈 문자열이다.
+  # 어느 쪽이든 시크릿이 없으니 **초록**이었다. CT_DEV_TOKEN 과 서버 토큰이
+  # 어긋난 채로 돌리면 "시크릿 0건" 이 거짓으로 통과한다. 검사가 성립하지
+  # 않는 상태와 검사를 통과한 상태를 같은 화면으로 두지 않는다.
+  body=$(curl -s --max-time 10 -H "Cookie: ct_session=$T" "$B/")
+  if ! printf '%s' "$body" | grep -q 'id="board-rows"'; then
+    check V-SAFE-03 "보드를 못 받았다 — 시크릿 검사가 성립하지 않는다 (토큰·서버 확인)" 1
+  else
+    leaked=0
+    printf '%s' "$body" | grep -q -- "$S" && leaked=1
+    # 상대경로 금지 — 저장소 루트가 아닌 데서 부르면 조용히 건너뛰어졌다.
+    LOGDIR="$ROOT/webapp-logs"
+    if [ -d "$LOGDIR" ]; then
+      grep -rq -- "$S" "$LOGDIR"/ 2>/dev/null && leaked=1
+      check V-SAFE-03 "응답 본문(보드 확인됨)·webapp-logs 에 광고 시크릿 0건" "$leaked"
+    else
+      # 로그 디렉터리가 없으면 "로그에 0건" 을 증명한 게 아니다 — 그렇다고 말한다.
+      check V-SAFE-03 "응답 본문(보드 확인됨)에 광고 시크릿 0건 · webapp-logs 없음(로그 검사 못 했다)" "$leaked"
+    fi
   fi
-  check V-SAFE-03 "응답 본문·webapp-logs 에 광고 시크릿 0건" "$leaked"
 fi
 
 echo "----"
