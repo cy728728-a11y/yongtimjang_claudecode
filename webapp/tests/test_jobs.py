@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -185,6 +186,109 @@ def test_쓰기잡은_동시에_두개가_안된다(잡판, synthetic_job):
     끝날때까지(첫번째)
     두번째 = jobs.create_job("prep", argv_override=synthetic_job(lines=1, delay=0.05)["argv"])
     assert 두번째 != 첫번째
+
+
+def test_띄우는_중인_쓰기잡도_가드에_잡힌다(잡판, synthetic_job, monkeypatch):
+    """CR-01 재현 방어 — **INSERT 와 spawn 사이의 창**에서도 전역 쓰기 가드가 산다.
+
+    예전에는 INSERT 가 `status='running'` · `pid=NULL` 이었고 pid 는 spawn 뒤에 들어왔다.
+    그 수~수십 ms 창에서 `_reap`(SSE 가 0.4초마다 부른다)이 `_alive(None)=False` 를 보고
+    그 행을 **`orphaned` 로 찍었다.** 그러면 `status='running'` 만 보던 가드가 그 잡을
+    못 봐서 **두 번째 쓰기 잡이 들어간다** — `before_bids_<alias>.json` 병합이 깨지면
+    그 소재는 영영 못 되돌린다(WRITE_KINDS 주석의 그 사고).
+
+    창을 시간으로 재현하면 확률 테스트가 된다. 대신 `spawn` 안에서 강제로 끼어들어
+    **창을 정확히 한 번 벌린다** — 그 순간 ① 폴링이 상태를 못 망가뜨리고
+    ② 두 번째 쓰기 잡이 `BusyError` 로 막히는지 본다.
+    """
+    본것 = {}
+    원래spawn = jobs.spawn
+    끼어드는중 = {"on": False}
+
+    def 창에서_폴링하는_spawn(argv, log_path):
+        # 여기가 그 창이다 — 행은 커밋됐고 pid 는 아직 없다.
+        if not 끼어드는중["on"]:
+            끼어드는중["on"] = True
+            try:
+                # ① SSE 폴링이 부르는 그 경로(_reap 포함)를 강제로 돌린다
+                본것["창안"] = [(j["id"], j["status"], j["pid"])
+                              for j in jobs.recent_jobs(5)]
+                # ② 바로 그 순간 두 번째 쓰기 잡을 넣어 본다
+                try:
+                    본것["두번째"] = jobs.create_job("revert_only", argv_override=argv)
+                except jobs.BusyError as e:
+                    본것["두번째"] = f"막혔다: {e}"
+            finally:
+                끼어드는중["on"] = False
+        return 원래spawn(argv, log_path)
+
+    monkeypatch.setattr(jobs, "spawn", 창에서_폴링하는_spawn)
+
+    스펙 = synthetic_job(lines=40, delay=0.2)
+    첫번째 = jobs.create_job("bids_commit", argv_override=스펙["argv"])
+
+    # 창 안에서 폴링이 돌았다는 것 자체를 먼저 못박는다 — 안 돌았으면 이 테스트는
+    # 아무것도 검증하지 않은 것이다(영원히 통과하는 검사를 만들지 않는다).
+    assert 첫번째 in [id for id, _, _ in 본것["창안"]], "창 안에서 그 행을 못 봤다"
+
+    # ② **제일 강한 주장부터.** 두 번째 쓰기 잡은 반드시 막혔어야 한다.
+    assert str(본것["두번째"]).startswith("막혔다"), \
+        f"창 안에서 두 번째 쓰기 잡이 들어갔다: {본것['두번째']} · 창안={본것['창안']}"
+    assert 첫번째 in str(본것["두번째"]), "사유에 막은 잡의 id 가 있어야 한다"
+
+    창안상태 = dict((id, st) for id, st, _ in 본것["창안"])[첫번째]
+    assert 창안상태 == "starting", f"창 안 상태가 starting 이 아니다: {창안상태}"
+
+    # ③ 창이 닫힌 뒤 그 잡은 멀쩡히 running 이다 — orphaned 로 찍히지 않았다
+    상태 = jobs.job_status(첫번째)
+    assert 상태["status"] == "running", f"멀쩡한 잡이 {상태['status']} 로 찍혔다"
+    assert 상태["pid"] > 0
+
+
+def test_띄우다_죽은_잡은_가드를_영원히_잡지_않는다(잡판, monkeypatch):
+    """`starting` 이 영원히 남으면 `_reap` 이 원래 막던 고장이 이름만 바꿔 돌아온다.
+
+    INSERT 는 됐는데 spawn 전에 프로세스가 통째로 죽은 경우다. `STARTING_TIMEOUT_SEC`
+    을 넘기면 `failed` 로 닫혀 **다음 쓰기 작업이 열려야 한다.**
+    """
+    monkeypatch.setattr(jobs, "spawn", lambda argv, log_path: 가짜프로세스(argv))
+    죽은놈 = jobs.create_job("bids_commit", argv_override=["x"])
+
+    # 서버가 INSERT 직후에 죽은 상태를 손으로 만든다 — starting 으로 되돌리고
+    # 시작 시각을 상한 너머로 민다.
+    cx = jobs._conn()
+    옛날 = (datetime.now().astimezone()
+          - timedelta(seconds=jobs.STARTING_TIMEOUT_SEC + 5)).isoformat(timespec="seconds")
+    cx.execute("UPDATE jobs SET status='starting', pid=NULL, started_at=? WHERE id=?",
+               (옛날, 죽은놈))
+    cx.commit()
+    cx.close()
+    jobs._PROCS.pop(죽은놈, None)
+
+    # 상한을 넘겼으니 다음 쓰기 잡이 들어가야 한다
+    다음 = jobs.create_job("bids_commit", argv_override=["y"])
+    assert jobs.job_status(죽은놈)["status"] == "failed"
+    assert jobs.job_status(죽은놈)["exit_code"] == -1
+    assert 다음 != 죽은놈
+
+
+def test_띄우는_중인_잡은_상한_전까지는_가드를_잡는다(잡판, monkeypatch):
+    """음성 대조군 — 위 테스트가 "그냥 starting 을 다 풀어 준다" 로 통과하지 않게.
+
+    상한을 **안 넘긴** `starting` 은 살아 있는 잡이므로 가드가 그대로 걸려야 한다.
+    """
+    monkeypatch.setattr(jobs, "spawn", lambda argv, log_path: 가짜프로세스(argv))
+    도는놈 = jobs.create_job("bids_commit", argv_override=["x"])
+
+    cx = jobs._conn()
+    cx.execute("UPDATE jobs SET status='starting', pid=NULL WHERE id=?", (도는놈,))
+    cx.commit()
+    cx.close()
+
+    with pytest.raises(jobs.BusyError) as e:
+        jobs.create_job("revert_all", argv_override=["y"])
+    assert 도는놈 in str(e.value)
+    assert jobs.job_status(도는놈)["status"] == "starting", "상한 전인데 상태가 바뀌었다"
 
 
 def test_미리보기는_가드를_안탄다(잡판, synthetic_job):

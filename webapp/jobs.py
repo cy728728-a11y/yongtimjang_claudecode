@@ -30,7 +30,7 @@ import os
 import sqlite3
 import subprocess
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -54,6 +54,24 @@ KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
 # Phase 2 가 이걸 대상별 락으로 좁힌다. 미리보기·판정은 아무것도 안 쓰므로 뺀다 —
 # 쓰기가 아닌 것까지 막는 가드는 사람이 가드를 끄게 만든다.
 WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "revert_all"})
+
+# **살아 있는 잡의 상태 두 가지.** `starting` 은 "행은 들어갔는데 자식이 아직 안 떴다" 다.
+# 왜 둘로 쪼갰나: 예전에는 INSERT 가 바로 `running` 이었는데, 그 행의 `pid` 는 spawn 뒤에야
+# 채워진다. 그 수~수십 ms 창에서 `_reap`(SSE 가 0.4초마다 부른다)이 `pid=NULL` 을 보고
+# **멀쩡히 뜰 잡을 `orphaned` 로 찍었다.** 그러면 ① 전역 쓰기 가드(`status='running'` 조회)가
+# 그 잡을 못 봐서 두 번째 쓰기 잡이 들어가고(백업 병합이 깨져 그 소재는 영영 못 되돌린다),
+# ② `post_revert_job` 이 일부러 허용하는 `orphaned` 에 **살아서 PUT 을 날리는 중인 잡**이
+# 섞인다. 재현된 경합이다.
+#
+# 그래서 spawn 전 구간을 `starting` 으로 두고 **가드는 둘 다 본다**(LIVE_STATUSES).
+# `_reap` 은 `running` 만 건드리므로 그 창이 통째로 사라진다.
+LIVE_STATUSES: tuple[str, ...] = ("running", "starting")
+
+# `starting` 인 채로 이 시간을 넘기면 "띄우다 죽은 것" 으로 보고 닫는다.
+# 이게 없으면 INSERT 와 spawn 사이에 프로세스가 통째로 죽었을 때 그 행이 **영원히**
+# 전역 가드를 잡는다 — `_reap` 이 원래 막으려던 바로 그 고장이 이름만 바뀌어 돌아온다.
+# spawn 은 실측 수~수십 ms 라 60초면 오탐이 날 여지가 없다.
+STARTING_TIMEOUT_SEC = 60
 
 DDL = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -199,6 +217,12 @@ def _reap(cx: sqlite3.Connection) -> None:
 
     프로세스 메모리에 `Popen` 이 없는데 pid 도 죽었으면 종료코드를 알 길이 없다.
     그때는 **지어내지 않고** `orphaned` 로 둔다 — 복구는 Phase 2(ENG-05)다.
+
+    **`starting` 은 생사를 묻지 않는다.** 그 상태의 행은 아직 pid 가 없는 게 정상이라,
+    `_alive(None)` 을 물으면 무조건 거짓이고 멀쩡히 뜰 잡이 `orphaned` 가 된다
+    (재현된 경합 — LIVE_STATUSES 주석 참조). 대신 **시간으로만** 판정한다:
+    `STARTING_TIMEOUT_SEC` 을 넘겼으면 띄우다 죽은 것이니 `failed` 로 닫아 전역 가드를
+    풀어 준다. 시간 이전의 `starting` 은 건드리지 않는다.
     """
     for r in cx.execute("SELECT id, pid FROM jobs WHERE status = 'running'").fetchall():
         proc = _PROCS.get(r["id"])
@@ -210,6 +234,16 @@ def _reap(cx: sqlite3.Connection) -> None:
         if not _alive(r["pid"]):
             cx.execute("UPDATE jobs SET status = 'orphaned', ended_at = ? WHERE id = ?",
                        (_now(), r["id"]))
+
+    한계 = datetime.now().astimezone() - timedelta(seconds=STARTING_TIMEOUT_SEC)
+    for r in cx.execute("SELECT id, started_at FROM jobs WHERE status = 'starting'").fetchall():
+        try:
+            시작 = datetime.fromisoformat(r["started_at"])
+        except (TypeError, ValueError):
+            시작 = None            # 시각을 못 읽으면 살려 두지 않는다 — 가드를 영원히 잡는 쪽이 더 나쁘다
+        if 시작 is None or 시작 < 한계:
+            cx.execute("UPDATE jobs SET status = 'failed', exit_code = -1, ended_at = ? "
+                       "WHERE id = ? AND status = 'starting'", (_now(), r["id"]))
 
 
 # ── 자식 띄우기 ─────────────────────────────────────────────────────────────
@@ -374,8 +408,8 @@ def create_job(kind: str, *, run_dir: str | None = None,
       ② 회차 화이트리스트 — 라우트가 깜빡해도 여기서 막힌다 (T-1-11)
       ③ 대상 목록을 파일로 (FLOW-02)
       ④ argv 조립 (webapp/argv.py 한 곳)
-      ⑤ jobs 행 INSERT (status='running')
-      ⑥ spawn → pid UPDATE
+      ⑤ jobs 행 INSERT (status='starting' — **아직 running 이 아니다**)
+      ⑥ spawn → pid 와 status='running' 을 **같이** UPDATE
 
     `only_ads` 와 `targets_path_override` 는 **상호배타**다. 전자는 목록을 받아 파일을
     새로 쓰고, 후자는 이미 있는 파일을 그대로 가리킨다 — 둘을 같이 주면 어느 쪽이
@@ -410,9 +444,13 @@ def create_job(kind: str, *, run_dir: str | None = None,
         _reap(cx)
         if kind in WRITE_KINDS:
             표시 = ",".join("?" * len(WRITE_KINDS))
+            상태표시 = ",".join("?" * len(LIVE_STATUSES))
+            # **`starting` 도 본다.** 안 보면 자식을 띄우는 중인 쓰기 잡을 가드가 못 잡아
+            # 두 번째 쓰기 잡이 들어간다 — 고치려던 구멍이 이름만 바뀐다.
             막는것 = cx.execute(
-                f"SELECT id, kind FROM jobs WHERE status = 'running' AND kind IN ({표시}) "
-                "ORDER BY rowid LIMIT 1", tuple(sorted(WRITE_KINDS))).fetchone()
+                f"SELECT id, kind FROM jobs WHERE status IN ({상태표시}) AND kind IN ({표시}) "
+                "ORDER BY rowid LIMIT 1",
+                tuple(LIVE_STATUSES) + tuple(sorted(WRITE_KINDS))).fetchone()
             if 막는것:
                 raise BusyError(
                     f"이미 도는 쓰기 작업이 있다: {막는것['id']} ({막는것['kind']})")
@@ -464,7 +502,10 @@ def create_job(kind: str, *, run_dir: str | None = None,
             (job_id, kind, run_dir,
              json.dumps(accounts, ensure_ascii=False),
              json.dumps(cmd, ensure_ascii=False),      # 재현·감사용. 시크릿 없음
-             "running", str(log_path),
+             # **`running` 이 아니라 `starting` 이다.** pid 는 spawn 뒤에야 들어오는데,
+             # 그 전에 `running` 으로 적으면 `_reap` 이 `pid=NULL` 을 죽음으로 읽고
+             # 멀쩡한 잡을 `orphaned` 로 찍어 전역 쓰기 가드가 풀린다(LIVE_STATUSES 주석).
+             "starting", str(log_path),
              str(targets_path) if targets_path else None,
              str(result_path) if result_path else None,
              parent_job_id,
@@ -477,8 +518,8 @@ def create_job(kind: str, *, run_dir: str | None = None,
     finally:
         cx.close()
 
-    # ⑥ 자식 띄우기. 실패하면 행을 failed 로 닫는다 — running 으로 남겨 두면
-    #    전역 가드가 영원히 걸린다.
+    # ⑥ 자식 띄우기. 실패하면 행을 failed 로 닫는다 — starting 으로 남겨 두면
+    #    전역 가드가 `STARTING_TIMEOUT_SEC` 동안 걸린다.
     try:
         proc = spawn(cmd, log_path)
     except Exception as e:
@@ -491,10 +532,15 @@ def create_job(kind: str, *, run_dir: str | None = None,
             cx.close()
         raise RuntimeError(f"작업을 띄우지 못했다: {type(e).__name__}: {e}")
 
+    # 자식이 떴다. **pid 와 status 를 한 UPDATE 로 같이 올린다** — pid 만 먼저 쓰고
+    # status 를 나중에 쓰면 그 사이가 또 창이 된다. `_PROCS` 등록을 UPDATE 보다 먼저
+    # 하는 것도 같은 이유다: `running` 으로 보이는 순간에는 `poll()` 할 객체가 이미 있어야
+    # `_reap` 이 종료코드를 지어내지 않는다.
     _PROCS[job_id] = proc
     cx = _conn()
     try:
-        cx.execute("UPDATE jobs SET pid = ? WHERE id = ?", (proc.pid, job_id))
+        cx.execute("UPDATE jobs SET pid = ?, status = 'running' WHERE id = ?",
+                   (proc.pid, job_id))
         cx.commit()
     finally:
         cx.close()

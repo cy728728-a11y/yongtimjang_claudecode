@@ -43,7 +43,8 @@ from webapp import jobs, security, settings
     "revert_only": "이 작업분 되돌리기", "revert_all": "이 회차 전체 되돌리기",
     "synthetic": "합성 작업",
 }
-상태이름 = {"running": "도는 중", "done": "끝남", "failed": "실패", "orphaned": "결과 미상"}
+상태이름 = {"starting": "띄우는 중", "running": "도는 중", "done": "끝남",
+        "failed": "실패", "orphaned": "결과 미상"}
 
 
 def read_from(path, offset: int) -> tuple[str, int]:
@@ -135,7 +136,9 @@ async def sse_generator(job_id: str, request):
             continue             # 아직 흐르는 중이면 상태를 물을 것도 없다
 
         상태 = await anyio.to_thread.run_sync(jobs.job_status, job_id)
-        if 상태 is None or 상태.get("status") != "running":
+        # `starting` 도 **아직 도는 중**이다 (jobs.LIVE_STATUSES). 여기서 끝난 것으로
+        # 읽으면 자식이 뜨기도 전에 done 을 쏘고 스트림을 닫는다.
+        if 상태 is None or 상태.get("status") not in jobs.LIVE_STATUSES:
             yield ServerSentEvent(data=완료요약(상태 or {}), event="done")
             break
 
