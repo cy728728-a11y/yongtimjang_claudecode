@@ -246,3 +246,12 @@ tmp 프로필 파일)로 동작이 확인됐다. 다만 **인덱스를 채우는
   `web/join_*.json` 을 glob 하지 마라 — 중간에 죽은 잡도 반쯤 쓴 파일을 남긴다.
   `group_health(...)["완결"]` 이 거짓인 그룹의 행은 **"인덱스 불완전(시스템)"** 으로 띄워라.
   "번호없음(광고 오류)"과 같은 칸에 담으면 안 된다.
+
+## Self-Check: PASSED
+
+- 파일 3종 존재 확인: `webapp/bulsaja_index.py` · `webapp/tests/test_index.py` ·
+  `.planning/phases/03-join-detail-state/03-03-SUMMARY.md`
+- 커밋 5건 확인: `bee0cd3`(RED) · `ccc8520`(T1) · `e328635`(T2) · `6445afc`(T3) · `ac53b48`(docs)
+- 삭제된 추적 파일 0건 (`git diff --diff-filter=D HEAD~4 HEAD` 비어 있음)
+- STATE.md · ROADMAP.md 미수정 (오케스트레이터 소유) · 03-02 파일(`join.py`·`state.py`·
+  `test_join.py`·`test_state.py`) 미접촉
