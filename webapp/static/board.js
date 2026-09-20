@@ -254,10 +254,24 @@
     return n;
   }
 
-  function 요약갱신() {
+  /**
+   * 선택 요약을 다시 그린다.
+   *
+   * **`활성데이터` 인자가 있는 이유가 이 파일의 제일 비싼 교훈이다.**
+   * `dataFiltered` 핸들러 안에서 `table.getData("active")` 를 읽으면 **직전 필터의
+   * 집합**이 나온다 — Tabulator 의 `Filter.filter()` 가 결과를 만든 뒤 먼저 이벤트를
+   * 쏘고, 그 다음에 `RowManager` 가 `activeRows` 를 갈아끼우기 때문이다(건수 배지가
+   * 같은 이유로 01-04 에서 한 스텝 뒤처졌다).
+   *
+   * 여기서 그 랙이 나면 증상이 더 고약하다: 계정을 바꿔도 "필터 밖에 89개 골라 뒀다"
+   * 가 **안 뜬다.** 화면엔 새 계정만 보이는데 선택은 옛 계정에 남아 있는 상태가
+   * 조용히 유지된다. 그래서 이벤트가 넘겨주는 **갓 계산된 행 목록만** 믿는다.
+   * (2026-09-20 preview_cdp.sh 의 V-PRE-07 이 실제로 이걸 잡았다.)
+   */
+  function 요약갱신(활성데이터) {
     if (!요약칸) { return; }
     var 고른것 = table.getSelectedData();
-    var 활성 = table.getData("active");
+    var 활성 = 활성데이터 || table.getData("active");
     var 대상 = 대상수(고른것);
     var 규칙1있는상품 = 고른것.filter(function (r) { return (r.rule1_count || 0) > 0; }).length;
 
@@ -289,9 +303,15 @@
     }
   }
 
-  table.on("rowSelectionChanged", 요약갱신);
-  table.on("dataFiltered", function () { 배너닫기(); 요약갱신(); });
-  table.on("tableBuilt", 요약갱신);
+  // **핸들러를 그대로 넘기지 마라.** `rowSelectionChanged` 의 첫 인자는 *선택된*
+  // 데이터라, 그걸 `활성데이터` 자리에 받으면 "필터 통과 전체" 가 "지금 고른 것" 이
+  // 되어 `필터 전체 N건` 이 항상 선택 수와 같아진다 — 링크가 영영 안 뜬다.
+  table.on("rowSelectionChanged", function () { 요약갱신(); });
+  table.on("dataFiltered", function (filters, 걸린행) {
+    배너닫기();
+    요약갱신((걸린행 || []).map(function (r) { return r.getData(); }));
+  });
+  table.on("tableBuilt", function () { 요약갱신(); });
 
   function 배너닫기() { if (배너) { 배너.hidden = true; } }
 
