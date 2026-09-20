@@ -47,15 +47,22 @@ def build_body(ad_obj, new_bid):
     return body
 
 
-def apply_raise(acct, ad_obj, new_bid):
-    """실제로 입찰가를 바꾼다. (성공여부, 메시지).
+def _put_ad(acct, ad_obj, body, tries=4):
+    """소재 adAttr 를 PUT 한다. (성공여부, 메시지). **인상과 되돌리기가 같이 쓴다.**
 
-    Important 9: prune.delete_ads 와 회복력을 맞춘다 — 429/5xx 는 최대 4회 재시도(지수
-    백오프)한다. 2,242건 연속 PUT 중 429 하나로 그 소재가 그 주 인상에서 빠지면 안 된다.
+    Important 9: prune.delete_ads 와 회복력을 맞춘다 — 429/5xx/0 은 최대 4회 재시도
+    (지수 백오프). 2,242건 연속 PUT 중 429 하나로 그 소재가 빠지면 안 된다.
+
+    **왜 공용 헬퍼인가:** 예전엔 이 루프가 apply_raise 에만 있고 apply_revert 는
+    한 번 쏘고 끝이었다. 되돌리기는 **사고 대응 경로**라 인상보다 회복력이 더 필요한
+    자리인데 더 약했다 — 472건을 초당 4.3건으로 되돌리는 중에 429 가 하나 뜨면
+    그 소재는 즉시 실패로 기록되고 **인상된 채로 남는다.** 루프를 복사하면 다음에
+    한쪽만 고쳐져 같은 비대칭이 돌아오므로, 한 곳에 두고 둘이 부른다.
+
+    하드 에러(4xx 중 429 아님)는 재시도하지 않는다 — 몇 번을 더 쏴도 같은 답이다.
     """
-    body = build_body(ad_obj, new_bid)
     st, res = 0, ""
-    for attempt in range(4):
+    for attempt in range(tries):
         st, res = nvad.call(acct, "PUT", f"/ncc/ads/{ad_obj['nccAdId']}",
                             params={"fields": "adAttr"}, body=body)
         if st in (200, 201):
@@ -65,6 +72,11 @@ def apply_raise(acct, ad_obj, new_bid):
             continue
         return False, f"{st} {str(res)[:150]}"
     return False, f"{st} {str(res)[:150]} (재시도 소진)"
+
+
+def apply_raise(acct, ad_obj, new_bid):
+    """실제로 입찰가를 바꾼다. (성공여부, 메시지)."""
+    return _put_ad(acct, ad_obj, build_body(ad_obj, new_bid))
 
 
 def build_revert_body(ad_obj, original_attr):
@@ -79,12 +91,11 @@ def build_revert_body(ad_obj, original_attr):
 
 
 def apply_revert(acct, ad_obj, original_attr):
-    """백업된 원본 adAttr 로 되돌린다. (성공여부, 메시지)."""
-    st, res = nvad.call(acct, "PUT", f"/ncc/ads/{ad_obj['nccAdId']}",
-                        params={"fields": "adAttr"}, body=build_revert_body(ad_obj, original_attr))
-    if st in (200, 201):
-        return True, ""
-    return False, f"{st} {str(res)[:150]}"
+    """백업된 원본 adAttr 로 되돌린다. (성공여부, 메시지).
+
+    **인상과 같은 재시도를 탄다** (_put_ad). 되돌리기가 인상보다 약하면 안 된다.
+    """
+    return _put_ad(acct, ad_obj, build_revert_body(ad_obj, original_attr))
 
 
 def update_streaks(led, zero_ids, recovered_ids, run_date, log=print):

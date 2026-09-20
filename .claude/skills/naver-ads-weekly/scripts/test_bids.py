@@ -127,6 +127,67 @@ class TestApplyRaiseRetry(unittest.TestCase):
         self.assertEqual(len(self.calls), 1)
 
 
+class TestApplyRevertRetry(unittest.TestCase):
+    """되돌리기도 인상과 **같은** 회복력을 갖는다 (WR-09).
+
+    예전엔 apply_revert 가 한 번 쏘고 끝이었다. 되돌리기는 사고 대응 경로라
+    인상보다 회복력이 더 필요한 자리인데 더 약했다 — 472건을 되돌리는 중에 429 가
+    하나 뜨면 그 소재는 즉시 실패로 기록되고 **인상된 채로 남는다.**
+
+    인상 쪽 테스트(TestApplyRaiseRetry)와 **같은 3종**을 건다. 한쪽만 있으면
+    다음에 또 한쪽만 고쳐진다.
+    """
+
+    def setUp(self):
+        self._orig_call = bids.nvad.call
+        self._orig_sleep = bids.time.sleep
+        bids.time.sleep = lambda *_: None
+        self.calls = []
+        self.ad_obj = {"nccAdId": "a", "adAttr": {"bidAmt": 110, "useGroupBidAmt": False}}
+        self.원본 = {"bidAmt": 100, "useGroupBidAmt": True}
+
+    def tearDown(self):
+        bids.nvad.call = self._orig_call
+        bids.time.sleep = self._orig_sleep
+
+    def test_429는_재시도후_성공한다(self):
+        seq = [(429, "too many"), (200, {})]
+        bids.nvad.call = lambda *a, **k: (self.calls.append(1), seq.pop(0))[1]
+        good, err = bids.apply_revert({}, self.ad_obj, self.원본)
+        self.assertTrue(good)
+        self.assertEqual(len(self.calls), 2)
+
+    def test_4회_전부_실패하면_포기한다(self):
+        bids.nvad.call = lambda *a, **k: (self.calls.append(1), (503, "down"))[1]
+        good, err = bids.apply_revert({}, self.ad_obj, self.원본)
+        self.assertFalse(good)
+        self.assertEqual(len(self.calls), 4)
+        self.assertIn("재시도 소진", err)
+
+    def test_하드에러는_재시도하지_않는다(self):
+        bids.nvad.call = lambda *a, **k: (self.calls.append(1), (400, "bad request"))[1]
+        good, err = bids.apply_revert({}, self.ad_obj, self.원본)
+        self.assertFalse(good)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_되돌리기_본문은_원본_adAttr_그대로다(self):
+        """재시도를 붙이면서 본문이 바뀌지 않았는지 못박는다."""
+        본것 = []
+        bids.nvad.call = lambda acct, method, path, params=None, body=None: (
+            본것.append((method, path, params, body)), (200, {}))[1]
+        bids.apply_revert({}, self.ad_obj, self.원본)
+        method, path, params, body = 본것[0]
+        self.assertEqual(method, "PUT")
+        self.assertEqual(path, "/ncc/ads/a")
+        self.assertEqual(params, {"fields": "adAttr"})
+        self.assertEqual(body["adAttr"], self.원본)
+
+    def test_인상과_되돌리기가_같은_재시도_경로를_탄다(self):
+        """루프를 복사하지 않았다는 것 자체를 고정한다 — 복사하면 또 갈라진다."""
+        self.assertIs(bids.apply_raise.__code__.co_names.count("_put_ad") > 0, True)
+        self.assertIs(bids.apply_revert.__code__.co_names.count("_put_ad") > 0, True)
+
+
 class TestRevert(unittest.TestCase):
     """Important 4 — bids --revert 되돌리기."""
 
