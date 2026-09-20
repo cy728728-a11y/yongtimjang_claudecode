@@ -101,7 +101,7 @@ Plans:
 
 **Goal**: 광고 판정 행을 불사자 상품에 실제로 잇고 상세 상태를 3단계로 판정해, "유입은 있는데 상세가 중국어 원본인 상품" 목록을 화면에서 정확히 뽑아낸다
 **Mode:** mvp
-**Depends on**: Phase 2
+**Depends on**: Phase 1 (Phase 2 는 뒤로 미뤘다 — 2026-09-21 용팀장 결정. 핵심가치 Phase 5 로 가는 최단 경로. Phase 2 의 삭제 버튼은 조인·상세 트랙과 무관하다 — Sequencing Notes 의 "입찰가·소재정리·쿠팡복사는 조인 불필요" 참조)
 **Requirements**: ENG-08, JOIN-01, JOIN-02, JOIN-03, JOIN-04, STATE-01, STATE-02, STATE-03, STATE-04, STATE-05
 **Success Criteria** (what must be TRUE):
 
@@ -206,4 +206,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 입찰가·소재정리·쿠팡복사는 조인 불필요 (adId / `find_by_code` 자체 해결) | Phase 1, 2, 7 |
 | 채널상품ID는 20일 물갈이로 재발급 (실측 교집합 0/160) | JOIN-04 — 영구 키 금지 |
 | 작업 모수 주당 ~120행 | 성능 최적화 단계 없음. 서버사이드 페이징·가상 스크롤 Out of Scope |
+| Phase 2 를 Phase 3~5 뒤로 미룬다 (2026-09-21) | 핵심가치가 Phase 5 다. Phase 2 는 삭제 버튼이고 조인·상세 트랙이 안 쓴다. 되돌릴 수 없는 쓰기의 안전계약(재조회·상한·감사로그)은 Phase 5 의 크레딧 소모 전에 필요하므로, **Phase 5 계획 시 Phase 2 의 SAFE-04~07 중 무엇을 끌어와야 하는지 반드시 재확인할 것** |
 | 자동화 2단계(전부 실행)·3단계(스케줄) | v2. 단 v1 의 3단 구조와 감사 로그가 그 승인 근거를 쌓는다 (ENG-07, FLOW-07, BOARD-06) |
