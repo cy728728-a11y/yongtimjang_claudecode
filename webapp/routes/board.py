@@ -70,12 +70,15 @@ def home(request: Request, t: str | None = None, run_dir: str | None = None):
         return PlainTextResponse(
             "토큰이 필요하다 — 서버 기동 로그의 URL 로 들어와라", status_code=403)
 
-    회차들 = paths.scan_run_dirs()
+    # 회차 목록에 **그 회차에 들어 있는 계정**을 같이 싣는다 (OQ-7).
+    # 신선도만 보고 고르면, 계정 절반이 측정조차 안 된 판정 위에서 입찰가를
+    # 올리게 된다 — 화면은 "할 게 별로 없다" 로 읽히는데 그게 진짜 위험이다.
+    회차들 = paths.scan_runs()
 
     # 회차 선택. 쿼리로 온 이름은 `paths.run_dir_path` 화이트리스트를 통과해야 한다 —
     # 사용자 입력으로 경로를 조합하지 않는다(위협 T-1-11 / ASVS V12).
     # `..` 를 거르는 블랙리스트가 아니라, 실제로 존재하는 회차 목록에 든 이름만 통과한다.
-    선택 = run_dir or (회차들[0] if 회차들 else None)
+    선택 = run_dir or (회차들[0]["name"] if 회차들 else None)
     if run_dir is not None:
         try:
             paths.run_dir_path(run_dir)
@@ -96,7 +99,7 @@ def home(request: Request, t: str | None = None, run_dir: str | None = None):
         # 죽은 줄 안다 — 실제로는 자식이 세션 분리되어 잘 돌고 있는데.
         # 읽기만 한다: 레지스트리가 없으면 만들지 않고 None 이다.
         "job": jobs.active_job(),
-        "run_dirs": 회차들,
+        "runs": 회차들,
         "run_dir": 선택,
         "freshness": None,
         "accounts": [],

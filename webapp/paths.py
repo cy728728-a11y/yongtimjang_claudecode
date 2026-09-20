@@ -87,6 +87,55 @@ def scan_run_dirs() -> list[str]:
     return sorted(names, reverse=True)
 
 
+# 회차별 계정 목록 메모. 키는 `(경로, mtime_ns, size)` 다 — 회차의 `result.json` 은
+# 한 번 쓰이면 안 바뀌지만, 재판정(`run`)으로 덮이면 mtime 이 움직여 캐시가 저절로
+# 무효화된다. 880KB 파싱이 3ms 라 한 번은 싸지만, 회차는 주 1회 쌓여 1년이면 52개다 —
+# 드롭다운을 그릴 때마다 전부 다시 파싱하면 페이지 로드가 계단식으로 느려진다.
+_계정캐시: dict[tuple, list[str]] = {}
+
+
+def run_accounts(name: str) -> list[str]:
+    """그 회차의 **판정된 계정 alias 목록** (OQ-7).
+
+    출처는 `result.json` 의 `accounts` 키뿐이다 — 보드가 계정 목록을 얻는 곳과
+    같다(BOARD-02). 여기서 계정 이름을 리터럴로 쓰지 않고, 설정에 계정을 더하면
+    다음 회차부터 저절로 따라온다.
+
+    **왜 이 수를 화면에 띄워야 하는가:** 회차마다 들어 있는 계정이 다르다. 어떤
+    회차는 2계정, 어떤 회차는 4계정이다. 신선도(며칠 전)만 보고 회차를 고르면,
+    계정 절반이 **측정조차 안 된** 판정 위에서 입찰가를 올리게 된다. 그때 화면은
+    "오늘은 할 게 별로 없네" 로 읽히는데 그게 진짜 위험이다 — 없는 게 아니라
+    안 본 것이다.
+
+    읽기 실패는 삼킨다. 계정 수를 못 읽는다고 회차 목록 전체가 안 뜨면 그게 더 나쁘다.
+    """
+    p = runs_root() / name / "result.json"
+    try:
+        st = p.stat()
+    except OSError:
+        return []
+    키 = (str(p), st.st_mtime_ns, st.st_size)
+    if 키 in _계정캐시:
+        return _계정캐시[키]
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        목록 = sorted((raw.get("accounts") or {}).keys())
+    except Exception:
+        목록 = []
+    _계정캐시[키] = 목록
+    return 목록
+
+
+def scan_runs() -> list[dict]:
+    """회차 목록 + 회차마다 들어 있는 계정 (최신순). 드롭다운이 이걸로 그려진다.
+
+    `scan_run_dirs()` 는 화이트리스트 관문이라 **이름만** 돌려주는 채로 둔다 —
+    경로 검증에 계정 정보가 끼면 그 함수가 하는 일이 흐려진다.
+    """
+    return [{"name": n, "accounts": run_accounts(n), "account_count": len(run_accounts(n))}
+            for n in scan_run_dirs()]
+
+
 def run_dir_path(name: str) -> Path:
     """회차 이름 → 디렉터리. **화이트리스트를 통과한 이름만** 경로가 된다.
 
@@ -139,10 +188,21 @@ def freshness(name: str) -> dict:
 
     from webapp import settings  # 순환 import 회피 — settings 가 paths 를 쓴다
 
+    # 이 회차에 들어 있는 계정 (OQ-7). 신선도와 **나란히** 띄운다 —
+    # 둘 중 하나만 보면 "3일 전 회차" 가 계정 하나짜리라는 걸 못 본다.
+    계정들 = run_accounts(name)
+    최대 = max([r["account_count"] for r in scan_runs()] or [0])
+
     return {
         "run_dir": name,
         "age_days": age_days,
         "window7": window7,
         "window30": window30,
         "stale": age_days is not None and age_days > settings.STALE_DAYS,
+        "accounts": 계정들,
+        "account_count": len(계정들),
+        # 다른 회차엔 더 있는데 이 회차엔 없는 계정. **막지는 않는다** — 보여만 준다.
+        "missing_accounts": sorted(
+            {a for r in scan_runs() for a in r["accounts"]} - set(계정들)),
+        "max_account_count": 최대,
     }

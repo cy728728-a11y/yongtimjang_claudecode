@@ -70,6 +70,18 @@
         <strong>{{ freshness.run_dir }}</strong> 회차
         {% if freshness.age_days is not none %} · {{ freshness.age_days }}일 전{% endif %}
         {% if freshness.window7 %} · 통계 기간 {{ freshness.window7[0] }}~{{ freshness.window7[1] }}{% endif %}
+        {# 이 회차에 들어 있는 계정 (OQ-7). 신선도 **옆에** 붙는 게 핵심이다 —
+           "3일 전 회차" 가 계정 하나짜리라는 사실은 둘을 같이 봐야만 보인다.
+           계정 alias 를 여기 박지 않는다: 값은 전부 result.json 에서 왔다(BOARD-02). #}
+        {% if freshness.account_count %}
+          · 계정 {{ freshness.account_count }}개
+          <small>({{ freshness.accounts | join(", ") }})</small>
+        {% endif %}
+        {% if freshness.missing_accounts %}
+          <br><strong>이 회차엔 없는 계정이 있다: {{ freshness.missing_accounts | join(", ") }}</strong> —
+          다른 회차에는 판정이 있다. 이 화면에서 "할 게 없다" 로 보이는 건
+          대상이 없어서가 아니라 <strong>그 계정을 안 본 것</strong>이다.
+        {% endif %}
         {% if freshness.stale %}
           <br><strong>이 회차 낡았다.</strong>
           묵은 판정으로 입찰가를 올리는 게 이 단계의 제일 큰 위험이다 — 새로 수집하고 판정부터 해라.
@@ -135,11 +147,15 @@
 
     {# 회차 드롭다운. GET 폼이라 상태를 바꾸지 않는다 — 회차 이름은 서버에서
        paths.run_dir_path 화이트리스트를 다시 통과한다(T-1-11). #}
-    {% if run_dirs %}
+    {% if runs %}
       <form id="rundir-form" method="get" action="/" role="group">
+        {# 회차마다 들어 있는 계정 수를 **옵션 글자에** 넣는다 (OQ-7). 드롭다운을
+           여는 순간 "이 회차는 2개, 저 회차는 4개" 가 한눈에 비교된다 —
+           고르고 나서 배너로 알려 주면 이미 늦다. #}
         <select name="run_dir" id="rundir-select" aria-label="회차 선택">
-          {% for name in run_dirs %}
-            <option value="{{ name }}" {% if name == run_dir %}selected{% endif %}>{{ name }} 회차</option>
+          {% for r in runs %}
+            <option value="{{ r.name }}" {% if r.name == run_dir %}selected{% endif %}>
+              {{ r.name }} 회차 · 계정 {{ r.account_count }}개</option>
           {% endfor %}
         </select>
         <button type="submit">이 회차 보기</button>
@@ -147,7 +163,7 @@
     {% endif %}
   </header>
 
-  {% if not run_dirs %}
+  {% if not runs %}
     <article>
       <h2>먼저 새로 수집을 돌려라</h2>
       <p>판정 결과가 있는 회차가 하나도 없다. 빈 표를 띄우면 “대상이 없다”로 오독하게 되므로 아예 안 그린다.</p>

@@ -147,6 +147,95 @@ def test_prep_summary_가_없으면_통계기간은_None_이다(tmp_path, monkey
     assert f["window7"] is None and f["window30"] is None
 
 
+# ── 5-b. 회차마다 들어 있는 계정이 다르다 (OQ-7) ─────────────────────────
+
+def _계정있는_회차(tmp_path, monkeypatch, 회차별계정: dict):
+    """회차마다 **다른 계정 집합**을 가진 result.json 을 만든다.
+
+    실측이 그렇다: 같은 폴더 구조인데 어떤 회차는 계정 2개, 어떤 회차는 4개다.
+    prep 을 한 계정만 돌린 날이 그대로 남기 때문이다.
+    """
+    monkeypatch.setattr(paths, "data_root", lambda: tmp_path)
+    runs = tmp_path / "naver-ads" / "runs"
+    for 이름, 계정들 in 회차별계정.items():
+        d = runs / 이름
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "result.json").write_text(json.dumps({
+            "generated": 이름,
+            "accounts": {a: {"rules": {}} for a in 계정들},
+        }, ensure_ascii=False), encoding="utf-8")
+    return runs
+
+
+def test_회차마다_들어있는_계정수를_같이_준다(tmp_path, monkeypatch):
+    """신선도만 보고 회차를 고르면 계정 절반이 측정조차 안 된 판정 위에서
+    입찰가를 올리게 된다 (OQ-7). 그래서 회차 목록이 계정 수를 같이 들고 다닌다.
+
+    계정 이름은 코드가 아니라 **result.json 에서만** 온다 — 여기 가짜 이름을 넣어도
+    그대로 나와야 한다(BOARD-02 와 같은 근거).
+    """
+    _계정있는_회차(tmp_path, monkeypatch, {
+        "2026-08-30": ["aa", "bb", "cc", "dd"],
+        "2026-08-29": ["aa", "bb"],
+        "2026-09-20": ["aa"],
+    })
+
+    목록 = paths.scan_runs()
+    assert [r["name"] for r in 목록] == ["2026-09-20", "2026-08-30", "2026-08-29"]
+    assert [r["account_count"] for r in 목록] == [1, 4, 2]
+    assert 목록[1]["accounts"] == ["aa", "bb", "cc", "dd"]
+
+    # 화이트리스트 관문은 **이름만** 돌려주는 채로 남는다 (역할이 흐려지면 안 된다)
+    assert paths.scan_run_dirs() == ["2026-09-20", "2026-08-30", "2026-08-29"]
+
+
+def test_신선도에_계정수와_빠진계정이_실린다(tmp_path, monkeypatch):
+    """계정 1개짜리 회차를 골랐을 때 **무엇이 빠졌는지**까지 말한다.
+
+    "할 게 별로 없네" 로 읽히는 화면이 실제로는 "3개 계정을 안 본 것" 인 상태 —
+    그게 이 기능이 막는 오독이다. 막지는 않는다, 보여만 준다.
+    """
+    _계정있는_회차(tmp_path, monkeypatch, {
+        "2026-08-30": ["aa", "bb", "cc", "dd"],
+        "2026-09-20": ["aa"],
+    })
+
+    적은것 = paths.freshness("2026-09-20")
+    assert 적은것["account_count"] == 1
+    assert 적은것["accounts"] == ["aa"]
+    assert 적은것["missing_accounts"] == ["bb", "cc", "dd"]
+    assert 적은것["max_account_count"] == 4
+
+    많은것 = paths.freshness("2026-08-30")
+    assert 많은것["account_count"] == 4
+    assert 많은것["missing_accounts"] == []
+
+
+def test_계정목록이_재판정을_따라온다(tmp_path, monkeypatch):
+    """`run` 으로 result.json 을 덮으면 계정 목록도 따라온다.
+
+    파싱 결과를 캐시하는데 키가 mtime·크기라, 파일이 바뀌면 캐시가 저절로 무효화된다.
+    안 그러면 계정을 늘리고 재판정해도 화면이 옛날 수를 계속 보여준다.
+    """
+    runs = _계정있는_회차(tmp_path, monkeypatch, {"2026-08-30": ["aa"]})
+    assert paths.run_accounts("2026-08-30") == ["aa"]
+
+    (runs / "2026-08-30" / "result.json").write_text(json.dumps({
+        "generated": "x", "accounts": {"aa": {}, "bb": {}}}), encoding="utf-8")
+    assert paths.run_accounts("2026-08-30") == ["aa", "bb"]
+
+
+def test_계정을_못_읽어도_회차목록은_뜬다(tmp_path, monkeypatch):
+    """result.json 이 깨져도 회차 목록 전체가 사라지지 않는다.
+
+    계정 수를 못 읽는 것보다 회차 목록이 통째로 안 뜨는 게 훨씬 나쁘다.
+    """
+    runs = _계정있는_회차(tmp_path, monkeypatch, {"2026-08-30": ["aa"]})
+    (runs / "2026-08-30" / "result.json").write_text("{깨짐", encoding="utf-8")
+    assert paths.run_accounts("2026-08-30") == []
+    assert [r["name"] for r in paths.scan_runs()] == ["2026-08-30"]
+
+
 # ── 6. 임계값을 넘으면 stale ─────────────────────────────────────────────
 
 def test_임계값을_넘은_회차는_stale_이다(tmp_path, monkeypatch):
