@@ -258,6 +258,67 @@ def test_모르는_잡은_done_없이_조용히_끝난다(잡판):
 
 # ── 설계 가드 ───────────────────────────────────────────────────────────────
 
+def test_이벤트루프에서_blocking_파일IO_를_하지_않는다(잡판):
+    """WR-10 — `read_from` 을 이벤트 루프 위에서 직접 부르지 않는다.
+
+    `jobs.job_status`(sqlite)는 이미 `anyio.to_thread.run_sync` 로 밀어내면서 —
+    바로 그 이유를 docstring 에 적어 두고 — 같은 루프에서 `open()/read()` 는 직접
+    했다. prep 은 계정당 3분 × 4계정이고 로그가 계속 자란다. 이벤트마다 누적본
+    전체를 보내는 설계라(T-1-26) 로그가 수백 KB 가 되면 한 바퀴에 그만큼을 escape
+    하고 직렬화해서 보내는데, 그 사이 다른 SSE 스트림과 /healthz 가 같이 멈춘다.
+
+    **문자열 감시가 아니라 동작으로 잰다** — `read_from` 이 어느 스레드에서
+    불렸는지를 직접 기록한다.
+    """
+    import threading
+
+    # 한 줄 찍고 바로 끝나는 합성 잡 — 제너레이터가 log 한 번, done 한 번을 내고 닫힌다.
+    job_id = 찍는잡("print('가나다')")
+    끝날때까지(job_id)
+
+    부른스레드 = []
+    원래 = logtail.read_from
+
+    def 기록하며읽기(경로, off):
+        부른스레드.append(threading.current_thread().name)
+        return 원래(경로, off)
+
+    logtail.read_from = 기록하며읽기
+
+    async def 몸통():
+        본루프스레드 = threading.current_thread().name
+        async for _ in logtail.sse_generator(job_id, 가짜요청()):
+            pass
+        return 본루프스레드
+
+    try:
+        본루프스레드 = anyio.run(몸통)
+    finally:
+        logtail.read_from = 원래
+
+    assert 부른스레드, "read_from 이 한 번도 안 불렸다 — 이 테스트가 눈이 멀었다"
+    assert all(t != 본루프스레드 for t in 부른스레드), \
+        f"read_from 이 이벤트 루프 스레드에서 돌았다: {set(부른스레드)}"
+
+
+def test_누적본이_상한을_넘으면_앞을_잘라낸다():
+    """WR-10 의 나머지 절반 — 이벤트마다 누적본 전체를 보내는 설계의 대가를 끊는다.
+
+    전량 재전송 자체는 근거가 명확하니(T-1-26) 건드리지 않는다. 다만 상한은 필요하다.
+    """
+    짧은것 = "가나다\n" * 3
+    assert logtail.앞을자른다(짧은것, 상한=1000) == 짧은것, "상한 아래인데 잘랐다"
+
+    긴것 = "".join(f"줄{i}\n" for i in range(5000))
+    잘린것 = logtail.앞을자른다(긴것, 상한=1000)
+    assert len(잘린것) <= 1000 + len(logtail.생략표시)
+    assert logtail.생략표시 in 잘린것, "잘라 놓고 말을 안 한다"
+    assert 잘린것.endswith("줄4999\n"), "끝(최신)을 잘랐다 — 앞을 잘라야 한다"
+    # **줄 경계에서 자른다** — 이미 escape 된 HTML 이라 엔티티가 반 토막 나면 안 된다
+    몸통 = 잘린것[len(logtail.생략표시):]
+    assert 몸통.startswith("줄"), f"줄 한가운데서 잘렸다: {몸통[:20]!r}"
+
+
 def test_last_event_id_를_읽지_않는다():
     """T-1-27 — 이 헤더에 기대는 순간 "가끔 이어진다" 는 재현 불가 버그가 된다.
 

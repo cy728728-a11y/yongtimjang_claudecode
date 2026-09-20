@@ -46,6 +46,29 @@ from webapp import jobs, security, settings
 상태이름 = {"starting": "띄우는 중", "running": "도는 중", "done": "끝남",
         "failed": "실패", "orphaned": "결과 미상"}
 
+# 누적본 상한. **이벤트마다 누적본 전체를 보내는 설계**(T-1-26)의 대가를 여기서 끊는다.
+# prep 은 계정당 3분 × 4계정이라 로그가 계속 자라는데, 수백 KB 가 되면 한 바퀴에
+# 그만큼을 escape 하고 직렬화해서 보낸다 — 그 사이 다른 SSE 스트림과 /healthz 가
+# 같이 멈춘다. "멈춘 게 아니다" 라고 안내하는 화면 자체가 멈추는 게 제일 나쁜 모양이다.
+# 전량 재전송 자체는 근거가 명확하니 그대로 두고(모듈 docstring), **앞을 잘라낸다.**
+MAX_ACCUM = 1_000_000          # 1MB
+생략표시 = "<p><strong>[앞부분 생략] 로그가 길어 앞을 잘라냈다 — 전문은 잡 로그 파일에 있다.</strong></p>\n"
+
+
+def 앞을자른다(누적: str, 상한: int = MAX_ACCUM) -> str:
+    """상한을 넘으면 앞을 잘라내고 생략 표시를 붙인다.
+
+    **줄 경계에서 자른다.** 이 문자열은 이미 escape 된 HTML 이라 아무 데서나 자르면
+    `&am|p;` 처럼 엔티티가 반 토막 난다. 줄바꿈 뒤로 밀면 그 위험이 사라진다.
+    """
+    if len(누적) <= 상한:
+        return 누적
+    꼬리 = 누적[-상한:]
+    줄바꿈 = 꼬리.find("\n")
+    if 줄바꿈 != -1:
+        꼬리 = 꼬리[줄바꿈 + 1:]
+    return 생략표시 + 꼬리
+
 
 def read_from(path, offset: int) -> tuple[str, int]:
     """오프셋(바이트)부터 읽고 `(텍스트, 새 오프셋)` 을 준다.
@@ -127,12 +150,22 @@ async def sse_generator(job_id: str, request):
         if await request.is_disconnected():
             break
 
-        덩어리, off = read_from(경로, off)
+        # **파일 IO 도 스레드로 민다.** `jobs.job_status`(sqlite)만 밀어내고 `open()/read()`
+        # 는 루프 위에서 직접 하고 있었다 — 같은 이유로 같이 밀어야 한다. 자식이 빠르게
+        # 찍는 동안은 이 루프가 파일 읽기로만 돌아서 다른 요청이 그만큼 멈춘다.
+        덩어리, off = await anyio.to_thread.run_sync(read_from, 경로, off)
         if 덩어리:
             # scrub 먼저, escape 나중. 순서가 바뀌면 시크릿이 escape 된 모양으로
             # 어긋나 스크러버를 비켜 갈 수 있다.
-            누적 += html.escape(security.scrub(덩어리))
+            누적 = 앞을자른다(누적 + html.escape(security.scrub(덩어리)))
             yield ServerSentEvent(data=누적, event="log", id=str(off))
+            # 새 바이트가 있어도 **한 번은 양보한다.** 예전엔 sleep 없이 continue 라
+            # 로그가 흐르는 동안 루프를 놓지 않았다. 위의 `to_thread.run_sync` 가
+            # 이미 매 바퀴 await 점이라 지금은 **보험**이다 — 그래서 이 한 줄만
+            # 떼어내는 음성 대조군은 빨개지지 않는다(실측). 그래도 남겨 둔다:
+            # 나중에 읽기를 다시 동기로 바꾸는 사람이 있으면 그때 이 줄이 유일한
+            # 양보 지점이 된다. 0초 sleep 이라 진행 로그 지연은 없다.
+            await anyio.sleep(0)
             continue             # 아직 흐르는 중이면 상태를 물을 것도 없다
 
         상태 = await anyio.to_thread.run_sync(jobs.job_status, job_id)
