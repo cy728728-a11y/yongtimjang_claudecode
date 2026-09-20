@@ -1,12 +1,80 @@
-<!-- 작업 진행 패널 — Plan 01-05 가 채운다.
+{# 작업 진행 패널.
 
-     여기에 들어올 것:
-       · sse-connect="/jobs/{id}/stream" · sse-swap 으로 진행 로그를 받는다 (JS 0줄)
-       · 매 접속마다 로그를 **처음부터 재생한 뒤 tail** 한다 — 탭을 닫았다 열어도 이어진다(SC-03)
-       · 로그는 security.scrub() 을 통과한 뒤에만 화면으로 나간다
+   두 가지로 쓰인다:
+     · board.html 이 include → `job` 이 없다 → 빈 자리(hidden)
+     · POST /jobs/* · GET /jobs/{id} 응답 조각 → `job` 이 있다 → 이 섹션이 통째로 교체된다
 
-     지금은 자리만 있다. htmx-ext-sse 배선이 없으면 이 div 는 조용히 비어 있다. -->
+   그래서 **조각이 `<section id="job-panel">` 을 스스로 포함**하고, 버튼·폴링 모두
+   `hx-swap="outerHTML"` 로 자기 자신을 갈아끼운다. innerHTML 로 하면 조각 안에
+   또 같은 id 의 섹션이 들어가 중첩된다.
+
+   폴링은 상태가 running 일 때만 건다. `done`/`failed`/`orphaned` 로 바뀐 응답에는
+   hx-trigger 가 아예 없으므로 그 순간 폴링이 멈춘다 — 끄는 코드를 따로 쓰지 않는다.
+
+   자동 이스케이프를 끄는 필터를 쓰지 마라. 여기 들어오는 값은 전부 서버가 만든
+   화이트리스트 필드(`webapp/routes/jobs.py` 의 `공개필드`)지만, 그 규칙을 화면에서도
+   지켜야 다음 사람이 로그 문자열을 그냥 끼워 넣지 않는다 (T-1-17). #}
+
+{% set 작업이름 = {
+  "prep": "새로 수집",
+  "run": "판정 다시",
+  "bids_preview": "입찰가 미리보기",
+  "bids_commit": "입찰가 인상",
+  "revert_only": "이 작업분 되돌리기",
+  "revert_all": "이 회차 전체 되돌리기",
+  "synthetic": "합성 작업"
+} %}
+{% set 상태이름 = {
+  "running": "도는 중",
+  "done": "끝남",
+  "failed": "실패",
+  "orphaned": "결과 미상"
+} %}
+
+{% if job %}
+<section id="job-panel"
+         {% if job.status == "running" %}
+         hx-get="/jobs/{{ job.id }}"
+         hx-trigger="every 2s"
+         hx-target="this"
+         hx-swap="outerHTML"
+         {% endif %}>
+  <h2>작업 진행</h2>
+
+  <p>
+    <strong>{{ 작업이름.get(job.kind, job.kind) }}</strong>
+    — {{ 상태이름.get(job.status, job.status) }}
+    {% if job.elapsed_sec is not none %}
+      · {{ (job.elapsed_sec // 60) | int }}분 {{ (job.elapsed_sec % 60) | int }}초
+    {% endif %}
+    {% if job.run_dir %} · {{ job.run_dir }} 회차{% endif %}
+    {% if job.target_count %} · 대상 {{ job.target_count }}건{% endif %}
+  </p>
+
+  {% if job.status == "running" %}
+    {# 진행률(몇 %)은 없다. CLI 가 "몇 번째 처리 중" 을 알려주지 않아서, 있는 척하면
+       거짓말이 된다. 대신 경과시간을 보여준다 (OQ-3 확정). #}
+    <p><small>브라우저를 닫아도 작업은 계속 돈다. 다시 열면 이어서 보인다.</small></p>
+  {% elif job.status == "failed" %}
+    <p class="stale">
+      <strong>실패했다 (종료코드 {{ job.exit_code }}).</strong>
+      아래 로그에서 사유를 봐라. 광고 설정이 바뀐 건 없다 — 실패한 항목은 건너뛴 것이다.
+    </p>
+  {% elif job.status == "orphaned" %}
+    <p class="stale">
+      <strong>결과를 모른다.</strong> 작업이 도는 중에 서버가 재시작됐다.
+      종료코드를 지어내지 않고 이렇게 남긴다 — 산출물 파일로 확인해라.
+    </p>
+  {% endif %}
+
+  {# 실시간 로그 자리 — Plan 01-06 이 SSE(sse-connect/sse-swap)로 채운다.
+     지금은 상태 폴링까지다. 여기에 파이프를 직접 흘리지 마라: 로그는 파일에
+     쌓이고 오프셋부터 읽어야 "탭 닫았다 열기" 가 성립한다 (ENG-03 / SC-03). #}
+  <pre id="job-log"></pre>
+</section>
+{% else %}
 <section id="job-panel" hidden>
   <h2>작업 진행</h2>
   <pre id="job-log"></pre>
 </section>
+{% endif %}

@@ -60,6 +60,60 @@
       <p id="freshness">판정된 회차가 없다.</p>
     {% endif %}
 
+    {# 작업 버튼 (D-15). **hx-post 다 — hx-get 으로 바꾸지 마라.**
+       교차 사이트 단순 GET 에는 Origin 헤더가 없어서, 작업 생성을 GET 으로 만드는
+       순간 security.guard 의 Origin 층이 통째로 무력화된다 (T-1-01b).
+
+       hx-include="#f-acct" — 계정 필터를 걸어 두면 그 계정만 넘어간다. 아무것도
+       안 고르면 select 가 값을 안 보내고, 서버는 --account 플래그 자체를 안 붙여
+       전 계정을 돈다(빈 --account 는 전 계정이 되는 함정을 argv.py 가 막는다).
+
+       hx-disabled-elt="this" — 응답이 올 때까지 버튼을 잠근다. 3분짜리 작업에서
+       두 번 눌러 두 개가 뜨는 것이 제일 흔한 사고다(두 번째는 어차피 409 지만
+       사용자는 "안 눌렸나?" 로 읽는다).
+
+       hx-swap="outerHTML" — 조각이 <section id="job-panel"> 을 스스로 품는다.
+       innerHTML 로 하면 같은 id 의 섹션이 중첩된다. #}
+    <div class="job-actions" role="group">
+      <button type="button"
+              hx-post="/jobs/prep"
+              hx-include="#f-acct"
+              hx-target="#job-panel" hx-swap="outerHTML"
+              hx-disabled-elt="this"
+              hx-on::before-request="document.getElementById('job-error').hidden = true"
+              hx-on::response-error="var b = document.getElementById('job-error');
+                b.textContent = event.detail.xhr.status === 409
+                  ? '이미 도는 작업이 있다 — 끝나고 다시 눌러라'
+                  : ('작업을 못 만들었다 (' + event.detail.xhr.status + ')');
+                b.hidden = false;">새로 수집</button>
+
+      {% if run_dir %}
+        <button type="button"
+                hx-post="/jobs/run"
+                hx-include="#f-acct, #job-run-dir"
+                hx-target="#job-panel" hx-swap="outerHTML"
+                hx-disabled-elt="this"
+                hx-on::before-request="document.getElementById('job-error').hidden = true"
+                hx-on::response-error="var b = document.getElementById('job-error');
+                  b.textContent = event.detail.xhr.status === 409
+                    ? '이미 도는 작업이 있다 — 끝나고 다시 눌러라'
+                    : ('작업을 못 만들었다 (' + event.detail.xhr.status + ')');
+                  b.hidden = false;">판정 다시</button>
+        <input type="hidden" id="job-run-dir" name="run_dir" value="{{ run_dir }}">
+      {% endif %}
+    </div>
+
+    <p id="job-error" class="stale" hidden></p>
+
+    {# 이 안내가 없으면 "새로 수집" 이 광고를 건드리는 버튼으로 읽힌다.
+       "광고 API 에 아무것도 쓰지 않는다" 로 쓰면 그건 틀린 말이다 — prep 은 통계를
+       받으려고 리포트 잡(POST /stat-reports)을 만든다. 광고 설정이 안 바뀔 뿐이다. #}
+    <p><small>
+      <strong>새로 수집</strong>은 계정당 3분쯤 걸린다. 광고를 바꾸지는 않는다 —
+      소재·통계를 새로 받아올 뿐이다. <strong>판정 다시</strong>는 받아 둔 자료로
+      6규칙만 다시 매긴다(초 단위). 계정 필터를 걸어 두면 그 계정만 돈다.
+    </small></p>
+
     {# 회차 드롭다운. GET 폼이라 상태를 바꾸지 않는다 — 회차 이름은 서버에서
        paths.run_dir_path 화이트리스트를 다시 통과한다(T-1-11). #}
     {% if run_dirs %}
@@ -81,7 +135,7 @@
       <p>터미널에서:</p>
       <pre><code>.venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/run_ads.py prep
 .venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/run_ads.py run</code></pre>
-      <p>화면에서 누르는 “새로 수집” 버튼은 Plan 01-05 가 연다.</p>
+      <p>위쪽 <strong>새로 수집</strong> 버튼을 눌러도 같은 일을 한다(계정당 3분쯤).</p>
     </article>
   {% endif %}
 
@@ -107,7 +161,9 @@
     <div class="board-filters">
       <label>
         계정
-        <select id="f-acct" multiple size="4" aria-label="계정 필터">
+        {# name="accounts" 는 htmx 의 hx-include 가 집어가는 이름이다 —
+           작업 버튼이 이 select 의 선택값을 그대로 --account 로 실어 보낸다. #}
+        <select id="f-acct" name="accounts" multiple size="4" aria-label="계정 필터">
           {% for a in accounts %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
         </select>
       </label>
