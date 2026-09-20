@@ -102,6 +102,30 @@
 - 팬아웃 경고를 고를 때 띄울지 미리보기에서 띄울지
 - 불사자 상태 인덱스의 갱신 트리거(보드 열 때 / 버튼 / 백그라운드)
 - 🔴🟡⚪ 판정 로직의 정확한 필드 조합
+
+### 웹앱은 불사자 MCP 를 직접 부르지 않는다 (2026-09-21 PATTERNS 발견으로 확정)
+
+- **D-19: 불사자 MCP 접촉은 전부 CLI 자식 프로세스에서 한다. 웹앱 프로세스는 SQLite 읽기만 한다.**
+  `.venv-web` 에 `requests` 가 없어서 `eroomlib.bulsaja` 를 웹앱에서 import 하면 ImportError 다.
+  `webapp/paths.py:4-10` 주석이 이미 같은 결론을 박아 뒀다 — *"CLI 와 규약만 공유하고
+  프로세스는 subprocess 경계로 갈라 둔다."*
+  **대안 둘은 전부 제약 위반이다:** `.venv-web` 에 `requests` 설치 = "이 페이즈는 새 외부 패키지를
+  하나도 설치하지 않는다" 위반 / 웹앱이 `httpx` 로 MCP transport 를 따로 짜기 = **transport 진실이 둘**
+  (CLAUDE.md 금지항목).
+  → **RESEARCH 의 "웹앱이 MCP 1회로 재검증" 경로는 그대로는 안 돈다.** 재검증도 잡으로 간다.
+  `webapp/bulsaja_index.py` 는 `board.py` 처럼 **읽기 전용·네트워크 0** 이어야 한다.
+
+- **D-20: `ss_index` 테이블 신설은 `test_jobs.py` 의 "테이블은 jobs 하나뿐" 가드를 일부러 넓히는 작업이다.**
+  허용 집합을 `{"jobs", "ss_index"}` 로 넓히고, **왜 캐시가 아닌지** 를 그 테스트 docstring 에 적는다.
+  조용히 고치면 다음 사람이 "보드 캐시 금지"가 풀린 줄 안다.
+  구분: 보드 캐시는 `result.json` 에서 언제든 재생성 가능한 투영이고,
+  `ss_index` 는 **3시간 반을 태워야 다시 얻는 외부 관측 기록**이다. 성격이 다르다.
+
+- **D-21: `workspace.toml` 에 `[webapp]` 테이블을 신설하는 것이 플랜의 작업이다.**
+  ENG-08 의 `settings.cfg(..., required=True)` 는 지금 기동 즉시 KeyError 다. 그게 설계 의도지만,
+  toml 에 값을 넣는 작업을 플랜에 안 넣으면 **서버가 기동 직후 죽는다.**
+  값은 `workspace.toml` 에만 두고 `settings.DEFAULTS` 에는 **빈 문자열**을 둔다 (리터럴 가드).
+
 </decisions>
 
 <canonical_refs>
