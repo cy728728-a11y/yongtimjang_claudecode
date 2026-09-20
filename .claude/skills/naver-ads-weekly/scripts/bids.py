@@ -257,6 +257,10 @@ def run_revert(acct, run_dir, commit=False, log=print, only_ads=None):
     되돌리려고 존재한다(D-12~D-14). **이 함수는 백업 파일을 읽기만 한다** — 되돌렸다고
     `before_bids_<alias>.json` 에서 키를 지우지 않는다. 지우면 같은 회차의 다른 작업분을
     되돌릴 근거가 사라지고, 중간에 죽었을 때 재시도할 원본도 함께 날아간다(D-13).
+
+    리턴에 `plans` 가 실린다 — 항목별 `adId`/`to`(복원할 입찰가)/`useGroupBid`/`restore`
+    (원본 adAttr 통째)이고, `--commit` 경로에서는 `result`/`error` 가 붙는다.
+    `run_bids` 와 같은 모양이라 화면이 같은 코드로 읽는다(FLOW-05 연장).
     """
     alias = acct.get("alias") or str(acct.get("customer_id"))
     bk_path = run_dir / f"before_bids_{alias}.json"
@@ -267,7 +271,7 @@ def run_revert(acct, run_dir, commit=False, log=print, only_ads=None):
         return {}
     if not backup:
         log(f"[{alias}] 되돌릴 항목 없음")
-        return {"targets": 0}
+        return {"targets": 0, "plans": []}
 
     ad_by_id = {}
     ads_path = run_dir / "accounts" / alias / "ads.json"
@@ -286,29 +290,52 @@ def run_revert(acct, run_dir, commit=False, log=print, only_ads=None):
     if len(targets) > 10:
         log(f"    … 외 {len(targets)-10}건")
 
+    # 항목 단위 계획/결과 (FLOW-05 연장). stdout 은 10건에서 접지만 산출물은 전량이다 —
+    # 화면은 로그를 파싱하지 않고 이 산출물만 읽는다(D-03). 건수만 돌려주면
+    # "469 성공 / 3 실패" 에서 그 3건이 **어느 소재인지** 화면이 말할 수 없는데,
+    # 되돌리기는 사고 대응 경로라 다시 겨눌 대상을 알아야 한다.
+    #
+    # `from`(되돌리기 직전의 실제 입찰가)은 **싣지 않는다.** 소재 스냅샷은 인상 전에
+    # 찍힌 것이라 지금 값이 아니고, 여기서 지어내면 화면에 없는 숫자가 생긴다.
+    # 말할 수 있는 것은 "무엇으로 되돌리는가"(`to`)뿐이다.
+    plans = [{"adId": ad_id,
+              "title": (ad_by_id.get(ad_id) or {}).get("referenceData", {}).get("productTitle") or "",
+              "action": "되돌리기",
+              "to": (backup[ad_id] or {}).get("bidAmt"),
+              "useGroupBid": (backup[ad_id] or {}).get("useGroupBidAmt"),
+              "restore": backup[ad_id]}
+             for ad_id in targets]
+
     if not commit:
         log("  (dry-run — --commit 을 주면 실제로 되돌린다)")
-        return {"targets": len(targets), "committed": 0}
+        return {"targets": len(targets), "committed": 0, "plans": plans}
 
+    plan_by_id = {p["adId"]: p for p in plans}
     led_path = run_dir.parent.parent / "ledger" / f"{alias}.json"
     led = ledger.load(led_path)
     today = date.today().isoformat()
     ok = fail = 0
     try:
         for ad_id in targets:
+            p = plan_by_id[ad_id]
             ad_obj = ad_by_id.get(ad_id)
             if not ad_obj:
                 fail += 1
+                # prep 이후 소재가 삭제된 경우 — 스냅샷 기반 실행의 정상적 실패다(Pitfall 7).
+                p["result"], p["error"] = "실패", "스냅샷에 소재 없음"
                 continue
             good, err = apply_revert(acct, ad_obj, backup[ad_id])
             if good:
                 ok += 1
                 ledger.record_reverted(led, ad_id, today)
+                p["result"], p["error"] = "성공", ""
             else:
                 fail += 1
                 log(f"    ✗ {ad_id} {err}")
+                # 원문 예외를 통째로 싣지 않는다 — 저장소 관례대로 잘라 담는다(T-1-15).
+                p["result"], p["error"] = "실패", str(err)[:150]
             time.sleep(0.08)
     finally:
         ledger.save(led_path, led)
     log(f"  되돌리기 완료 {ok}건 / 실패 {fail}건 · 이력 → {led_path}")
-    return {"targets": len(targets), "committed": ok, "failed": fail}
+    return {"targets": len(targets), "committed": ok, "failed": fail, "plans": plans}
