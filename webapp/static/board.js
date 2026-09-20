@@ -73,31 +73,39 @@
   // 컬럼 정의를 **데이터 구조로** 둔다 (sheets_out.py:28-48 의 COLS 관례).
   // 규칙마다 있는 필드가 다르다는 사실이 이 표에 그대로 드러나야, ①의 빈칸이
   // 버그가 아니라 설계상 정상값이라는 게 읽는 사람에게 보인다.
+  //
+  // 폭 배분에 대해: 상품명은 이 저장소의 Core Value 가 걸린 열이라 제일 넓게 가져간다.
+  // 그래도 한국어 상품명은 60자를 넘는 게 보통이라 어떤 폭을 줘도 잘린다(실측 38/40).
+  // 줄바꿈(variableHeight)으로 다 보여주는 선택지는 **버렸다** — 2,637행 보드에서
+  // 행 높이가 2~3배가 되면 한 화면에 7~8줄밖에 안 들어와 훑는 용도가 죽는다.
+  // 대신 `tooltip: true` 로 hover 시 전문을 띄우고, 숫자 열의 군더더기 폭을 깎아
+  // 가로 스크롤을 없앴다(실측 1,520 → 컨테이너 안). 상품명 전문이 상시 필요해지는 건
+  // 상세페이지 판정(Phase 3)이고, 그때는 목록이 아니라 상세 패널이 맡을 일이다.
   var columns = [
-    { title: "계정", field: "acct", width: 100, headerFilter: false },
-    { title: "규칙", field: "rules", width: 90 },
-    { title: "상품명", field: "title", minWidth: 260, widthGrow: 3 },
-    { title: "노출", field: "imp", hozAlign: "right", width: 100,
+    { title: "계정", field: "acct", width: 95 },
+    { title: "규칙", field: "rules", width: 85 },
+    { title: "상품명", field: "title", minWidth: 200, widthGrow: 5, tooltip: true },
+    { title: "노출", field: "imp", hozAlign: "right", width: 90,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "클릭", field: "clk", hozAlign: "right", width: 90,
+    { title: "클릭", field: "clk", hozAlign: "right", width: 80,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "CTR %", field: "ctr", hozAlign: "right", width: 90,
+    { title: "CTR %", field: "ctr", hozAlign: "right", width: 85,
       sorter: "number", sorterParams: 빈칸아래, formatter: 비율 },
-    { title: "구매완료", field: "purCnt", hozAlign: "right", width: 100,
+    { title: "구매완료", field: "purCnt", hozAlign: "right", width: 90,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "구매금액", field: "purAmt", hozAlign: "right", width: 120,
+    { title: "구매금액", field: "purAmt", hozAlign: "right", width: 105,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
     // `cost` 는 **광고비**다. 원본 필드가 salesAmt 라서 헷갈리기 쉬운데
     // 광고에 쓴 돈이지 벌어들인 돈이 아니다 (ads_rules._with_stat:50 주석).
-    { title: "광고비", field: "cost", hozAlign: "right", width: 110,
+    { title: "광고비", field: "cost", hozAlign: "right", width: 100,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "현재입찰", field: "bid", hozAlign: "right", width: 100,
+    { title: "현재입찰", field: "bid", hozAlign: "right", width: 90,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "그룹입찰따름", field: "useGroupBid", hozAlign: "center", width: 120,
+    { title: "그룹입찰따름", field: "useGroupBid", hozAlign: "center", width: 110,
       formatter: 예아니오 },
-    { title: "①소재수", field: "rule1_count", hozAlign: "right", width: 100,
+    { title: "①소재수", field: "rule1_count", hozAlign: "right", width: 90,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "상품ID", field: "mallProductId", width: 140 }
+    { title: "상품ID", field: "mallProductId", width: 130, tooltip: true }
   ];
 
   var table = new Tabulator("#board", {
@@ -168,12 +176,29 @@
 
   // 보이는 줄 수를 항상 띄운다. 이 숫자가 Plan 01-07 의 "보이는 선택 vs 필터 전체"
   // 배너가 올라탈 자리다 — 지금부터 사람이 그 수를 눈으로 익혀 둬야 한다.
-  function 건수갱신() {
+  //
+  // **`dataFiltered` 안에서 `table.getDataCount("active")` 를 읽지 마라.**
+  // Tabulator 의 `Filter.filter()` 는 필터링 결과를 만든 뒤 **먼저 이 이벤트를 쏘고,
+  // 그 다음에** 호출자(RowManager.refreshActiveData)가 `activeRows` 를 갈아끼운다.
+  // 그래서 핸들러 시점의 `activeRows` 는 아직 **직전 필터의 집합**이고, 배지가
+  // 정확히 한 스텝 뒤처진다: 전체 2,637 에서 계정 하나를 걸어도 2,637 이 남고,
+  // 다음 계정으로 바꿔야 그제야 앞 계정의 수가 뜬다.
+  // 육안으론 안 잡힌다 — 숫자가 *움직이긴* 하기 때문이다. 두 번 연속 바꿔
+  // 직전 값과 대조해야만 드러난다 (webapp/tests/board_cdp.sh 가 그걸 기계로 한다).
+  //
+  // 이벤트가 2번째 인자로 갓 계산된 행 목록을 넘겨주는 이유가 바로 이것이다.
+  // 그 값만 믿는다 — 커밋 안 된 내부 상태를 뒤지지 않는다.
+  function 건수표시(n) {
     if (!건수) { return; }
-    건수.textContent = table.getDataCount("active").toLocaleString("ko-KR");
+    건수.textContent = Number(n).toLocaleString("ko-KR");
   }
-  table.on("dataFiltered", 건수갱신);
-  table.on("tableBuilt", 건수갱신);
+  table.on("dataFiltered", function (filters, 걸린행) {
+    건수표시(걸린행 ? 걸린행.length : 0);
+  });
+  // 최초 1회. 이 시점엔 필터가 진행 중이 아니라 activeRows 가 이미 확정돼 있다.
+  table.on("tableBuilt", function () {
+    건수표시(table.getDataCount("active"));
+  });
 
   // 회차 드롭다운은 고르는 즉시 이동한다. GET 폼이라 서버 상태를 바꾸지 않는다.
   var 회차칸 = document.getElementById("rundir-select");
