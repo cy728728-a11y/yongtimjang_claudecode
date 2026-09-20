@@ -45,7 +45,7 @@ updated: 2026-09-20
 | **Config file** | CLI: 없음(파일 직접 실행) · 웹앱: `webapp/pytest.ini` — **Plan 01-01 Task 1 이 만든다** |
 | **Quick run command** | `.venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_bids.py` |
 | **Full suite command** | `for t in nvad reports ads_rules ledger bids prune; do .venv/bin/python3 .claude/skills/naver-ads-weekly/scripts/test_$t.py \|\| exit 1; done && .venv-web/bin/pytest webapp/tests -q` |
-| **Estimated runtime** | CLI 100 tests ~0.02초 · 웹앱 전체 **~12초** (01-08 실측, 147 tests) · `sse_cdp.sh` ~35초 · `board_cdp.sh` ~20초 · `preview_cdp.sh` ~60초 · `commit_cdp.sh` ~25초(미리보기 접수 포함) |
+| **Estimated runtime** | CLI 100 tests ~0.02초 · 웹앱 전체 **~25초** (01-09 실측, 186 tests — `test_revert.py` 가 진짜 CLI 프로세스를 여러 번 띄운다) · `sse_cdp.sh` ~35초 · `board_cdp.sh` ~20초 · `preview_cdp.sh` ~60초 · `commit_cdp.sh` ~25초(미리보기 접수 포함) |
 | **Baseline (2026-09-19 실측)** | CLI **100 tests, 6 파일 전부 exit=0** (7+7+21+21+28+16) |
 
 ---
@@ -108,7 +108,9 @@ updated: 2026-09-20
 | ✚diff-01 | 01-08 | 6 | 미리보기와 달라진 N건을 사유와 함께 보고한다 (D-10) | T-1-36 | 재계산 차이를 은폐하지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_미리보기와_달라진건을_보고한다` · 0건이면 "미리보기 그대로 실행됐다" 한 줄) | ✅ 존재 | ✅ green |
 | ✚실행안됨-01 | 01-08 | 6 | `result` 키가 없는 항목을 **성공으로 세지 않는다** | T-1-35 | 안 올라간 소재가 되돌리기 대상에 안 든다 | unit | `.venv-web/bin/pytest webapp/tests/test_flow.py -x -q` (핵심 노드: `::test_결과가_안_적힌_항목은_성공이_아니다` · `::test_종료코드가_0이어도_전량_실패면_실패로_보인다`) | ✅ 존재 | ✅ green |
 | ✚실행버튼-CDP | 01-08 | 6 | 실행 버튼이 **미리보기가 끝나야** 열리고, 새로고침하면 다시 잠긴다 · 요약 숫자가 산출물과 같다 | T-1-34 | 미리보기 없이 실행 불가를 화면에서도 본다 | integration | `CT_DEV_TOKEN=devtoken123 bash webapp/tests/commit_cdp.sh` (15종 · 미리보기만 접수 · **실행 버튼은 안 누른다** · 광고비 0) | ✅ 존재 | ✅ green (15/15) |
-| BID-04 | 01-09 | 7 | 되돌리기가 **그 작업분만** 되돌린다 (백업 파일 불변) | T-1-08, T-1-40 | 회차 전체가 풀리지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_revert.py -x -q` | ❌ W0 | ⬜ pending |
+| BID-04 | 01-09 | 7 | 되돌리기가 **그 작업분만** 되돌린다 (백업 파일 불변) | T-1-08, T-1-40 | 회차 전체가 풀리지 않는다 | unit | `.venv-web/bin/pytest webapp/tests/test_revert.py -x -q` (핵심 노드: `::test_그_작업분만_되돌린다` · `::test_백업_파일은_바뀌지_않는다` · `::test_회차전체와_작업분은_다른_수다` — **진짜 CLI 로 샌드박스 회차에 가짜 작업분 2개를 누적시켜 3/4/7 분기를 낸다.** 실데이터(2026-09-20)에는 인상이 한 번뿐이라 "작업분" 과 "회차 전체" 가 우연히 같은 수라 분기를 증명할 수 없다) | ✅ 존재 | ✅ green (41/41) |
+| ✚되돌리기-CDP | 01-09 | 7 | 두 버튼이 **화면에서 실제로 떨어져 있다** · 위험 구역이 접혀 있다 · 확인 단계 건수가 서버와 같다 · 취소는 아무것도 안 보낸다 · 요청 본문에 대상 목록이 없다 | T-1-08, T-1-43, T-1-06 | 오클릭으로 회차 전체가 풀리지 않는다 | integration | `CT_RUN_DIR=2026-09-20 CT_DEV_TOKEN=devtoken123 bash webapp/tests/revert_cdp.sh` (26종 · **되돌리기 요청 0건** — 페이지 안에서 `window.fetch` 를 가로채고 **가로채기가 걸렸는지 프로브로 확인한 뒤에만** 클릭한다) | ✅ 존재 | ✅ green (26/26) |
+| ✚동시쓰기-02 | 01-09 | 7 | **되돌리기가 도는 중**엔 다른 쓰기가 409 (Pitfall 3 — 01-08 이 못 한 확인) | T-1-09 | 백업·ledger read-modify-write 레이스 차단 | unit + integration | `.venv-web/bin/pytest webapp/tests/test_revert.py -x -q` (핵심 노드: `::test_되돌리기_도는_중엔_다른_쓰기가_409다`) + 살아 있는 서버 실측(합성 `revert_only`/`revert_all` 잡 · 광고 API 0): 회차전체 409 · prep 409 · 인상 실행 409 · **미리보기는 200**(쓰기가 아닌 것까지 막지 않는다) | ✅ 존재 | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -200,7 +202,7 @@ grep -rq "$S" webapp-logs/ && echo FAIL || echo PASS
 | 보드 건수 배지가 필터를 정확히 따라온다 | (BOARD-01 부수) | 01-04 — **자동화됨** | ~~시각 확인~~ → **육안으로는 못 잡는다** | 필터를 한 번만 바꾸면 숫자가 *움직이긴 해서* 사람은 PASS 를 준다. **두 번 연속 바꿔 직전 값과 대조해야만** 랙이 드러난다(2026-09-20 실제 버그). 그래서 수동 항목에서 빼고 `webapp/tests/board_cdp.sh` 로 옮겼다. 보드 JS 를 건드리면 그걸 돌려라 |
 | 그룹입찰 행의 현재가가 그룹 기본가다 | BID-03 | 01-07 — **자동화됨** | 실데이터 대조 | `preview_cdp.sh` V-PRE-12a/b 가 실데이터로 대조한다. 2026-09-20 실측: `nad-a001-02-000000495390006` **70 → 80 · 그룹입찰따름 예**. 50 → 60 이면 웹앱이 재계산한 것 |
 | 실제 광고 입찰가가 +10 됐다 | FLOW-01 | 01-08 Task 3 (8번) | 외부 시스템(네이버 광고 관리 화면) | 소재 하나를 직접 열어 입찰가 확인. 이게 유일한 최종 진실 |
-| 되돌리기가 그 작업분만 내린다 / 백업 불변 | BID-04 | 01-09 Task 3 (4·5·6번) | 외부 시스템 + 디스크 상태 대조 | 되돌린 건수 == 성공 건수, `before_bids_*.json` 전후 건수 동일, 광고 화면에서 원복 확인 |
+| 되돌리기가 그 작업분만 내린다 / 백업 불변 | BID-04 | 01-09 Task 3 — **일부만 자동화됨** | 외부 시스템(네이버 광고 화면) | 범위 분기·백업 불변·버튼 배치·확인 단계·409 는 전부 기계가 본다(`test_revert.py` + `revert_cdp.sh`). **남은 것은 하나다: 실제 광고 API 에 되돌리기를 태우고 광고 화면에서 원복을 눈으로 보는 것.** 용팀장 지시로 2026-09-20 인상 472건은 유지하기로 했으므로 Phase 1 에서는 실행하지 않았다 — 이 경로는 **아직 실탄으로 한 번도 안 눌렸다**(01-09-SUMMARY § 남은 리스크) |
 | 광고 API 자격증명 유효성 | (OQ-6) | 01-06 Task 3 (2번) | 리서치가 광고 API 를 한 번도 호출하지 않았다 | `run_ads.py prep --account cy728` 가 401/403 없이 완주하는지. 실패하면 자격증명 갱신부터 |
 
 ---
@@ -217,6 +219,7 @@ grep -rq "$S" webapp-logs/ && echo FAIL || echo PASS
 - [x] 보드 JS 수정 시 `bash webapp/tests/board_cdp.sh` 전량 PASS (01-07 재확인 — 선택 컬럼 40px 을 벌려고 숫자 열 폭을 깎았다. 표 1448 / 컨테이너 1448 로 가로 스크롤 없음)
 - [x] 선택·미리보기 수정 시 `bash webapp/tests/preview_cdp.sh` 전량 PASS (01-08 재확인 — board.js 실행 배선 추가 후 31/31)
 - [x] 실행 버튼 배선 수정 시 `bash webapp/tests/commit_cdp.sh` 전량 PASS (01-08 신설 — 15/15, 버튼은 누르지 않는다)
+- [x] 되돌리기 배선·위험 구역 수정 시 `bash webapp/tests/revert_cdp.sh` 전량 PASS (01-09 신설 — 26/26, 되돌리기 요청 0건)
 - [ ] 진행 로그·작업 패널 수정 시 `bash webapp/tests/sse_cdp.sh` 전량 PASS (같은 계층)
 - [x] `nyquist_compliant: true` set in frontmatter
 
