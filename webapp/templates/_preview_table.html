@@ -25,9 +25,9 @@
 {% else %}
   {# 집계 줄 — 항상 먼저. 사용자가 표를 훑기 전에 규모를 읽는다. #}
   <p>
-    <strong>대상 {{ total }}건</strong>
+    <strong>대상 {{ "{:,}".format(total) }}건</strong>
     {% if counts %}
-      → {% for action, n in counts.items() %}{{ action }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}
+      → {% for action, n in counts.items() %}{{ action }} {{ "{:,}".format(n) }}{% if not loop.last %} · {% endif %}{% endfor %}
     {% else %}
       — 판정이 하나도 없다
     {% endif %}
