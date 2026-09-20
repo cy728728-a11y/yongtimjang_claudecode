@@ -250,11 +250,11 @@ def test_산출물이_빈_dict면_실패로_본다(tmp_path):
 
     없는파일 = flow.read_preview(tmp_path / "nope.json")
     assert 없는파일["error"]
-    assert "FileNotFoundError" in 없는파일["error"]
+    assert 없는파일["error"] == "FileNotFoundError"   # 경로는 안 싣는다(WR-03)
 
     깨진파일 = tmp_path / "broken.json"
     깨진파일.write_text("{not json", encoding="utf-8")
-    assert "JSONDecodeError" in flow.read_preview(깨진파일)["error"]
+    assert flow.read_preview(깨진파일)["error"] == "JSONDecodeError"
 
     # 계정 하나만 `{}` 인 경우는 전체 실패가 아니라 **그 계정만** 눈이 먼 것이다
     섞임 = tmp_path / "mix.json"
@@ -662,6 +662,90 @@ def test_항목단위_결과가_화면투영된다(화면, tmp_run_dir):
     # **실패·스킵이 위다** (T-1-37). 표가 잘려도 안 된 것이 먼저 남아야 한다 —
     # 사용자가 봐야 할 건 성공이 아니다.
     assert [r["result"] for r in j["rows"]] == ["실패", "스킵", "성공"]
+
+
+def test_도는_중에는_산출물을_안_읽고_도는_중이라고_말한다(화면, tmp_run_dir, monkeypatch):
+    """WR-03 — `running` 분기가 죽은 코드였다. 대신 절대경로가 화면에 떴다.
+
+    산출물 파일은 작업이 끝나야 생긴다. 그런데 `_산출물` 이 상태를 안 보고 먼저 읽어서
+    `FileNotFoundError` 가 `error` 에 찼고, 템플릿이 `error` 를 먼저 보는 바람에
+    **`running` 분기에 도달하는 경우가 없었다.** 화면에는 잘 돌고 있는 중에
+    "산출물이 없거나 깨졌다" 와 `/Users/…/runs/…/web/preview_….json` 이 떴다.
+
+    `board.js` 의 폴링 한도가 끝나면 아직 도는 중인데도 결과를 갈아끼우므로,
+    사용자는 실패로 읽고 다시 누른다 — 두 번째 쓰기 잡을 접수하려는 그 행동이다.
+    """
+    # 잡판 픽스처의 가짜프로세스는 `poll()==0` 이라 곧바로 끝난 것으로 본다.
+    # 여기서는 **안 끝나는** 대역이 필요하다 — 도는 중의 화면을 보려는 테스트다.
+    class 안끝나는프로세스(가짜프로세스):
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(jobs, "spawn", lambda argv, log_path: 안끝나는프로세스(argv))
+    job_id = 미리보기잡(tmp_run_dir)
+    상태 = jobs.job_status(job_id)
+    assert 상태["status"] == "running"
+    assert not Path(상태["result_path"]).exists(), "도는 중인데 산출물이 벌써 있다"
+
+    j = 화면.get(f"/jobs/{job_id}/result?format=json").json()
+    assert j["running"] is True
+    assert j["error"] is None, f"도는 중인데 에러가 찼다: {j['error']}"
+
+    본문 = 화면.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+    assert "만드는 중이다" in 본문, "죽은 running 분기 — 도는 중이라고 말하지 않는다"
+    assert "산출물이 없거나 깨졌다" not in 본문
+    # 내부 절대경로가 화면에 나가면 안 된다 (ASVS V7)
+    assert "/runs/" not in 본문 and str(tmp_run_dir) not in 본문
+
+
+def test_표_템플릿은_error_보다_running_을_먼저_본다():
+    """WR-03 의 방어선 둘째 겹 — 템플릿 **분기 순서**를 직접 고정한다.
+
+    `_산출물` 이 도는 중에는 `error` 를 안 채우므로 지금은 둘이 동시에 서지 않는다.
+    그래도 순서를 고정해 두는 이유: 누가 나중에 `_산출물` 에서 그 가드를 빼면
+    순서가 곧바로 사고가 된다(그게 원래 모양이었다). 여기서는 **둘 다 세운 채로**
+    렌더해서 running 이 이기는지 본다 — 순서를 뒤집으면 이 테스트가 빨개진다.
+    """
+    from webapp.main import templates
+
+    공통 = {"job": {"status": "running", "id": "x", "kind": "bids_preview"},
+           "rows": [], "total": 0, "counts": {}, "raise_total": 0,
+           "result_counts": {}, "cli_totals": {"committed": 0, "failed": 0},
+           "succeeded": 0, "diff": [], "preview_error": None, "aborted": {},
+           "blind": [], "limit": 200, "전체되돌리기": False,
+           "raise_date": None, "today": "2026-09-20", "date_mismatch": False,
+           "error": "FileNotFoundError", "running": True}
+    for 조각, 도는중문구, 에러문구 in (
+            ("_preview_table.html", "만드는 중이다", "미리보기를 못 읽었다"),
+            ("_result_table.html", "실행 중이다", "실행 결과를 못 읽었다"),
+            ("_revert_table.html", "되돌리는 중이다", "되돌리기 결과를 못 읽었다")):
+        본문 = templates.get_template(조각).render(**공통)
+        assert 도는중문구 in 본문, f"{조각}: running 이 error 에 밀렸다"
+        assert 에러문구 not in 본문, f"{조각}: 도는 중인데 에러 문구가 같이 떴다"
+
+    # 음성 대조군 — running 이 꺼지면 error 문구가 나와야 한다(둘 다 안 뜨면 안 된다)
+    꺼짐 = dict(공통, running=False)
+    for 조각, 에러문구 in (("_preview_table.html", "미리보기를 못 읽었다"),
+                          ("_result_table.html", "실행 결과를 못 읽었다"),
+                          ("_revert_table.html", "되돌리기 결과를 못 읽었다")):
+        assert 에러문구 in templates.get_template(조각).render(**꺼짐), 조각
+
+
+def test_산출물_읽기_실패_사유에_경로가_없다(tmp_path):
+    """WR-03 의 나머지 절반 — 사유는 **예외 이름까지만**이다.
+
+    `f"{type(e).__name__}: {e}"` 로 두면 FileNotFoundError 가 내부 절대경로를
+    통째로 화면에 흘린다. `_판정읽기` 는 이미 이름까지만 쓴다 — 관례를 맞춘다.
+    """
+    없는파일 = tmp_path / "여기에없다.json"
+    사유 = flow.read_preview(없는파일)["error"]
+    assert 사유 == "FileNotFoundError", 사유
+    assert str(tmp_path) not in 사유 and "여기에없다" not in 사유
+
+    # 음성 대조군 — 사유 자체는 여전히 있어야 한다(조용히 성공으로 읽지 않는다)
+    깨진파일 = tmp_path / "broken.json"
+    깨진파일.write_text("{not json", encoding="utf-8")
+    assert flow.read_preview(깨진파일)["error"] == "JSONDecodeError"
 
 
 def test_CLI_가_중단했으면_그_사유가_화면에_뜬다(화면, tmp_run_dir):

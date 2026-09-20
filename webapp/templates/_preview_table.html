@@ -20,12 +20,16 @@
 
 {% import "_bid_macros.html" as 표 %}
 
-{% if error %}
+{# **순서가 running → error 다.** 뒤집으면 도는 중에 result_path 파일이 아직
+   없어서 error 가 먼저 차고, running 분기가 도달 불가능한 죽은 코드가 된다
+   (routes/jobs.py 의 `_산출물` 주석 참조). 잘 돌고 있는데 "깨졌다" 로 보이면
+   사용자는 다시 누른다. #}
+{% if running %}
+  <p>미리보기를 만드는 중이다… 위 진행 로그를 봐라.</p>
+
+{% elif error %}
   <p class="stale"><strong>미리보기를 못 읽었다 — {{ error }}</strong><br>
     산출물이 없거나 깨졌다. 빈 표를 결과로 읽지 않게 표를 그리지 않는다.</p>
-
-{% elif job.status == "running" %}
-  <p>미리보기를 만드는 중이다… 위 진행 로그를 봐라.</p>
 
 {% else %}
   {# 집계 줄 — 항상 먼저. 사용자가 표를 훑기 전에 규모를 읽는다. #}

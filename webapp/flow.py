@@ -149,8 +149,11 @@ def read_preview(path) -> dict:
     try:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
     except Exception as e:
-        # 트레이스백을 화면에 싣지 않는다 (ASVS V7) — 이름과 메시지로 줄인다.
-        return {"accounts": {}, "blind": [], "error": f"{type(e).__name__}: {e}"}
+        # 트레이스백을 화면에 싣지 않는다 (ASVS V7) — **예외 이름까지만**이다.
+        # 메시지를 붙이면 FileNotFoundError 가 내부 절대경로를 통째로 화면에 흘린다
+        # (실측: "/Users/…/runs/2026-08-30/web/preview_6248ec43-….json").
+        # `_판정읽기` 가 이미 쓰는 관례와 같다.
+        return {"accounts": {}, "blind": [], "error": f"{type(e).__name__}"}
 
     if not isinstance(raw, dict) or not raw:
         return {"accounts": {}, "blind": [],

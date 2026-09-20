@@ -12,13 +12,14 @@
 
 {% import "_bid_macros.html" as 표 %}
 
-{% if error %}
+{# 순서가 running → error 다 (_preview_table.html 의 같은 주석 참조). #}
+{% if running %}
+  <p>실행 중이다… 위 경과시간을 봐라. 진행률은 안 나온다 — 초당 12건쯤 돈다.</p>
+
+{% elif error %}
   <p class="stale"><strong>실행 결과를 못 읽었다 — {{ error }}</strong><br>
     산출물이 없거나 깨졌다. <strong>실행이 안 됐다는 뜻은 아니다</strong> —
     터미널에서 회차의 <code>before_bids_*.json</code> 과 ledger 를 먼저 봐라.</p>
-
-{% elif job.status == "running" %}
-  <p>실행 중이다… 위 경과시간을 봐라. 진행률은 안 나온다 — 초당 12건쯤 돈다.</p>
 
 {% else %}
   {# CLI 가 **중단한** 계정 — "성공 0건" 과 "백업이 깨져 아예 안 올렸다" 는 다른 상태다.

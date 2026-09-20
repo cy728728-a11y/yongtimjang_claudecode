@@ -14,14 +14,15 @@
 
 {% import "_bid_macros.html" as 표 %}
 
-{% if error %}
+{# 순서가 running → error 다 (_preview_table.html 의 같은 주석 참조). #}
+{% if running %}
+  <p>되돌리는 중이다… 위 경과시간을 봐라. 진행률은 안 나온다.</p>
+
+{% elif error %}
   <p class="stale"><strong>되돌리기 결과를 못 읽었다 — {{ error }}</strong><br>
     산출물이 없거나 깨졌다. <strong>되돌리기가 안 됐다는 뜻은 아니다</strong> —
     터미널에서 회차의 <code>before_bids_*.json</code> 과 ledger 를 먼저 봐라.
     <strong>백업은 되돌리기가 지우지 않으므로</strong> 그대로 다시 돌릴 수 있다.</p>
-
-{% elif job.status == "running" %}
-  <p>되돌리는 중이다… 위 경과시간을 봐라. 진행률은 안 나온다.</p>
 
 {% else %}
   {# CLI 가 **중단한** 계정 — "성공 0건" 과 "백업이 깨져 아예 안 올렸다" 는 다른 상태다.

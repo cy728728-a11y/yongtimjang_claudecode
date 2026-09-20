@@ -202,11 +202,27 @@ def _투영(상태: dict) -> dict:
 
 
 def _산출물(상태: dict, 없을때: str) -> dict:
-    """잡의 산출물 파일을 읽는다. 경로가 없으면 사유를 실어 빈 결과를 준다."""
+    """잡의 산출물 파일을 읽는다. **상태를 먼저 보고, 도는 중이면 읽지 않는다.**
+
+    순서가 중요하다. 도는 중에는 `result_path` 파일이 아직 없어서 `read_preview` 가
+    `FileNotFoundError` 를 `error` 에 채웠고, 템플릿은 `{% if error %}` 를 먼저 보므로
+    **`running` 분기가 도달 불가능한 죽은 코드**였다. 화면에는 잘 돌고 있는 중에
+    "산출물이 없거나 깨졌다" 와 내부 절대경로가 떴다.
+
+    그게 왜 비싼가: `board.js` 의 폴링 한도가 끝나면(미리보기 150회=60초, 실행 3000회)
+    아직 도는 중인데도 결과를 갈아끼운다. 사용자는 실패로 읽고 **다시 누른다** —
+    409 로 막히긴 하지만 그 문구가 또 다른 오해를 만든다.
+
+    `starting` 도 도는 중이다 (jobs.LIVE_STATUSES).
+    """
+    if (상태 or {}).get("status") in jobs.LIVE_STATUSES:
+        return {"accounts": {}, "blind": [], "error": None, "running": True}
     경로 = 상태.get("result_path") if 상태 else None
     if not 경로:
-        return {"accounts": {}, "blind": [], "error": 없을때}
-    return flow.read_preview(Path(경로))
+        return {"accounts": {}, "blind": [], "error": 없을때, "running": False}
+    읽은것 = flow.read_preview(Path(경로))
+    읽은것.setdefault("running", False)
+    return 읽은것
 
 
 def _미리보기표ctx(상태: dict) -> dict:
@@ -220,6 +236,8 @@ def _미리보기표ctx(상태: dict) -> dict:
         "raise_total": flow.raise_total(미리보기),
         "blind": 미리보기.get("blind") or [],
         "error": 미리보기.get("error"),
+        # 도는 중인지를 **산출물 읽기가 아니라 잡 상태**에서 받는다 (_산출물 참조)
+        "running": bool(미리보기.get("running")),
         "limit": flow.PREVIEW_ROW_LIMIT,
     }
 
@@ -251,6 +269,7 @@ def _실행표ctx(상태: dict) -> dict:
         "preview_error": 미리보기.get("error"),
         "blind": 결과.get("blind") or [],
         "error": 결과.get("error"),
+        "running": bool(결과.get("running")),
         "limit": flow.PREVIEW_ROW_LIMIT,
         **_되돌리기배너(상태),
     }
@@ -295,6 +314,7 @@ def _되돌리기표ctx(상태: dict) -> dict:
         "전체되돌리기": 상태.get("kind") == "revert_all",
         "blind": 결과.get("blind") or [],
         "error": 결과.get("error"),
+        "running": bool(결과.get("running")),
         "limit": flow.PREVIEW_ROW_LIMIT,
         **_되돌리기배너(부모 or 상태),
     }
