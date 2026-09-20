@@ -20,7 +20,7 @@
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: 첫 왕복 — 보드 + 입찰가 인상 버튼** - 터미널 없이 브라우저에서 규칙① 대상을 보고 입찰가를 올리고 되돌린다
+- [x] **Phase 1: 첫 왕복 — 보드 + 입찰가 인상 버튼** - 터미널 없이 브라우저에서 규칙① 대상을 보고 입찰가를 올리고 되돌린다 (completed 2026-09-20)
 - [ ] **Phase 2: 되돌릴 수 없는 쓰기 — 꺼진 소재 정리** - 백업 선행·상한·재조회로 안전 계약을 완성하고 삭제 버튼을 연다
 - [ ] **Phase 3: 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정** - 광고 행을 불사자 상품에 잇고 🔴🟡⚪ 상태로 대상 목록을 뽑는다
 - [ ] **Phase 4: 홍보배너 식별** - 기존 상세 이미지에서 중국 판매사 배너를 골라내고 100건 라벨링으로 검증한다
@@ -75,7 +75,7 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 01-09-PLAN.md — Wave 7: 되돌리기 2종(이 작업분만 / 이 회차 전체) + 범위 가드
+- [x] 01-09-PLAN.md — Wave 7: 되돌리기 2종(이 작업분만 / 이 회차 전체) + 범위 가드
 
 **UI hint**: yes
 
@@ -185,7 +185,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 8/9 | In Progress|  |
+| 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 9/9 | Complete   | 2026-09-20 |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 0/TBD | Not started | - |
 | 4. 홍보배너 식별 | 0/TBD | Not started | - |

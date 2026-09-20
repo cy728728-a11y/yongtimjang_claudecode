@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: Completed 01-08-PLAN.md (첫 실제 인상 — cy728 472건 성공 · 되돌리기 미완)
-last_updated: "2026-09-20T12:05:13.000Z"
+last_updated: "2026-09-20T12:42:16.614Z"
 last_activity: 2026-09-20
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 9
-  completed_plans: 8
-  percent: 89
+  completed_plans: 9
+  percent: 14
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 
 Phase: 01 (board-bid-raise) — EXECUTING
 Plan: 9 of 9
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-20
 
-Progress: [█████████░] 89%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [█████████░] 89%
 | Phase 01 P06 | 78min | 3 tasks | 17 files |
 | Phase 01 P07 | 26min | 4 tasks | 13 files |
 | Phase 01 P08 | 140min | 3 tasks | 12 files |
+| Phase 01 P09 | 30m | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,10 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-08 실행 라우트는 대상을 받지 않는다 — 부모 미리보기의 targets 파일만 가리킨다 (D-11)
 - [Phase 01]: 01-08 첫 실제 인상은 cy728 472건(+4,720원) — 08-30 미되돌림 겹침 3건으로 두 번째 +10 위험 최소
 - [Phase 01]: 01-08 되돌릴 수단을 샌드박스 revert dry-run 으로 먼저 증명하고 방아쇠를 당긴다
+- [Phase ?]: 되돌리기 대상은 실행 잡 산출물의 성공 adId 만 — 화면이 목록을 만들지 않는다 (D-13)
+- [Phase ?]: 회차 전체 되돌리기는 물리적으로 다른 버튼 + 기본 접힘 + 건수 확인 + 1,625px 거리 (D-14/T-1-43)
+- [Phase ?]: 쓰기 전 dry-run 으로 CLI 에게 범위를 되묻는다 — 부모 성공 건수와 다르면 409 (Pitfall 2)
+- [Phase ?]: 실제 광고 API 되돌리기는 Phase 1 에서 미실행 — 인상 472건 유지(용팀장 지시)
 
 ### Pending Todos
 
@@ -114,6 +119,7 @@ None yet.
 - **[환경]** 이 맥북에 `bulsaja-yongssaem` MCP 서버 항목이 없다 — 용쌤 계정 전환 경로가 끊겨 있음 (ENG-08 착수 시 확인)
 - OQ-7: 회차마다 든 계정 수가 다른데 화면이 말하지 않는다. 실측 2026-08-29=2계정 · 2026-08-30=4계정 · 2026-09-20=1계정(판정 전). 신선도 배너(D-16)는 경과일만 보여준다 — 01-07/01-08 이 신선도만 보고 회차를 고르면 빠진 계정의 소재가 조용히 대상에서 사라진다(실제 광고비). 배너·드롭다운에 계정 수를 노출할지 01-07 에서 결정할 것
 - OQ-8: 수집만 되고 판정 안 된 회차가 있을 때 화면이 알리지 않는다 — 보드의 '새로 수집' 버튼 때문에 재발 구조다. 01-08 이 실행 흐름을 만들 때 자리가 생길 수 있다(지금 고치지 않는다)
+- 실제 광고 API 되돌리기가 Phase 1 에서 한 번도 실행되지 않았다 — 사고 시 처음 눌러보는 경로. 소수 건 되돌렸다 즉시 재인상으로 싸게 닫을 수 있다(당일이면 쿨다운 안 걸림)
 
 ## Deferred Items
 
@@ -125,6 +131,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T12:05:13.000Z
+Last session: 2026-09-20T12:41:59.506Z
 Stopped at: Completed 01-08-PLAN.md (첫 실제 인상 — cy728 472건 성공 · 되돌리기 미완)
 Resume file: None

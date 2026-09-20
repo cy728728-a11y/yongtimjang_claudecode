@@ -56,7 +56,7 @@
 - [x] **BID-01**: 규칙①(노출 0, 7일) 대상을 판정해 보여준다
 - [x] **BID-02**: 미리보기로 상품별 현재가 → 인상 후 가격을 보여준다
 - [x] **BID-03**: 그룹입찰 상품의 출발점이 **그룹 기본입찰가**다 (개별 `bidAmt` 를 쓰면 올리려다 내린다)
-- [ ] **BID-04**: 실행 후 화면에서 바로 되돌릴 수 있다 (`--revert`)
+- [x] **BID-04**: 실행 후 화면에서 바로 되돌릴 수 있다 (`--revert`)
 
 ### 버튼 2 — 꺼진 소재 정리 (PRUNE)
 
@@ -180,7 +180,7 @@
 | BID-01 | Phase 1 | Complete |
 | BID-02 | Phase 1 | Complete |
 | BID-03 | Phase 1 | Complete |
-| BID-04 | Phase 1 | Pending |
+| BID-04 | Phase 1 | Complete |
 | PRUNE-01 | Phase 2 | Pending |
 | PRUNE-02 | Phase 2 | Pending |
 | PRUNE-03 | Phase 2 | Pending |
