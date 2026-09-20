@@ -1,0 +1,192 @@
+# Phase 3: 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 - Context
+
+**Gathered:** 2026-09-21
+**Status:** Ready for planning
+
+<domain>
+## Phase Boundary
+
+광고 판정 행(규칙③+⑤)을 불사자 상품에 잇고, 상세 상태를 3단계로 판정해 **"유입은 있는데 상세가 중국어 원본인 상품" 목록**을 화면에서 숫자로 뽑아낸다. Phase 5 가 크레딧을 태울 대상 목록이 여기서 나온다.
+
+**이 페이즈가 만들지 않는 것:** 상세페이지 생성(Phase 5) · 홍보배너 식별(Phase 4) · 마켓 반영(Phase 6).
+
+**실측 모수 (2026-09-20 회차, 7계정):**
+```
+전체 게재중 소재  32,050
+③원인분석             130   ← 클릭은 오는데 안 팔린다
+⑤효자확정              64   ← 이미 팔리고 있다
+                   ─────
+작업 대상 후보         194 행
+```
+</domain>
+
+<decisions>
+## Implementation Decisions
+
+### 조인 키 — 실측으로 확정했다
+
+- **D-01: 광고↔불사자 조인은 `mallProductId` 정확 일치다. 상품명 매칭을 쓰지 않는다.**
+  광고 행의 `mallProductId` 가 불사자의 `uploadedSuccessUrl.smartstore` 와 **문자열 그대로 일치**한다.
+  실측: 광고 `13749951371` ↔ 불사자 `"13749951371"` (productId `U01KTNJ15CASKT4YH0CWKTM28ST`).
+
+- **D-02: 광고그룹명의 `NN-N` 번호로 불사자 마켓그룹을 먼저 좁힌다.**
+  광고그룹 `판매상품_12-2_제이와이디컴퍼니` → `12-2` → 불사자 `11번_용쌤11-2` 형태.
+  조회 범위를 그룹으로 좁혀야 인덱스 구축 비용이 감당된다.
+  **번호 추출은 정규식으로만** 한다 — 접두사 포맷이 계정마다 다르다:
+  `판매상품_6-2_…`(언더바) · `20-3 …`(공백) · `1000개_21-1_…`(다른 접두사).
+
+- **D-03: 상품명 매칭은 폴백으로도 쓰지 않는다.**
+  실측 6건 중 2건이 깨졌다 — 물갈이 사본이 **같은 단어를 순서만 섞어** 2건 반환(둘 다 광고 상품명과 불일치),
+  그리고 1건은 전체·축약 검색 모두 0건. 이름 기반은 조용히 틀린 상품을 집는 길이다.
+
+- **D-04: 채널상품ID(`mallProductId`)를 영구 키로 저장하지 않는다 (JOIN-04).**
+  20일 물갈이로 재발급된다(실측 교집합 0/160). **그 회차 스냅샷 안에서의 조인 키로만** 쓰고,
+  회차를 넘겨 캐시하지 않는다. 회차마다 다시 잇는다.
+
+### 코드 체계 — 두 코드를 구분해서 쓴다
+
+- **D-05:** `판매자상품코드`(예: `sLix0885VmdKsGxunAznE`)는 **사본 1개를 콕 집는** 코드다.
+  실제 작업(상세 생성·반영)은 이걸로 지목한다.
+- **D-06:** `불사자코드`(예: `v5naA0wfY8TtuK5gnxcjQ`)는 **사본 전체를 묶는** 코드다.
+  팬아웃(JOIN-03) 경고는 이걸로 조회해서 센다. 실측: 1코드 → 사본 2건
+  (① 업로드 완료·잠금·`구매_가공완료` / ② 업로드 실패·미잠금·태그없음).
+- **D-07:** `mallProductId` 로는 `bulsaja_product_find_by_code` 가 **안 된다** (실측 4건 전부 0).
+  코드 조회는 위 두 코드로만 한다.
+
+### 기작업 스킵 — 새 대장을 만들지 않는다
+
+- **D-08: `구매_가공완료` 태그가 붙은 상품은 자동 작업 대상에서 제외한다. 단 화면에서 숨기지 않는다.**
+  2026-09-21 용팀장 지시: *"구매_가공완료 되어있는건 추가 작업은 하지말고, 내가 그걸 인지할 수 있게 방법을 알려줘.
+  그럼 내가 추가 작업을 할지말지 판단할게."*
+  → 목록에 **회색으로 보이고 태그가 표시**되며, 사용자가 직접 체크하면 대상에 넣을 수 있다.
+  기본 선택에서만 빠진다. 사람 판단 큐를 만들지 않되 판단 재료는 화면에 남긴다.
+
+- **D-09: 기작업 여부의 출처는 불사자다. 로컬 대장을 정본으로 만들지 않는다.**
+  PROJECT.md 의 "진실의 원천: 불사자 서버 플래그가 정본" 을 그대로 지킨다.
+  읽을 신호: `그룹` 태그(`구매_가공완료` / `구매` / `null`) + `uploadDetailContents.imageTranslated`.
+  **STATE-04 의 보완 인덱스 신설은 보류한다** — 용팀장이 손으로 붙이는 `구매_가공완료` 태그가 이미 그 역할을 한다.
+  1건 실측에서 `aiImageGenerated` 가 별도로 필요한지 먼저 확인하고, 필요할 때만 되살린다.
+
+- **D-10: 기작업 스킵은 목표 장수와 무관한 절대 조건이다 (STATE-05).**
+  동적 장수 계산이 스킵을 무력화하면 안 된다.
+
+### 상태 판정
+
+- **D-11: `imageTranslated` 는 타입 안전하게 읽는다 (STATE-02).**
+  실측에서 **문자열 `"1"`** 로 왔다. 요구사항이 예고한 4종(`'0'` `'1'` `False` `1`)을 전부 같은 규약으로 정규화한다.
+- **D-12: 상세 상태 판정값은 화면에 🔴 중국어 원본 / 🟡 단순번역만 / ⚪ AI 가공 완료로 보인다 (STATE-03).**
+  판정 근거 필드가 무엇인지는 구현 단계에서 확정한다 — `imageTranslated` 단독으로 3단계가 갈리는지 미확인.
+
+### 성능 — 인덱스를 만든다
+
+- **D-13: `uploadedSuccessUrl` 은 상품 목록 조회에 안 나온다. 상세를 개별로 불러야 한다.**
+  194행마다 상세 호출은 비싸다. **마켓그룹 단위로 한 번 훑어 `smartstore번호 → productId` 인덱스를 만들고 캐시**한다.
+  캐시는 회차 스코프다(D-04) — 회차가 바뀌면 버린다.
+
+### 해상률을 숨기지 않는다
+
+- **D-14: 못 이은 항목은 "미해소"로 사유와 함께 보인다 (JOIN-02). 해상률을 숫자로 띄운다 (JOIN-01).**
+  100% 를 기대하는 설계가 아니다. 실측 6건 중 4건(67%) 성공이었고, 실패 2건의 유형이 이미 드러나 있다.
+
+### Claude's Discretion
+
+아래는 논의하지 않았다. 계획·구현 단계에서 정한다:
+- 미해소 항목을 같은 보드에 뱃지로 둘지 별도 목록으로 뺄지
+- 팬아웃 경고를 고를 때 띄울지 미리보기에서 띄울지
+- 불사자 상태 인덱스의 갱신 트리거(보드 열 때 / 버튼 / 백그라운드)
+- 🔴🟡⚪ 판정 로직의 정확한 필드 조합
+</decisions>
+
+<canonical_refs>
+## Canonical References
+
+**Downstream agents MUST read these before planning or implementing.**
+
+### 프로젝트 제약
+- `.planning/PROJECT.md` — 핵심가치, "불사자 서버 플래그가 정본 · 로컬 대장을 정본으로 삼지 않는다", dry-run 선행, 크레딧 견적 보고
+- `./CLAUDE.md` — 기술스택, 한국어 주석, Python + try-except
+- `.planning/ROADMAP.md` § Sequencing Notes — 순서 제약 실측표 (Phase 2 이월 결정 포함)
+
+### Phase 1 에서 확립된 것 (재사용 대상)
+- `.planning/phases/01-board-bid-raise/01-CONTEXT.md` — D-01~D-17. 특히 D-05(한 줄=상품), D-11(대상 파일 하나), D-17(작업 생성은 호출 가능한 함수)
+- `.planning/phases/01-board-bid-raise/01-09-SUMMARY.md` § patterns-established — 검증 기준("FAIL 을 본 적 없는 검증은 검증이 아니다", "벤더 소스가 문서보다 정본")
+- `.planning/phases/01-board-bid-raise/01-REVIEW.md` — Critical 2 + Warning 11 의 실패 유형. 특히 "빈 값이 전량이 되는" 부류
+- `webapp/jobs.py` · `webapp/argv.py` · `webapp/flow.py` — 잡 엔진·argv 조립·3단 계약
+- `webapp/tests/{board,preview,commit,revert,sse}_cdp.{sh,mjs}` — CDP 하네스 모양
+
+### 기존 CLI 자산
+- `.claude/skills/bulsaja-detail-page/scripts/detail_batch.py` — **STATE-01 대상.** 48행의 윈도 경로 하드코딩이 원인:
+  `SKILL_SCRIPTS = r"C:\Users\workspace\.claude\skills\bulsaja-category-fix\scripts"`
+  모듈 자체는 `.claude/skills/bulsaja-category-fix/scripts/bulsaja_mcp.py` 에 실재한다. 경로만 고치면 된다(로직 무변경)
+- `.claude/skills/bulsaja-category-fix/scripts/bulsaja_mcp.py` — `BulsajaMCP` 클라이언트
+- `.claude/skills/naver-ads-weekly/scripts/` — 광고 판정 CLI (Phase 1 이 래핑한 것)
+
+### 불사자 MCP 도구
+- `bulsaja_my_profile` — 계정 확인 (ENG-08)
+- `bulsaja_market_groups` — 마켓그룹 목록 (그룹 번호 매칭)
+- `bulsaja_product_list` — 그룹 내 목록. **`uploadedSuccessUrl` 은 안 나온다**
+- `bulsaja_product_workdata` (`mode=full`) — `uploadedSuccessUrl` · `imageTranslated` · `uploadBulsajaCode` 가 여기 있다
+- `bulsaja_product_find_by_code` — 판매자상품코드 / 불사자코드로 조회. **mallProductId 로는 안 된다**
+</canonical_refs>
+
+<code_context>
+## Existing Code Insights
+
+### Reusable Assets
+- **Phase 1 의 잡 엔진 전체** — `create_job` / 전역 쓰기 락 / SSE 로그 tail / 미리보기→실행 3단 계약. 조인 인덱스 구축도 잡으로 돌리면 진행 로그가 공짜로 붙는다
+- **보드 투영 (`webapp/board.py`)** — 한 줄 = 상품 접기가 이미 있다. 상세 상태 열을 여기에 더하는 형태
+- **검증 하네스 6종** — 새 화면 요소는 같은 방식으로 CDP 검증한다
+- **`bulsaja_mcp.py`** — 이미 있는 클라이언트. 새로 만들지 마라
+
+### Established Patterns
+- 웹앱은 CLI 의 subprocess 래퍼다. 판정·계산을 재구현하지 않는다
+- 계정·상한을 코드·화면·**주석**에 리터럴로 박지 않는다 (Phase 1 가드가 주석도 잡는다)
+- 작업 생성은 호출 가능한 함수, HTTP 핸들러는 얇게 (ENG-07 / D-17)
+
+### Integration Points
+- 보드 행(`webapp/board.py` 투영) ← 여기에 상세 상태·해상 결과 열이 붙는다
+- 불사자 MCP ← 새 외부 의존. Phase 1 은 네이버 광고 API 만 썼다
+- `detail_batch.py` ← Phase 5 가 래핑할 대상. 이 페이즈에서 돌게만 만든다
+</code_context>
+
+<specifics>
+## Specific Ideas
+
+**용팀장이 직접 알려준 운영 체계 (2026-09-21):**
+> "광고그룹명에 보통 11-2 이런식으로 마켓 번호가 넘버링 되어있어. (…) 그 번호가 불사자에서 마켓그룹명에 용쌤11-2 이런식으로 되어있어. 해당 마켓그룹에서 상품명으로 조회해 보면 딱 그 상품 하나만 나올거야."
+
+→ 그룹 번호 매칭은 채택(D-02). 상품명 조회는 실측 결과 67% 라 `mallProductId` 정확 일치로 대체(D-01, D-03).
+
+**데이터 품질 예외 1건:**
+`milky-way1992` 계정의 광고그룹 `소형이동식오피스` 에 번호가 없다. 실제 번호는 **25-2** (용팀장 확인).
+게재중 소재 569개 · ③⑤ **57행** 이 여기 있다 — 전체 194행의 **29%**.
+용팀장이 광고 쪽 그룹명을 고치기로 했다. 고쳐지면 예외는 사라진다.
+**구현은 이 예외에 하드코딩하지 말 것** — 번호 없는 그룹은 "미해소"로 사유와 함께 뜨면 된다(D-14).
+
+**계정 매핑 미확인 — 계획 전에 답이 필요하다:**
+부킹(용쌤) 계정의 마켓그룹에는 `1-x ~ 4-x`, `11-x ~ 25-x` 만 있다.
+광고 쪽 63개 번호 중 **19개(`5-x ~ 12-x`)가 부킹에 없다**:
+```
+5-1 5-2 5-3  6-1 6-2 6-3  7-1 7-2 7-3  8-1 8-2 8-3  9-1 9-2  10-1 10-2 10-3  12-1 12-2
+```
+용팀장 계정에 있을 것으로 보이나 **미확인**. 맞다면 조인이 불사자 계정 2개를 다 봐야 하고,
+ENG-08(계정 가드)이 "표시"를 넘어 "전환"까지 가야 한다.
+반대 방향(불사자에만 있고 광고엔 없는 번호) 10개: `15-3 19-3 20-2 22-2 22-3 23-2 23-3 24-2 24-3 25-3` — 조인 방향상 문제 없음.
+</specifics>
+
+<deferred>
+## Deferred Ideas
+
+- **Phase 2 (꺼진 소재 정리)** — 2026-09-21 용팀장 결정으로 Phase 3~5 뒤로 미뤘다.
+  ⚠ **Phase 5 계획 시 재확인 필요:** Phase 2 의 SAFE-04~07(재조회·상한·감사 로그) 중
+  크레딧 소모 전에 끌어와야 할 것이 있는지. ROADMAP Sequencing Notes 에도 기록했다.
+- **되돌리기 실탄 미검증** — `01-HUMAN-UAT.md` 에 열린 항목. Phase 3 과 무관하나 잔존 리스크다.
+- **⑥삭제대상 편중** — `milky-way1992` 359건 · `level_up_ad` 236건 · `pogeunae` 201건으로 다른 계정(6~39)보다 크다.
+  `naver-ads-interlock-mass-pause` 패턴 가능성. Phase 2 영역이다.
+- **STATE-04 보완 인덱스** — D-09 로 보류. `구매_가공완료` 태그로 안 되는 게 드러나면 되살린다.
+</deferred>
+
+---
+
+*Phase: 3-작업 대상 확정 — 엔티티 해소 + 상세 상태 판정*
+*Context gathered: 2026-09-21*
