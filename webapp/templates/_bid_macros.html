@@ -1,0 +1,32 @@
+{# 미리보기 표와 실행 결과 표가 **같이 쓰는** 조각들 — Plan 01-08.
+
+   왜 묶는가: FLOW-01 이 "모든 버튼이 판정 → 미리보기 → 실행 3단을 **똑같은 모양으로**
+   지난다" 이고, 그 '모양' 에는 화면도 들어간다. 컬럼 제목·잘림 안내·입찰가 칸이 두
+   파일에서 따로 진화하면 Phase 2~7 이 베낄 형판이 둘이 된다.
+
+   여기 있는 것은 전부 **표시**다. 값을 만들거나 계산하지 않는다 —
+   `from`/`to` 는 CLI 산출물 값 그대로다 (T-1-07 / BID-02). #}
+
+{% macro 잘렸다고말하기(total, shown, job_id, 정렬설명) %}
+  {# `report_md._count_label` 관례 — 잘렸으면 **반드시 말한다.**
+     안 말하면 사용자가 상위 200건을 전부로 읽는다. #}
+  {% if total > shown %}
+    <p><small>{{ "{:,}".format(total) }}건 중 상위 {{ shown }}건만 그린다
+      ({{ 정렬설명 }}). 전체는
+      <a href="/jobs/{{ job_id }}/result?format=json">JSON</a> 으로 받아라.</small></p>
+  {% endif %}
+{% endmacro %}
+
+{% macro 입찰가칸(r) %}
+  {# 현재가 → 인상 후. 값이 없으면 **빈칸**이다 — 0 으로 대체하면 "0원이었다" 는
+     없는 판정이 생긴다. 스킵 항목의 `to` 는 원래 None 이다. #}
+  <td style="text-align:right">{% if r["from"] is not none %}{{ r["from"] }}{% endif %}</td>
+  <td>→</td>
+  <td style="text-align:right">{% if r.to is not none %}{{ r.to }}{% endif %}</td>
+{% endmacro %}
+
+{% macro 예아니오(v) %}
+  {# **bool 을 먼저 분기한다.** 숫자 서식에 태우면 1/0 이 되어 사람이 못 읽는다
+     (`report_md.py:17-40` 의 함정). None 은 빈칸 — 예/아니오 로 지어내지 않는다. #}
+  {% if v is true %}예{% elif v is false %}아니오{% endif %}
+{% endmacro %}

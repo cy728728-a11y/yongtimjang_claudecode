@@ -1,0 +1,123 @@
+{# 실행 결과 표 (FLOW-05 / D-10) — Plan 01-08.
+
+   **종료코드로 성공을 판단하지 않는다.** `bids` 는 PUT 이 전량 실패해도 exit 0 이다
+   (RESEARCH §1.1). 작업 패널이 "끝남" 이라고 말해도 그건 CLI 가 죽지 않았다는 뜻일
+   뿐이다 — 무엇이 실제로 올라갔는지는 **이 표**가 유일한 근거다. 그래서 여기에
+   초록 배지를 두지 않는다.
+
+   값은 전부 CLI 가 쓴 결과 파일에서 온다. 로그를 파싱하지 않는다 (D-03).
+
+   자동 이스케이프에 기댄다 — 상품명에 중국어 원문·특수문자가 섞여 들어온다(T-1-17).
+   `| safe` 를 쓰지 마라. #}
+
+{% import "_bid_macros.html" as 표 %}
+
+{% if error %}
+  <p class="stale"><strong>실행 결과를 못 읽었다 — {{ error }}</strong><br>
+    산출물이 없거나 깨졌다. <strong>실행이 안 됐다는 뜻은 아니다</strong> —
+    터미널에서 회차의 <code>before_bids_*.json</code> 과 ledger 를 먼저 봐라.</p>
+
+{% elif job.status == "running" %}
+  <p>실행 중이다… 위 경과시간을 봐라. 진행률은 안 나온다 — 초당 12건쯤 돈다.</p>
+
+{% else %}
+  {# ① 집계 줄 — 항상 맨 위. 사용자가 표를 훑기 전에 규모를 읽는다. #}
+  <p>
+    <strong>대상 {{ "{:,}".format(total) }}건</strong>
+    {# 성공/실패/스킵은 0건이어도 띄운다 — 빈 자리를 고장으로 읽지 않게(Pitfall 6).
+       "실행 안 됨" 은 사고일 때만 생기므로 0 이면 안 쓴다. #}
+    {% set 보일것 = result_counts.items() | rejectattr("0", "equalto", "실행 안 됨") | list %}
+    {% if result_counts.get("실행 안 됨") %}{% set 보일것 = result_counts.items() | list %}{% endif %}
+    → {% for 결과, n in 보일것 %}{{ 결과 }} {{ "{:,}".format(n) }}{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+
+  {# CLI 가 스스로 센 수와 대조한다. 어긋나면 **그 사실도 적는다** — 어느 쪽이 맞는지
+     사람이 판단할 근거가 화면에 있어야 한다(Pitfall 6 과 같은 판단). #}
+  {% if cli_totals.committed != result_counts.get("성공", 0)
+        or cli_totals.failed != result_counts.get("실패", 0) %}
+    <p class="stale"><strong>CLI 가 센 수와 표의 수가 다르다</strong> —
+      CLI: 성공 {{ cli_totals.committed }} · 실패 {{ cli_totals.failed }} /
+      표: 성공 {{ result_counts.get("성공", 0) }} · 실패 {{ result_counts.get("실패", 0) }}.
+      둘 중 하나를 고르지 않고 그대로 보여준다. 결과 파일을 직접 열어 확인해라.</p>
+  {% endif %}
+
+  {% if result_counts.get("실행 안 됨") %}
+    <p class="stale"><strong>결과가 안 적힌 항목이 {{ result_counts["실행 안 됨"] }}건 있다.</strong>
+      실행 중에 끊겼거나 미리보기 산출물을 결과로 읽은 것이다 —
+      <strong>성공으로 세지 않았다.</strong></p>
+  {% endif %}
+
+  {% if blind %}
+    <p class="stale"><strong>소재 스냅샷을 못 읽은 계정이 있다: {{ blind | join(", ") }}</strong><br>
+      이 계정들은 0건이 아니라 <strong>측정이 안 됐다</strong>.</p>
+  {% endif %}
+
+  {% if total == 0 %}
+    <p>결과 파일에 항목이 하나도 없다. 실행이 접수되기 전에 끝났을 수 있다 — 로그를 봐라.</p>
+  {% else %}
+    {# ② 항목 표. **실패·스킵이 위다** — 사용자가 봐야 할 건 성공이 아니라 안 된 것들이다.
+       표가 잘려도 그 순서 덕분에 안 된 것이 먼저 남는다 (T-1-37). #}
+    {{ 표.잘렸다고말하기(total, rows | length, job.id, "실패·스킵이 위") }}
+    <div style="max-height: 24rem; overflow: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>계정</th><th>상품명</th><th>소재ID</th><th>결과</th><th>사유</th>
+            <th>현재가</th><th></th><th>인상 후</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.acct }}</td>
+              <td title="{{ r.title }}">{{ r.title[:40] }}</td>
+              <td><small>{{ r.adId }}</small></td>
+              <td>{{ r.result }}</td>
+              <td>
+                {{ r.error }}
+                {# Pitfall 7 — 버그가 아니라 prep 이후 소재가 삭제된 것이다.
+                   설명을 안 붙이면 사용자가 이걸 고장으로 읽고 다시 누른다. #}
+                {% if r.error == "스냅샷에 소재 없음" %}
+                  <br><small>prep 이후에 소재가 지워졌다 — 새로 수집하면 목록에서 빠진다.</small>
+                {% endif %}
+              </td>
+              {{ 표.입찰가칸(r) }}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  {# ③ 미리보기 대비 diff (D-10). **0건이어도 한 줄을 띄운다** — 아무것도 안 띄우면
+     사용자가 대조가 돌았는지조차 알 수 없다. 갈라지는 것 자체는 정상이다(D-09):
+     쿨다운·연속실패중단·상한 가드가 실행 시점 기준으로 다시 돈다. #}
+  <h3>미리보기 대비</h3>
+  {% if preview_error %}
+    <p class="stale"><strong>미리보기 산출물을 못 읽어 대조하지 못했다 — {{ preview_error }}</strong><br>
+      대조를 건너뛴 것이지, 달라진 게 없다는 뜻이 아니다.</p>
+  {% elif diff %}
+    <p><strong>미리보기와 달라진 {{ "{:,}".format(diff | length) }}건</strong> —
+      실행 시점에 다시 계산해서 그렇다(쿨다운·연속실패중단·상한이 그때 기준으로 다시 돈다).
+      거부하지 않고 그대로 보여준다.</p>
+    <table>
+      <thead><tr><th>소재ID</th><th>사유</th><th>미리보기</th><th>실행</th></tr></thead>
+      <tbody>
+        {% for d in diff %}
+          <tr>
+            <td><small>{{ d.adId }}</small></td>
+            <td>{{ d.why }}</td>
+            <td>{{ d.before | default("", true) }}</td>
+            <td>{{ d.after | default("", true) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>미리보기 그대로 실행됐다 — 달라진 항목 0건.</p>
+  {% endif %}
+
+  <p><small><strong>종료코드는 성공의 근거가 아니다.</strong>
+    이 명령은 전량 실패해도 정상 종료한다 — 위 표가 실제로 무엇이 바뀌었는지 말하는
+    유일한 자리다. 되돌리려면 <strong>오늘 안에</strong> 눌러라.</small></p>
+{% endif %}

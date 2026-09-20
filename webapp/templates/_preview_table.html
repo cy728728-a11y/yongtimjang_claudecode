@@ -13,7 +13,12 @@
    빈 표만 보이면 사람은 고장으로 읽고 다시 누른다.
 
    자동 이스케이프에 기댄다 — 상품명에 중국어 원문·특수문자가 섞여 들어온다(T-1-17).
-   `| safe` 를 쓰지 마라. #}
+   `| safe` 를 쓰지 마라.
+
+   컬럼·잘림 안내·입찰가 칸은 `_bid_macros.html` 을 실행 결과 표와 **같이 쓴다** —
+   FLOW-01 의 "똑같은 모양" 이 화면 레벨에서도 지켜져야 Phase 2~7 이 그대로 베낀다. #}
+
+{% import "_bid_macros.html" as 표 %}
 
 {% if error %}
   <p class="stale"><strong>미리보기를 못 읽었다 — {{ error }}</strong><br>
@@ -50,12 +55,7 @@
   {% if total == 0 %}
     <p>고른 상품에 규칙① 소재가 없다 — ②③⑤ 소재는 입찰가 인상 대상이 아니다(D-06).</p>
   {% else %}
-    {% if total > rows | length %}
-      {# 잘렸으면 **반드시 말한다** — `report_md._count_label` 관례. #}
-      <p><small>{{ "{:,}".format(total) }}건 중 상위 {{ rows | length }}건만 그린다
-        (판정 순서 · 인상이 위). 전체는
-        <a href="/jobs/{{ job.id }}/result">JSON</a> 으로 받아라.</small></p>
-    {% endif %}
+    {{ 표.잘렸다고말하기(total, rows | length, job.id, "판정 순서 · 인상이 위") }}
     <div style="max-height: 24rem; overflow: auto;">
       <table>
         <thead>
@@ -71,12 +71,8 @@
               <td title="{{ r.title }}">{{ r.title[:40] }}</td>
               <td><small>{{ r.adId }}</small></td>
               <td>{{ r.action }}</td>
-              <td style="text-align:right">{% if r["from"] is not none %}{{ r["from"] }}{% endif %}</td>
-              <td>→</td>
-              <td style="text-align:right">{% if r.to is not none %}{{ r.to }}{% endif %}</td>
-              {# **bool 을 먼저 분기한다.** 숫자 서식에 태우면 1/0 이 되어 사람이 못 읽는다
-                 (`report_md.py:17-40` 의 함정). None 은 빈칸 — 예/아니오 로 지어내지 않는다. #}
-              <td>{% if r.useGroupBid is true %}예{% elif r.useGroupBid is false %}아니오{% endif %}</td>
+              {{ 표.입찰가칸(r) }}
+              <td>{{ 표.예아니오(r.useGroupBid) }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -85,5 +81,5 @@
   {% endif %}
 
   <p><small>여기까지는 <strong>미리보기</strong>다 — 광고 입찰가는 아직 하나도 안 바뀌었다.
-    실제로 올리는 버튼은 다음 플랜에서 붙는다.</small></p>
+    아래 <strong>진짜 올린다</strong> 를 눌러야 바뀐다.</small></p>
 {% endif %}

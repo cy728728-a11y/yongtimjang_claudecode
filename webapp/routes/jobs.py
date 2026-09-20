@@ -173,6 +173,58 @@ def _투영(상태: dict) -> dict:
     return {k: 상태.get(k) for k in 공개필드}
 
 
+def _산출물(상태: dict, 없을때: str) -> dict:
+    """잡의 산출물 파일을 읽는다. 경로가 없으면 사유를 실어 빈 결과를 준다."""
+    경로 = 상태.get("result_path") if 상태 else None
+    if not 경로:
+        return {"accounts": {}, "blind": [], "error": 없을때}
+    return flow.read_preview(Path(경로))
+
+
+def _미리보기표ctx(상태: dict) -> dict:
+    """미리보기 표 조각이 쓰는 값. 전부 CLI 산출물에서 읽어 **표시만** 한다."""
+    미리보기 = _산출물(상태, "이 작업에는 산출물이 없다")
+    return {
+        "job": _투영(상태),
+        "rows": flow.preview_rows(미리보기),
+        "total": flow.total_rows(미리보기),
+        "counts": flow.summarize_counts(미리보기),
+        "raise_total": flow.raise_total(미리보기),
+        "blind": 미리보기.get("blind") or [],
+        "error": 미리보기.get("error"),
+        "limit": flow.PREVIEW_ROW_LIMIT,
+    }
+
+
+def _실행표ctx(상태: dict) -> dict:
+    """실행 결과 표 조각이 쓰는 값 (FLOW-05 / D-10).
+
+    **종료코드를 성공의 근거로 삼지 않는다.** 이 명령은 광고 API 쓰기가 전량 실패해도
+    정상 종료한다(RESEARCH §1.1) — 그래서 여기서 보는 것은 결과 파일의 항목별
+    `result`/`error` 뿐이다.
+
+    diff 는 **부모 미리보기 잡의 산출물**과 대조해서 만든다. 부모를 못 읽으면 그
+    사실을 따로 실어 보낸다 — 대조를 건너뛴 것을 "달라진 게 없다" 로 보여주면
+    D-10 이 거짓말이 된다.
+    """
+    결과 = _산출물(상태, "이 작업에는 산출물이 없다")
+    부모 = jobs.job_status(상태["parent_job_id"]) if 상태.get("parent_job_id") else None
+    미리보기 = _산출물(부모, "부모 미리보기 잡이 없다")
+    return {
+        "job": _투영(상태),
+        "rows": flow.result_rows(결과),
+        "total": flow.total_rows(결과),
+        "result_counts": flow.result_counts(결과),
+        "cli_totals": flow.cli_totals(결과),
+        "succeeded": len(flow.succeeded_ad_ids(결과)),
+        "diff": flow.diff_preview(미리보기, 결과),
+        "preview_error": 미리보기.get("error"),
+        "blind": 결과.get("blind") or [],
+        "error": 결과.get("error"),
+        "limit": flow.PREVIEW_ROW_LIMIT,
+    }
+
+
 def _응답(request: Request, 상태: dict, 전체: bool = True):
     """htmx 요청이면 HTML 조각을, 아니면 JSON 을 돌려준다.
 
@@ -363,14 +415,17 @@ def get_job_panel(job_id: str, request: Request):
 
 
 @router.get("/jobs/{job_id}/result")
-def get_job_result(job_id: str, request: Request):
-    """미리보기 산출물 → 소재 단위 표 (BID-03 / D-05). **읽기 전용이다.**
+def get_job_result(job_id: str, request: Request, format: str | None = None):
+    """산출물 → 표 조각 (미리보기: BID-03/D-05 · 실행: FLOW-05/D-10). **읽기 전용이다.**
 
     값은 CLI 산출물에서 읽어 **그대로** 표시한다. 웹앱이 입찰가를 다시 계산하면
     진실이 둘이 되고, ①행의 92%가 그룹입찰이라 거의 전량이 틀린다(T-1-07).
 
     작업이 아직 도는 중이면 표 대신 "도는 중" 을 준다 — 없는 파일을 읽어
     "0건" 으로 보여주면 사용자가 그걸 결과로 읽는다.
+
+    `format=json` 은 표가 잘렸을 때 전체를 받는 창이다. htmx 헤더 유무로 모양을
+    가르는 규칙은 그대로 두고, 브라우저 주소창에서도 JSON 을 받을 길만 연다.
     """
     if not security.page_cookie_ok(request):
         return PlainTextResponse("토큰이 필요하다", status_code=403)
@@ -378,26 +433,15 @@ def get_job_result(job_id: str, request: Request):
     if 상태 is None:
         raise HTTPException(status_code=404, detail="그런 작업이 없다")
 
-    경로 = 상태.get("result_path")
-    미리보기 = (flow.read_preview(Path(경로)) if 경로 else
-                {"accounts": {}, "blind": [], "error": "이 작업에는 산출물이 없다"})
-
-    ctx = {
-        "job": _투영(상태),
-        "rows": flow.preview_rows(미리보기),
-        "total": flow.total_rows(미리보기),
-        "counts": flow.summarize_counts(미리보기),
-        "raise_total": flow.raise_total(미리보기),
-        "blind": 미리보기.get("blind") or [],
-        "error": 미리보기.get("error"),
-        "limit": flow.PREVIEW_ROW_LIMIT,
-    }
-    if not request.headers.get("hx-request"):
+    실행 = 상태.get("kind") == "bids_commit"
+    ctx = _실행표ctx(상태) if 실행 else _미리보기표ctx(상태)
+    if format == "json" or not request.headers.get("hx-request"):
         return ctx
 
     from webapp.main import templates  # 지연 import — main 이 이 모듈을 먼저 부른다
 
-    return templates.TemplateResponse(request, "_preview_table.html", ctx)
+    조각 = "_result_table.html" if 실행 else "_preview_table.html"
+    return templates.TemplateResponse(request, 조각, ctx)
 
 
 @router.get("/jobs/{job_id}/stream")

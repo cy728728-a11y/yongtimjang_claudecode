@@ -585,3 +585,216 @@ def test_override_는_새_파일을_쓰지_않는다(잡판, tmp_run_dir):
     with pytest.raises(ValueError):
         jobs.create_job("bids_commit", run_dir=tmp_run_dir.name, commit=True,
                         targets_path_override=str(tmp_run_dir / "web" / "targets_없음.json"))
+
+
+# ── 항목 단위 결과 + 미리보기 대비 diff (FLOW-05 / D-10) — Plan 01-08 ────────
+#
+# 결과 파일의 모양은 `bids.run_bids` 의 commit 경로 리턴이 정본이다:
+# plans[i] 에 `result`("성공"/"실패"/"스킵")와 `error`(사유)가 붙고, 계정 단위로
+# `committed`/`failed` 가 따로 온다. **로그를 파싱하지 않는다** (D-03).
+
+def 결과계획(adId, action="인상", frm=70, to=80, result="성공", error="",
+             title="테스트 상품", group=True):
+    """commit 경로를 지난 plan — `result`/`error` 가 붙은 모양."""
+    p = 계획(adId, action, frm, to, group, title)
+    p["result"], p["error"] = result, error
+    return p
+
+
+def 실행계정(plans, committed=None, failed=None) -> dict:
+    v = 계정(plans)
+    v["committed"] = (committed if committed is not None
+                      else sum(1 for p in plans if p.get("result") == "성공"))
+    v["failed"] = (failed if failed is not None
+                   else sum(1 for p in plans if p.get("result") == "실패"))
+    return v
+
+
+def 실행잡(화면, tmp_run_dir, 부모산출물, 결과산출물):
+    """미리보기 → 실행 사슬을 만들고 양쪽 산출물을 떨군 뒤 실행 job_id 를 준다."""
+    부모 = 미리보기잡(tmp_run_dir)
+    Path(jobs.job_status(부모)["result_path"]).write_text(
+        json.dumps(부모산출물, ensure_ascii=False), encoding="utf-8")
+
+    자식 = 화면.post("/jobs/bids/commit", json={"preview_job_id": 부모}).json()["job_id"]
+    Path(jobs.job_status(자식)["result_path"]).write_text(
+        json.dumps(결과산출물, ensure_ascii=False), encoding="utf-8")
+    return 자식
+
+
+def test_항목단위_결과가_화면투영된다(화면, tmp_run_dir):
+    """성공/실패/스킵이 **사유와 함께** 항목 단위로 보인다 (FLOW-05 / T-1-37).
+
+    그리고 **종료코드로 성공을 판단하지 않는다** — `bids` 는 PUT 이 전량 실패해도
+    exit 0 이다(RESEARCH §1.1). 결과 파일을 읽어야만 안다.
+    """
+    plans = [
+        결과계획("nad-a001-02-000000495390006", "인상", 70, 80, "성공", ""),
+        결과계획("nad-a001-02-000000495390007", "인상", 70, 80, "실패", "HTTP 400 잘못된 요청"),
+        결과계획("nad-a001-02-000000495390008", "최근인상", 90, None, "스킵", "최근인상"),
+    ]
+    산 = 산출물(ownway1=실행계정(plans))
+    갈래 = flow.classify_results({"accounts": 산})
+    assert [p["adId"] for p in 갈래["성공"]] == ["nad-a001-02-000000495390006"]
+    assert 갈래["실패"][0]["error"] == "HTTP 400 잘못된 요청"
+    assert 갈래["스킵"][0]["error"] == "최근인상"
+
+    # 부모 미리보기는 **같은 판정**이다 — 그래야 diff 0건 화면(D-10)을 검증할 수 있다.
+    미 = 산출물(ownway1=계정([계획(p["adId"], p["action"], p["from"], p["to"])
+                              for p in plans]))
+    job_id = 실행잡(화면, tmp_run_dir, 미, 산)
+    본문 = 화면.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+
+    assert "성공" in 본문 and "실패" in 본문 and "스킵" in 본문
+    assert "HTTP 400 잘못된 요청" in 본문, "실패 사유가 화면에서 사라졌다"
+    assert "최근인상" in 본문, "스킵 사유가 화면에서 사라졌다"
+    # 집계 줄은 항상 맨 위에 있다
+    assert "대상 3건" in 본문
+    # diff 가 0건이어도 **한 줄을 띄운다** (D-10) — 안 띄우면 diff 가 돌았는지 모른다
+    assert "미리보기 그대로 실행됐다" in 본문
+
+    # JSON 으로도 같은 값을 준다
+    j = 화면.get(f"/jobs/{job_id}/result?format=json").json()
+    assert j["result_counts"]["성공"] == 1
+    assert j["result_counts"]["실패"] == 1
+    assert j["result_counts"]["스킵"] == 1
+    assert j["diff"] == []
+    # **실패·스킵이 위다** (T-1-37). 표가 잘려도 안 된 것이 먼저 남아야 한다 —
+    # 사용자가 봐야 할 건 성공이 아니다.
+    assert [r["result"] for r in j["rows"]] == ["실패", "스킵", "성공"]
+
+
+def test_종료코드가_0이어도_전량_실패면_실패로_보인다(화면, tmp_run_dir):
+    """`bids` 는 PUT 이 전량 실패해도 exit 0 이다 — 화면이 초록으로 끝내면 안 된다."""
+    plans = [결과계획("nad-a001-02-000000495390006", "인상", 70, 80, "실패", "HTTP 500")]
+    산 = 산출물(ownway1=실행계정(plans))
+    job_id = 실행잡(화면, tmp_run_dir, 산출물(ownway1=계정([계획(plans[0]["adId"])])), 산)
+
+    assert jobs.job_status(job_id)["exit_code"] == 0      # CLI 는 0 으로 끝났다
+    j = 화면.get(f"/jobs/{job_id}/result?format=json").json()
+    assert j["result_counts"]["성공"] == 0
+    assert j["result_counts"]["실패"] == 1
+    assert "HTTP 500" in 화면.get(f"/jobs/{job_id}/result",
+                                  headers={"HX-Request": "true"}).text
+
+
+def test_스킵_사유는_action_이다(tmp_path):
+    """`최근인상`·`연속실패중단`·`상한도달`·`입찰가불명` 이 그대로 사유가 된다.
+
+    `bids.run_bids` 가 `p["result"], p["error"] = "스킵", p["action"]` 으로 넣는다 —
+    스킵 사유를 웹앱이 지어내지 않는다.
+    """
+    사유들 = ["최근인상", "연속실패중단", "상한도달", "입찰가불명"]
+    plans = [결과계획(f"nad-a001-02-00000049539000{i}", 사, 70, None, "스킵", 사)
+             for i, 사 in enumerate(사유들)]
+    갈래 = flow.classify_results({"accounts": 산출물(ownway1=실행계정(plans))})
+
+    assert len(갈래["스킵"]) == len(사유들)
+    assert sorted(p["error"] for p in 갈래["스킵"]) == sorted(사유들)
+    assert 갈래["성공"] == [] and 갈래["실패"] == []
+
+
+def test_스냅샷에_소재_없음은_실패로_보인다(화면, tmp_run_dir):
+    """prep 이후 소재가 삭제된 것이다 — 버그가 아니고, 숨기지도 않는다 (Pitfall 7)."""
+    plans = [결과계획("nad-a001-02-000000495390006", "인상", 70, 80,
+                      "실패", "스냅샷에 소재 없음")]
+    산 = 산출물(ownway1=실행계정(plans))
+    갈래 = flow.classify_results({"accounts": 산})
+    assert 갈래["실패"][0]["error"] == "스냅샷에 소재 없음"
+
+    job_id = 실행잡(화면, tmp_run_dir, 산출물(ownway1=계정([계획(plans[0]["adId"])])), 산)
+    본문 = 화면.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+    assert "스냅샷에 소재 없음" in 본문
+    # 사유 옆에 그게 무슨 뜻인지 한 줄이 붙는다 — 안 붙으면 사용자가 버그로 읽는다
+    assert "prep 이후" in 본문
+
+
+def test_성공한_adId_만_추린다(tmp_path):
+    """`succeeded_ad_ids` 가 `result == "성공"` 인 것만 돌려준다 — 01-09 의 입력(D-13)."""
+    산 = 산출물(
+        ownway1=실행계정([
+            결과계획("nad-a001-02-000000495390006", "인상", 70, 80, "성공", ""),
+            결과계획("nad-a001-02-000000495390007", "인상", 70, 80, "실패", "HTTP 400"),
+        ]),
+        pogeunae=실행계정([
+            결과계획("nad-b001-02-000000495390001", "인상", 70, 80, "성공", ""),
+            결과계획("nad-b001-02-000000495390002", "최근인상", 90, None, "스킵", "최근인상"),
+        ]),
+    )
+    assert flow.succeeded_ad_ids({"accounts": 산}) == [
+        "nad-a001-02-000000495390006", "nad-b001-02-000000495390001"]
+
+
+# ── D-10 / T-1-36 — 재계산 차이를 은폐하지 않는다 ────────────────────────────
+
+def test_미리보기와_달라진건을_보고한다():
+    """action 이나 `to` 가 바뀐 항목이 사유와 before/after 로 나온다 (D-10).
+
+    D-09 로 **실행 시점 재계산을 유지**했으므로 갈라지는 건 정상이다 — 쿨다운·연속실패
+    중단·상한 가드가 실행 시점 기준으로 다시 도는 편이 안전하다. 이 함수의 일은
+    갈라졌다는 사실을 숨기지 않는 것이다.
+    """
+    미 = {"accounts": 산출물(ownway1=계정([
+        계획("nad-a001-02-000000495390006", "인상", 70, 80),
+        계획("nad-a001-02-000000495390007", "인상", 70, 80)]))}
+    실 = {"accounts": 산출물(ownway1=실행계정([
+        # 실행 시점에 쿨다운이 걸렸다 — 미리보기 때는 인상이었다
+        결과계획("nad-a001-02-000000495390006", "최근인상", 70, None, "스킵", "최근인상"),
+        결과계획("nad-a001-02-000000495390007", "인상", 70, 80, "성공", "")]))}
+
+    갈림 = flow.diff_preview(미, 실)
+    assert len(갈림) == 1
+    한건 = 갈림[0]
+    assert 한건["adId"] == "nad-a001-02-000000495390006"
+    assert 한건["why"] == "재계산으로 바뀜"
+    assert "인상" in 한건["before"] and "최근인상" in 한건["after"]
+
+
+def test_미리보기에_없던_소재도_보고한다():
+    """결과에만 있는 adId 는 `미리보기에 없던 소재` 로 나온다."""
+    미 = {"accounts": 산출물(ownway1=계정([계획("nad-a001-02-000000495390006")]))}
+    실 = {"accounts": 산출물(ownway1=실행계정([
+        결과계획("nad-a001-02-000000495390006", "인상", 70, 80, "성공", ""),
+        결과계획("nad-a001-02-000000495390099", "인상", 70, 80, "성공", "")]))}
+
+    갈림 = flow.diff_preview(미, 실)
+    assert [d["adId"] for d in 갈림] == ["nad-a001-02-000000495390099"]
+    assert 갈림[0]["why"] == "미리보기에 없던 소재"
+
+
+def test_달라진게_없으면_빈_목록이다():
+    """같은 입력이면 diff 가 빈 리스트다. **거부하지 않는다** — 스테일 거부는 Phase 2."""
+    plans = [계획("nad-a001-02-000000495390006", "인상", 70, 80)]
+    미 = {"accounts": 산출물(ownway1=계정(list(plans)))}
+    실 = {"accounts": 산출물(ownway1=실행계정([
+        결과계획("nad-a001-02-000000495390006", "인상", 70, 80, "성공", "")]))}
+    assert flow.diff_preview(미, 실) == []
+
+
+def test_결과가_안_적힌_항목은_성공이_아니다(화면, tmp_run_dir):
+    """`result` 키가 없는 plan 은 `실행 안 됨` 이다 — **성공으로 세지 않는다.**
+
+    dry-run 산출물을 실행 결과로 읽었거나 실행이 중간에 끊긴 모양이 이것이다.
+    성공으로 세면 "전부 올렸다" 는 거짓말이 화면 맨 위 집계 줄에 뜬다. 그리고
+    Plan 01-09 의 되돌리기가 **올라가지도 않은 소재**를 되돌리려 든다(D-13).
+    """
+    plans = [
+        결과계획("nad-a001-02-000000495390006", "인상", 70, 80, "성공", ""),
+        계획("nad-a001-02-000000495390007", "인상", 70, 80),   # result 키가 없다
+    ]
+    산 = 산출물(ownway1=실행계정(plans))
+    갈래 = flow.classify_results({"accounts": 산})
+
+    assert [p["adId"] for p in 갈래["성공"]] == ["nad-a001-02-000000495390006"]
+    assert [p["adId"] for p in 갈래["실행 안 됨"]] == ["nad-a001-02-000000495390007"]
+    # 되돌리기 대상에도 안 들어간다
+    assert flow.succeeded_ad_ids({"accounts": 산}) == ["nad-a001-02-000000495390006"]
+
+    job_id = 실행잡(화면, tmp_run_dir,
+                    산출물(ownway1=계정([계획(p["adId"]) for p in plans])), 산)
+    j = 화면.get(f"/jobs/{job_id}/result?format=json").json()
+    assert j["result_counts"]["성공"] == 1
+    assert j["result_counts"]["실행 안 됨"] == 1
+    # 화면도 그 사실을 말한다 — 조용히 넘어가면 사람이 못 본다
+    본문 = 화면.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+    assert "결과가 안 적힌 항목이 1건" in 본문

@@ -214,3 +214,142 @@ def total_rows(preview: dict) -> int:
     """잘리기 전 전체 소재 줄 수. 표가 잘렸으면 잘렸다고 말하려고 따로 센다."""
     return sum(len((v or {}).get("plans") or [])
                for v in (preview.get("accounts") or {}).values())
+
+
+# ── 실행 결과 (Plan 01-08) ───────────────────────────────────────────────────
+#
+# 결과 파일의 모양은 `bids.run_bids` 의 commit 경로 리턴이 정본이다. plans[i] 에
+# `result`("성공"/"실패"/"스킵")와 `error`(사유)가 붙는다 — Plan 01-02 가 CLI 에 심었다.
+# **로그를 파싱하지 않는다** (D-03). 그리고 **종료코드로 성공을 판단하지 않는다** —
+# `bids` 는 PUT 이 전량 실패해도 exit 0 이다(RESEARCH §1.1). 결과 파일이 유일한 근거다.
+
+# 결과 바구니의 **표시 순서**다. 실패·스킵이 먼저다 — 사용자가 봐야 할 것은
+# 성공이 아니라 안 된 것들이다.
+RESULT_ORDER = ("실패", "스킵", "실행 안 됨", "성공")
+
+
+def _계정들(d: dict) -> dict:
+    """`read_preview` 결과든 CLI 산출물 원본이든 계정 dict 로 만든다.
+
+    양쪽을 다 받는 이유: 라우트는 `read_preview` 를 거치고(빈 산출물을 성공으로 보지
+    않으려고), 순수 함수 검증은 산출물을 손으로 만든다. 모양을 하나로 강제하면
+    호출부마다 감싸는 코드가 생기고, 그 감싸기를 빠뜨린 곳이 조용히 빈 결과를 낸다.
+    """
+    안 = (d or {}).get("accounts")
+    if isinstance(안, dict):
+        return 안
+    return {k: v for k, v in (d or {}).items()
+            if isinstance(v, dict) and v.get("plans") is not None}
+
+
+def _plans(d: dict):
+    """(계정, plan) 쌍을 계정 순서대로 흘린다."""
+    for alias, v in _계정들(d).items():
+        for p in (v or {}).get("plans") or []:
+            yield alias, p
+
+
+def _결과줄(alias: str, p: dict) -> dict:
+    """결과 표의 한 줄. 값은 산출물 그대로 옮긴다 — 여기서 만들지 않는다."""
+    return {
+        "acct": alias,
+        "adId": p.get("adId"),
+        "title": p.get("title") or "",
+        "action": p.get("action"),
+        "from": p.get("from"),
+        "to": p.get("to"),
+        "result": p.get("result") or "실행 안 됨",
+        "error": p.get("error") or "",
+    }
+
+
+def classify_results(result: dict) -> dict[str, list[dict]]:
+    """성공 / 실패 / 스킵 으로 갈라 담는다 (FLOW-05 / T-1-37).
+
+    `result` 키가 없는 plan 은 **`실행 안 됨`** 이다. dry-run 산출물을 실수로 실행
+    결과로 읽었을 때가 그 모양인데, 그걸 성공으로 세면 "1,200건 올렸다" 는 거짓말이
+    화면에 뜬다. 성공으로 세지 않는다.
+
+    스킵 사유는 `bids.run_bids` 가 넣은 action 그대로다(최근인상·연속실패중단·
+    상한도달·입찰가불명). 웹앱이 사유를 지어내지 않는다.
+    """
+    갈래: dict[str, list[dict]] = {k: [] for k in RESULT_ORDER}
+    for alias, p in _plans(result):
+        줄 = _결과줄(alias, p)
+        갈래.setdefault(줄["result"], []).append(줄)
+    return 갈래
+
+
+def result_counts(result: dict) -> dict[str, int]:
+    """바구니별 건수. 표시 순서는 실패·스킵이 먼저다."""
+    갈래 = classify_results(result)
+    순서 = {k: i for i, k in enumerate(RESULT_ORDER)}
+    return {k: len(v) for k, v in sorted(갈래.items(),
+                                         key=lambda kv: (순서.get(kv[0], len(순서)), kv[0]))}
+
+
+def cli_totals(result: dict) -> dict[str, int]:
+    """CLI 가 스스로 센 `committed`/`failed` 합.
+
+    화면이 센 값과 **대조하려고** 따로 둔다. 둘이 어긋나면 그 사실을 화면에 적는다 —
+    어느 쪽이 맞는지 사람이 판단할 근거가 화면에 있어야 한다(Pitfall 6 와 같은 판단).
+    """
+    합 = {"committed": 0, "failed": 0}
+    for v in _계정들(result).values():
+        for k in 합:
+            try:
+                합[k] += int((v or {}).get(k) or 0)
+            except (TypeError, ValueError):
+                pass
+    return 합
+
+
+def result_rows(result: dict, limit: int | None = PREVIEW_ROW_LIMIT) -> list[dict]:
+    """결과 표의 줄 — **실패·스킵이 위**다 (T-1-37).
+
+    잘릴 때 성공만 남기면 안 된 것들이 화면 밖으로 밀린다. 정렬이 곧 안전장치다.
+    """
+    순서 = {k: i for i, k in enumerate(RESULT_ORDER)}
+    줄 = [_결과줄(alias, p) for alias, p in _plans(result)]
+    줄.sort(key=lambda r: (순서.get(r["result"], len(순서)), r["acct"], r["adId"] or ""))
+    return 줄 if limit is None else 줄[:limit]
+
+
+def succeeded_ad_ids(result: dict) -> list[str]:
+    """실제로 올라간 adId 목록. Plan 01-09 의 되돌리기 대상이 여기서 나온다 (D-13).
+
+    실패·스킵을 섞지 않는다 — 안 올라간 소재를 되돌리려 들면 백업에 없는 키를 찾다가
+    "되돌릴 게 없다" 로 끝나거나, 더 나쁘면 남의 원본을 덮는다.
+    """
+    return [p.get("adId") for _, p in _plans(result)
+            if p.get("result") == "성공" and p.get("adId")]
+
+
+def diff_preview(preview: dict, result: dict) -> list[dict]:
+    """미리보기와 실행이 어디서 갈라졌는지 사유와 함께 (D-10 / T-1-36).
+
+    **갈라지는 건 정상이다.** D-09 로 실행 시점 재계산을 유지했기 때문이다 —
+    쿨다운·연속실패중단·상한 가드가 실행 시점 기준으로 다시 도는 편이 안전하다.
+    미리보기를 보고 커피를 한 잔 마시고 눌러도, 그 사이 다른 창에서 올린 소재는
+    실행 시점에 스킵된다. 그게 맞는 동작이다.
+
+    이 함수의 일은 **갈라졌다는 사실을 숨기지 않는 것**이다. **거부하지 않는다** —
+    스테일 거부(FLOW-03 / SAFE-05)는 Phase 2 다. 거부를 여기서 흉내 내면 "미리보기와
+    다르다" 는 이유로 정상 실행이 막히고, 사람은 곧 미리보기를 건너뛸 길을 찾는다.
+    """
+    본것 = {p.get("adId"): p for _, p in _plans(preview)}
+    갈림 = []
+    for _, r in _plans(result):
+        adId = r.get("adId")
+        p = 본것.get(adId)
+        if p is None:
+            갈림.append({"adId": adId, "why": "미리보기에 없던 소재"})
+            continue
+        if (p.get("action"), p.get("to")) != (r.get("action"), r.get("to")):
+            갈림.append({
+                "adId": adId,
+                "why": "재계산으로 바뀜",
+                "before": f'{p.get("action")} {p.get("from")}→{p.get("to")}',
+                "after": f'{r.get("action")} {r.get("from")}→{r.get("to")}',
+            })
+    return 갈림
