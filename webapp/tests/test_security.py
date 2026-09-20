@@ -170,3 +170,26 @@ def test_시크릿이_새지_않는다(client):
     for f in sorted(템플릿.rglob("*")) if 템플릿.is_dir() else []:
         if f.is_file() and 시크릿 in f.read_text(encoding="utf-8", errors="ignore"):
             pytest.fail(f"템플릿에 광고 시크릿이 들어 있다: {f.name}")
+
+
+def test_비ascii_토큰은_403_이지_500_이_아니다(client):
+    """`compare_digest` 가 str 에 대해 비ASCII 를 만나면 TypeError 를 던진다(실측).
+
+    헤더·쿠키에는 누구나 아무 바이트나 넣는다(`curl -H "X-CT-Token: 한글"` 실측 → 500).
+    거부 경로가 예외로 새면 403 이어야 할 자리에 500 이 나오고, 트레이스백이 로그를
+    덮고, "가끔 500 이 난다" 를 쫓게 된다.
+
+    헤더 값은 **바이트로** 넘긴다 — httpx 가 str 비ASCII 헤더를 클라이언트 쪽에서
+    먼저 거부해서(실측 `UnicodeEncodeError`) 서버까지 가지도 못한다. 진짜 브라우저·
+    curl 은 그런 배려를 해 주지 않으므로 바이트로 쏘는 쪽이 현실에 가깝다.
+    """
+    # 순수 함수부터 — 여기가 터지면 위 두 층이 전부 500 이 된다
+    assert security.토큰이같나("한글토큰", security.BOOT_TOKEN) is False
+    assert security.토큰이같나(security.BOOT_TOKEN, security.BOOT_TOKEN) is True
+
+    응답 = client.post("/jobs/run", json={},
+                      headers={b"X-CT-Token": "한글토큰입니다".encode("utf-8")})
+    assert 응답.status_code == 403, f"토큰 비교가 터졌다 ({응답.status_code})"
+
+    # 쿠키 쪽(`page_cookie_ok`)도 같은 비교 함수를 쓴다. httpx 가 비ASCII 쿠키 값을
+    # 클라이언트에서 막아 HTTP 로는 못 쏘므로, 위의 순수 함수 검증이 그 층을 덮는다.

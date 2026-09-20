@@ -511,8 +511,13 @@ def test_재접속하면_처음부터_이어본다(실서버, synthetic_job):
     assert 뒤줄[0] == "[1/12] tick", "재접속했더니 첫 줄이 없다 (전량 재생이 아니다)"
     assert 뒤줄[:len(앞줄)] == 앞줄, "재접속 페이로드가 1차와 어긋난다"
     assert len(뒤줄) > len(앞줄), "끊긴 사이에 찍힌 줄이 안 왔다 (파이프를 읽고 있다)"
-    assert 뒤줄 == [f"[{i}/12] tick" for i in range(1, len(뒤줄) + 1)], \
+
+    # 진행 줄은 1번부터 빠짐없이 연속이어야 한다(중복 0 · 누락 0).
+    # 잡이 창 안에서 끝나면 마지막에 완료 줄이 하나 더 붙는다 — 그건 진행 줄이 아니다.
+    틱 = [줄 for 줄 in 뒤줄 if 줄.endswith("tick")]
+    assert 틱 == [f"[{i}/12] tick" for i in range(1, len(틱) + 1)], \
         f"줄이 빠졌거나 중복됐다: {뒤줄}"
+    assert 뒤줄[:len(틱)] == 틱, f"진행 줄 사이에 다른 게 끼었다: {뒤줄}"
 
 
 def test_스트림은_event_stream_이고_gzip_으로_묶이지_않는다(화면, synthetic_job):

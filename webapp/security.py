@@ -43,6 +43,24 @@ HEADER_NAME = "X-CT-Token"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
+def 토큰이같나(들어온것: str, 진짜: str) -> bool:
+    """상수시간 토큰 비교. **비ASCII 입력에도 예외를 던지지 않는다.**
+
+    `secrets.compare_digest` 는 str 두 개를 받으면 내부적으로 ASCII 인코딩을 시도하고,
+    한 글자라도 ASCII 밖이면 `TypeError: comparing strings with non-ASCII characters
+    is not supported` 를 던진다. HTTP 헤더·쿠키 값은 **누구나 아무 바이트나** 넣을 수
+    있으므로(실측: `X-CT-Token: 한글` → 500), 그대로 두면 토큰 비교가 인증 거부가
+    아니라 **서버 오류**가 된다. 403 이어야 할 자리에 500 이 나오면 ① 거부 경로가
+    에러 핸들러로 새고 ② 로그가 트레이스백으로 더럽혀지고 ③ "가끔 500 이 난다" 를
+    쫓게 된다.
+
+    바이트로 바꿔서 비교하면 상수시간 성질은 그대로이고 예외만 사라진다.
+    """
+    return secrets.compare_digest(
+        들어온것.encode("utf-8", "surrogatepass"),
+        진짜.encode("utf-8", "surrogatepass"))
+
+
 def allowed_origins() -> set[str]:
     """쓰기를 허용할 Origin 집합.
 
@@ -79,7 +97,7 @@ async def guard(request: Request, call_next):
         if origin is None and request.headers.get("sec-fetch-site") not in (None, "same-origin"):
             return PlainTextResponse("sec-fetch-site 거부", status_code=403)
         토큰 = request.headers.get(HEADER_NAME.lower()) or ""
-        if not secrets.compare_digest(토큰, BOOT_TOKEN):
+        if not 토큰이같나(토큰, BOOT_TOKEN):
             return PlainTextResponse("토큰 거부", status_code=403)
     return await call_next(request)
 
@@ -90,7 +108,7 @@ def page_cookie_ok(request: Request) -> bool:
     미들웨어가 아니라 라우트에서 보는 이유: `/healthz` 처럼 쿠키 없이도 열려야 하는
     읽기 창이 있다. 화면이 고장났을 때 서버가 살았는지 보려면 그 창은 막히면 안 된다.
     """
-    return secrets.compare_digest(request.cookies.get(COOKIE_NAME, ""), BOOT_TOKEN)
+    return 토큰이같나(request.cookies.get(COOKIE_NAME, ""), BOOT_TOKEN)
 
 
 # ── 시크릿 스크러버 ──────────────────────────────────────────────────────────

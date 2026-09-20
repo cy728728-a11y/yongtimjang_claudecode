@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 보안 8종 검증 — **실행 중인 서버**에 대고 쏜다.
+# 보안 9종 검증 — **실행 중인 서버**에 대고 쏜다.
+# (V-SAFE-02c 가 Plan 01-06 에서 c1/c2 두 갈래로 쪼개져 8 → 9 가 됐다.)
 #
 # TestClient 는 ASGI 앱을 직접 부르므로 "실제로 127.0.0.1 에만 떴는지", "uvicorn 이
 # Host 헤더를 어떻게 넘기는지" 를 증명하지 못한다. 그 구멍을 이 스크립트가 메운다.
@@ -111,17 +112,38 @@ check V-SAFE-02a "토큰 없는 POST → 403" $?
 test "$(code -X POST -H "Origin: $B" -H "X-CT-Token: wrong" "$B/jobs/bids/preview")" = 403
 check V-SAFE-02b "틀린 토큰 POST → 403" $?
 
-# V-SAFE-02c  정상 쓰기는 통과한다
+# V-SAFE-02c  정상 쓰기는 통과한다 — **두 갈래로 확인한다** (Plan 01-06 에서 조였다)
+#
 #   이게 없으면 "전부 막힘" 을 성공으로 오독한다. 403 만 확인하는 검증은
 #   서버를 뽑아 놔도 똑같이 통과한다.
-#   ※ Plan 01-05 가 POST /jobs/bids/preview 를 만들기 전까지 이 라우트는 **404** 다.
-#      404 는 "가드가 안 걸렸다" 는 뜻이므로 지금 기준은 "403 이 아닐 것".
-#      Plan 01-06 완료 후 이 줄을 `-lt 400` 으로 조여라(VALIDATION.md 원문 형태).
+#
+#   (1) 실재하는 쓰기 라우트에 올바른 Origin·토큰으로 쏜다. 가드 3층을 통과해
+#       **앱 로직이 답했다는 것**까지 본다: 없는 회차 → 400 + 몸통에 "회차".
+#       403 이면 가드가 정상 쓰기를 막은 것이고, 000/500 이면 서버가 이상한 것이다.
+#       부수효과 0 — create_job 이 회차 화이트리스트에서 거부하므로 자식이 안 뜬다.
+#   (2) Plan 01-07 이 만들 POST /jobs/bids/preview. 라우트가 **생기는 순간**
+#       기준이 `-lt 400` 으로 자동으로 조여진다. 그 전에는 "정확히 404" 를 요구한다
+#       ("403 이 아닐 것" 은 000·500 도 통과시켜서 느슨했다).
+c1=$(curl -s --max-time 10 -w '\n%{http_code}' -X POST -H "Origin: $B" -H "X-CT-Token: $T" \
+     -H 'Content-Type: application/json' -d '{"run_dir":"그런회차없음"}' "$B/jobs/run")
+c1_code=$(printf '%s' "$c1" | tail -1)
+c1_body=$(printf '%s' "$c1" | sed '$d')
+ok=1
+if [ "$c1_code" = "400" ]; then
+  printf '%s' "$c1_body" | grep -q '회차' && ok=0
+fi
+check V-SAFE-02c1 "정상 쓰기가 가드 3층을 통과해 앱 로직에 닿는다 (400 + 사유, 현재 $c1_code)" "$ok"
+
 ok_code=$(code -X POST -H "Origin: $B" -H "X-CT-Token: $T" \
           -H 'Content-Type: application/json' \
           -d '{"run_dir":"2026-08-30","ad_ids":[]}' "$B/jobs/bids/preview")
-test "$ok_code" != "403"
-check V-SAFE-02c "올바른 Origin + 올바른 토큰 POST → 403 아님 (현재 $ok_code)" $?
+if grep -q '/jobs/bids/preview' webapp/routes/jobs.py 2>/dev/null; then
+  test "$ok_code" -lt 400
+  check V-SAFE-02c2 "입찰가 미리보기 POST → 2xx/3xx (현재 $ok_code)" $?
+else
+  test "$ok_code" = "404"
+  check V-SAFE-02c2 "입찰가 미리보기 라우트는 아직 없다 → 정확히 404 (현재 $ok_code) · Plan 01-07 이 만들면 -lt 400 으로 자동 강화" $?
+fi
 
 # ── SAFE-03 ─────────────────────────────────────────────────────────────────
 
@@ -142,7 +164,7 @@ fi
 
 echo "----"
 if [ "$fails" -eq 0 ]; then
-  echo "보안 8종 전량 PASS"
+  echo "보안 9종 전량 PASS"
 else
   echo "FAIL 이 있다 — 여기서 멈춰라"
 fi
