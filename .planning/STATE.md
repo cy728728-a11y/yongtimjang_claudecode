@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 01-08-PLAN.md (첫 실제 인상 — cy728 472건 성공 · 되돌리기 미완)
-last_updated: "2026-09-20T12:42:16.614Z"
-last_activity: 2026-09-20
+status: planned
+stopped_at: Phase 03 계획 완료 (7플랜/6웨이브, plan-checker 통과). 다음은 /gsd:execute-phase 03
+last_updated: "2026-09-20T23:13:56.460Z"
+last_activity: 2026-09-21 -- Phase 03 planning complete (7 plans / 6 waves)
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 9
+  total_plans: 16
   completed_plans: 9
   percent: 14
 ---
@@ -21,16 +21,19 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-19)
 
 **Core value:** 유입이나 판매가 있는데 상세페이지가 중국어 원본·단순번역인 상품을, 중복 작업 없이 한 화면에서 골라 고치고 반영하는 것
-**Current focus:** Phase 01 — board-bid-raise
+**Current focus:** Phase 03 — join-detail-state (계획 완료, 실행 대기)
 
 ## Current Position
 
-Phase: 01 (board-bid-raise) — EXECUTING
-Plan: 9 of 9
-Status: Phase complete — ready for verification
-Last activity: 2026-09-20
+Phase: 03 (join-detail-state) — PLANNED
+Plan: 0 of 7 (6 waves)
+Status: Ready to execute — `/gsd:execute-phase 03`
+Last activity: 2026-09-21 -- Phase 03 planning complete (plan-checker PASSED)
 
-Progress: [██████████] 100%
+Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
+Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
+
+Progress: [██▒▒▒▒▒▒▒▒] 1 of 7 phases
 
 ## Performance Metrics
 
