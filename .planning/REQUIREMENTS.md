@@ -24,8 +24,8 @@
 
 ### 기반 — 안전 (SAFE)
 
-- [ ] **SAFE-01**: 서버는 `127.0.0.1` 에만 바인드하고, Host 헤더 화이트리스트와 Origin 검증을 통과한 요청만 받는다
-- [ ] **SAFE-02**: 부팅 시 발급한 랜덤 토큰이 있어야 쓰기 요청이 통과한다 (다른 탭의 사이트가 CSRF 로 크레딧을 태우는 걸 막는다)
+- [x] **SAFE-01**: 서버는 `127.0.0.1` 에만 바인드하고, Host 헤더 화이트리스트와 Origin 검증을 통과한 요청만 받는다
+- [x] **SAFE-02**: 부팅 시 발급한 랜덤 토큰이 있어야 쓰기 요청이 통과한다 (다른 탭의 사이트가 CSRF 로 크레딧을 태우는 걸 막는다)
 - [x] **SAFE-03**: 자격증명(광고 시크릿·불사자 토큰)이 화면·로그·에러 메시지에 절대 나오지 않는다
 - [ ] **SAFE-04**: 백업이 선행되는 작업은 **백업 실패 시 쓰기를 중단**한다
 - [ ] **SAFE-05**: `--commit` 직전에 대상을 재조회해, 미리보기 시점 이후 상태가 바뀐 항목은 제외하고 그 사실을 보고한다
@@ -157,8 +157,8 @@
 | ENG-06 | Phase 2 | Pending |
 | ENG-07 | Phase 1 | Pending |
 | ENG-08 | Phase 3 | Pending |
-| SAFE-01 | Phase 1 | Pending |
-| SAFE-02 | Phase 1 | Pending |
+| SAFE-01 | Phase 1 | Complete |
+| SAFE-02 | Phase 1 | Complete |
 | SAFE-03 | Phase 1 | Complete |
 | SAFE-04 | Phase 2 | Pending |
 | SAFE-05 | Phase 2 | Pending |

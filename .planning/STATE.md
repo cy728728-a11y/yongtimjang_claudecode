@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-09-19T17:27:09.174Z"
-last_activity: 2026-09-19
+stopped_at: Completed 01-03-PLAN.md (보안 3층 + 앱 셸)
+last_updated: "2026-09-20T08:03:37.859Z"
+last_activity: 2026-09-20
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 9
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 01 (board-bid-raise) — EXECUTING
-Plan: 3 of 9
+Plan: 4 of 9
 Status: Ready to execute
-Last activity: 2026-09-19
+Last activity: 2026-09-20
 
-Progress: [██░░░░░░░░] 22%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██░░░░░░░░] 22%
 *Updated after each plan completion*
 | Phase 01 P01 | 8min | 3 tasks | 19 files |
 | Phase 01 P02 | 14min | 3 tasks | 3 files |
+| Phase 01 P03 | 22min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,9 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-02 only_ads 필터는 run_bids 안쪽 update_streaks 뒤·plan_raise 앞 한 줄 — 앞에 걸면 연속실패 카운팅이 통째로 빠진다
 - [Phase 01]: 01-02 --only-ads 읽기 실패는 exit 1. 전량 실행으로 폴백하지 않는다 (T-1-05)
 - [Phase 01]: 01-02 accounts 서브커맨드 화이트리스트 투영으로 SAFE-03 을 구조로 보장 — 웹앱이 자격증명 파일을 두 번째로 갖지 않는다
+- [Phase 01]: 01-03 openapi_url=None 까지 껐다 — docs 만 끄면 /openapi.json 이 토큰 없이 라우트 전체를 내준다
+- [Phase 01]: 01-03 장시간 프로세스의 줄 출력은 flush=True 필수 — tty 가 아니면 버퍼가 영영 안 비워져 기동 토큰 URL 이 사라진다
+- [Phase 01]: 01-03 CT_PORT 는 settings 계층에서 처리 — 기동 스크립트가 직접 읽으면 Origin 화이트리스트가 옛 포트에 남는다
 
 ### Pending Todos
 
@@ -98,6 +102,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T17:27:03.820Z
-Stopped at: Phase 1 context gathered
+Last session: 2026-09-20T08:03:37.854Z
+Stopped at: Completed 01-03-PLAN.md (보안 3층 + 앱 셸)
 Resume file: None
