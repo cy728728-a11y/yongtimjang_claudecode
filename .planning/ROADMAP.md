@@ -112,7 +112,34 @@ Plans:
   5. 불사자 외부 경로로 상세를 반영해도 `aiImageGenerated` 가 찍히는지 1건 실측으로 답이 나오고, 안 찍히면 보완 인덱스가 서 있다 (크레딧 무한 루프 차단)
   6. 작업 화면에 현재 불사자 계정이 항상 표시되고, 기대 계정(부킹/용쌤)이 아니면 실행이 거부된다
 
-**Plans**: TBD
+**Plans**: 7 plans in 6 waves
+
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — 기반: 설정 8키 + `workspace.toml [webapp]` + 픽스처·가드 확장 + `detail_batch.py` shim (STATE-01)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 03-02-PLAN.md — 순수 판정: `state.py`(⚪🟡🔴 · 타입 안전) + `join.py`(번호 매칭 · 해상률 · 미해소 3종 · 팬아웃)
+- [ ] 03-03-PLAN.md — 인덱스 저장소 + 불사자 잡 3종 + `BulsajaArgv` + ENG-08 계정 가드
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 03-04-PLAN.md — 불사자 CLI: 레이트리밋 모듈 · 인덱스 구축 · 회차 스캔 (MCP 접촉은 전부 여기)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 03-05-PLAN.md — 첫 실스캔 해상률 확정 + 라우트 3종 + 계정 배너·버튼 3개
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 03-06-PLAN.md — 보드 상태 열·필터·기작업 회색 + 해상률 배너 2종 + 청소 목록 + CDP
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 03-07-PLAN.md — 실탄: 재개 회귀 + 첫 인덱스 구축 완주(체크포인트) + 보드 최종 확인 + VALIDATION 마감
+
 **UI hint**: yes
 
 ### Phase 4: 홍보배너 식별
@@ -187,7 +214,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 9/9 | Complete   | 2026-09-20 |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
-| 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 0/TBD | Not started | - |
+| 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 0/7 | Planned | - |
 | 4. 홍보배너 식별 | 0/TBD | Not started | - |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 0/TBD | Not started | - |
 | 6. 마켓 수정업로드 | 0/TBD | Not started | - |
