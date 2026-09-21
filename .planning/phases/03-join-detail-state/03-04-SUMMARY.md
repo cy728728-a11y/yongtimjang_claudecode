@@ -70,7 +70,7 @@ completed: 2026-09-21
 
 - **Duration:** 약 52분
 - **Tasks:** 3 / 3
-- **Tests:** 284 → **293 passed** (신규 9: 레이트리밋 8 + 스모크·가드 4 중 일부는 기존 파일 확장)
+- **Tests:** 284 → **297 passed** (신규 13: 레이트리밋 8 + CLI 스모크 2 + 가드 3)
 - **Files:** 신규 3 · 수정 2
 - **크레딧 소모:** **0** — 실제로 나간 MCP 호출은 `bulsaja_my_profile` 한 번뿐이다(스캔 가드 스모크가 계정이 다른 것을 확인하고 exit 3)
 
@@ -226,7 +226,7 @@ MCP 를 끌어오는 순간 `.venv-web` 의 pytest 가 이 모듈을 import 조�
 ## 검증
 
 ```
-.venv-web/bin/pytest webapp/tests -q                          → 293 passed
+.venv-web/bin/pytest webapp/tests -q                          → 297 passed
 .venv-web/bin/pytest webapp/tests/test_index.py -q            → 0.21s (실제 sleep 0)
 .venv/bin/python3 ss_index_build.py --help                    → exit 0
 .venv/bin/python3 bulsaja_scan.py --help                      → exit 0
