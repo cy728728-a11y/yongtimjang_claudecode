@@ -546,3 +546,130 @@ def test_레이트모듈은_stdlib만_쓴다():
     import줄 = [줄 for 줄 in 소스.splitlines()
                if 줄.startswith("import ") or 줄.startswith("from ")]
     assert import줄 == ["import time"], f"stdlib 밖을 import 한다: {import줄}"
+
+
+# ── 9. 재개 회귀 — 중단한 인덱스가 이미 한 일을 다시 하지 않는다 (03-07 / Pitfall 6) ──
+#
+# 여기서 지키는 것은 **3시간 32분**이다. 재개가 고장 나면 두 가지 중 하나가 된다:
+#   · 이미 훑은 것을 다시 훑는다  → 중단할 때마다 처음부터. 실질적으로 완주 불가
+#   · 안 훑은 것을 훑은 걸로 센다 → 그 상품이 화면에서 "미해소(= 광고 쪽 오류)" 로 뜨고
+#                                   용팀장이 멀쩡한 광고그룹을 지우러 간다 (Pitfall 3)
+#
+# **실제 MCP 를 타지 않는다.** 그건 3시간이고 이 테스트는 1초여야 한다. 재개 대상 계산이
+# `ss_index_resume.py`(import 0줄)로 떨어져 나와 있어서 `.venv-web` pytest 가 직접 때린다.
+
+import ss_index_resume  # noqa: E402
+
+
+def _성공행(pid, gid=그룹A):
+    """정상 적재된 한 줄 (`unresolved = 0`)."""
+    return (pid, f"1{pid[-4:]}", gid, None, 0, _지금())
+
+
+def _미조회행(pid, gid=그룹A):
+    """429 로 못 읽어 **행만 남긴** 한 줄 (`unresolved = 1` · smartstore 는 NULL)."""
+    return (pid, None, gid, None, 1, _지금())
+
+
+def test_재개는_처리한것을_건너뛴다(잡판):
+    """처리완료 3건 · 전체 5건이면 남은 대상은 **정확히 2건**이고 둘 다 처리완료 밖이다.
+
+    음성 대조(03-07 수용 기준): `남은대상` 이 차집합을 안 하도록 고쳐 놓으면
+    이 테스트가 FAIL 로 바뀌는 것을 실제로 확인했다.
+    """
+    전체 = [f"zzpid-{i}" for i in range(5)]
+    _써넣기([_성공행(p) for p in 전체[:3]])
+
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        완료 = ss_index_resume.처리완료(cx, 그룹A)
+    finally:
+        cx.close()
+
+    assert 완료 == set(전체[:3]), f"처리완료 집합이 틀렸다: {완료}"
+
+    남은 = ss_index_resume.남은대상(전체, 완료)
+    assert 남은 == 전체[3:], f"남은 대상이 2건이 아니다: {남은}"
+    assert not (set(남은) & 완료), "이미 처리한 것을 다시 훑는다 — 3시간을 다시 태운다"
+
+
+def test_재개는_페이지번호를_안_쓴다(잡판):
+    """전체 목록의 **순서를 뒤섞어도** 남은 대상 집합이 같다.
+
+    목록 조회의 정렬 기준은 문서화돼 있지 않고 실측 단조성이 61.9%다. 호출 사이에
+    물갈이 삭제·신규 수집이 끼면 페이지 경계가 밀려서 **안 훑은 상품이 훑은 것으로
+    넘어간다** (RESEARCH §Pitfall 6). 그래서 재개 기준이 순서에 의존하면 안 된다.
+    """
+    전체 = [f"zzpid-{i}" for i in range(8)]
+    _써넣기([_성공행(p) for p in (전체[0], 전체[3], 전체[6])])
+
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        완료 = ss_index_resume.처리완료(cx, 그룹A)
+    finally:
+        cx.close()
+
+    기준 = set(ss_index_resume.남은대상(전체, 완료))
+    for 뒤섞은것 in (list(reversed(전체)), [전체[i] for i in (5, 1, 7, 2, 4, 0, 6, 3)]):
+        assert set(ss_index_resume.남은대상(뒤섞은것, 완료)) == 기준, \
+            "목록 순서가 바뀌면 재개 대상이 달라진다 — 페이지 기준 재개와 같은 병이다"
+
+    assert 기준 == set(전체) - 완료
+    # 중복이 섞여 들어와도 **한 실행에서 한 번만** 조회한다 (레이트리밋 예산 보호)
+    중복섞임 = ss_index_resume.남은대상(전체 + 전체, 완료)
+    assert len(중복섞임) == len(set(중복섞임)) == len(기준)
+
+
+def test_미조회는_다시_시도하되_해소로_승격되지_않는다(잡판):
+    """`unresolved = 1` 행의 두 성질을 한 자리에서 못박는다.
+
+    ① **다시 시도한다** — 성공행만 건너뛴다. 이게 03-04 이탈 #1 의 결론이다.
+       미조회를 "처리완료" 로 세면 429 로 빠진 상품이 **영원히 미조회로 굳고**,
+       잡을 몇 번 다시 돌려도 사람이 고칠 방법이 없다.
+       ⚠️ 03-07-PLAN 의 `test_미조회도_처리한것이다` 와 **반대 방향**이다 —
+       플랜이 적힌 뒤 03-04 가 이 위험을 발견해 계약을 바꿨고, 그 결정이 이긴다.
+       플랜이 막으려던 "무한 재시도" 는 아래 ③(한 실행에 한 번)으로 막힌다.
+    ② **자동으로 해소가 되지 않는다** — 다시 조회해서 값을 받아야 `unresolved = 0` 이다.
+       재시도 대상에 올랐다는 것만으로 승격되면 인덱스가 없는 확신을 만든다.
+    ③ 재시도는 **한 실행에 한 번**이다 — 대상 목록에 그 상품이 하나만 들어간다.
+    """
+    성공, 미조회 = "zzpid-ok", "zzpid-429"
+    _써넣기([_성공행(성공), _미조회행(미조회)])
+
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        완료 = ss_index_resume.처리완료(cx, 그룹A)
+        남은 = ss_index_resume.남은대상([성공, 미조회], 완료)
+        # ② 그 행은 여전히 미조회로 DB 에 남아 있다 (승격 0건)
+        적힌값 = dict(cx.execute(
+            "SELECT product_id, unresolved FROM ss_index WHERE market_group_id = ?",
+            (그룹A,)))
+    finally:
+        cx.close()
+
+    assert 미조회 not in 완료, "미조회를 '성공적으로 처리함' 으로 셌다 — 영원히 굳는다"
+    assert 성공 in 완료
+    assert 남은 == [미조회], f"재개 대상이 미조회 1건이 아니다: {남은}"
+    assert 남은.count(미조회) == 1, "한 실행에서 같은 상품을 두 번 조회한다"
+    assert 적힌값[미조회] == 1, "재시도 대상에 올랐다고 해소로 승격됐다"
+    assert 적힌값[성공] == 0
+
+    # 인덱스 관문(`bulsaja_index`)도 같은 말을 해야 한다 — 미조회가 남아 있는 한
+    # 그 그룹은 `완결` 이 아니고, 화면은 "인덱스 불완전"(시스템)으로 띄운다 (Pitfall 3)
+    건강 = bulsaja_index.group_health([그룹A])[그룹A]
+    assert 건강["미조회"] == 1 and 건강["완결"] is False
+
+
+def test_재개모듈은_아무것도_import하지_않는다():
+    """`ss_index_resume` 의 import 는 **0줄**이다 (`bulsaja_rate` 와 같은 선 / D-19).
+
+    여기에 `bulsaja_mcp` 를 한 줄이라도 끌어오면 `.venv-web` 에서 import 가 죽고,
+    그 순간 §9 전체가 사라진다 — 재개 규율이 **3시간짜리 잡을 실제로 돌려야만**
+    검증되는 물건으로 되돌아간다.
+    """
+    소스 = open(ss_index_resume.__file__, encoding="utf-8").read()
+    import줄 = [줄 for 줄 in 소스.splitlines()
+               if 줄.startswith("import ") or 줄.startswith("from ")]
+    assert import줄 == [], f"재개 모듈이 뭔가를 import 한다: {import줄}"
+    for 쓰기 in ("INSERT", "UPDATE", "DELETE", "CREATE", "DROP"):
+        assert 쓰기 not in 소스, f"재개 모듈에 {쓰기} 가 있다 — 읽기만 해야 한다"

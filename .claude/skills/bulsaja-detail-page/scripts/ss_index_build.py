@@ -71,6 +71,7 @@ if SCRIPT_DIR not in sys.path:
 
 from bulsaja_mcp import BulsajaMCP  # noqa: E402
 from bulsaja_rate import 안전호출, 호출간격  # noqa: E402
+from ss_index_resume import 남은대상, 처리완료  # noqa: E402
 
 
 # ── 공용 유틸 ───────────────────────────────────────────────────────────────
@@ -228,26 +229,30 @@ def 그룹훑기(mcp, cx, 간격, gid, 인자, 순번, 전체그룹수):
     """
     머리 = f"[그룹 {순번}/{전체그룹수}]"
 
-    # ① 재개 기준 — 이미 적힌 productId 집합. 페이지 번호가 아니다 (Pitfall 6).
-    처리됨 = {r[0] for r in cx.execute(
-        "SELECT product_id FROM ss_index WHERE market_group_id = ?", (gid,))}
+    # ① 재개 기준 — 이미 **성공적으로** 적힌 productId 집합. 페이지 번호가 아니다 (Pitfall 6).
+    #
+    #    ② 미조회로 적힌 행은 **다시 시도한다.** 성공한 행만 건너뛴다 — 안 그러면 429 때문에
+    #       빠진 상품이 영원히 미조회로 남고, 그 행이 화면에서 "미해소" 로 굳는다 (Pitfall 3).
+    #       그래서 `처리완료()` 가 `unresolved = 0` 만 센다.
+    #
+    #    이 두 줄의 계산이 `ss_index_resume.py` 로 나가 있는 이유(03-07 Task 1):
+    #    **3시간 32분짜리 루프의 재개 규율은 루프를 돌려서 검증할 수 없다.** 이 파일은
+    #    최상단에서 `bulsaja_mcp` 를 import 하므로 `.venv-web` 의 pytest 가 import 조차
+    #    못 한다. 계산만 import 0줄 모듈로 떼면 재개 회귀가 1초짜리 테스트로 고정된다.
+    #    (로직은 그대로다 — `p not in 처리됨 or p in 남은미조회` == `p not in 성공행`)
+    성공행 = 처리완료(cx, gid)
     기존미조회 = cx.execute(
         "SELECT COUNT(*) FROM ss_index WHERE market_group_id = ? AND unresolved = 1",
         (gid,)).fetchone()[0]
 
-    말하기(f"{머리} 목록 조회 중 (이미 적힌 것 {len(처리됨)}건"
+    말하기(f"{머리} 목록 조회 중 (이미 적힌 것 {len(성공행) + 기존미조회}건"
           + (f", 그중 미조회 {기존미조회}건" if 기존미조회 else "") + ")")
 
     pid들, 총상품수 = 그룹상품목록(mcp, 간격, gid, 인자.batch_size)
     말하기(f"{머리} 상품 {len(pid들)}건"
           + (f" (서버 집계 {총상품수}건)" if 총상품수 is not None else ""))
 
-    # ② 미조회로 적힌 행은 **다시 시도한다.** 성공한 행만 건너뛴다 — 안 그러면 429 때문에
-    #    빠진 상품이 영원히 미조회로 남고, 그 행이 화면에서 "미해소" 로 굳는다 (Pitfall 3).
-    남은미조회 = {r[0] for r in cx.execute(
-        "SELECT product_id FROM ss_index WHERE market_group_id = ? AND unresolved = 1",
-        (gid,))}
-    할것 = [p for p in pid들 if p not in 처리됨 or p in 남은미조회]
+    할것 = 남은대상(pid들, 성공행)
     if 인자.limit:
         할것 = 할것[:인자.limit]
 
