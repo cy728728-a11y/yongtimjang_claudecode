@@ -380,10 +380,15 @@
           상품 연결 <strong>{{ resolution.상품해소 }}</strong>/{{ resolution.번호해소 }} ·
           인덱스 불완전 {{ index_health.불완전 }}행({{ index_health.그룹 }}그룹) ·
           인덱스 미보유 {{ index_health.미보유 }}행 ·
-          인덱스 불일치 {{ index_health.불일치 }}행
+          인덱스 불일치 {{ index_health.불일치 }}행{% if index_health.팬아웃미조회 %} ·
+          사본·기작업 태그 미조회 {{ index_health.팬아웃미조회 }}행{% endif %}
           <br><small><strong>이건 시스템 문제다. 광고를 고칠 일이 아니다.</strong>
             아직 다 안 훑었거나(인덱스 구축 미완) 물갈이로 번호가 재발급된 것이다 —
             <strong>인덱스 구축</strong>을 끝내고 <strong>조인 스캔</strong>을 다시 돌리면 줄어든다.
+            {% if index_health.팬아웃미조회 %}
+              <strong>사본·기작업 태그 미조회</strong>는 그 행의 사본 수가 0이라는 뜻이 <strong>아니다</strong> —
+              못 물어본 것이다. 태그를 못 읽었으므로 그 행은 <strong>기본 선택에서 빠진다</strong>(직접 체크하면 들어간다).
+            {% endif %}
             마지막 조인 스캔 {{ join_at }}.</small>
         {% else %}
           <strong>아직 조인 스캔을 안 돌렸다 — 먼저 위의 조인 스캔을 눌러라.</strong>

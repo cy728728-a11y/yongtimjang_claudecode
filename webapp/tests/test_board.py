@@ -714,10 +714,57 @@ def test_화면도_팬아웃_미조회를_기본선택에서_뺀다():
 
     assert "팬아웃미조회" in js, "화면이 팬아웃 미조회를 한 글자도 안 읽는다"
     # 기본 선택 규약은 `고를수있는` **한 곳**이다 — 두 벌이면 한쪽만 고쳐진다
-    본문 = js.split("function 고를수있는")[1].split("function ")[0]
+    # 최상위 함수는 두 칸 들여쓰기다 — `\n  function ` 으로 끊어야 filter 안의
+    # 익명 `function (r)` 에서 잘리지 않는다.
+    본문 = js.split("function 고를수있는")[1].split("\n  function ")[0]
     assert "기작업" in 본문 and "팬아웃미조회" in 본문, \
         "기본 선택에서 팬아웃 미조회를 안 뺀다 (D-08 의 마지막 자리)"
     # 배너 확인(필터 전체 선택)도 같은 규약을 타야 한다
     확인 = js.split("배너확인.addEventListener")[1][:600]
     assert "고를수있는" in 확인 or "팬아웃미조회" in 확인, \
         "필터 전체 선택이 팬아웃 미조회 행을 도로 집는다"
+
+
+def test_팬아웃_미조회는_시스템칸에_뜨고_광고청소에_안_섞인다(조인보드):
+    """"사본·기작업 태그를 못 물어봤다" 는 **시스템 쪽 숫자**다 (CR-02 / Pitfall 3).
+
+    이 행은 번호도 상품도 찾은 **해소 행**이라 미해소 분기에 안 들어간다. 그래서
+    따로 세지 않으면 화면에 한 숫자도 안 남고, 사람이 "왜 이 행만 기본 선택에서
+    빠졌지" 를 코드에서 찾아야 한다.
+
+    ⚠️ 광고 청소 배너에 섞이면 안 된다 — 이건 기계가 더 돌면 될 것이지 사람이
+       광고를 고칠 일이 아니다.
+    """
+    import json as _json
+
+    문서 = _json.loads((픽스처 / "join_traps.json").read_text(encoding="utf-8"))
+    for 행 in 문서["행"]:
+        if 행.get("mallProductId") == "19000000002":
+            행["사본"] = None
+            행["그룹태그"] = None
+            행["팬아웃미조회"] = True
+    산출물 = 조인보드.tmp / "join_팬아웃.json"
+    산출물.write_text(_json.dumps(문서, ensure_ascii=False), encoding="utf-8")
+
+    from webapp import join
+
+    r, ctx = 조인보드(산출물)
+
+    assert ctx["index_health"]["팬아웃미조회"] == 1
+
+    행 = [x for x in ctx["rows"] if x["mallProductId"] == "19000000002"][0]
+    assert 행["팬아웃미조회"] is True and 행["해소"] is True
+    # 미해소 버킷으로 흘리지 않는다 — 번호도 상품도 찾았다. 못 읽은 건 태그뿐이다
+    assert 행["버킷"] is None
+    assert 행 not in join.selectable(ctx["rows"]), "기본 선택에 그대로 들어갔다 (D-08)"
+    # 그 행의 광고그룹이 **청소 목록에 오르지 않는다** — 시스템 사정이 사람의
+    # 삭제 작업 목록으로 둔갑하는 것이 이 페이즈 최대 오진이다
+    청소이름 = {g["adGroup"] for g in ctx["cleanup"]}
+    assert not (set(행["adGroups"]) & 청소이름)
+
+    본문 = _마크업만(r.text)
+    시스템칸 = 본문.split('id="resolution-system"')[1].split("</p>")[0]
+    assert "사본·기작업 태그 미조회 1행" in 시스템칸, "시스템 칸에 그 숫자가 없다"
+    assert "기본 선택에서 빠진다" in 시스템칸, "왜 빠졌는지를 화면이 말하지 않는다"
+    # 화면이 "사본 0건" 을 단언하지 않는다
+    assert "사본 0건" not in 본문
