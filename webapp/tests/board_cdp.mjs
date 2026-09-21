@@ -68,6 +68,15 @@ function check(id, 설명, ok, 자세히) {
   if (!ok) { 실패 = 1; }
 }
 
+/* SKIP 은 **초록이 아니다.** 지금 화면 상태로는 그 검사를 할 재료가 없다는 뜻이고,
+ * 그 사실이 보고에 남아야 한다. 조용히 넘기면 "검사가 있는 척" 이 된다.
+ * (예: 조인 스캔 전에는 판정값이 있는 행이 0개다 — 그건 실패가 아니라 순서 문제다) */
+let 건너뜀 = 0;
+function skip(id, 설명, 왜) {
+  console.log(`SKIP ${id}  ${설명}  — ${왜}`);
+  건너뜀 += 1;
+}
+
 /* 페이지 안에서 돌릴 헬퍼. 배지를 읽고, 원본 JSON 에서 정답을 직접 센다. */
 const HELPERS = `
 window.__ct = {
@@ -110,6 +119,73 @@ window.__ct = {
     return Array.prototype.map.call(
       document.querySelectorAll(".tabulator-cell"),
       function (c) { return c.textContent; });
+  },
+
+  // ── Phase 3 (상태 열 · 필터 2종 · 기작업 · 배너 · 청소 목록) ──────────────
+  // 정답은 여기서도 **원본 JSON**이다. Tabulator 에게 묻지 않는다.
+  단일고르기: function (id, value) {
+    var sel = document.getElementById(id);
+    if (!sel) { return false; }
+    sel.value = value;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    return sel.value === value;
+  },
+  헤더들: function () {
+    return Array.prototype.map.call(
+      document.querySelectorAll(".tabulator-col-title"),
+      function (c) { return (c.textContent || "").trim(); });
+  },
+  // 특정 field 컬럼의 렌더된 셀 텍스트만. Tabulator 가 셀에 field 를 붙여 준다.
+  필드셀: function (field) {
+    return Array.prototype.map.call(
+      document.querySelectorAll('.tabulator-cell[tabulator-field="' + field + '"]'),
+      function (c) { return (c.textContent || "").trim(); });
+  },
+  회색행수: function () {
+    return document.querySelectorAll(".tabulator-row.ct-done").length;
+  },
+  선택수: function () {
+    try { return Tabulator.findTable("#board")[0].getSelectedData().length; }
+    catch (e) { return -1; }
+  },
+  전체선택: function () {
+    var a = document.getElementById("sel-all");
+    if (!a || a.offsetParent === null) { return false; }
+    a.click();
+    var ok = document.getElementById("sel-banner-ok");
+    if (!ok) { return false; }
+    ok.click();
+    return true;
+  },
+  선택해제: function () {
+    try { Tabulator.findTable("#board")[0].deselectRow(); return true; }
+    catch (e) { return false; }
+  },
+  // 기작업 행 하나를 **손으로** 체크한다 (D-08 의 두 번째 절반).
+  손으로체크: function () {
+    try {
+      var t = Tabulator.findTable("#board")[0];
+      var 행 = t.getRows("active").filter(function (r) { return r.getData().기작업; })[0];
+      if (!행) { return null; }
+      행.toggleSelect();
+      return 행.getData().key;
+    } catch (e) { return null; }
+  },
+  배너클래스: function () {
+    var a = document.getElementById("resolution-ads");
+    var b = document.getElementById("resolution-system");
+    return {
+      광고있나: !!a, 시스템있나: !!b,
+      같은요소: !!(a && b && a === b),
+      광고: a ? a.className : null,
+      시스템: b ? b.className : null
+    };
+  },
+  청소셀: function () {
+    var t = document.querySelector("#cleanup table");
+    if (!t) { return null; }
+    return Array.prototype.map.call(t.querySelectorAll("td"),
+      function (c) { return (c.textContent || "").trim(); });
   }
 };
 true;
@@ -229,11 +305,176 @@ async function main() {
     })()`);
     check("V-BOARD-08", "상품명 열에 툴팁이 있다 (잘려도 전문을 읽는다)", 툴팁 === true);
   }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+   * Phase 3 — 상태 열 · 필터 2종 · 기작업 선택 제외 · 배너 구분 · 청소 목록
+   *
+   * 이 6종이 겨누는 것은 한 문장이다: **화면이 두 종류의 미해소를 섞지 않는다.**
+   * 섞이면 용팀장이 멀쩡한 광고그룹을 지우러 간다 — 되돌릴 수 없다.
+   * pytest 는 HTML 문자열까지만 본다. "Tabulator 가 그 값을 실제로 셀에 그렸는가",
+   * "선택 수가 정말 전체-기작업인가" 는 진짜 브라우저에서만 확인된다.
+   * ══════════════════════════════════════════════════════════════════════════ */
+  await 평가(`window.__ct.초기화()`);
+  await 평가(`window.__ct.선택해제()`);
+  await 잠깐(600);
+
+  const 상태있는행 = 원본.filter((r) => r.상세상태);
+  const 기작업행 = 원본.filter((r) => r.기작업);
+  const 기호들 = ["⚪", "🟡", "🔴"];
+
+  // ── 1. 상태 열이 그려진다 ────────────────────────────────────────────────
+  {
+    const 헤더 = await 평가(`window.__ct.헤더들()`);
+    check("V-BOARD-09", "헤더에 상세/기작업/사본/해소 4열이 있다",
+      ["상세", "기작업", "사본", "해소"].every((h) => 헤더.indexOf(h) !== -1),
+      헤더.join("|"));
+
+    if (상태있는행.length === 0) {
+      skip("V-BOARD-10", "상태 셀에 기호가 붙는다",
+        "원본에 판정값이 있는 행이 0개다 — 조인 스캔/인덱스를 먼저 돌려라");
+    } else {
+      const 셀 = await 평가(`window.__ct.필드셀("상세상태")`);
+      const 값있는셀 = 셀.filter((t) => t !== "");
+      const 기호붙음 = 값있는셀.filter((t) => 기호들.some((s) => t.indexOf(s) === 0));
+      check("V-BOARD-10", "판정값이 있는 셀은 전부 기호+글자다",
+        값있는셀.length > 0 && 기호붙음.length === 값있는셀.length,
+        `값 ${값있는셀.length} / 기호 ${기호붙음.length} · 예: ${값있는셀[0]}`);
+      // 미판정을 🔴로 대체하지 않았다 (T-3-35) — 빈칸 수가 원본과 맞아야 한다
+      check("V-BOARD-11", "미판정은 빈칸이다 (기본값으로 대체하지 않는다)",
+        셀.length - 값있는셀.length === 셀.length - 상태있는행.length ||
+        값있는셀.length <= 상태있는행.length,
+        `빈칸 ${셀.length - 값있는셀.length} · 원본 판정있음 ${상태있는행.length}`);
+    }
+  }
+
+  // ── 2. 상태 필터가 행을 줄인다 (두 번 연속 바꿔 한 스텝 랙도 본다) ────────
+  console.log("---- 상태 필터 연속 전환 ----");
+  {
+    let 직전 = null;
+    for (const v of ["중국어원본", "AI가공완료", "단순번역만"]) {
+      const 걸렸나 = await 평가(`window.__ct.단일고르기("f-state", ${JSON.stringify(v)})`);
+      if (!걸렸나) {
+        skip("V-BOARD-12", `상태 필터 ${v}`, "#f-state 에 그 옵션이 없다");
+        continue;
+      }
+      await 잠깐(500);
+      const 배지 = await 평가(`window.__ct.배지()`);
+      const 정답 = 원본.filter((r) => r.상세상태 === v).length;
+      const 랙 = 직전 !== null && 배지 === 직전 && 배지 !== 정답;
+      console.log(`  ${v.padEnd(10)} 정답 ${String(정답).padStart(5)} | 배지 ${String(배지).padStart(5)}${랙 ? "   ← 직전 값이다" : ""}`);
+      check("V-BOARD-12", `상태 ${v} 배지 = 정답`, 배지 === 정답,
+        `배지 ${배지} / 정답 ${정답}`);
+      직전 = 정답;
+    }
+    await 평가(`window.__ct.초기화()`);
+    await 잠깐(500);
+  }
+
+  // ── 3. 필터 2종을 같이 걸어도 한 번에 풀린다 ─────────────────────────────
+  // 필터를 따로 `setFilter` 하면 해제 순서에 따라 하나가 남아 "왜 안 보이지" 가 된다.
+  {
+    await 평가(`window.__ct.단일고르기("f-state", "중국어원본")`);
+    await 평가(`window.__ct.단일고르기("f-join", "시스템")`);
+    await 잠깐(600);
+    const 둘다 = await 평가(`window.__ct.배지()`);
+    const 둘다정답 = 원본.filter((r) => r.상세상태 === "중국어원본" && r.버킷 === "시스템").length;
+    check("V-BOARD-13", "상태+해소 동시 적용", 둘다 === 둘다정답,
+      `배지 ${둘다} / 정답 ${둘다정답}`);
+
+    // 상태만 `전체` 로 되돌린다 → 해소 조건만 남아야 한다
+    await 평가(`window.__ct.단일고르기("f-state", "")`);
+    await 잠깐(600);
+    const 하나 = await 평가(`window.__ct.배지()`);
+    const 하나정답 = 원본.filter((r) => r.버킷 === "시스템").length;
+    check("V-BOARD-14", "하나를 풀면 나머지 하나만 남는다 (필터가 한 함수다)",
+      하나 === 하나정답, `배지 ${하나} / 정답 ${하나정답}`);
+
+    await 평가(`window.__ct.초기화()`);
+    await 잠깐(600);
+  }
+
+  // ── 4. 기작업 행은 회색이고 전체 선택에서 빠진다 (D-08 / STATE-05) ───────
+  if (기작업행.length === 0) {
+    skip("V-BOARD-15", "기작업 회색 + 전체선택 제외",
+      "원본에 기작업 행이 0개다 — 인덱스를 훑기 전이면 정상이다");
+  } else {
+    await 평가(`window.__ct.선택해제()`);
+    await 잠깐(400);
+
+    // 회색 행수는 **뷰포트에 그려진 것만** 센다(가상 DOM) — 0보다 크면 된다.
+    const 회색 = await 평가(`window.__ct.회색행수()`);
+    check("V-BOARD-15", "기작업 행에 회색 클래스가 붙는다", 회색 > 0,
+      `그려진 회색 ${회색} / 원본 기작업 ${기작업행.length}`);
+
+    const 눌렸나 = await 평가(`window.__ct.전체선택()`);
+    await 잠깐(700);
+    if (!눌렸나) {
+      skip("V-BOARD-16", "전체 선택 = 전체 - 기작업", "`필터 전체 선택` 링크가 안 보인다");
+    } else {
+      const 선택 = await 평가(`window.__ct.선택수()`);
+      const 정답 = 원본.length - 기작업행.length;
+      check("V-BOARD-16", "전체 선택 수 = 전체 - 기작업",
+        선택 === 정답, `선택 ${선택} / 정답 ${정답} (전체 ${원본.length})`);
+
+      // D-08 의 **두 번째 절반** — 숨긴 게 아니라는 증명. 손으로 체크하면 들어간다.
+      const 키 = await 평가(`window.__ct.손으로체크()`);
+      await 잠깐(500);
+      const 선택2 = await 평가(`window.__ct.선택수()`);
+      check("V-BOARD-17", "기작업 행을 손으로 체크하면 선택에 들어간다",
+        키 !== null && 선택2 === 선택 + 1,
+        `키 ${키} · ${선택} → ${선택2}`);
+    }
+    await 평가(`window.__ct.선택해제()`);
+    await 잠깐(300);
+  }
+
+  // ── 5. 배너 2종이 서로 다른 것이다 (T-3-31 / Pitfall 3) ──────────────────
+  {
+    const b = await 평가(`window.__ct.배너클래스()`);
+    check("V-BOARD-18", "해상률 배너가 2개다 (광고청소 / 시스템)",
+      b.광고있나 && b.시스템있나 && !b.같은요소,
+      `광고 ${b.광고있나} · 시스템 ${b.시스템있나}`);
+    check("V-BOARD-19", "두 배너의 className 이 다르다",
+      !!(b.광고 && b.시스템 && b.광고 !== b.시스템),
+      `광고 "${b.광고}" vs 시스템 "${b.시스템}"`);
+  }
+
+  // ── 6. 청소 목록에 광고그룹명 원문이 있다 (JOIN-02) ──────────────────────
+  {
+    const 셀 = await 평가(`window.__ct.청소셀()`);
+    const 이름들 = new Set();
+    원본.forEach((r) => (r.adGroups || []).forEach((g) => 이름들.add(g)));
+
+    if (셀 === null) {
+      // 표가 아예 없다 = 청소 대상 0건. **섹션 자체는 있어야 한다.**
+      const 섹션 = await 평가(`!!document.getElementById("cleanup")`);
+      check("V-BOARD-20", "청소 대상 0건이어도 섹션은 있다", 섹션 === true);
+      skip("V-BOARD-21", "청소 목록에 광고그룹명 원문", "청소 대상이 0건이다");
+    } else {
+      const 맞는것 = 셀.filter((t) => 이름들.has(t));
+      check("V-BOARD-20", "청소 표가 그려졌다", 셀.length > 0, `셀 ${셀.length}개`);
+      check("V-BOARD-21", "청소 목록 셀이 원본 adGroups 값과 정확히 일치한다",
+        맞는것.length > 0, `일치 ${맞는것.length} · 예: ${맞는것[0]}`);
+    }
+  }
+
+  // ── 7. 화면 어디에도 `미스` 가 그대로 안 뜬다 (03-05 가 넘긴 숙제) ────────
+  {
+    const 나쁨 = await 평가(`(function(){
+      var 본문 = document.body.innerText || "";
+      return 본문.split("미스").length - 1;
+    })()`);
+    check("V-BOARD-22", "화면 글자에 '미스' 0건 (인덱스 불완전으로 떠야 한다)",
+      나쁨 === 0, `${나쁨}건`);
+  }
 }
 
 main()
   .then(() => {
     console.log("----");
+    if (건너뜀) {
+      console.log(`SKIP ${건너뜀}건 — 초록이 아니다. 무엇이 없어서 못 봤는지 위를 읽어라.`);
+    }
     console.log(실패 === 0 ? "보드 CDP 검증 전량 PASS" : "FAIL 이 있다 — 여기서 멈춰라");
     ws.close();
     process.exit(실패);

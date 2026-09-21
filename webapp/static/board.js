@@ -108,7 +108,11 @@
     // 인덱스를 한 번도 안 훑은 행까지 "그룹에 없음" 으로 읽힌다(03-05 숙제).
     var 말 = d.표시사유;
     if (빈칸이면(말)) { return ""; }
-    return (d.버킷 === 광고청소 ? "광고 · " : "시스템 · ") + 말;
+    // 🛠 = 사람이 고칠 것(광고) · ⚙ = 기계가 더 돌면 될 것(시스템).
+    // **기호가 구분을 지고 있는 게 아니다** — 서버가 붙인 이름이 이미 `번호…` /
+    // `인덱스…` 로 갈려 있다(routes/board.py 의 `_사유이름`). 기호는 훑을 때의 덤이고,
+    // 흑백·색맹에서 기호가 죽어도 글자가 남는다.
+    return (d.버킷 === 광고청소 ? "🛠 " : "⚙ ") + 말;
   }
 
   /** 미해소 사유 전문. 잘린 칸을 hover 로 읽는다 — 이름 그대로 광고 화면에서 찾는다. */
@@ -121,6 +125,22 @@
   // 통계 없는 ① 행으로 덮인다.
   var 빈칸아래 = { alignEmptyValues: "bottom" };
 
+  // 🔴 **`widthShrink` 를 쓰지 마라.** 이 표에서는 정확히 반대로 동작한다.
+  //
+  // Phase 3 가 컬럼 4개를 더하면서 고정폭 합이 컨테이너를 넘었고(실측 1,775 / 1,448),
+  // "그럼 shrink 로 비율 축소를 시키면 되겠다" 가 자연스러운 수였다. 실측 결과는
+  // **2,022 로 더 넓어졌다.** 벤더 소스의 `fitColumns` 를 읽어 이유를 확인했다:
+  //   · 고정폭 합 n 이 컨테이너 o 보다 크면 잔여 r = o - n 이 **음수**가 된다
+  //   · grow 컬럼(상품명)은 minWidth 아래로 못 내려가 그 음수를 못 흡수한다
+  //   · 남은 음수 c 가 `h[h.length-1].width -= c` 로 **마지막 shrink 컬럼에 더해진다**
+  //     — 상품ID 가 105 → 392 로 부풀었다
+  // 즉 shrink 는 "고정폭 합이 이미 컨테이너 안" 일 때만 뜻이 있다.
+  //
+  // 방법은 하나다: **고정폭 합 + 상품명 minWidth ≤ 컨테이너.**
+  // 아래 폭은 그 예산(1,270 + 130 = 1,400 ≤ 1,448)에 맞춰 깎은 값이다.
+  // 컬럼을 더 붙일 사람에게: 숫자를 눈대중으로 늘리지 말고 `board_cdp.sh` 의
+  // V-BOARD-07 을 돌려라. 그 검사가 이 예산을 지키는 유일한 장치다.
+
   // 컬럼 정의를 **데이터 구조로** 둔다 (sheets_out.py:28-48 의 COLS 관례).
   // 규칙마다 있는 필드가 다르다는 사실이 이 표에 그대로 드러나야, ①의 빈칸이
   // 버그가 아니라 설계상 정상값이라는 게 읽는 사람에게 보인다.
@@ -129,9 +149,11 @@
   // 그래도 한국어 상품명은 60자를 넘는 게 보통이라 어떤 폭을 줘도 잘린다(실측 38/40).
   // 줄바꿈(variableHeight)으로 다 보여주는 선택지는 **버렸다** — 2,637행 보드에서
   // 행 높이가 2~3배가 되면 한 화면에 7~8줄밖에 안 들어와 훑는 용도가 죽는다.
-  // 대신 `tooltip: true` 로 hover 시 전문을 띄우고, 숫자 열의 군더더기 폭을 깎아
-  // 가로 스크롤을 없앴다(실측 1,520 → 컨테이너 안). 상품명 전문이 상시 필요해지는 건
-  // 상세페이지 판정(Phase 3)이고, 그때는 목록이 아니라 상세 패널이 맡을 일이다.
+  // 대신 `tooltip: true` 로 hover 시 전문을 띄우고, 나머지 열의 군더더기 폭을 깎아
+  // 가로 스크롤을 없앴다(바로 위 예산 주석). Phase 3 에서 컬럼 4개가 붙으면서
+  // 숫자 열을 한 번 더 깎았다 — 세 자리 콤마 숫자는 72px 에 들어간다.
+  // 상품명 전문이 상시 필요해지는 건 상세페이지 작업이고, 그때는 목록이 아니라
+  // 상세 패널이 맡을 일이다.
   var columns = [
     // 선택 체크박스. **`titleFormatterParams.rowRange` 를 비워 두지 마라** —
     // 헤더 체크박스 핸들러는 `table.selectRow(params.rowRange)` 를 부르고,
@@ -145,44 +167,44 @@
       formatter: "rowSelection", titleFormatter: "rowSelection",
       titleFormatterParams: { rowRange: "visible" },
       cellClick: function (e, cell) { cell.getRow().toggleSelect(); } },
-    { title: "계정", field: "acct", width: 95 },
-    { title: "규칙", field: "rules", width: 85 },
-    { title: "상품명", field: "title", minWidth: 200, widthGrow: 5, tooltip: true },
-    { title: "노출", field: "imp", hozAlign: "right", width: 90,
+    { title: "계정", field: "acct", width: 70 },
+    { title: "규칙", field: "rules", width: 58 },
+    { title: "상품명", field: "title", minWidth: 130, widthGrow: 5, tooltip: true },
+    { title: "노출", field: "imp", hozAlign: "right", width: 72,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "클릭", field: "clk", hozAlign: "right", width: 80,
+    { title: "클릭", field: "clk", hozAlign: "right", width: 64,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "CTR %", field: "ctr", hozAlign: "right", width: 85,
+    { title: "CTR %", field: "ctr", hozAlign: "right", width: 64,
       sorter: "number", sorterParams: 빈칸아래, formatter: 비율 },
-    { title: "구매완료", field: "purCnt", hozAlign: "right", width: 90,
+    { title: "구매완료", field: "purCnt", hozAlign: "right", width: 74,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "구매금액", field: "purAmt", hozAlign: "right", width: 95,
+    { title: "구매금액", field: "purAmt", hozAlign: "right", width: 80,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
     // `cost` 는 **광고비**다. 원본 필드가 salesAmt 라서 헷갈리기 쉬운데
     // 광고에 쓴 돈이지 벌어들인 돈이 아니다 (ads_rules._with_stat:50 주석).
-    { title: "광고비", field: "cost", hozAlign: "right", width: 95,
+    { title: "광고비", field: "cost", hozAlign: "right", width: 76,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "현재입찰", field: "bid", hozAlign: "right", width: 90,
+    { title: "현재입찰", field: "bid", hozAlign: "right", width: 74,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "그룹입찰따름", field: "useGroupBid", hozAlign: "center", width: 110,
+    { title: "그룹입찰따름", field: "useGroupBid", hozAlign: "center", width: 78,
       formatter: 예아니오 },
-    { title: "①소재수", field: "rule1_count", hozAlign: "right", width: 90,
+    { title: "①소재수", field: "rule1_count", hozAlign: "right", width: 70,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
     // ── 조인 · 상세 상태 (Phase 3) ─────────────────────────────────────────
     // **상품ID 앞**에 둔다. 이 네 칸이 이 화면의 목적이라 오른쪽 끝에서 잘리면
     // 안 된다 — 🔴 를 골라내는 게 Core Value 다.
-    { title: "상세", field: "상세상태", width: 110, formatter: 상태 },
-    { title: "기작업", field: "기작업태그", width: 100, formatter: 태그 },
-    { title: "사본", field: "사본N", hozAlign: "right", width: 70,
+    { title: "상세", field: "상세상태", width: 102, formatter: 상태 },
+    { title: "기작업", field: "기작업태그", width: 88, formatter: 태그 },
+    { title: "사본", field: "사본N", hozAlign: "right", width: 54,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
     // ⚠️ field 가 `사유코드` 가 **아니라** `표시사유` 다. 판정 코드는 데이터에 그대로
     //    남아 있지만(기계의 기록 · 소스 보기로 되짚는 통로) 화면에 그리지 않는다 —
     //    `사유코드` 의 `미스` 는 인덱스를 한 번도 안 훑은 행에도 붙어서, 그대로 띄우면
     //    시스템 사정이 광고 쪽 오류로 읽힌다(03-05 가 넘긴 숙제 / Pitfall 3).
     //    정렬도 표시 이름 기준이 맞다 — 사람이 보는 순서와 어긋나면 안 된다.
-    { title: "해소", field: "표시사유", width: 145,
+    { title: "해소", field: "표시사유", width: 116,
       formatter: 해소, tooltip: 사유전문 },
-    { title: "상품ID", field: "mallProductId", width: 105, tooltip: true }
+    { title: "상품ID", field: "mallProductId", width: 90, tooltip: true }
   ];
 
   var table = new Tabulator("#board", {
