@@ -30,6 +30,7 @@ RESULT_TRAPS = FIXTURES / "result_traps.json"
 BULSAJA_GROUPS_TRAPS = FIXTURES / "bulsaja_groups_traps.json"
 JOIN_TRAPS = FIXTURES / "join_traps.json"
 RESULT_JOIN_REAL = FIXTURES / "result_join_real.json"
+BULSAJA_GROUPS_REAL = FIXTURES / "bulsaja_groups_real.json"
 
 # 픽스처 회차명. `result_min.json` 의 `generated` 와 맞춰 둔다.
 RUN_NAME = "2026-08-30"
@@ -68,12 +69,23 @@ def join_traps() -> dict:
 
 @pytest.fixture
 def result_join_real() -> dict:
-    """실회차 ③⑤ 194행 익명화본 — 해상률 회귀의 모수.
+    """실회차 ③⑤ 194행 익명화본 — 해상률 회귀의 모수(분모).
 
-    ⚠️ 이 픽스처만으로는 해상률 기댓값을 계산할 수 없다. 불사자 마켓그룹 **번호 집합**이
-    있어야 하는데 그건 MCP 조회라 03-04 가 첫 스캔에서 가져온다.
+    짝은 `bulsaja_groups_real` 다. 둘이 있어야 해상률이 계산된다 —
+    번호를 **뽑는 쪽**(광고)과 번호가 **있는 쪽**(불사자)이 각각 하나씩이다.
     """
     return json.loads(RESULT_JOIN_REAL.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def bulsaja_groups_real() -> dict:
+    """실회차 불사자 마켓그룹 86개 익명화본 — 해상률 회귀의 짝(분자를 정하는 쪽).
+
+    03-05 의 첫 실스캔(`bulsaja_market_groups` 1회, 크레딧 0)에서 떴다.
+    마켓번호 `NN-N` 만 글자 그대로 남기고 이름은 전부 `zzfake` 다 —
+    해상률이 번호로만 결정되므로 익명화해도 회귀가 그대로 재현된다.
+    """
+    return json.loads(BULSAJA_GROUPS_REAL.read_text(encoding="utf-8"))
 
 
 @pytest.fixture

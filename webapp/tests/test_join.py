@@ -184,6 +184,99 @@ def test_해상률(result_traps, join_traps):
         assert 금지 not in 집계, f"'{금지}' 가 두 버킷을 한 숫자로 합친다 (Pitfall 3)"
 
 
+def test_실회차_해상률(result_join_real, bulsaja_groups_real):
+    """실회차 ③⑤ 194행의 **번호층 해상률을 실측으로 고정**한다 (JOIN-01).
+
+    🔴 **VALIDATION 기댓값은 179/194 · 실측은 92/194 다.**
+    차이 사유: `result_join_real.json` 은 2026-09-20 회차, 즉 용팀장이 광고그룹을
+    **정리하기 전** 스냅샷이다. CONTEXT 의 179 는 정리(69→58그룹, 번호 9건 정정)를
+    끝낸 뒤 그 이름을 같은 회차에 다시 입혀 재판정한 값이라, 이 디스크 픽스처로는
+    재현되지 않는다. 179 를 보려면 **정리 후 광고 회차를 새로 떠야 한다** —
+    그건 네이버 광고 API 를 다시 도는 일이고 이 플랜의 범위가 아니다.
+    숫자를 맞추려고 픽스처를 고치는 순간 이 테스트는 아무것도 지키지 않는다.
+
+    그래서 이 테스트가 실제로 지키는 것은 "92 가 맞다"가 아니라 **"92 를 만드는
+    계산이 안 바뀐다"** 이다. 정리 후 회차로 픽스처를 갈아끼우면 이 숫자는 179 로
+    올라야 하고, 그때 이 docstring 을 같이 고쳐라.
+
+    분자는 불사자 마켓그룹 목록이 정한다 — 그래서 픽스처가 둘이다.
+    """
+    doc = {
+        "run_dir": "2026-09-20",
+        "마켓그룹": bulsaja_groups_real["그룹"],
+        "제외그룹": None,     # 설정의 정본은 settings 한 곳 (03-04 결정)
+        "행": [],             # 인덱스 구축 전 — 상품층 관측이 하나도 없다
+    }
+    rows = board.fold_products(result_join_real)
+    # `excluded=()` 로 고정한다. workspace.toml 의 D-18 설정을 읽으면 이 회귀가
+    # **PC 설정에 따라 숫자가 흔들린다** — 설정 연동은 라우트 테스트가 따로 본다.
+    붙임 = join.attach(rows, result_join_real, doc,
+                      excluded=(), done_tags=기작업태그들)
+    집계 = join.resolution(붙임)
+
+    # ── 모수 ──
+    assert 집계["전체"] == 194, "③⑤ 행수가 194 가 아니다 — 픽스처가 바뀌었다"
+    assert len(bulsaja_groups_real["그룹"]) == 86
+    assert sum(1 for g in bulsaja_groups_real["그룹"]
+               if join.market_number(g["그룹명"])) == 54
+
+    # ── 번호층 해상률: 실측 92/194 (47%) ──
+    # 179 가 나오면 픽스처를 **정리 후** 회차로 갈아끼운 것이다 — docstring 을 같이 고쳐라.
+    # 0 이 나오면 마켓그룹 픽스처에서 번호가 지워진 것이다(익명화가 번호까지 바꿨다).
+    assert 집계["번호해소"] == 92
+    assert 집계["번호미해소"] == 102
+    assert 집계["번호해소"] + 집계["번호미해소"] == 집계["전체"]
+
+    # ── 상품층은 0 이다. 인덱스를 아직 한 번도 안 훑었다 ──
+    # **이건 실패가 아니라 정확한 상태다.** 여기가 0 이 아니게 되는 건 03-07 실탄 뒤다.
+    assert 집계["상품해소"] == 0
+
+    # ── 두 버킷을 따로 단언한다 (Pitfall 3) ──
+    # 광고청소 = 번호를 못 이은 102행. 이게 용팀장의 광고 청소 목록이고,
+    # 실제로 2026-09-21 에 이 목록으로 69→58그룹 정리가 돌았다.
+    assert 집계["광고청소"]["행"] == 102
+    assert 집계["광고청소"]["그룹"] == 14       # 지울 대상은 그룹이고 행은 부산물이다
+    assert 집계["광고청소"]["사유별"] == {"추출실패": 57, "번호없음": 45}
+    # 57 = 번호가 통째로 없던 그룹 하나가 만든 행수(전체의 29%). 정리 후엔 0 이 된다.
+
+    # 시스템 = 번호는 이었는데 **우리가 아직 안 본** 92행. 광고는 멀쩡하다.
+    assert 집계["시스템"]["행"] == 92
+    assert 집계["시스템"]["사유별"] == {"미조회": 92, "미스": 0, "불일치": 0}
+
+    # 🔴 두 버킷의 합이 전체가 된다 — 그런데 **그 합을 내보내는 키는 없어야 한다.**
+    assert 집계["광고청소"]["행"] + 집계["시스템"]["행"] == 집계["전체"]
+    for 금지 in ("미해소", "해상률", "비율"):
+        assert 금지 not in 집계
+
+    # 청소 목록이 그룹 단위로 접힌다 — 102행을 그대로 띄우면 할 일 목록으로 못 쓴다
+    청소 = join.cleanup_groups(붙임)
+    assert len(청소) == 14
+    assert sum(g["행수"] for g in 청소) >= 집계["광고청소"]["행"]
+    assert 청소 == sorted(청소, key=lambda g: (-g["행수"], g["adGroup"]))
+
+    # 인덱스 대상은 번호 기준 중복제거 뒤 31그룹이다 (RESEARCH 의 31 과 같은 수 —
+    # 그 측정도 정리 전 회차였다). D-18 제외를 태우면 하나가 빠진다.
+    assert len(join.index_targets(붙임, doc, excluded=())) == 31
+    assert len(join.index_targets(붙임, doc, excluded=("13-2",))) == 30
+
+
+def test_실회차_그룹픽스처에_실물이름이_없다(bulsaja_groups_real):
+    """마켓그룹 픽스처가 진짜 이름을 담지 않는다 — 리터럴 가드와 같은 선이다.
+
+    이름이 하나라도 새면 저장소가 공개될 때 영업 정보가 같이 나가고,
+    `test_board.py::test_계정을_코드에_박지_않는다` 와도 충돌한다.
+    """
+    이름들 = [g["그룹명"] for g in bulsaja_groups_real["그룹"]]
+    assert 이름들, "그룹이 비었다"
+    새는것 = [n for n in 이름들 if "zzfake" not in n]
+    assert not 새는것, f"실물 이름이 남았다: {새는것[:5]}"
+    assert len(set(이름들)) == len(이름들), "익명화가 서로 다른 그룹을 같은 이름으로 접었다"
+    # groupId 도 실물이 아니다 — 연번 가짜값이라 전부 같은 길이·같은 접두다
+    ids = [g["groupId"] for g in bulsaja_groups_real["그룹"]]
+    assert all(i.startswith("9") and len(i) == 7 for i in ids), ids[:5]
+    assert len(set(ids)) == len(ids)
+
+
 def test_미해소_사유_3종(result_traps, join_traps):
     """`추출실패` / `번호없음` / `미조회` 가 **서로 다른 값**이고 버킷이 갈린다 (JOIN-02 / D-18)."""
     붙임 = _붙인다(result_traps, join_traps)

@@ -47,6 +47,11 @@ from webapp import paths  # noqa: E402
 번호패턴 = re.compile(r"(?<![0-9-])(\d{1,2}-\d{1,2})(?![0-9-])")
 
 출력 = Path(__file__).resolve().parent / "result_join_real.json"
+출력_그룹 = Path(__file__).resolve().parent / "bulsaja_groups_real.json"
+
+# 불사자 마켓그룹명의 `NN번_` 접두. 이 숫자는 **마켓번호가 아니다** — 구조적 함정이라
+# 익명화 후에도 남겨야 한다 (`bulsaja_groups_traps.json` 의 함정 (a)와 같은 성질).
+_그룹접두패턴 = re.compile(r"^(\d{1,2}번_)")
 
 
 def _광고그룹_익명화(원문: str, 회사맵: dict) -> str:
@@ -106,7 +111,82 @@ def 익명화(회차: str) -> dict:
     return 나온것
 
 
+# ── 불사자 마켓그룹 목록 익명화 (`bulsaja_groups_real.json`) ─────────────────
+
+def _마켓그룹_익명화(원문: str, 카운터: list) -> str:
+    """번호(`NN-N`)는 **글자 그대로 보존**하고 나머지 이름만 `zzfake` 로 바꾼다.
+
+    해상률은 번호로만 결정된다 — 그래서 이름을 통째로 가짜로 만들어도 회귀가 재현된다.
+    반대로 번호를 바꾸면 이 픽스처는 아무것도 지키지 못한다.
+
+    보존하는 성질 둘:
+      · `NN번_` 접두 — 이 숫자는 마켓번호가 **아니다**(함정 (a)). 남겨야 오탐 회귀가 산다
+      · 번호가 아예 없는 그룹 — 그 성질을 유지한 채 통째로 바꾼다(번호가 생기면 안 된다)
+
+    ⚠️ `zzfake` 와 번호 사이에 글자 경계가 있어야 한다. `zzfake0715-2` 처럼 숫자를
+       바로 붙이면 `anonymize_join` 의 경계 있는 번호패턴이 `15-2` 를 못 뽑는다.
+       그래서 `zzfake` 뒤에 바로 번호를 붙인다 — `zzfake15-2` (traps 픽스처와 같은 모양).
+    """
+    앞 = _그룹접두패턴.match(원문)
+    접두 = 앞.group(1) if 앞 else ""
+    m = 번호패턴.search(원문)
+    if not m:
+        카운터[0] += 1
+        return f"{접두}zzfake{카운터[0]:02d}"
+    return f"{접두}zzfake{m.group(1)}"
+
+
+def 그룹익명화(조인산출물: dict) -> dict:
+    """조인 잡 산출물(`join_<job>.json`)의 `마켓그룹` → 익명화 픽스처 dict.
+
+    `groupId` 는 연번 가짜값으로 갈아끼운다 — 그룹 ID 는 화면에도 코드에도 남을 값이
+    아니고, 실물 ID 가 저장소에 남으면 다음 사람이 그걸 리터럴로 베낀다.
+    순서는 원본을 그대로 따른다(정렬하면 실물 순서 정보가 사라지는 대신 재현성이
+    좋아지는데, 여기서는 재현성이 이미 파일로 고정돼 있다).
+    """
+    그룹들 = (조인산출물 or {}).get("마켓그룹") or []
+    카운터 = [0]
+    나온것 = []
+    for i, g in enumerate(그룹들, start=1):
+        if not isinstance(g, dict):
+            continue
+        나온것.append({
+            "groupId": str(9000000 + i),        # 연번 가짜값 — 실물 ID 를 남기지 않는다
+            "그룹명": _마켓그룹_익명화(str(g.get("그룹명") or ""), 카운터),
+        })
+    return {
+        "_주석": [
+            "실회차 불사자 마켓그룹 목록(`bulsaja_market_groups`)의 익명화본.",
+            "해상률 회귀(`test_실회차_해상률`)의 짝이다 — `result_join_real.json` 과 함께 쓴다.",
+            "보존: 마켓번호 `NN-N` 은 **글자 그대로**. 해상률이 번호로만 결정되기 때문이다.",
+            "보존: `NN번_` 접두 — 이 숫자는 마켓번호가 아니다(오탐 회귀의 입력).",
+            "지움: 그룹명의 실물 이름 → `zzfake`. groupId → 연번 가짜값(9000001~).",
+            "재생성: .venv-web/bin/python3 webapp/tests/fixtures/anonymize_join.py --groups <join_*.json>",
+        ],
+        "그룹": 나온것,
+    }
+
+
 def main() -> int:
+    # `--groups <join 산출물>` 모드 — 불사자 마켓그룹 픽스처만 다시 뜬다.
+    if len(sys.argv) > 1 and sys.argv[1] == "--groups":
+        try:
+            경로 = Path(sys.argv[2])
+            문서 = json.loads(경로.read_text(encoding="utf-8"))
+            결과 = 그룹익명화(문서)
+        except IndexError:
+            print("사용: anonymize_join.py --groups <join_*.json>", file=sys.stderr)
+            return 2
+        except Exception as e:                  # noqa: BLE001 — 도구라 원인만 보이면 된다
+            print(f"그룹 익명화 실패: {e}", file=sys.stderr)
+            return 1
+        출력_그룹.write_text(json.dumps(결과, ensure_ascii=False, indent=1), encoding="utf-8")
+        번호있음 = sum(1 for g in 결과["그룹"] if 번호패턴.search(g["그룹명"]))
+        print(f"그룹: {len(결과['그룹'])}")
+        print(f"번호 있는 그룹: {번호있음}")
+        print(f"저장: {출력_그룹}")
+        return 0
+
     try:
         회차 = sys.argv[1] if len(sys.argv) > 1 else (paths.scan_run_dirs() or [None])[0]
         if not 회차:
