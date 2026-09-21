@@ -302,3 +302,13 @@ completed: 2026-09-22
 ---
 *Phase: 04-banner-detection*
 *Completed: 2026-09-22*
+
+## Self-Check: PASSED
+
+- 파일 6개 전부 존재: `banner_scan.py` · `webapp/tests/cli/__init__.py` · `webapp/tests/cli/test_ocr_determinism.py` · `webapp/tests/test_banner.py` · `webapp/pytest.ini` · `04-04-SUMMARY.md`
+- 커밋 4개 전부 존재: `28cc168` · `3eb6103` · `c3451ba` · `1799db7`
+- **삭제된 파일 0건** (`git diff --diff-filter=D --name-only 438d94f..HEAD`)
+- **공유 산출물 미수정:** base 이후 변경 파일 6개가 전부 이 플랜의 `files_modified` 안이다. `STATE.md`·`ROADMAP.md`·`REQUIREMENTS.md` 변경 0건 (오케스트레이터 몫)
+- 커밋되지 않아야 할 것이 안 들어갔다: `.venv`/`.venv-web` 심링크 디렉터리 · `workspace.toml` 사본 · scratchpad e2e 산출물 전부 staged 0건
+- `.venv-web` 388 green (exit 0) · `.venv` `webapp/tests/cli/test_ocr_determinism.py` 4 green (exit 0)
+- D-09 금지 낱말(`보류`·`대기`·`검토요청`) `banner.py`·`banner_scan.py` 양쪽 0건 · `setRevision_` 소스에 박힘 · Vision 계열 최상단 import 0줄
