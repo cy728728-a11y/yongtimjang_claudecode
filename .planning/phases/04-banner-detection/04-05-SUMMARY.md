@@ -279,3 +279,14 @@ argparse 가 "unrecognized arguments" 로 죽은 것이 **아니다** — 14개 
 ---
 *Phase: 04-banner-detection*
 *Completed: 2026-09-22*
+
+## Self-Check: PASSED
+
+- 파일 7개 전부 존재: `webapp/jobs.py` · `webapp/argv.py` · `webapp/routes/jobs.py` · `webapp/tests/test_jobs.py` · `webapp/tests/test_argv.py` · `webapp/tests/test_routes_jobs.py` · `04-05-SUMMARY.md`
+- 커밋 4개 전부 존재: `a313cc8` · `90d1f4d` · `98b787e` · `6c79031`
+- **삭제된 파일 0건** (`git diff --diff-filter=D --name-only 2329d39..HEAD`)
+- **공유 산출물 미수정:** base 이후 변경 파일 6개가 전부 플랜 `files_modified` 안이다. `STATE.md`·`ROADMAP.md`·`REQUIREMENTS.md` 변경 0건 (오케스트레이터 몫)
+- 커밋되지 않아야 할 것이 안 들어갔다: `.venv`/`.venv-web` 심링크 디렉터리 · `workspace.toml` 사본 · scratchpad e2e 산출물 전부 staged 0건. `git status` 깨끗
+- `.venv-web` **407 green** (exit 0) · `.venv` `webapp/tests/cli` **4 green** (exit 0)
+- 집합 배치 실측: `banner_scan` ∈ `KINDS`·`SINGLETON_KINDS` · ∉ `WRITE_KINDS`·`BULSAJA_KINDS`
+- 조립 argv 14플래그를 실제 자식에 태워 전부 파싱 확인 (빈 조인 → exit 2 · 네트워크 0 · 크레딧 0)
