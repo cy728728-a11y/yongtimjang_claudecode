@@ -289,3 +289,12 @@ $ … --join <2행: 상세 2장 + 상세 None>
 ---
 *Phase: 04-banner-detection*
 *Completed: 2026-09-22*
+
+## Self-Check: PASSED
+
+- 파일 4개 전부 존재: `banner_scan.py` · `bulsaja_scan.py` · `webapp/tests/test_banner_scan.py` · `04-03-SUMMARY.md`
+- 커밋 4개 전부 존재: `ef9dc64` · `05a4437` · `d630605` · `ef5e39f`
+- 삭제된 파일 0건 (`git diff --diff-filter=D 247464a..HEAD`)
+- 커밋되지 않아야 할 것이 안 들어갔다: `.venv`/`.venv-web` 디렉터리 · `workspace.toml` 사본 전부 staged 0건. 워크트리 밖 임시 e2e 산출물(`scratchpad/`)도 저장소에 0건
+- 공유 산출물 미수정: `STATE.md` · `ROADMAP.md` · `REQUIREMENTS.md` 변경 0건
+- 전 스위트 387 green (exit 0) · `banner_scan.py` 에 `import requests` 0건 · 불사자 MCP 모듈 토큰 0건 · `MAX_IMAGE_PIXELS = None` 0건 · `except …: pass` 는 `말하기`/`오류말하기` 안쪽 2곳뿐
