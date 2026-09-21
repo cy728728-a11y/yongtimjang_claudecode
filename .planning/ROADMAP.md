@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: 첫 왕복 — 보드 + 입찰가 인상 버튼** - 터미널 없이 브라우저에서 규칙① 대상을 보고 입찰가를 올리고 되돌린다 (completed 2026-09-20)
 - [ ] **Phase 2: 되돌릴 수 없는 쓰기 — 꺼진 소재 정리** - 백업 선행·상한·재조회로 안전 계약을 완성하고 삭제 버튼을 연다
 - [x] **Phase 3: 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정** - 광고 행을 불사자 상품에 잇고 🔴🟡⚪ 상태로 대상 목록을 뽑는다 (completed 2026-09-21)
-- [ ] **Phase 4: 홍보배너 식별** - 기존 상세 이미지에서 중국 판매사 배너를 골라내고 100건 라벨링으로 검증한다
+- [ ] **Phase 4: 홍보배너 식별** - 기존 상세 이미지에서 중국 판매사 배너를 골라내고 현 회차 연결 전량 전수 검수로 미탐 0%를 증명한다
 - [ ] **Phase 5: 상세페이지 작업 버튼 ★ Core Value** - 🔴 상품을 화면에서 골라 AI 상세를 접수·폴링까지 완주한다
 - [ ] **Phase 6: 마켓 수정업로드** - 생성 완료분을 스마트스토어에 반영한다 (1건 육안 확인 게이트)
 - [ ] **Phase 7: 남은 버튼 — 썸네일 교체 / 쿠팡 복사** - 규칙② 썸네일 교체와 쿠팡 6단계 원클릭을 붙여 관제탑을 닫는다
@@ -145,19 +145,54 @@ Plans:
 
 ### Phase 4: 홍보배너 식별
 
-**Goal**: 기존 상세 이미지에서 중국 판매사 홍보배너만 골라내고, 실제 작업에 쓰기 전에 100건 라벨링으로 미탐 0%를 증명한다
+**Goal**: 기존 상세 이미지에서 중국 판매사 홍보배너만 골라내고, 실제 작업에 쓰기 전에 현 회차 연결 전량 전수 검수로 미탐 0%를 증명한다
 **Mode:** mvp
 **Depends on**: Phase 3
 **Requirements**: BANNER-01, BANNER-02b, BANNER-03b, BANNER-04, BANNER-05
-**Canonical refs**: `.planning/phases/04-banner-detection/04-CONTEXT.md` — BANNER-02·03(pHash 코퍼스 빈도)은 2026-09-21 실측으로 대체됐다. CONTEXT 가 정본이다.
+**Canonical refs**: `.planning/phases/04-banner-detection/04-CONTEXT.md` — BANNER-02·03(pHash 코퍼스 빈도)은 2026-09-21 실측으로 대체됐다. 판정 신호(위치·종횡비·엔트로피)는 2026-09-22 실측 반증으로 온디바이스 OCR 어휘군(D-10)에 대체됐다. CONTEXT 가 정본이다.
 **Success Criteria** (what must be TRUE):
 
   1. 사용자가 아무 상품이나 골라 "이 상세의 몇 번째 이미지를 배너로 봤는지"와 남는 제품 이미지 목록을 눈으로 확인한다
-  2. 100건 손라벨링 세트에서 미탐 0% · 오탐 10% 이하가 숫자로 보고되고, 이 게이트를 통과하기 전에는 상세 생성 입력으로 쓰이지 않는다
+  2. **현 회차 연결 전량(이번 회차 57상품 891장) 손라벨링**에서 미탐 0% · 오탐 10% 이하(**분모 = 제품 이미지 전체**, D-11)가 숫자로 보고되고, 이 게이트를 통과하기 전에는 상세 생성 입력으로 쓰이지 않는다 (모수가 100건 이상이 되면 무작위 100건으로 좁힌다 — D-12)
   3. 제거율이 50%를 넘거나 남는 제품 이미지가 2장 미만이면 그 상품이 통째로 스킵되고 스킵 사유가 보인다 (사람 판단 큐를 만들지 않는다)
-  4. 빈도 판정이 타오바오상품번호 distinct 기준으로 돌고, 같은 타오바오 상품의 물갈이 사본이 빈도를 부풀리지 않는다
+  4. **라벨링 세트와 미탐/오탐 집계**가 타오바오상품번호 distinct(없으면 불사자코드) 기준으로 돌고, 같은 타오바오 상품의 물갈이 사본이 분모를 부풀리지 않는다 (빈도 판정 자체는 D-01a 로 폐기 — 살아 있는 요구는 "사본이 통계를 부풀리지 않는다"다)
 
-**Plans**: TBD
+**Plans**: 8 plans in 8 waves
+
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Wave 0: `.venv` 에 Vision·pytest + 라벨 308장 픽스처 + Phase 4 설정 키 10개
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 04-02-PLAN.md — 순수 모듈 `webapp/banner.py`(파싱·스킵읽기·게이트집계) + D-19 트리 순회 import 가드
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 04-03-PLAN.md — CLI 스캐너 앞절반: 인자·종료코드 · 조인 읽기 · SSRF 가드 다운로드 · Pillow 특징 · 썸네일
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 04-04-PLAN.md — CLI 스캐너 뒷절반: OCR 2패스(revision 고정) · 어휘군 8개 · 스킵 규칙 · 산출물 + `.venv` 결정성 테스트
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 04-05-PLAN.md — 잡 배선: `banner_scan` 등록 · `BannerArgv` · `banner_label`/`banner_confirm` DDL · 접수 라우트
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 04-06-PLAN.md — 라벨 저장소 + 라우트 4종(review · thumb · label · confirm) + 보안 회귀 3건
+
+**Wave 7** *(blocked on Wave 6)*
+
+- [ ] 04-07-PLAN.md — 검수 화면 본체: 전장 스트립(D-03a) · 테두리 3종 · 경계 4장 기준 확인 + 브라우저 회귀
+
+**Wave 8** *(blocked on Wave 7)*
+
+- [ ] 04-08-PLAN.md — 실탄: 첫 실스캔 완주 + **전수 검수 체크포인트** + 게이트 숫자 + VALIDATION 마감
+
+**UI hint**: yes
 
 ### Phase 5: 상세페이지 작업 버튼 ★ Core Value
 
@@ -217,7 +252,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 9/9 | Complete   | 2026-09-20 |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
-| 4. 홍보배너 식별 | 0/TBD | Not started | - |
+| 4. 홍보배너 식별 | 0/8 | Not started | - |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 0/TBD | Not started | - |
 | 6. 마켓 수정업로드 | 0/TBD | Not started | - |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |
