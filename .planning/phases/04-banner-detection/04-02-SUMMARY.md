@@ -295,3 +295,14 @@ completed: 2026-09-22
 ---
 *Phase: 04-banner-detection*
 *Completed: 2026-09-22*
+
+## Self-Check: PASSED
+
+- 파일 5개 전부 존재: `webapp/banner.py` · `webapp/tests/test_banner.py` ·
+  `webapp/tests/test_argv.py` · `webapp/tests/test_join.py` · `04-02-SUMMARY.md`
+- 커밋 4개 전부 존재: `81a5a75` · `8c1ba74` · `ec8a6bf` · `80e2fb5`
+- 삭제된 파일 0건 (`git diff --diff-filter=D 34f6d87..HEAD`)
+- 커밋되지 않아야 할 것이 안 들어갔다: `.venv`/`.venv-web` 디렉터리·`workspace.toml` 사본 전부
+  staged 0건. 가드 실측용 임시 주입 2건(`banner.py`·`routes/board.py`)도 되돌린 뒤 커밋했다
+- 공유 산출물 미수정: `STATE.md` · `ROADMAP.md` · `REQUIREMENTS.md` 변경 0건
+- 전 스위트 377 green (exit 0)
