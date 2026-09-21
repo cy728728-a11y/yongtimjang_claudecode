@@ -9,9 +9,10 @@
   · 그룹이 덜 훑렸으면 그 사실이 숫자로 드러난다   (Pitfall 3 — "미조회"가 "미해소"로 둔갑 금지)
   · 계정 확인이 없거나·다르거나·낡았으면 거부다    (ENG-08)
 
-⚠️ **레이트리밋(초당 4회)·429 재시도 테스트는 여기 없다.** 그 루프는 CLI 안에 있고(03-04),
-`test_초당4회_상한`·`test_429는_미조회로_남는다` 를 이 파일에 덧붙이는 것도 03-04 의 작업이다.
-여기서 흉내 내면 "우리가 짠 가짜 루프" 를 검증하게 된다.
+⚠️ **레이트리밋(초당 4회)·429 재시도는 §8 에서 본다 — 단 `webapp/` 의 코드가 아니다.**
+그 루프는 CLI 쪽 `bulsaja_rate.py` 에 살고(03-04), 이 파일은 그 **진짜 모듈**을 import 해서
+가짜 시계로 잰다. 웹앱 런타임이 그 모듈을 쓰는 게 아니라 테스트 프로세스만 쓴다 —
+여기서 루프를 흉내 내면 "우리가 짠 가짜 루프" 를 검증하게 되므로 그렇게 하지 않는다.
 
 ⚠️ **재검증 판정(`히트`/`미스`/`미조회`/`불일치`)은 여기서 안 본다.** 그건 조인 의미론이라
 `webapp/join.py`(03-02)가 정본이고 `test_join.py` 가 고정한다. 이 모듈은 **인덱스에 적힌 값을
@@ -19,11 +20,28 @@
 """
 import json
 import sqlite3
+import sys
 from datetime import datetime, timedelta
 
 import pytest
 
 from webapp import bulsaja_index, jobs, paths, settings
+
+# `.claude/skills/bulsaja-detail-page/scripts` 를 import 경로에 넣는다 (§8 전용).
+#
+# **이 sys.path 삽입은 테스트 프로세스에만 허용된다** — `test_cli_patch.py:21-31` 이
+# 이미 같은 말을 적어 뒀다. 웹앱 런타임(`webapp/*.py`)은 절대 이걸 하지 않는다.
+# 웹앱은 subprocess 경계로만 CLI 를 부른다. 여기서만, 테스트 격리 목적으로 허용한다.
+#
+# `bulsaja_rate` 를 `.venv-web` 에서 import 할 수 있다는 것 자체가 검증 대상이다 —
+# 그 모듈이 `bulsaja_mcp`·`eroomlib`·`requests` 를 하나라도 건드리면 여기서 ImportError 로
+# 죽는다(`.venv-web` 에 `requests` 가 없다, D-19). 그러면 레이트리밋 규율이
+# **3시간 32분짜리 잡을 실제로 돌려야만** 검증되는 물건이 된다.
+CLI_SCRIPTS = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page" / "scripts")
+if str(CLI_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(CLI_SCRIPTS))
+
+import bulsaja_rate  # noqa: E402
 
 # 가짜 이름만 쓴다. 진짜 마켓그룹 ID·계정 닉네임을 테스트에 담으면 리터럴 가드와 충돌하고
 # 저장소가 공개될 때 영업 정보가 같이 나간다 (conftest.py 원칙 둘).
@@ -362,3 +380,169 @@ def test_이_모듈은_네트워크도_쓰기도_안_한다():
         assert 금지 not in 소스, f"bulsaja_index.py 에 {금지} 가 있다 (D-19)"
     for 쓰기 in ("INSERT", "UPDATE", "DELETE", "CREATE"):
         assert 쓰기 not in 소스, f"bulsaja_index.py 에 {쓰기} 가 있다 — 읽기 전용이어야 한다"
+
+
+# ── 8. 레이트리밋 규율 · 429 처리 (03-04 / Pitfall 2·3) ─────────────────────
+#
+# 여기서 지키는 것은 **3시간 32분짜리 잡의 생존**이다. 실측 근거:
+#   · 서버 응답 헤더 `RateLimit-Policy: 240;w=60` — 초당 4회
+#   · 429 응답의 `Retry-After: 20` — `eroomlib` 의 백오프(합계 6초)보다 길다
+# 가짜 시계로 재므로 실제 `time.sleep` 을 한 번도 타지 않는다 (전체 0.01초).
+
+
+class 가짜시계:
+    """주입 가능한 시계. `잠(초)` 이 불리면 그만큼 현재 시각을 앞으로 민다.
+
+    실제 `time.sleep` 을 부르지 않는 게 핵심이다 — 안 그러면 `Retry-After: 21` 을
+    검증하는 테스트 하나가 21초를 먹고, 그러면 아무도 이 테스트를 안 돌린다.
+    """
+
+    def __init__(self, 시작: float = 1000.0):
+        self.지금 = 시작
+        self.잔시간: list[float] = []
+
+    def now(self) -> float:
+        return self.지금
+
+    def 잠(self, 초: float) -> None:
+        self.잔시간.append(초)
+        self.지금 += 초
+
+
+def test_초당4회_상한():
+    """20번 연속 호출해도 **인접 호출 간격이 전부 `최소간격` 이상**이다.
+
+    소스에 특정 숫자가 박혀 있는지 보는 게 아니라(그건 문자열 검사다),
+    주입한 시계가 실제로 얼마나 벌어졌는지를 잰다 (`test_jobs.py:474-478` 의 규율).
+    """
+    시계 = 가짜시계()
+    간격 = bulsaja_rate.호출간격(0.26, now_fn=시계.now, sleep_fn=시계.잠)
+
+    찍힌시각 = []
+    for _ in range(20):
+        간격.대기()
+        찍힌시각.append(시계.now())     # 호출이 실제로 나가는 시점
+
+    틈 = [b - a for a, b in zip(찍힌시각, 찍힌시각[1:])]
+    assert len(틈) == 19
+    for i, d in enumerate(틈):
+        assert d >= 0.26 - 1e-9, f"{i}번째 간격이 {d}초 — 초당 4회를 넘겼다"
+
+
+def test_이미_충분히_지났으면_안_잔다():
+    """직전 호출 후 충분히 지났으면 `대기()` 가 0 이고 `sleep_fn` 이 안 불린다.
+
+    안 그러면 workdata 응답이 느린 구간에서 **이미 지난 시간을 또 잔다** —
+    47,105건이면 그 낭비가 시간 단위가 된다.
+    """
+    시계 = 가짜시계()
+    간격 = bulsaja_rate.호출간격(0.26, now_fn=시계.now, sleep_fn=시계.잠)
+
+    assert 간격.대기() == 0.0            # 첫 호출은 기다릴 이유가 없다
+    시계.지금 += 5.0                      # MCP 응답이 5초 걸렸다고 치자
+    assert 간격.대기() == 0.0
+    assert 시계.잔시간 == [], "이미 지난 시간을 또 잤다"
+
+
+def test_429는_미조회로_남는다():
+    """끝까지 429 면 `(None, True)` — **예외로 터지지도, 성공으로 접히지도 않는다.**
+
+    조용히 건너뛰면 그 상품이 화면에서 "미해소(= 광고 쪽 오류)" 로 보이고
+    용팀장이 멀쩡한 광고그룹을 지우러 간다. 되돌릴 수 없다 (RESEARCH §Pitfall 3).
+    """
+    시계 = 가짜시계()
+
+    def 항상429():
+        raise RuntimeError("불사자 MCP 호출 실패: HTTP 429 Too Many Requests")
+
+    결과, 미조회 = bulsaja_rate.안전호출(
+        항상429, 재시도대기=21, 횟수=3, sleep_fn=시계.잠, 로그=lambda *_: None)
+
+    assert 결과 is None
+    assert 미조회 is True
+
+
+def test_429가_아닌_예외는_올라간다():
+    """`ValueError` 는 그대로 전파된다.
+
+    모르는 실패를 미조회로 뭉개면 원인이 사라지고, 미조회는 화면에서
+    "인덱스 불완전" 으로 읽혀 **사람이 고칠 수 없는 문제**가 된다.
+    """
+    시계 = 가짜시계()
+
+    def 엉뚱한실패():
+        raise ValueError("응답 JSON 이 깨졌다")
+
+    with pytest.raises(ValueError):
+        bulsaja_rate.안전호출(엉뚱한실패, 재시도대기=21, 횟수=3,
+                            sleep_fn=시계.잠, 로그=lambda *_: None)
+    assert 시계.잔시간 == [], "429 가 아닌데 재시도 대기를 했다"
+
+
+def test_429뒤_성공하면_결과를_준다():
+    """첫 호출만 429, 두 번째 성공 → `(결과, False)` 이고 대기는 **한 번**이다."""
+    시계 = 가짜시계()
+    호출수 = {"n": 0}
+
+    def 한번만429():
+        호출수["n"] += 1
+        if 호출수["n"] == 1:
+            raise RuntimeError("HTTP 429")
+        return {"data": {"uploadedSuccessUrl": {"smartstore": "zz1"}}}
+
+    결과, 미조회 = bulsaja_rate.안전호출(
+        한번만429, 재시도대기=21, 횟수=6, sleep_fn=시계.잠, 로그=lambda *_: None)
+
+    assert 미조회 is False
+    assert 결과["data"]["uploadedSuccessUrl"]["smartstore"] == "zz1"
+    assert 시계.잔시간 == [21]
+
+
+def test_재시도대기는_서버요구를_따른다():
+    """`sleep_fn` 에 들어온 값이 **호출자가 준 `재시도대기` 그대로**다.
+
+    `eroomlib._post` 의 백오프는 `0.4 × 2^attempt` = 합계 6초인데 서버는
+    `Retry-After: 20` 을 요구한다. 하드코딩된 짧은 백오프면 3시간짜리 잡이
+    **시작 40초 만에** 죽는다 (RESEARCH §Pitfall 2 — 이 페이즈 최대 위험).
+    """
+    시계 = 가짜시계()
+
+    def 항상429():
+        raise RuntimeError("HTTP 429")
+
+    bulsaja_rate.안전호출(항상429, 재시도대기=21, 횟수=4,
+                        sleep_fn=시계.잠, 로그=lambda *_: None)
+
+    assert 시계.잔시간, "재시도를 아예 안 했다"
+    assert set(시계.잔시간) == {21}, f"서버 요구와 다른 값으로 잤다: {시계.잔시간}"
+
+
+def test_로그가_429를_말한다():
+    """주입한 `로그` 콜백이 429 사실을 문자열로 받는다.
+
+    **무신호가 더 위험한 신호다.** 3시간짜리 로그에 아무 말이 없으면
+    "잘 돌고 있다" 와 "429 로 전부 미조회가 되고 있다" 를 구분할 수 없다.
+    """
+    시계 = 가짜시계()
+    말한것: list[str] = []
+
+    def 항상429():
+        raise RuntimeError("HTTP 429 Too Many Requests")
+
+    bulsaja_rate.안전호출(항상429, 재시도대기=21, 횟수=2,
+                        sleep_fn=시계.잠, 로그=말한것.append)
+
+    assert 말한것, "429 인데 아무 말도 안 했다"
+    assert any("429" in 줄 for 줄 in 말한것), f"로그에 429 가 없다: {말한것}"
+
+
+def test_레이트모듈은_stdlib만_쓴다():
+    """`bulsaja_rate` 의 import 는 `import time` 하나다 (D-19 / 검증 가능성).
+
+    MCP 클라이언트를 여기 끌어오면 `.venv-web` 에서 import 자체가 안 되고,
+    그 순간 이 파일의 §8 전체가 사라진다 — 레이트리밋 규율이 검증 불가능해진다.
+    """
+    소스 = open(bulsaja_rate.__file__, encoding="utf-8").read()
+    import줄 = [줄 for 줄 in 소스.splitlines()
+               if 줄.startswith("import ") or 줄.startswith("from ")]
+    assert import줄 == ["import time"], f"stdlib 밖을 import 한다: {import줄}"
