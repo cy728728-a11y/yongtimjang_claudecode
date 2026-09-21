@@ -110,3 +110,54 @@ def test_인덱스빌더가_뜬다():
     for 플래그 in ("--db", "--out", "--profile-out", "--expect-nick",
                   "--min-interval", "--retry-after", "--batch-size", "--limit"):
         assert 플래그 in 나온것, f"usage 에 {플래그} 가 없다 — argv 계약이 깨졌다"
+
+
+def test_스캔이_뜬다():
+    """`bulsaja_scan.py --help` 가 exit 0 이고 두 모드의 플래그를 다 보여준다 (03-04).
+
+    `--profile-only` 가 usage 에 있어야 `bulsaja_profile` 잡이 뜬다 — 그 잡이 없으면
+    계정 확인 산출물이 안 생기고, ENG-08 사전 점검이 **영원히 거부**로 굳는다.
+    """
+    나온것 = _도움말(argv.BULSAJA_SCAN)
+    for 플래그 in ("--targets", "--profile-only", "--expect-nick", "--run-dir",
+                  "--out", "--db", "--profile-out", "--min-interval",
+                  "--retry-after", "--batch-size"):
+        assert 플래그 in 나온것, f"usage 에 {플래그} 가 없다 — argv 계약이 깨졌다"
+
+
+def test_스캔_CLI_는_판정을_하지_않는다():
+    """조인 판정 어휘가 스캔 CLI 소스에 **한 글자도 없다.**
+
+    보통은 문자열 검사를 피하지만 여기서 막고 싶은 게 정확히 "두 번째 판정 구현" 이다.
+    판정이 CLI 와 `webapp/join.py` 두 곳에 있으면 화면과 산출물이 다른 말을 하고,
+    그때 어느 쪽이 맞는지 아무도 모른다. 주석에라도 적히면 다음 사람이 그걸 구현한다.
+    """
+    본문 = argv.BULSAJA_SCAN.read_text(encoding="utf-8", errors="ignore")
+    for 판정어 in ("히트", "불일치"):
+        assert 판정어 not in 본문, (
+            f"{argv.BULSAJA_SCAN.name} 에 판정 어휘 '{판정어}' 가 있다 — "
+            "판정은 webapp/join.재검증판정 한 곳이다")
+
+
+def test_스캔은_인덱스를_읽기만_한다():
+    """스캔 CLI 가 `ss_index` 에 쓰지 않는다 — 인덱스를 고치는 건 인덱스 잡뿐이다.
+
+    `mode=ro` 로 열면 SQLite 가 막아 주지만, 쓰기 SQL 이 소스에 등장하는 순간
+    누군가 커넥션을 바꿔 열면 곧바로 뚫린다. 그래서 SQL 자체가 없는 것을 고정한다.
+    """
+    본문 = argv.BULSAJA_SCAN.read_text(encoding="utf-8", errors="ignore")
+    assert "mode=ro" in 본문, "스캔이 인덱스를 읽기 전용으로 열지 않는다"
+    for 쓰기 in ("INSERT", "UPDATE", "DELETE ", "DROP"):
+        assert 쓰기 not in 본문, f"스캔 CLI 에 {쓰기} 가 있다 — 인덱스를 고치면 안 된다"
+
+
+def test_인덱스빌더가_스키마를_만들지_않는다():
+    """`ss_index` DDL 정본은 `webapp/jobs.py` 하나다 (D-20 / 위협 T-3-23).
+
+    CLI 가 테이블을 만들면 스키마가 두 벌이 되고, 컬럼이 조용히 갈라진다.
+    그때 인덱스 잡은 3시간 반을 멀쩡히 돌고도 웹앱이 못 읽는 테이블을 채운다.
+    """
+    본문 = argv.SS_INDEX_BUILD.read_text(encoding="utf-8", errors="ignore")
+    생성문 = "CREATE " + "TABLE"     # 이 파일 자신이 검사 대상 문자열이 되지 않게 조립한다
+    assert 생성문 not in 본문, f"{argv.SS_INDEX_BUILD.name} 에 테이블 생성문이 있다"
+    assert "INSERT OR REPLACE INTO ss_index" in 본문, "인덱스를 적는 SQL 이 없다"
