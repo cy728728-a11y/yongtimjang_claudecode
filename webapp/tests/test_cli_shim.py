@@ -77,3 +77,36 @@ def test_죽은_래퍼_안내가_남아있지_않다():
     본문 = DETAIL_BATCH.read_text(encoding="utf-8", errors="ignore")
     죽은래퍼 = "run_" + "yong.py"   # 문자열 검사 대상을 이 파일에 통째로 남기지 않는다
     assert 죽은래퍼 not in 본문, f"{DETAIL_BATCH.name} 에 죽은 래퍼 안내가 남아 있다"
+
+
+def _도움말(스크립트):
+    """`--help` 를 돌려 `(returncode, stdout)` 을 준다 — 크레딧 0, 쓰기 0, 네트워크 0.
+
+    argparse 가 usage 를 찍었다는 건 **모듈 최상위 import 가 전부 통과했다**는 뜻이다.
+    두 CLI 다 최상위에서 `bulsaja_mcp` 를 import 하므로, shim 경로가 틀어지면 여기서 죽는다.
+    """
+    assert 스크립트.is_file(), f"CLI 가 없다: {스크립트}"
+    assert argv.PY_CLI.is_file(), (
+        f"CLI 인터프리터가 없다: {argv.PY_CLI} — `.venv` 가 만들어져 있어야 한다")
+    try:
+        p = subprocess.run([str(argv.PY_CLI), str(스크립트), "--help"],
+                           capture_output=True, timeout=60)
+    except subprocess.TimeoutExpired:                       # pragma: no cover - 방어
+        pytest.fail(f"{스크립트.name} --help 가 60초 안에 안 끝났다 — "
+                    "최상위에서 네트워크를 타고 있다")
+    assert p.returncode == 0, (
+        f"exit={p.returncode}\n--- stderr 끝 20줄 ---\n{_꼬리(p.stderr)}")
+    return p.stdout.decode("utf-8", errors="replace")
+
+
+def test_인덱스빌더가_뜬다():
+    """`ss_index_build.py --help` 가 exit 0 이고 `--groups` 를 보여준다 (03-04).
+
+    `--groups` 가 usage 에 있는지 보는 이유: 웹앱의 `BulsajaArgv` 가 조립하는 플래그와
+    자식의 argparse 가 **한 글자라도 다르면 잡이 즉시 죽는다.** 그 계약을 여기서 못박는다.
+    """
+    나온것 = _도움말(argv.SS_INDEX_BUILD)
+    assert "--groups" in 나온것, f"usage 에 --groups 가 없다:\n{나온것[:600]}"
+    for 플래그 in ("--db", "--out", "--profile-out", "--expect-nick",
+                  "--min-interval", "--retry-after", "--batch-size", "--limit"):
+        assert 플래그 in 나온것, f"usage 에 {플래그} 가 없다 — argv 계약이 깨졌다"
