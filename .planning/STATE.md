@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-stopped_at: Phase 03 complete (7/7) — ready to discuss Phase 4
-last_updated: 2026-09-21T07:30:55.954Z
-last_activity: 2026-09-21 -- Phase 03 execution complete (7/7)
+status: planning
+stopped_at: Phase 4 context gathered
+last_updated: "2026-09-21T14:26:53.618Z"
+last_activity: 2026-09-21
 progress:
   total_phases: 7
   completed_phases: 2
@@ -133,6 +133,7 @@ Recent decisions affecting current work:
   **안 찍는다.** 음성대조 26건 + 실탄 재확인(해소 51행 중 ⚪ **0건** · `uploadDetailContents` 키가
   `{imageTranslated, renderContent}` 둘뿐). **중복방지는 태그 쪽을 봐야 한다** — `aiImageGenerated`
   만 보면 기작업 29건을 다시 태운다. 확정 실험(외부 반영 1건 실측)은 예정대로 Phase 5
+
 - **[Phase 6 게이트]** 수정업로드가 상하단 안내이미지를 어느 시점 기준으로 올리는지 모순 미해결 — 1건 육안 확인으로 깬다 (MARKET-02)
 - **[Phase 4 미검증]** 홍보배너 식별은 기성 해법이 없는 가설. 100건 라벨링 미탐 0% 를 통과해야 실작업 투입
 - **[환경]** 이 맥북에 `bulsaja-yongssaem` MCP 서버 항목이 없다 — 용쌤 계정 전환 경로가 끊겨 있음 (ENG-08 착수 시 확인)
@@ -150,6 +151,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-21T05:30:00.000Z
-Stopped at: Completed 03-07-PLAN.md — Phase 3 실행 7/7. 다음은 `/gsd:verify-work`
-Resume file: .planning/phases/03-join-detail-state/.continue-here.md
+Last session: 2026-09-21T14:26:53.612Z
+Stopped at: Phase 4 context gathered
+Resume file: .planning/phases/04-banner-detection/04-CONTEXT.md
