@@ -39,6 +39,44 @@ DEFAULTS = {
     "index_excluded_groups": [],   # D-18 인덱스에서 뺄 **마켓번호 문자열** 리스트.
                                    # **빈 리스트 = 제외 없음** (전량 제외가 아니다). 실값은 workspace.toml 에만
     "done_tags": ["구매_가공완료"],  # D-08 기작업 태그. 늘어날 수 있으므로 리스트로 둔다
+
+    # ── Phase 4 (배너 판정) 에서 더한 키 ──────────────────────────────────
+    # Phase 3 블록과 같은 규율이다 — **모듈 상수로 올리지 않는다.** 전부 아래로만 읽어라:
+    #     settings.cfg("키", settings.DEFAULTS["키"])
+    # `webapp/**` 런타임 소스에 이 숫자들을 리터럴로 베끼지 마라. 베끼면 workspace.toml 을
+    # 고쳐도 동작이 안 바뀐다(있는 척만 하는 설정).
+    "banner_cache_dir": "webapp-banner/cache",   # 원본 이미지 캐시 루트. .gitignore 대상
+    "banner_thumb_dir": "webapp-banner/thumbs",  # 검수 스트립용 썸네일. .gitignore 대상
+    "banner_workers": 8,           # 8스레드. 916장 271MB 를 50~75초에 받는 실측값
+    "banner_vision_revision": 3,   # **박는 것이 요점이다**(D-10). 안 박으면 OS 업데이트가 기본
+                                   # 리비전을 올리는 날 판정이 조용히 바뀐다 — D-02 가 걱정한
+                                   # "회차마다 흔들린다"가 되살아나는 유일한 경로다.
+                                   # 실측 지원 `[1,2,3]` (VNRecognizeTextRequest.supportedRevisions)
+    "banner_blank_ar": 6.0,        # **배너 판정이 아니다**(D-10). 구분선·슬라이스 잔재를 빼는
+                                   # '무내용 장' 규칙 전용. 종횡비로 배너를 잡으려 하지 마라 —
+                                   # 실측상 정반대다(Pitfall 1: 배너는 오히려 세로로 길다, 중앙값 0.89)
+    "banner_blank_short_px": 32,   # 같은 '무내용 장' 규칙의 짧은 변 하한(px). 위 주석과 한 쌍이다
+    "banner_skip_min_keep": 2,     # D-07. 잔여 제품 이미지가 이보다 적으면 그 상품을 통째로 스킵
+    "banner_skip_max_removal": 0.5,  # D-08. 제거율이 이를 넘으면 판정이 폭주한 신호 → 통째로 스킵.
+                                   # D-07/D-08 둘 다 "애매하면 사람에게 묻는 게 아니라
+                                   # 그 상품을 건너뛴다"(D-09)
+    "banner_lexicon_version": "2026-09-21",  # 어휘군 **문자열 목록 자체는 `banner_scan.py` 에 산다**
+                                   # (설정에 200개 문자열을 넣으면 회귀 픽스처와 버전이 어긋난다).
+                                   # 여기 있는 것은 산출물 `판정규칙` 블록에 찍을 버전 표기뿐이다
+    "banner_keep_runs": 2,         # 원본 캐시를 남길 회차 수. 회차당 약 271MB. 집행은 04-03
+    # 검수 화면 첫 화면에 **일부러** 배치할 경계 표본(RESEARCH Appendix A "경계 4장").
+    # 용팀장 기준을 클릭으로 받는 자리다 — 미리 묻지 않는다.
+    # ⚠️ 이 4개만 익명화되지 않은 **실제 판매자상품코드**다. `banner_labels.json` 은 `zzNN` 을
+    #    쓰지만 여기는 실제 회차 산출물과 매칭돼야 기능하므로 익명화할 수 없다.
+    # ⚠️ **다음 회차에는 반드시 낡는다** — 물갈이로 상품코드가 재발급된다. 04-07 의
+    #    "못 찾았다" 폴백이 낡음을 부드럽게 처리하므로 기능은 안 깨지지만, 경계 4장 확인은
+    #    그 회차에 조용히 빈다. 회차가 바뀌면 이 값을 다시 떠라.
+    "banner_boundary_samples": [
+        "dnb2lYw0omRnoG121KzBL:6",   # 수상·브랜드 배너지만 제품이 크게 나온다
+        "fElaVlxOzkeSVkDotMrAJ:0",   # 첫 장 타이틀 히어로 — 제품인가 배너인가
+        "sLix0885VmdKsGxunAznE:0",   # 장식 포스터. 제품(밥그릇)이 나온다
+        "sLix0885VmdKsGxunAznE:4",   # 사용 장면 배너. 제품은 안 나온다
+    ],
 }
 
 _cache = None
