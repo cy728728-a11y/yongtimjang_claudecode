@@ -11,6 +11,11 @@
 담으면 리터럴 가드(`test_paths.py -k 리터럴` · `test_board.py::test_계정을_코드에_박지_않는다`)와
 충돌하고, 저장소가 공개될 때 영업 정보가 같이 나간다. 전부 `zz*` 가짜 이름이다.
 재생성 방법은 `fixtures/anonymize_join.py` 에 있다.
+
+**Phase 4 픽스처도 같은 규율을 따른다** — 판매자상품코드는 `zzNN`, 이미지 URL 은
+`zzcdn.example`. 재생성은 `fixtures/anonymize_labels.py`.
+(단 `settings.DEFAULTS["banner_boundary_samples"]` 만은 실코드다. 그 값은 실제 회차
+산출물과 매칭돼야 기능하므로 익명화할 수 없다 — 04-01-SUMMARY 에 사유가 적혀 있다.)
 """
 import json
 import shutil
@@ -31,6 +36,10 @@ BULSAJA_GROUPS_TRAPS = FIXTURES / "bulsaja_groups_traps.json"
 JOIN_TRAPS = FIXTURES / "join_traps.json"
 RESULT_JOIN_REAL = FIXTURES / "result_join_real.json"
 BULSAJA_GROUPS_REAL = FIXTURES / "bulsaja_groups_real.json"
+
+# Phase 4 (배너 판정) 픽스처. 재생성은 `fixtures/anonymize_labels.py` 에 있다.
+RENDER_CONTENT_TRAPS = FIXTURES / "render_content.json"
+BANNER_LABELS = FIXTURES / "banner_labels.json"
 
 # 픽스처 회차명. `result_min.json` 의 `generated` 와 맞춰 둔다.
 RUN_NAME = "2026-08-30"
@@ -86,6 +95,26 @@ def bulsaja_groups_real() -> dict:
     해상률이 번호로만 결정되므로 익명화해도 회귀가 그대로 재현된다.
     """
     return json.loads(BULSAJA_GROUPS_REAL.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def render_content_traps() -> dict:
+    """`renderContent` 파싱 함정 6종 + 정상 1종 (04-RESEARCH §Pattern 1 실측 표본).
+
+    `기대` 는 **기대 판정(test oracle)** 이지 CLI 산출물 필드가 아니다 —
+    `join_traps` 와 같은 규약이다.
+    """
+    return json.loads(RENDER_CONTENT_TRAPS.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def banner_labels() -> dict:
+    """리서치 라벨 16상품 308장 정답지(익명화) — 어휘군 회귀의 분모이자 분자.
+
+    ⚠️ **리서처(Claude)의 시각 판단이지 용팀장의 라벨이 아니다.** 회귀 정답지로 쓰되
+    게이트(BANNER-04 미탐 0%) 통과 근거로 쓰지 마라 — 게이트는 사람이 본 것으로만 닫힌다.
+    """
+    return json.loads(BANNER_LABELS.read_text(encoding="utf-8"))
 
 
 @pytest.fixture

@@ -1,0 +1,160 @@
+{
+ "_주석": [
+  "`uploadDetailContents.renderContent` 파싱 함정 픽스처 — 04-RESEARCH §Pattern 1 '실측 함정 표본' 6종.",
+  "출처: 회차 2026-09-20 · 조인 산출물 join_323b1918 (194행 / 상세 보유 57건 / 916 URL).",
+  "`행` 은 조인 산출물 `행[]` 한 개의 모양을 흉내 낸 것이다 — 파서 입력으로 그대로 먹인다.",
+  "판매자상품코드는 전부 `zzNN` 가짜이고 URL 은 전부 `zzcdn.example` 가짜다 (Phase 3 익명화 원칙).",
+  "`기대` 는 **기대 판정(test oracle)** 이지 CLI 산출물 필드가 아니다 — `join_traps.json` 과 같은 규약.",
+  "이 파일은 손으로 쓴다. 숫자의 출처는 04-RESEARCH.md §Pattern 1 의 '실측 함정 표본' 표다."
+ ],
+ "함정": {
+  "1_상세미조회": {
+   "설명": "`uploadDetailContents` 자체가 None. 실측 194행 중 137행. **미조회다 — 0장이 아니다.** 상세이미지목록()은 여기서 ValueError 를 던져야 한다. 삼키면 '못 물어봤다'와 '0장이라 답했다'가 같은 값이 된다(ss_index_calls.목록꺼내기 규약).",
+   "행": {
+    "판매자상품코드": "zz01",
+    "uploadDetailContents": null,
+    "imageTranslated": "0"
+   },
+   "기대": {
+    "예외": "ValueError",
+    "장수": null
+   }
+  },
+  "2_공백만": {
+   "설명": "`renderContent` 가 `&nbsp;` 와 개행만. 실측 18건에 잔여 공백. `<img>` 가 0장이므로 **빈 리스트가 정답**이고, 이건 미조회가 아니다. 태그 밖 텍스트는 전부 무시해도 된다.",
+   "행": {
+    "판매자상품코드": "zz02",
+    "uploadDetailContents": {
+     "renderContent": "&nbsp;\n&nbsp;\n<div>&nbsp;</div>\n"
+    },
+    "imageTranslated": "0"
+   },
+   "기대": {
+    "예외": null,
+    "장수": 0,
+    "URL": []
+   }
+  },
+  "3_순번보존": {
+   "설명": "같은 URL 이 한 상품에 두 번(실측 57건 중 3건) + `src` 속성이 없는 `<img>` 한 장(실측 0건이지만 규약을 겨눈다). **둘 다 중복 제거도 건너뛰기도 하지 마라 — 순서를 보존한다.** 순번이 밀리면 사람 라벨(이미지순번 기준)이 통째로 어긋난다. src 없는 장은 빈 문자열로 자리를 남긴다. 중복 제거는 Phase 5 몫이다.",
+   "행": {
+    "판매자상품코드": "zz03",
+    "uploadDetailContents": {
+     "renderContent": "<div><img src=\"https://zzcdn.example/zz03aaaaaaaaaaaaaaaaa/upload/0000.jpg\"></div><div><img src=\"https://zzcdn.example/zz03aaaaaaaaaaaaaaaaa/upload/0001.jpg\"></div><div><img src=\"https://zzcdn.example/zz03aaaaaaaaaaaaaaaaa/upload/0000.jpg\"></div><div><img></div><div><img src=\"https://zzcdn.example/zz03aaaaaaaaaaaaaaaaa/upload/0002.jpg\"></div>"
+    },
+    "imageTranslated": "1"
+   },
+   "기대": {
+    "예외": null,
+    "장수": 5,
+    "URL": [
+     "https://zzcdn.example/zz03aaaaaaaaaaaaaaaaa/upload/0000.jpg",
+     "https://zzcdn.example/zz03aaaaaaaaaaaaaaaaa/upload/0001.jpg",
+     "https://zzcdn.example/zz03aaaaaaaaaaaaaaaaa/upload/0000.jpg",
+     "",
+     "https://zzcdn.example/zz03aaaaaaaaaaaaaaaaa/upload/0002.jpg"
+    ],
+    "중복순번": [
+     0,
+     2
+    ],
+    "src없는순번": [
+     3
+    ]
+   }
+  },
+  "4_한장짜리": {
+   "설명": "이미지가 1장뿐인 상품. 실측 1건(ri=5). 배너를 하나도 못 빼도 **잔여가 2장 미만이라 D-07 이 즉시 발동**한다 — 이 상품은 통째로 스킵이고, 사람에게 묻지 않는다(D-09).",
+   "행": {
+    "판매자상품코드": "zz04",
+    "uploadDetailContents": {
+     "renderContent": "<div><img src=\"https://zzcdn.example/zz04aaaaaaaaaaaaaaaaa/upload/0000.jpg\"></div>"
+    },
+    "imageTranslated": "0"
+   },
+   "기대": {
+    "예외": null,
+    "장수": 1,
+    "스킵사유": "D-07 잔여 제품 이미지 2장 미만"
+   }
+  },
+  "5_전장404": {
+   "설명": "20장이 **전부 404**. 실측 1건(ri=39). 이건 **판정 불가**다 — '배너 0장'이 아니다. 다운로드 실패를 '배너 아님'으로 흡수하면 Phase 3 의 CR-01~03 과 같은 병이 된다(오류와 0건을 가른다). 장별 판정은 `미판정` + 사유여야 한다.",
+   "행": {
+    "판매자상품코드": "zz05",
+    "uploadDetailContents": {
+     "renderContent": "<div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0000.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0001.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0002.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0003.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0004.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0005.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0006.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0007.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0008.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0009.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0010.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0011.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0012.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0013.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0014.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0015.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0016.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0017.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0018.jpg\"></div><div><img src=\"https://zzcdn.example/zz05aaaaaaaaaaaaaaaaa/upload/0019.jpg\"></div>"
+    },
+    "imageTranslated": "0"
+   },
+   "기대": {
+    "예외": null,
+    "장수": 20,
+    "내려받기": "전량 404",
+    "판정": "미판정",
+    "판정아님": "배너 0장"
+   }
+  },
+  "6_번역플래그4종": {
+   "설명": "`imageTranslated` 의 실측 타입이 4종이다 — `'0'` 33건 / `'1'` 19건 / `False` 4건 / `True` 1건. Phase 3 의 `state.불리언정규화` 를 쓴다. **`bool()` 금지** — `bool('0')` 은 True 다(D-11). `행` 은 여기서만 리스트다(한 행으로는 4종을 못 담는다).",
+   "행": [
+    {
+     "판매자상품코드": "zz06",
+     "uploadDetailContents": {
+      "renderContent": "<div><img src=\"https://zzcdn.example/zz06aaaaaaaaaaaaaaaaa/upload/0000.jpg\"></div>"
+     },
+     "imageTranslated": "0",
+     "기대_정규화": false
+    },
+    {
+     "판매자상품코드": "zz07",
+     "uploadDetailContents": {
+      "renderContent": "<div><img src=\"https://zzcdn.example/zz07aaaaaaaaaaaaaaaaa/upload/0000.jpg\"></div>"
+     },
+     "imageTranslated": "1",
+     "기대_정규화": true
+    },
+    {
+     "판매자상품코드": "zz08",
+     "uploadDetailContents": {
+      "renderContent": "<div><img src=\"https://zzcdn.example/zz08aaaaaaaaaaaaaaaaa/upload/0000.jpg\"></div>"
+     },
+     "imageTranslated": false,
+     "기대_정규화": false
+    },
+    {
+     "판매자상품코드": "zz09",
+     "uploadDetailContents": {
+      "renderContent": "<div><img src=\"https://zzcdn.example/zz09aaaaaaaaaaaaaaaaa/upload/0000.jpg\"></div>"
+     },
+     "imageTranslated": true,
+     "기대_정규화": true
+    }
+   ],
+   "기대": {
+    "예외": null,
+    "타입종류": 4
+   }
+  }
+ },
+ "정상": {
+  "설명": "함정이 없는 평범한 상품. 실측 평균은 16.1장(중앙 16 · 최소 1 · 최대 32)이지만 픽스처는 4장으로 줄였다 — 파서 회귀에 장수는 무관하고, 파일만 커진다.",
+  "행": {
+   "판매자상품코드": "zz16",
+   "uploadDetailContents": {
+    "renderContent": "<div><img src=\"https://zzcdn.example/zz16aaaaaaaaaaaaaaaaa/upload/0000.jpg\"></div>\n<div><img src=\"https://zzcdn.example/zz16aaaaaaaaaaaaaaaaa/upload/0001.jpg\"></div>\n<div>&nbsp;</div>\n<div><img src=\"https://zzcdn.example/zz16aaaaaaaaaaaaaaaaa/upload/0002.jpg\"></div>\n<div><img src=\"https://zzcdn.example/zz16aaaaaaaaaaaaaaaaa/upload/0003.jpg\"></div>"
+   },
+   "imageTranslated": "1"
+  },
+  "기대": {
+   "예외": null,
+   "장수": 4,
+   "URL": [
+    "https://zzcdn.example/zz16aaaaaaaaaaaaaaaaa/upload/0000.jpg",
+    "https://zzcdn.example/zz16aaaaaaaaaaaaaaaaa/upload/0001.jpg",
+    "https://zzcdn.example/zz16aaaaaaaaaaaaaaaaa/upload/0002.jpg",
+    "https://zzcdn.example/zz16aaaaaaaaaaaaaaaaa/upload/0003.jpg"
+   ]
+  }
+ }
+}
