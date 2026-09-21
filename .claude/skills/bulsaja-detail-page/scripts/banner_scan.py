@@ -571,6 +571,123 @@ def 전부특징(상품들: list, 캐시루트: str, 썸루트: str, 회차: str
     return 특징수, 썸수, 무내용수
 
 
+# ── OCR 2패스 (D-10 · Pitfall 4 · T-4-13) ───────────────────────────────────
+#
+# **배너를 배너이게 하는 것은 픽셀 모양이 아니라 글자다**(D-10). 위 `무내용인가` 는
+# 구분선을 빼는 기하 규칙이고, 배너/제품을 가르는 것은 여기서 읽는 글자다.
+#
+# 네트워크 0 · 토큰 0 · 크레딧 0 — macOS 온디바이스 Vision 이 전부 로컬에서 돈다.
+
+
+class Vision미설치(RuntimeError):
+    """`pyobjc-framework-Vision` 이 없다. `main` 이 잡아 **exit 4** 로 내린다.
+
+    조용히 넘어가지 않는다. 미설치를 "OCR 결과 0줄" 로 접으면 전 장이 `제품` 으로
+    판정되고, 그 목록이 그대로 Phase 5 입력이 된다 — 중국 점포 워터마크가 붙은
+    이미지가 스마트스토어에 올라간다. **미설치는 실패여야 한다**(04-01 이 세운 규율:
+    `pytest.importorskip` 으로 덮지 않는 것과 같은 선이다).
+    """
+
+
+def _비전():
+    """`Vision` · `Quartz` · `NSURL` 을 **지연 import** 한다 → `(Vision, Quartz, NSURL)`.
+
+    **모듈 최상단에 두지 마라.** `.venv-web` 에는 이 패키지들이 없는 것이 설계이고
+    (D-19), `webapp/tests/test_banner_scan.py` 가 이 파일을 `importlib` 로 로드하므로
+    최상단 import 는 그 파일 전체를 collect 단계에서 죽인다. 04-03 이 `PIL` 에서
+    똑같은 일을 실제로 겪었다(그 플랜의 Deviations 1).
+    """
+    try:
+        import Vision                      # noqa: N813  (pyobjc 모듈명 그대로)
+        import Quartz
+        from Foundation import NSURL
+    except ImportError as e:
+        raise Vision미설치(
+            "⛔ pyobjc-framework-Vision 이 없다 — .venv 에 설치해라 "
+            f"(.venv/bin/pip install pyobjc-framework-Vision==12.2.2) [{e}]") from e
+    return Vision, Quartz, NSURL
+
+
+# 2패스 정의 — **순서가 결과를 바꾼다**(Pitfall 4). 두 번째 값이 그대로
+# `setUsesLanguageCorrection_` 에 들어간다.
+OCR_패스 = (
+    # 한국어 패스: setUsesLanguageCorrection_(True) — 번역된 상세가 대다수다
+    (("ko-KR", "en-US"), True),
+    # 중국어 패스: setUsesLanguageCorrection_(False)
+    #   **켜면 한자를 한글로 보정해 버린다**(실측). 끄는 것이 이 패스의 존재 이유다.
+    (("zh-Hans", "en-US"), False),
+)
+
+
+def ocr(경로: str, 언어: tuple, 교정: bool = True, *, revision: int) -> list:
+    """이미지 1장 → 인식된 문자열 줄 목록.
+
+    **`revision` 에 기본값을 두지 않는다 — 부르는 쪽이 반드시 준다.** 정본은
+    `settings.banner_vision_revision` 이고 `--vision-revision` 으로 들어온다. 기본값을
+    여기 박으면 산출물의 `판정규칙.vision_revision` 과 실제 동작의 출처가 갈라진다.
+
+    **`setRevision_` 을 반드시 건다**(T-4-13 · D-10 · D-02). 현재 기본 리비전은 3이고
+    지원은 [1,2,3] 이다(macOS 26.5.1 실측). 안 박으면 OS 업데이트가 기본 리비전을
+    올리는 날 판정이 **조용히** 바뀐다 — D-02 가 걱정한 "회차마다 흔들린다"가
+    되살아날 수 있는 **유일한 경로**다. 그래서 값이 산출물에도 같이 실린다.
+
+    **실패는 예외로 올린다. 빈 리스트로 접지 마라** — 빈 OCR 결과("글자가 없다")와
+    OCR 실패("못 읽었다")는 다른 사실이다. 접는 순간 못 읽은 배너가 `제품` 이 된다
+    (Pitfall 2 와 같은 계열의 흡수다).
+    """
+    Vision, Quartz, NSURL = _비전()
+    url = NSURL.fileURLWithPath_(os.path.abspath(경로))
+    src = Quartz.CGImageSourceCreateWithURL(url, None)
+    if src is None:
+        raise ValueError(f"이미지를 열 수 없다: {경로}")
+    img = Quartz.CGImageSourceCreateImageAtIndex(src, 0, None)
+    if img is None:
+        raise ValueError(f"이미지 디코딩 실패: {경로}")
+
+    req = Vision.VNRecognizeTextRequest.alloc().init()
+    req.setRevision_(int(revision))          # ← 협상 불가 (T-4-13)
+    req.setRecognitionLanguages_(list(언어))
+    req.setRecognitionLevel_(0)              # 0 = accurate (1 = fast)
+    req.setUsesLanguageCorrection_(bool(교정))
+    handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(img, None)
+    ok, err = handler.performRequests_error_([req], None)
+    if not ok:
+        raise RuntimeError(f"Vision 요청 실패: {err}")
+    줄들 = []
+    for obs in (req.results() or []):
+        후보 = obs.topCandidates_(1)
+        if 후보 and len(후보):
+            줄들.append(str(후보[0].string()))
+    return 줄들
+
+
+def ocr_2패스(경로: str, *, revision: int) -> list:
+    """한국어 패스 + 중국어 패스. **둘 다 필요하다**(Pitfall 4).
+
+    `recognitionLanguages` 는 우선순위 목록이고 **첫 언어가 강하게 지배한다.**
+    실측 4줄 — 같은 이미지를 언어 순서만 바꿔 읽은 결과다:
+
+      ko-KR 먼저  → `3층 대형 69`      (정답)
+      zh-Hans 먼저 → `3 ［H 69`         (한글을 못 읽는다)
+      ko-KR 먼저  → `t0&⅞35cm`         (한자를 못 읽는다)
+      zh-Hans 먼저 → `加深35cm`          (정답)
+
+    **중국어 패스는 언어교정을 끈다.** 켜면 한자를 한글로 보정해 버린다(실측).
+
+    한 패스로 끝내면 🔴 중국어원본 상품의 배너를 통째로 놓친다. 그 미탐은 화면에
+    "배너 0장" 으로 보여서 눈에 띄지도 않는다.
+
+    ⚠️ **한자 개수를 신호로 쓰지 마라.** 중국어 패스를 한국어 이미지에 돌리면 한글을
+    한자로 오인식한다(실측 891장 중 446장에서 잡음 한자 검출, 상위 글자가
+    `人米早号亼日厘些`). 판정에 쓰는 것은 **키워드 문자열 매칭뿐**이다 — 잡음이
+    `品质保证` 같은 정확한 다자 구절을 만들 확률은 매우 낮다.
+    """
+    줄들 = []
+    for 언어, 교정 in OCR_패스:
+        줄들 += ocr(경로, 언어, 교정, revision=revision)
+    return 줄들
+
+
 # ── ① 조인 산출물 → 상품 · 장 골격 ──────────────────────────────────────────
 
 def 상품골격(행: dict) -> dict:
@@ -830,6 +947,13 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except Vision미설치 as _비전없음:
+        # **exit 4 는 여기 한 곳에서만 난다.** 미설치를 "OCR 0줄" 로 접으면 전 장이
+        # `제품` 으로 판정되고 그 목록이 Phase 5 입력이 된다 — 조용한 실패가
+        # 크레딧으로 바뀌는 경로다. 산출물도 쓰지 않는다(판정이 전부 거짓이므로).
+        말하기(str(_비전없음))
+        오류말하기(str(_비전없음))
+        sys.exit(4)
     except KeyboardInterrupt:
         # `bulsaja_scan.py:544-548` 규약. 부분 산출물을 남기지 않는다 —
         # **다만 다운로드 캐시는 남는다**(271MB 재다운로드 방지. 캐시는 산출물이 아니다).
