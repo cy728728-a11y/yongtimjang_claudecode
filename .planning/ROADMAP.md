@@ -126,7 +126,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 03-04-PLAN.md — 불사자 CLI: 레이트리밋 모듈 · 인덱스 구축 · 회차 스캔 (MCP 접촉은 전부 여기)
+- [x] 03-04-PLAN.md — 불사자 CLI: 레이트리밋 모듈 · 인덱스 구축 · 회차 스캔 (MCP 접촉은 전부 여기)
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -214,7 +214,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 9/9 | Complete   | 2026-09-20 |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
-| 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 3/7 | In Progress|  |
+| 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 4/7 | In Progress|  |
 | 4. 홍보배너 식별 | 0/TBD | Not started | - |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 0/TBD | Not started | - |
 | 6. 마켓 수정업로드 | 0/TBD | Not started | - |
