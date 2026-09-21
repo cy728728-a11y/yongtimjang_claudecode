@@ -673,3 +673,104 @@ def test_재개모듈은_아무것도_import하지_않는다():
     assert import줄 == [], f"재개 모듈이 뭔가를 import 한다: {import줄}"
     for 쓰기 in ("INSERT", "UPDATE", "DELETE", "CREATE", "DROP"):
         assert 쓰기 not in 소스, f"재개 모듈에 {쓰기} 가 있다 — 읽기만 해야 한다"
+
+
+# ── 10. 호출 규약 회귀 — 오류를 "상품 0건" 으로 읽지 않는다 (03-07 실탄 / Pitfall 3) ──
+#
+# 이 절이 생긴 이유는 실측이다. 2026-09-21 첫 실탄에서 30그룹짜리 인덱스가
+# **9.2초 만에 exit 0** 으로 끝났다. 로그는 30그룹 전부 `상품 0건 · 누적 0행`.
+# 원인은 `groupId` 를 문자열로 보낸 것이고, 서버는 `-32602 expected number` 를 줬다.
+# 그 오류 응답에 `항목` 키가 없어서 `r.get("항목") or []` 가 그걸 **빈 그룹**으로 읽었다.
+#
+# 크레딧이 0이라 아무 경보도 안 울렸다. "성공한 것처럼 보이는 실패" 가 이 페이즈에서
+# 가장 비싼 고장이다 — 화면은 "인덱스 미보유" 를 띄우고, 사람은 그걸 "광고 쪽 오류" 로
+# 읽어 멀쩡한 광고그룹을 지우러 간다.
+
+import ss_index_calls  # noqa: E402
+
+
+def test_그룹아이디는_숫자로_보낸다():
+    """`groupId` 는 number 다 (실측 2026-09-21).
+
+    웹앱은 groupId 를 문자열로 다룬다 — `join.index_targets` 의 중복 제거가 문자열
+    기준이다. 그게 잘못은 아니고, 경계에서 바꾸는 게 맞다. 그 경계가 여기다.
+    """
+    assert ss_index_calls.그룹아이디("1001114") == 1001114
+    assert ss_index_calls.그룹아이디(" 1001114 ") == 1001114
+    assert ss_index_calls.그룹아이디(1001114) == 1001114
+    assert isinstance(ss_index_calls.그룹아이디("1001114"), int)
+    # 숫자가 아니면 **원본 그대로** — 여기서 터지면 id 체계가 바뀌는 날 우리가 먼저 죽는다
+    assert ss_index_calls.그룹아이디("zzgrp-a") == "zzgrp-a"
+    assert ss_index_calls.그룹아이디(None) is None
+
+
+def test_오류응답을_빈그룹으로_읽지_않는다():
+    """**이 테스트 하나가 9.2초짜리 가짜 성공을 막는다.**
+
+    `항목` 키가 없는 응답은 "물어봤더니 없더라" 가 아니라 "못 물어봤다" 다.
+    예외로 올려야 `ss_index_build.main()` 의 그룹별 try 가 그 그룹을
+    `완결: False · 오류` 로 적고, 다음 실행이 이어서 한다.
+    """
+    오류응답 = {"_text": 'MCP error -32602: Input validation error: '
+                       '[{"expected": "number", "path": ["groupId"]}]'}
+    with pytest.raises(RuntimeError) as e:
+        ss_index_calls.항목꺼내기(오류응답, 맥락=" (그룹 zzgrp-a · page 1)")
+    # 서버 문구를 **그대로** 싣는다 — 요약하면 다음 사람이 같은 미스터리를 처음부터 푼다
+    assert "-32602" in str(e.value)
+    assert "zzgrp-a" in str(e.value), "맥락(어느 그룹·몇 페이지)이 사유에 없다"
+
+    # dict 조차 아닌 응답도 빈 결과가 아니다
+    with pytest.raises(RuntimeError):
+        ss_index_calls.항목꺼내기(None)
+    with pytest.raises(RuntimeError):
+        ss_index_calls.항목꺼내기({"항목": "세 건"})
+
+
+def test_진짜_빈_그룹은_정상이다():
+    """키가 **있는데** 빈 것은 정상이다 — 진짜 빈 그룹이거나 마지막 페이지 다음이다.
+
+    이걸 예외로 만들면 반대 방향으로 틀린다: 멀쩡한 완주가 매번 '실패' 로 찍힌다.
+    """
+    assert ss_index_calls.항목꺼내기({"success": True, "항목": []}) == []
+    assert ss_index_calls.항목꺼내기({"success": True, "항목": None}) == []
+    assert ss_index_calls.항목꺼내기({"항목": [{"productId": "zzpid"}]}) == [
+        {"productId": "zzpid"}]
+
+
+def test_서버집계는_없으면_지어내지_않는다():
+    """실측 이름은 `총상품수`(2026-09-21, 그룹 1001114 = 3,546건).
+
+    못 찾으면 `None` 이고, `group_health` 는 그때 **행수만으로** 완결을 판단한다.
+    0 으로 채우면 `행수 >= 총계` 가 거짓으로 참이 되어 한 번도 안 훑은 그룹이
+    "다 봤다" 가 된다.
+    """
+    assert ss_index_calls.서버집계({"총상품수": 3546}) == 3546
+    assert ss_index_calls.서버집계({"전체개수": 12}) == 12
+    assert ss_index_calls.서버집계({"success": True}) is None
+    assert ss_index_calls.서버집계({"success": True}, 99) == 99
+    # bool 은 int 의 하위형이다. `총상품수: True` 를 1건으로 읽으면 안 된다
+    assert ss_index_calls.서버집계({"총상품수": True}) is None
+
+
+def test_호출규약모듈은_아무것도_import하지_않는다():
+    """`ss_index_resume` 과 같은 선 (D-19).
+
+    여기에 `bulsaja_mcp` 가 한 줄이라도 들어오면 §10 이 통째로 죽고, 위 규약이
+    **3시간짜리 잡을 실제로 돌려야만** 검증되는 물건으로 되돌아간다.
+    """
+    소스 = open(ss_index_calls.__file__, encoding="utf-8").read()
+    import줄 = [줄 for 줄 in 소스.splitlines()
+               if 줄.startswith("import ") or 줄.startswith("from ")]
+    assert import줄 == [], f"호출 규약 모듈이 뭔가를 import 한다: {import줄}"
+
+
+def test_인덱스빌더가_오류응답을_직접_해석하지_않는다():
+    """`ss_index_build.py` 안에 `r.get("항목") or []` 가 되살아나지 못하게 한다.
+
+    문자열 가드다. 03-04 가 판정 어휘에 쓴 것과 같은 수법 — 다음 사람이 "간단하게"
+    되돌리는 것을 기계가 막는다.
+    """
+    소스 = (CLI_SCRIPTS / "ss_index_build.py").read_text(encoding="utf-8")
+    assert '.get("항목")' not in 소스, "목록 응답을 직접 꺼내 쓴다 — 항목꺼내기() 를 써라"
+    assert "항목꺼내기(" in 소스
+    assert "그룹아이디(gid)" in 소스, "groupId 를 문자열 그대로 보낸다"

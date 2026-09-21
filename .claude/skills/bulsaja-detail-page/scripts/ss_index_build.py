@@ -71,6 +71,7 @@ if SCRIPT_DIR not in sys.path:
 
 from bulsaja_mcp import BulsajaMCP  # noqa: E402
 from bulsaja_rate import 안전호출, 호출간격  # noqa: E402
+from ss_index_calls import 그룹아이디, 서버집계, 항목꺼내기  # noqa: E402
 from ss_index_resume import 남은대상, 처리완료  # noqa: E402
 
 
@@ -189,19 +190,24 @@ def 그룹상품목록(mcp, 간격, gid, 페이지크기):
     pid들, 본것, page, 총상품수 = [], set(), 1, None
     while True:
         간격.대기()
+        # **`groupId` 는 number 다.** 문자열로 보내면 서버가 -32602 를 주고, 그 응답에
+        # `항목` 키가 없어서 호출부가 "상품 0건" 으로 읽는다 — 30그룹이 9.2초에
+        # 조용히 0행으로 끝났다(03-07 첫 실탄). 타입 정규화와 응답 해석 둘 다
+        # `ss_index_calls.py` 에 있다: 이 파일은 `.venv-web` pytest 가 import 를 못 해서
+        # 여기 인라인으로 두면 그 규약이 스위트에 한 줄도 안 남는다.
         r = mcp.call_tool("bulsaja_market_group_products",
-                          {"groupId": gid, "page": page, "pageSize": 페이지크기}) or {}
-        항목 = r.get("항목") or []
+                          {"groupId": 그룹아이디(gid), "page": page,
+                           "pageSize": 페이지크기})
+        # **오류를 빈 결과로 읽지 않는다.** 모양이 아니면 예외 → `main()` 의 그룹별
+        # try 가 받아 그 그룹만 `완결: False · 오류` 로 적고 나머지는 계속 훑는다.
+        항목 = 항목꺼내기(r, 맥락=f" (그룹 {gid} · page {page})")
         if not 항목:
             break
 
         # 서버가 전체 개수를 어느 이름으로 주는지 판마다 다르다. 못 찾으면 None 으로 둔다 —
         # **지어내지 않는다.** 없는 총계를 0 으로 채우면 "다 훑었다" 가 거짓으로 참이 된다.
-        for 키 in ("전체개수", "총상품수", "총개수", "전체"):
-            값 = r.get(키)
-            if isinstance(값, int):
-                총상품수 = 값
-                break
+        # (실측 2026-09-21: `총상품수`. 첫 그룹 1001114 = 3,546건)
+        총상품수 = 서버집계(r, 총상품수)
 
         늘어남 = 0
         for it in 항목:
