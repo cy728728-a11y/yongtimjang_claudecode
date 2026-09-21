@@ -455,3 +455,102 @@ def test_기대닉네임이_비면_argv_조립이_터진다(tmp_path, monkeypatc
     finally:
         monkeypatch.undo()
         S.reload()
+
+
+# ── 배너 argv (Phase 4) ─────────────────────────────────────────────────────
+#
+# 여기서도 서브프로세스를 띄우지 않는다. 배너 스캔은 크레딧 0 · MCP 0회지만 실측
+# 4분 12초 · 271MB 다운로드짜리다 — 테스트가 실수로 자식을 띄우면 CDN 에 실제 요청이
+# 나가고 그 회차 캐시가 통째로 다시 받아진다.
+
+def _배너(**덮기):
+    """`BannerArgv` 를 최소 인자로 만든다.
+
+    설정값은 **테스트가 직접 넘긴다** — 모델에 기본값이 없다는 게 검증 대상이라,
+    여기서 기본값을 흉내 내면 그 성질이 가려진다 (`_불사자` 와 같은 규율).
+    """
+    기본 = dict(join=Path("/tmp/zz-join.json"), out=Path("/tmp/zz-banner.json"),
+                run_dir="2026-09-20", cache=Path("/tmp/zz-cache"),
+                thumbs=Path("/tmp/zz-thumbs"), workers=8, vision_revision=3,
+                blank_ar=6.0, blank_short_px=32, skip_min_keep=2,
+                skip_max_removal=0.5, lexicon_version="2026-09-21", keep_runs=2)
+    기본.update(덮기)
+    return A.BannerArgv(**기본)
+
+
+def test_배너_argv_도_cli_인터프리터를_쓴다():
+    """Pillow 와 Vision 이 `.venv` 에만 있다 — 여기선 취향이 아니라 물리적 요구사항이다.
+
+    `.venv-web` 으로 띄우면 이미지 한 장을 열기도 전에 ImportError 다 (D-19 / ENG-01).
+    프리픽스가 붙으면 그 다음이 인터프리터, 그 다음이 스크립트다 (`AdsArgv` 와 같은 자리).
+    """
+    av = _배너().build()
+
+    assert av[0] == str(A.PY_CLI)
+    assert av[0].endswith("/.venv/bin/python3")
+    assert "/.venv-web/" not in av[0]
+    assert av[1] == str(A.BANNER_SCAN)
+    assert av[1].endswith("/bulsaja-detail-page/scripts/banner_scan.py")
+    assert Path(av[1]).is_absolute()
+
+    감싼것 = _배너(prefix=["/usr/bin/caffeinate", "-i"]).build()
+    assert 감싼것[:2] == ["/usr/bin/caffeinate", "-i"]
+    assert 감싼것[2] == str(A.PY_CLI)
+    assert 감싼것[3] == str(A.BANNER_SCAN)
+
+
+def test_배너_argv_는_전부_문자열이다():
+    """`Path` 나 `int` 가 섞이면 jobs 테이블의 argv 컬럼(JSON 배열) 직렬화가 터진다.
+
+    숫자 플래그가 많아서(`--workers`·`--blank-ar`·`--skip-max-removal` …) 이 파일의
+    다른 모델보다 미끄러지기 쉬운 자리다.
+    """
+    av = _배너(prefix=["/usr/bin/caffeinate", "-i"]).build()
+
+    assert all(isinstance(a, str) and "\n" not in a for a in av), av
+    # 필수 5개가 실제로 다 실렸는가 — 하나라도 빠지면 자식이 exit 2 다 (04-03 계약)
+    for 플래그 in ("--join", "--out", "--run-dir", "--cache", "--thumbs"):
+        assert 플래그 in av, f"{플래그} 가 빠졌다 — 자식이 exit 2 로 거부한다"
+    assert av[av.index("--run-dir") + 1] == "2026-09-20"
+    assert av[av.index("--blank-ar") + 1] == "6.0"
+
+
+def test_배너_임계값에_모델_기본값이_없다():
+    """🔴 가짜 설정 방지 회귀 (T-1-12 / S-4).
+
+    모델이나 CLI 에 기본값을 두면 `workspace.toml` 을 고쳐도 동작이 안 바뀐다.
+    배너 쪽은 한 겹 더 나쁘다 — 넘긴 값이 그대로 산출물 `판정규칙` 블록에 찍히므로,
+    모델 기본값으로 때우면 **"무슨 규칙으로 판정했나" 의 출처가 둘**이 된다.
+    그러면 회차 간 비교가 거짓말이 되고, 그게 D-10 이 경고한 바로 그 상황이다.
+
+    빠뜨릴 수 있는 인자를 **하나씩 전부** 확인한다 — 한 필드만 보면 다음 사람이
+    다른 필드에 기본값을 넣었을 때 이 테스트가 통과하는 척만 한다.
+    """
+    필수 = ("join", "out", "run_dir", "cache", "thumbs", "workers", "vision_revision",
+           "blank_ar", "blank_short_px", "skip_min_keep", "skip_max_removal",
+           "lexicon_version", "keep_runs")
+    온전 = dict(join=Path("/tmp/zz-join.json"), out=Path("/tmp/zz-banner.json"),
+                run_dir="2026-09-20", cache=Path("/tmp/zz-cache"),
+                thumbs=Path("/tmp/zz-thumbs"), workers=8, vision_revision=3,
+                blank_ar=6.0, blank_short_px=32, skip_min_keep=2,
+                skip_max_removal=0.5, lexicon_version="2026-09-21", keep_runs=2)
+
+    for 뺄것 in 필수:
+        모자란것 = {k: v for k, v in 온전.items() if k != 뺄것}
+        with pytest.raises(ValidationError):
+            A.BannerArgv(**모자란것)
+
+    # `prefix` 는 반대다 — 기본값(빈 리스트)이 있어야 한다. 프리픽스를 붙일지는
+    # 잡 종류가 정하는 판단이라 모델이 강요하면 그 판단이 두 곳으로 갈린다.
+    assert A.BannerArgv(**온전).prefix == []
+
+
+def test_어휘군_버전이_플래그_모양이면_거부된다():
+    """설정값이 `--force` 모양이면 자식의 argparse 가 그걸 **옵션으로** 파싱한다 (T-4-17).
+
+    `expect_nick` 과 같은 계열의 방어다 — 리스트 argv 라 셸은 안 거치지만,
+    셸을 안 거치는 것과 파서를 안 거치는 것은 다르다.
+    """
+    for 나쁜값 in ["--force", "-x", "2026 09 21", "", " "]:
+        with pytest.raises(ValidationError):
+            _배너(lexicon_version=나쁜값)

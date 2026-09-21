@@ -49,6 +49,13 @@ SS_INDEX_BUILD = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-pag
 BULSAJA_SCAN = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
                 / "scripts" / "bulsaja_scan.py")
 
+# 배너 판정 스캐너 (Phase 4). **같은 스킬 디렉터리다** — 위 두 개와 같은 이유로 그 자리다.
+# `PY_CLI` 를 쓰는 것이 여기서는 취향이 아니라 **물리적 요구사항**이다: Pillow 와
+# pyobjc-framework-Vision 이 `.venv` 에만 있고 `.venv-web` 에는 아예 없다. 웹앱 인터프리터로
+# 띄우면 이미지 한 장을 열기도 전에 ImportError 다.
+BANNER_SCAN = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
+               / "scripts" / "banner_scan.py")
+
 # 계정 alias 의 모양. 상한(개수)은 두지 않는다 — 계정은 `~/.eroom/naver-ads.json` 에
 # 항목을 더하는 것만으로 늘어난다(지금 4개, 6개 예정). 개수를 코드에 박으면
 # 계정을 늘린 날 화면이 조용히 멈춘다 (BOARD-02 와 같은 이유).
@@ -65,6 +72,16 @@ Alias = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]+$", min_length
 # 아니므로 BOARD-02 의 "개수를 박지 마라" 와 충돌하지 않는다.
 Nick = Annotated[str, StringConstraints(pattern=r"^[^-\s][^\s]*$",
                                         min_length=1, max_length=40)]
+
+# 설정에서 온 **자유 문자열**이 자식 argparse 에 플래그로 읽히지 않는 모양.
+# `Nick` 과 글자 그대로 같은 제약이지만 이름을 따로 둔다 — 뜻이 다른 두 값이 한 타입을
+# 공유하면 한쪽 규칙을 고칠 때 다른 쪽이 소리 없이 따라 바뀐다(`BULSAJA_KINDS` 와
+# `SINGLETON_KINDS` 를 합치지 않는 것과 같은 규율).
+# 지금 쓰는 곳은 어휘군 버전(`2026-09-21`)이다. `workspace.toml` 에서 오므로 클라이언트가
+# 못 만지지만, 값이 `--force` 모양이면 **리스트 argv 라도** 자식의 파서가 옵션으로 읽는다 —
+# 셸을 안 거치는 것과 파서를 안 거치는 것은 다르다(T-3-13 / T-4-17).
+PlainArg = Annotated[str, StringConstraints(pattern=r"^[^-\s][^\s]*$",
+                                            min_length=1, max_length=40)]
 
 
 class AdsArgv(BaseModel):
@@ -192,5 +209,72 @@ class BulsajaArgv(BaseModel):
         # "0건만 처리" 로 읽을 수도 있어서, 빈 리스트 규율과 같이 **아예 안 붙인다.**
         if self.limit:
             av += ["--limit", str(self.limit)]
+
+        return av
+
+
+class BannerArgv(BaseModel):
+    """`banner_scan.py` 호출 한 번을 표현하는 모델 (Phase 4 / BANNER-01).
+
+    `AdsArgv`·`BulsajaArgv` 와 **같은 파일**에 둔다. 다른 파일로 빼면 "조립은 한 곳" 이
+    깨지고, `test_argv.py` 의 트리 순회 가드가 지키는 주장이 통째로 헐거워진다.
+
+    **임계값·리비전·워커 수·어휘군 버전에 기본값이 없다.** 호출부(`jobs._build_argv`)가
+    `settings.cfg()` 로 읽어 넘긴다 — `BulsajaArgv` 가 세운 규율 그대로다. 기본값을
+    모델이나 CLI 에 두면 `workspace.toml` 을 고쳐도 동작이 안 바뀌는 **가짜 설정**이
+    된다(T-1-12). 여기엔 한 겹 더 있다: 넘긴 값이 그대로 산출물의 `판정규칙` 블록에
+    찍히므로, 모델 기본값으로 때우면 **"무슨 규칙으로 판정했나" 의 출처가 둘**이 되고
+    회차 간 비교가 거짓말이 된다(D-10 이 경고한 바로 그 상황).
+
+    플래그 이름은 04-03 이 확정한 CLI 계약 그대로다. 필수 5개(`--join`·`--out`·
+    `--run-dir`·`--cache`·`--thumbs`)가 빠지면 자식이 **exit 2** 로 거부한다 — 그래서
+    전부 `| None` 이 아닌 필수 필드다.
+
+    `--keep-runs` 에 0 을 넘기지 마라. 자식이 그걸 "캐시 전량 삭제" 가 아니라 **오류**로
+    보고 exit 2 한다(의도된 가드). 막는 자리는 CLI 한 곳이다 — 여기에 같은 규칙을 또 두면
+    둘이 어긋났을 때 어느 쪽이 진짜 가드인지 모르게 된다(`--groups` 와 같은 판단).
+    """
+
+    join: Path               # --join       직전 성공 bulsaja_scan 의 조인 산출물
+    out: Path                # --out        배너 판정 산출물 JSON
+    run_dir: str             # --run-dir    회차 이름 (캐시·썸네일 하위 디렉터리)
+    cache: Path              # --cache      원본 이미지 캐시 **루트** (회차 하위는 자식이 만든다)
+    thumbs: Path             # --thumbs     썸네일 **루트**
+    workers: int             # --workers
+    vision_revision: int     # --vision-revision  (D-10 — 박는 것이 요점이다)
+    blank_ar: float          # --blank-ar         무내용 장 규칙. **배너 판정이 아니다**
+    blank_short_px: int      # --blank-short-px   위와 한 쌍
+    skip_min_keep: int       # --skip-min-keep    D-07
+    skip_max_removal: float  # --skip-max-removal D-08
+    lexicon_version: PlainArg  # --lexicon-version 산출물 `판정규칙` 에 찍을 표기
+    keep_runs: int           # --keep-runs  남길 원본 캐시 회차 수 (회차당 약 271MB)
+    # `AdsArgv.prefix`·`BulsajaArgv.prefix` 와 같은 규약의 `caffeinate -i` 자리 (ENG-06).
+    # **무엇에 붙일지는 잡 종류가 정한다** — `jobs._수면방지_프리픽스` 가 그 판단을 들고 있다.
+    prefix: list[str] = []
+
+    def build(self) -> list[str]:
+        """argv 리스트. 셸을 거치지 않으므로 따옴표·이스케이프가 필요 없다."""
+        av: list[str] = [*self.prefix, str(PY_CLI), str(BANNER_SCAN)]
+
+        # 경로는 전부 `str()` 로 못박는다 — `Path` 를 두면 jobs 테이블의 argv 컬럼
+        # (JSON 배열) 직렬화가 터진다 (`AdsArgv.build()` 와 같은 이유).
+        av += ["--join", str(self.join)]
+        av += ["--out", str(self.out)]
+        av += ["--run-dir", self.run_dir]
+        av += ["--cache", str(self.cache)]
+        av += ["--thumbs", str(self.thumbs)]
+
+        # 숫자도 `str()` 이다. 같은 이유(JSON 배열에 int 가 섞이면 argv 가 아니다).
+        # **조건부로 붙이지 않는다** — 전부 언제나 붙인다. 하나라도 빠지면 자식이
+        # 자기 폴백 기본값으로 돌면서 산출물 `판정규칙` 에는 그 폴백을 찍는데,
+        # 그건 `workspace.toml` 이 말하는 값과 다를 수 있다(S-4 드리프트가 조용히 산다).
+        av += ["--workers", str(self.workers)]
+        av += ["--vision-revision", str(self.vision_revision)]
+        av += ["--blank-ar", str(self.blank_ar)]
+        av += ["--blank-short-px", str(self.blank_short_px)]
+        av += ["--skip-min-keep", str(self.skip_min_keep)]
+        av += ["--skip-max-removal", str(self.skip_max_removal)]
+        av += ["--lexicon-version", self.lexicon_version]
+        av += ["--keep-runs", str(self.keep_runs)]
 
         return av
