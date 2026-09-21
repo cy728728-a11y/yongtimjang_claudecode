@@ -57,10 +57,16 @@
         [--lexicon-version 2026-09-21] [--keep-runs 2]
 """
 import argparse
+import concurrent.futures
+import ipaddress
 import json
 import os
+import shutil
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime
 
 try:
@@ -179,6 +185,243 @@ def 썸네일이름(상품순번: int, 장순번: int) -> str:
 
 def 썸네일경로(썸루트: str, 회차: str, 상품순번: int, 장순번: int) -> str:
     return os.path.join(썸루트, 회차, 썸네일이름(상품순번, 장순번))
+
+
+# ── SSRF 관문 · 다운로드 · 캐시 정리 (T-4-06 / T-4-07 / T-4-01) ─────────────
+
+# 재시도 대기(초). 지수 백오프 3회 — 실측 404 25장은 3회 뒤에도 영구 404였다.
+기본_백오프 = (0.3, 0.6, 0.9)
+기본_타임아웃 = 20.0
+
+# 브라우저 UA 를 싣는다. 불사자 앞단 방화벽이 stdlib 기본 UA(`Python-urllib/…`)를
+# 403 으로 끊은 실측이 있다 — 크레딧이 아니라 **이미지 한 장도 못 받는** 문제라
+# 여기서 미리 막는다. 위조가 아니라 "차단 회피용 최소 표기"다.
+사용자에이전트 = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36")
+
+
+def 허용URL인가(url) -> tuple:
+    """다운로드 직전 **단일 관문**. `(허용여부, 사유)` (SSRF · ASVS V5 · T-4-06).
+
+    **URL 의 출처가 외부 서비스(불사자)라 신뢰할 수 없다.** 상세 HTML 은 타오바오에서
+    긁어온 마크업이고, 거기에 `http://169.254.169.254/...`(클라우드 메타데이터) 나
+    `https://127.0.0.1:8765/...`(자기 웹앱) 이 섞여 들어오는 것을 막을 방법이 우리에게 없다.
+    실측 916장은 전부 `https://` + 공인 호스트였지만, 그건 **오늘의 사실**이지 계약이 아니다.
+
+    거부는 **예외가 아니다.** 그 장을 `판정: "미판정"` + 사유로 남긴다 — 예외로 올리면
+    URL 한 개가 회차 전체를 죽이고, 조용히 건너뛰면 "배너 아님" 으로 흡수된다(T-4-01).
+
+    DNS 를 풀지 않는다. 푼 값과 실제 접속이 같다는 보장이 없고(TOCTOU), 1인 로컬에서
+    얻는 것보다 매 URL 에 붙는 지연이 크다. 스킴·호스트 모양 검사로 충분하다.
+    """
+    if not isinstance(url, str) or not url.strip():
+        # `src` 가 없는 `<img>` 자리. 빈 문자열을 통과시키면 urlopen 이 이상한 곳을 본다.
+        return False, "허용되지 않는 URL (비어 있다)"
+    try:
+        조각 = urllib.parse.urlsplit(url.strip())
+    except ValueError as e:
+        return False, f"허용되지 않는 URL (파싱 실패: {e})"
+
+    if 조각.scheme.lower() != "https":
+        # `http`·`data:`·상대경로 전부 여기서 걸린다. 실측 0건이지만 미래 방어다.
+        return False, f"허용되지 않는 URL (스킴 {조각.scheme or '없음'})"
+    if "@" in 조각.netloc:
+        # `https://cdn.bulsaja.com@127.0.0.1/…` 처럼 사람 눈을 속이는 모양.
+        return False, "허용되지 않는 URL (자격증명이 박힌 호스트)"
+
+    try:
+        호스트 = 조각.hostname
+    except ValueError as e:
+        return False, f"허용되지 않는 URL (호스트 파싱 실패: {e})"
+    if not 호스트:
+        return False, "허용되지 않는 URL (호스트가 없다)"
+    호스트 = 호스트.lower()
+
+    if 호스트 == "localhost" or 호스트.endswith(".localhost"):
+        return False, "허용되지 않는 URL (localhost)"
+
+    try:
+        주소 = ipaddress.ip_address(호스트)
+    except ValueError:
+        # IP 리터럴이 아니다 = 보통의 도메인. 통과.
+        return True, ""
+    # IP 리터럴은 **전부** 거부한다. 사설 대역만 막으면 `https://1.2.3.4/…` 같은
+    # 공인 IP 직접 지정이 남는데, 그건 CDN 이 하는 모양이 아니다(실측 0건).
+    if (주소.is_private or 주소.is_loopback or 주소.is_link_local
+            or 주소.is_reserved or 주소.is_multicast):
+        # 127. / 10. / 192.168. / 169.254. / 172.16~31. 이 전부 여기 들어온다.
+        return False, f"허용되지 않는 URL (사설·루프백 대역 {호스트})"
+    return False, f"허용되지 않는 URL (IP 리터럴 {호스트})"
+
+
+def 회차정리(캐시루트, 남길회차: int, 보호=None) -> list:
+    """원본 캐시에서 오래된 회차 디렉터리를 지운다 → 지운 회차 이름 목록 (T-4-07).
+
+    회차당 약 271MB 다. 안 지우면 디스크가 단조증가한다 — 1인 로컬이라 아무도
+    안 보다가 어느 날 맥북이 꽉 찬다.
+
+    **`남길회차` 가 0 이하면 예외다.** `0` 은 "전부 지워라" 가 아니라 설정이 비었다는
+    뜻일 가능성이 훨씬 높다 — 이 저장소가 네 번 막은 "빈 값이 전량이 되는 경로"의
+    삭제판이다. `보호` 로 지정한 회차(지금 돌고 있는 회차)는 절대 지우지 않는다.
+    """
+    남길회차 = int(남길회차)
+    if 남길회차 < 1:
+        raise ValueError(f"--keep-runs 는 1 이상이어야 한다 (받은 값 {남길회차}) — "
+                         "0 은 '전부 지워라' 가 아니다")
+    if not os.path.isdir(캐시루트):
+        return []
+
+    항목 = []
+    for 이름 in os.listdir(캐시루트):
+        경로 = os.path.join(캐시루트, 이름)
+        # 심링크는 따라가지 않는다 — 링크를 지우면 링크 대상이 사라질 수 있다.
+        if os.path.islink(경로) or not os.path.isdir(경로):
+            continue
+        항목.append((os.path.getmtime(경로), 이름, 경로))
+    항목.sort(key=lambda t: t[0], reverse=True)   # 최신 먼저
+
+    보호세트 = {보호} if 보호 else set()
+    남긴수 = sum(1 for _, 이름, _ in 항목 if 이름 in 보호세트)
+    지운것 = []
+    for _, 이름, 경로 in 항목:
+        if 이름 in 보호세트:
+            continue
+        if 남긴수 < 남길회차:
+            남긴수 += 1
+            continue
+        try:
+            shutil.rmtree(경로)
+            지운것.append(이름)
+        except OSError as e:
+            # 지우기 실패는 회차를 죽일 일이 아니다. 다만 **조용히 넘기지 않는다** —
+            # 디스크가 왜 안 줄었는지 나중에 알 수 있어야 한다.
+            말하기(f"[경고] 오래된 캐시 회차를 못 지웠다({이름}): {type(e).__name__}: {e}")
+    return 지운것
+
+
+def 한장받기(url, 저장경로, *, 백오프=기본_백오프, 타임아웃=기본_타임아웃) -> tuple:
+    """한 장을 받아 캐시에 쓴다 → `(성공여부, 사유)`.
+
+    이미 캐시에 있으면 **받지 않는다** — 271MB 재다운로드를 막는 것이 캐시의 존재 이유다.
+
+    재시도는 지수 백오프 3회(0.3 / 0.6 / 0.9초). **404 는 즉시 포기한다** — 실측 25장이
+    3회 뒤에도 영구 404 라 재시도가 시간만 먹는다. 실패는 사유를 들고 돌아온다.
+    **예외를 조용히 삼키지 않는다** — 잡은 예외는 전부 사유 문자열이 되어 장에 적힌다.
+    Phase 3 의 CR-01~03 이 전부 "못 본 것을 0건으로 적은" 같은 계열의 병이었다.
+    """
+    try:
+        if os.path.exists(저장경로) and os.path.getsize(저장경로) > 0:
+            return True, "캐시"
+    except OSError as e:
+        말하기(f"[경고] 캐시 확인 실패({저장경로}): {type(e).__name__}: {e}")
+
+    허용, 거부사유 = 허용URL인가(url)
+    if not 허용:
+        return False, 거부사유
+
+    마지막사유 = "알 수 없는 실패"
+    총시도 = len(백오프) + 1
+    for 시도 in range(총시도):
+        try:
+            요청 = urllib.request.Request(url, headers={"User-Agent": 사용자에이전트})
+            with urllib.request.urlopen(요청, timeout=타임아웃) as 응답:
+                본문 = 응답.read()
+            if not 본문:
+                마지막사유 = f"응답이 0바이트다 ({len(백오프)}회 재시도)"
+            else:
+                os.makedirs(os.path.dirname(저장경로) or ".", exist_ok=True)
+                tmp = 저장경로 + ".tmp"
+                with open(tmp, "wb") as f:
+                    f.write(본문)
+                os.replace(tmp, 저장경로)
+                return True, ""
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                # 영구다. "3회 재시도" 라고 적으면 안 한 일을 했다고 적는 것이다.
+                return False, "HTTP 404 (재시도 무의미 — 영구)"
+            마지막사유 = f"HTTP {e.code} ({len(백오프)}회 재시도)"
+        except urllib.error.URLError as e:
+            마지막사유 = f"연결 실패: {e.reason} ({len(백오프)}회 재시도)"
+        except OSError as e:
+            마지막사유 = f"{type(e).__name__}: {e} ({len(백오프)}회 재시도)"
+        if 시도 < len(백오프):
+            time.sleep(백오프[시도])
+    return False, 마지막사유
+
+
+def 호스트이름(url) -> str:
+    """실패 집계용 호스트. 못 뽑으면 `(알수없음)` — 빈 문자열로 접지 않는다."""
+    try:
+        return (urllib.parse.urlsplit(str(url)).hostname or "(알수없음)").lower()
+    except ValueError:
+        return "(알수없음)"
+
+
+def 전부받기(상품들: list, 캐시루트: str, 회차: str, 작업자수: int) -> tuple:
+    """장 전체를 병렬로 받는다 → `(성공수, 실패수, 호스트별실패)`.
+
+    실패한 장은 `판정: "미판정"` + 사유로 남는다. **빈 값으로 접지 않는다** —
+    404 20장이 한 상품(실측 ri=39)에 몰려 있어서, 흡수하면 그 상품이
+    "제품 0장 + 배너 0장" 으로 조용히 보인다.
+    """
+    일감 = []
+    for 상품순번, 상품 in enumerate(상품들):
+        for 장 in 상품.get("장") or []:
+            일감.append((상품, 장,
+                        원본경로(캐시루트, 회차, 상품순번, 장["순번"])))
+    if not 일감:
+        return 0, 0, {}
+
+    성공, 실패, 호스트별 = 0, 0, {}
+    작업자수 = max(1, int(작업자수))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=작업자수) as 풀:
+        미래 = {풀.submit(한장받기, 장["url"], 경로): (상품, 장)
+              for 상품, 장, 경로 in 일감}
+        for f in concurrent.futures.as_completed(미래):
+            상품, 장 = 미래[f]
+            try:
+                받음, 사유 = f.result()
+            except Exception as e:
+                # 스레드에서 올라온 예상 밖 예외도 **사유를 들고** 장에 적힌다.
+                받음, 사유 = False, f"{type(e).__name__}: {e}"
+            if 받음:
+                성공 += 1
+                장["사유"] = None
+                continue
+            실패 += 1
+            장["판정"] = banner.미판정
+            장["사유"] = 사유
+            호스트 = 호스트이름(장["url"])
+            호스트별[호스트] = 호스트별.get(호스트, 0) + 1
+    return 성공, 실패, 호스트별
+
+
+def 상품별미판정반영(상품들: list) -> int:
+    """미판정 장을 가진 상품에 `스킵사유: "판정불가"` 를 적는다 → 그런 상품 수.
+
+    **흡수 금지의 상품층 집행이다.** 장에만 사유를 적고 상품을 건드리지 않으면,
+    화면은 그 상품을 멀쩡한 상품으로 보여 준다. `webapp.banner.제품이미지목록` 이
+    미판정 장으로 한 번 더 막지만, 두 층이 같이 서야 "조용히 통과"가 안 생긴다.
+
+    **판정 실패의 기준은 `미판정` 이 아니라 `미판정 + 사유` 다.** 판정 자체는 04-04 가
+    얹으므로, 그 전까지는 멀쩡히 내려받은 장도 `미판정` 이다(사유는 `None`). 사유 없는
+    미판정을 실패로 세면 04-03 단계에서 전 상품이 '판정불가' 가 된다 — 실패는 **사유를
+    들고 오는 것**이라는 이 파일의 규약이 그대로 판별식이 된다.
+    """
+    센것 = 0
+    for 상품 in 상품들:
+        if 상품.get("스킵사유"):
+            센것 += 1
+            continue
+        미판정장 = [장 for 장 in (상품.get("장") or [])
+                 if 장.get("판정") == banner.미판정 and 장.get("사유")]
+        if not 미판정장:
+            continue
+        상품["스킵사유"] = "판정불가"
+        상품["사유"] = (f"판정 못 한 장 {len(미판정장)}/{len(상품.get('장') or [])} — "
+                     f"첫 사유: {미판정장[0].get('사유')}")
+        센것 += 1
+    return 센것
 
 
 # ── ① 조인 산출물 → 상품 · 장 골격 ──────────────────────────────────────────
@@ -363,6 +606,33 @@ def main() -> int:
         말하기(f"※ 상세 미조회 {미조회상품}상품 — **0장이 아니라 판정불가다.** "
               "조인 스캔이 그 행의 상세를 못 물어봤다는 뜻이고, 그 상품은 "
               "Phase 5 입력에서 예외로 막힌다")
+
+    # ④ 캐시 회차 정리 → 병렬 다운로드. **받기 전에 지운다** (T-4-07).
+    회차캐시 = os.path.join(인자.cache, 인자.run_dir)
+    os.makedirs(회차캐시, exist_ok=True)
+    try:
+        지운회차 = 회차정리(인자.cache, 인자.keep_runs, 보호=인자.run_dir)
+    except ValueError as e:
+        사유 = f"⛔ {e}"
+        말하기(사유)
+        오류말하기(사유)
+        return 2
+    if 지운회차:
+        말하기(f"오래된 원본 캐시 회차 {len(지운회차)}개를 지웠다 "
+              f"(--keep-runs {인자.keep_runs}): {', '.join(지운회차)}")
+
+    성공수, 실패수, 호스트별실패 = 전부받기(상품들, 인자.cache, 인자.run_dir, 인자.workers)
+    말하기(f"[2/5] 다운로드 {성공수}장 (실패 {실패수})")
+    if 호스트별실패:
+        줄 = " · ".join(f"{호스트} {수}"
+                      for 호스트, 수 in sorted(호스트별실패.items(),
+                                             key=lambda kv: -kv[1]))
+        말하기(f"    실패 호스트별: {줄}")
+
+    판정불가상품 = 상품별미판정반영(상품들)
+    if 판정불가상품:
+        말하기(f"※ 판정불가 상품 {판정불가상품}건 — 그 상품은 Phase 5 입력에서 "
+              "예외로 막힌다. **'배너 없음' 이 아니다**")
 
     집계 = 집계내기(상품들)
     산출물 = {
