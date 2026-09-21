@@ -70,6 +70,15 @@ CLI 쪽(`bulsaja_scan.py` · `ss_index_build.py`)에 세 군데 그대로 살아
 
 ### CR-01: 마켓그룹 조회 오류가 "마켓그룹 0개"로 흡수되고, 보드는 그걸 **전 행 광고청소**로 읽는다
 
+> ✅ **수정 완료 (2026-09-21)** — RED `eba6fda` · GREEN **`ec2d5e7`**
+> 1층 CLI: `bulsaja_scan.py` 가 `ss_index_calls.그룹꺼내기`(= `항목꺼내기` 와 같은 규약, 공통 본체
+> `목록꺼내기` 로 합쳤다)로 해석하고, 못 읽었거나 0개면 **exit 2 · 산출물 없음**.
+> 2층 웹앱: `_load_join` 이 `마켓그룹` 빈 산출물을 `None` + 사유로 내려 전 행을 `미조회`/`시스템`
+> (안전한 쪽)으로 떨어뜨린다. 회귀 5건 추가 — 재현값 `광고청소행 9 · 청소그룹 8` 이 0 으로 고정됐다
+> (`test_board.py::test_마켓그룹이_빈_산출물은_광고청소를_만들지_않는다` ·
+> `test_index.py` §11 네 건). MCP 는 한 번도 안 때린다(크레딧 0).
+> **CR-02 · CR-03 은 열린 채다 — 이번 수정 범위가 아니다.**
+
 **File:** `.claude/skills/bulsaja-detail-page/scripts/bulsaja_scan.py:309-313`
 **같이 볼 곳:** `webapp/join.py:217-261` · `webapp/routes/board.py:116-150`
 
