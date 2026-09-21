@@ -30,7 +30,8 @@
   4. `--db` 를 **읽기 전용**(`mode=ro`)으로 열어 인덱스를 조회한다. 스캔은 인덱스를
      고치지 않는다. 파일·테이블이 없으면 전 행을 `미조회` 로 두고 **계속 간다** —
      인덱스 구축 전에도 번호층 해상률과 광고 청소 목록은 나와야 한다
-  5. 인덱스에 productId 가 있는 행만 `bulsaja_product_workdata(mode=summary)` 로 다시 읽는다
+  5. 인덱스에 productId 가 있는 행만 `bulsaja_product_workdata(mode=full)` 로 다시 읽는다
+     (**full 이다** — `uploadBulsajaCode` 가 summary 응답에는 키가 아예 없다. 2026-09-21 실측)
   6. 팬아웃(JOIN-03): 모인 판매자상품코드를 **배치로** `bulsaja_product_find_by_code` 에
      넣어 사본 묶음 키를 얻고, 다시 배치로 넣어 사본 전체를 얻는다.
      **행마다 한 번씩 부르지 않는다** — 194행이면 194호출이라 레이트리밋 예산의 40%를 먹는다
@@ -340,11 +341,23 @@ def main():
                 continue
 
             간격.대기()
-            # `mode=summary` 로 충분하다 — 실측상 `uploadedSuccessUrl` 도
-            # `uploadDetailContents` 도 여기 다 나오고 응답이 16% 작다.
+            # **`mode=full` 이다. `summary` 를 쓰면 안 된다** (03-07 실탄 실측).
+            #
+            # `summary` 에도 `uploadedSuccessUrl`·`uploadDetailContents` 는 나온다 —
+            # 03-04 가 그래서 summary 를 골랐고, 그 판단은 **인덱스 빌더에서는 지금도 옳다**
+            # (그쪽은 smartstore 번호만 필요하고 30,546건을 돈다).
+            #
+            # 그런데 `uploadBulsajaCode` 는 **summary 응답에 키가 아예 없다**:
+            #   summary  14키 — uploadBulsajaCode 없음
+            #   full     38키 — uploadBulsajaCode = "QFXSFv6GJXiu-xv2WraaO"
+            # 그 코드가 없으면 팬아웃(JOIN-03 사본 N건)이 **전 행 0건**이 되고,
+            # 그러면 `그룹태그` 도 안 채워져 기작업(D-08) 제외가 통째로 죽는다.
+            # 실제로 첫 실탄에서 사본 0건 · 기작업 0건이 나왔다.
+            #
+            # 비용은 194행짜리 스캔에서만 든다(인덱스 3만건 루프가 아니다).
             r, 미조회 = 안전호출(
                 lambda: mcp.call_tool("bulsaja_product_workdata",
-                                      {"productId": pid, "mode": "summary"}),
+                                      {"productId": pid, "mode": "full"}),
                 재시도대기=인자.retry_after, sleep_fn=time.sleep, 로그=말하기)
             if 미조회:
                 행["미조회"] = True

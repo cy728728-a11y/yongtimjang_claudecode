@@ -774,3 +774,28 @@ def test_인덱스빌더가_오류응답을_직접_해석하지_않는다():
     assert '.get("항목")' not in 소스, "목록 응답을 직접 꺼내 쓴다 — 항목꺼내기() 를 써라"
     assert "항목꺼내기(" in 소스
     assert "그룹아이디(gid)" in 소스, "groupId 를 문자열 그대로 보낸다"
+
+
+def test_스캔은_full_로_읽고_인덱스는_summary_로_읽는다():
+    """두 CLI 가 **다른 mode 를 쓰는 것이 의도**다 (03-07 실탄 실측).
+
+    | CLI | mode | 왜 |
+    |---|---|---|
+    | `ss_index_build` | summary | smartstore 번호만 필요하고 30,546건을 돈다. 응답이 16% 작다 |
+    | `bulsaja_scan`   | **full** | `uploadBulsajaCode` 가 **summary 응답에 키가 없다** |
+
+    실측: summary 14키(uploadBulsajaCode 없음) vs full 38키
+    (`uploadBulsajaCode = "QFXSFv6GJXiu-xv2WraaO"`).
+    그 코드가 없으면 팬아웃(JOIN-03 사본 N건)이 전 행 0건이 되고, `그룹태그` 도
+    안 채워져 기작업(D-08) 제외가 통째로 죽는다. 첫 실탄에서 실제로 그렇게 나왔다.
+
+    **되돌리기 쉬운 한 글자짜리 차이라 문자열로 못박는다** — "응답이 작으니 summary 로
+    통일하자" 는 다음 사람에게 지극히 자연스러운 생각이다.
+    """
+    스캔 = (CLI_SCRIPTS / "bulsaja_scan.py").read_text(encoding="utf-8")
+    빌더 = (CLI_SCRIPTS / "ss_index_build.py").read_text(encoding="utf-8")
+
+    assert '"mode": "full"' in 스캔, "스캔이 full 로 안 읽는다 — 사본·기작업이 통째로 죽는다"
+    assert '"mode": "summary"' not in 스캔, "스캔에 summary 호출이 남아 있다"
+    assert '"mode": "summary"' in 빌더, "인덱스 빌더가 summary 를 버렸다 — 3만건에 불필요한 비용"
+    assert '"mode": "full"' not in 빌더
