@@ -1,8 +1,8 @@
 ---
 phase: 03-join-detail-state
 verified: 2026-09-21T06:22:05Z
-status: human_needed
-score: 10/10 must-have truths verified at code level (1 human verification item still open from prior round, unaffected by this round's fixes)
+status: passed
+score: 10/10 must-have truths verified at code level + 1 human verification item CLOSED 2026-09-21 (JOIN-02 ④⑤ 둘 다 PASS — 03-HUMAN-UAT.md)
 overrides_applied: 0
 re_verification:
   previous_status: gaps_found
@@ -13,6 +13,8 @@ re_verification:
     - "인덱스 히트가 재검증 없이 쓰이지 않는다, 히트 원본이 정직하다 (JOIN-04 / CR-03) — workdata 오류가 unresolved=1(미조회)로 기록되어 ss_index_resume.처리완료()가 다시 조회한다"
   gaps_remaining: []
   regressions: []
+human_verification_resolved: 2026-09-21
+human_verification_result: "PASS(2/2) — ④ 용팀장이 `소형이동식오피스`(번호 없음·703행, 최난도)를 사유 문구만 들고 네이버에서 찾아 `25-2 소형이동식오피스` 로 수정 완료. 코드 실측으로 수정이 해소로 이어짐을 확인(market_number→25-2, 불사자 마켓그룹에 25-2 존재=5번_용쌤25-2/1001822, 인덱스 미보유→재스캔 시 빨강→파랑 이동). `판매상품_17-3_오운웨이컴퍼니` 도 함께 수정. ⑤ 진술 그대로: \"안헷갈려\"."
 human_verification:
   - test: "보드의 미해소 청소 목록에서 광고그룹 1개를 골라, 거기 적힌 원문·번호만 들고 네이버 검색광고 화면에서 그 그룹을 실제로 찾을 수 있는지 확인한다. 두 배너('내가 지울 것' vs '시스템이 못 읽은 것')가 헷갈리는지도 함께 확인한다."
     expected: "미해소 사유 문구만으로 네이버 광고에서 해당 그룹을 특정할 수 있고, 두 배너의 소속이 구분된다 — 되든 안 되든 한 줄씩 진술이 남는다"
@@ -27,7 +29,7 @@ deferred:
 
 **Phase Goal:** 광고 판정 행을 불사자 상품에 실제로 잇고 상세 상태를 3단계로 판정해, "유입은 있는데 상세가 중국어 원본인 상품" 목록을 화면에서 **정확히** 뽑아낸다.
 **Verified:** 2026-09-21T06:22:05Z
-**Status:** human_needed
+**Status:** passed (2026-09-21 사람 검증 2/2 PASS 로 마감 — 아래 §Human Verification 참조)
 **Re-verification:** Yes — after CR-01/CR-02/CR-03 critical code-review gap closure
 
 ## 결론 먼저
@@ -172,3 +174,39 @@ TBD/FIXME/XXX/TODO/HACK/PLACEHOLDER: 이번 검증에서 다시 스캔, 수정 �
 
 _Verified: 2026-09-21T06:22:05Z_
 _Verifier: Claude (gsd-verifier, re-verification)_
+
+
+---
+
+## Human Verification — 마감 (2026-09-21)
+
+`human_needed` 를 만든 단 하나의 항목(JOIN-02 ④⑤)이 **둘 다 PASS** 로 닫혔다. 상세는
+`03-HUMAN-UAT.md`(status: complete · passed 2/2).
+
+### ④ 사유 문구만으로 네이버에서 그룹을 찾을 수 있는가 — PASS
+
+용팀장이 19그룹 중 **최난도 케이스**(`소형이동식오피스` · 번호 `—` · 사유 `추출실패` · 703행,
+전체 미해소 883행의 79.6%)를 골라, 보드가 준 광고그룹명 원문만 들고 네이버 검색광고에서
+그 그룹을 찾아 **`25-2 소형이동식오피스` 로 이름을 고쳤다.** 캠페인명 컬럼이 없는 것도
+장애가 되지 않았다. `판매상품_17-3_오운웨이컴퍼니` 도 같은 방식으로 수정.
+
+수정이 실제로 해소로 이어지는지 메인 세션이 코드로 실측:
+
+| 확인 | 결과 |
+|---|---|
+| `market_number("25-2 소형이동식오피스")` | `25-2` — `_번호패턴` 이 `search` 라 **접두+공백 형태도 통과**(기존 `판매상품_7-1_회사명` 언더스코어형과 모양이 달라도 됨) |
+| `25-2` 가 불사자 마켓그룹에 있나 | **있다** — `5번_용쌤25-2` (groupId `1001822`), 조인 산출물 86그룹 중 번호 있는 54개에 포함 |
+| groupId `1001822` 인덱스 보유 | **없다** — 인덱스 보유 30그룹에 미포함 |
+
+→ 재스캔 시 703행은 `추출실패`(🔴 사람 몫)에서 `인덱스 미보유`(🔵 기계 몫)로 이동한다.
+   빨강 883행/19그룹 → 약 180행/18그룹.
+
+**이 항목이 증명한 것:** JOIN-02 의 미해소 사유는 화면 장식이 아니라 **실제로 광고 화면에서
+작업을 완료시키는 정보**다. 번호조차 없는 최악의 행에서도 사유 문구에 더 필요한 것이 없었다.
+
+### ⑤ 두 배너가 헷갈리는가 — PASS
+
+용팀장 진술 그대로: **"안헷갈려"**. 행동으로도 뒷받침된다 — 빨강 배너를 "내 일"로 읽고
+실제로 네이버에 가서 광고그룹 2건을 고쳤다. 구조 검증(uat-verifier 실측)도 PASS:
+색·클래스·좌표 분리, 숫자 귀속 정확(883↔빨강 / 51↔파랑), 해소 필터 🛠/⚙ **혼입 0건**,
+금지 표현 `미스` 0건.
