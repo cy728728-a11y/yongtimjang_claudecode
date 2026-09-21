@@ -86,8 +86,9 @@ app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 # 라우터 등록은 health → board → jobs 순. 라우터 모듈을 여기서 import 하므로
 # 반대 방향(라우터 → main.templates)은 **핸들러 안에서 지연 import** 한다
 # (`paths.freshness()` 가 settings 를 지연 import 하는 것과 같은 이유).
-from webapp.routes import board, health, jobs  # noqa: E402
+from webapp.routes import banner, board, health, jobs  # noqa: E402
 
 app.include_router(health.router)
 app.include_router(board.router)
 app.include_router(jobs.router)
+app.include_router(banner.router)
