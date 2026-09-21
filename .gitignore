@@ -48,6 +48,8 @@ workspace.toml
 webapp.db*
 webapp-profile.json
 webapp-logs/
+# 원본 이미지 캐시(회차당 약 271MB)와 썸네일. 재생성 가능하므로 커밋하지 않는다
+webapp-banner/
 # 이 프로젝트는 npm 을 쓰지 않는다. 정적파일은 webapp/static/vendor/ 에 curl 로 박아 둔다.
 package.json
 package-lock.json
