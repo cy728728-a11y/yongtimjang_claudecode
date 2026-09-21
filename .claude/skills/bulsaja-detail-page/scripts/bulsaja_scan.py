@@ -86,7 +86,7 @@ from bulsaja_mcp import BulsajaMCP  # noqa: E402
 from bulsaja_rate import 안전호출, 호출간격  # noqa: E402
 # 응답 해석 규약은 `ss_index_calls` **한 곳**이다 — 여기서 다시 적으면 규약이 두 벌이 되고,
 # 다음 사람이 한쪽만 고친다 (그게 CR-01 의 발생 경위다: 호출부 3곳 중 1곳에만 붙어 있었다).
-from ss_index_calls import 그룹꺼내기  # noqa: E402
+from ss_index_calls import 그룹꺼내기, 워크데이터꺼내기, 항목꺼내기  # noqa: E402
 
 
 # ── 공용 유틸 (ss_index_build.py 와 같은 뼈대) ───────────────────────────────
@@ -396,7 +396,17 @@ def main():
                 미조회수 += 1
                 continue
 
-            d = 표시규칙제거((r or {}).get("data") or {})
+            # 🔴 응답에서 `data` 를 직접 까서 `or {}` 로 접으면 안 된다 (CR-03 · 위
+            #    마켓그룹과 같은 근거). 오류 dict 에는 `data` 키가 없고, 빈 dict 로 접으면 이 행이
+            #    "관측했는데 번호가 없더라" 가 된다. 그건 광고 쪽 오류로 읽히는 값이다 —
+            #    **우리가 못 본 것은 `미조회`** 여야 안전한 쪽으로 떨어진다 (Pitfall 3).
+            try:
+                d = 표시규칙제거(워크데이터꺼내기(r, 맥락=f" (pid {str(pid)[-8:]})"))
+            except RuntimeError as e:
+                말하기(f"[경고] workdata 응답이 모양이 아니다 — {e} — 미조회로 적는다")
+                행["미조회"] = True
+                미조회수 += 1
+                continue
             값 = (d.get("uploadedSuccessUrl") or {}).get("smartstore")
             행["관측_smartstore"] = str(값) if 값 else None
             # **키 부재까지 그대로 싣는다.** `aiImageGenerated` 는 값이 거짓이 되는 게

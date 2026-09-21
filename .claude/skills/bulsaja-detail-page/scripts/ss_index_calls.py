@@ -50,6 +50,21 @@ def 그룹아이디(gid):
         return gid
 
 
+def _사유(r):
+    """응답에서 **서버가 준 문구**를 그대로 꺼낸다. 없으면 어떤 키가 왔는지를 적는다.
+
+    요약하거나 "조회 실패" 같은 우리 말로 바꾸지 않는다 — 그러면 다음 사람이
+    9초짜리 미스터리를 처음부터 다시 푼다(모듈 docstring 참조). 본체를 여기 한 곳에
+    두는 이유도 같다: 사유를 꺼내는 규칙이 두 벌이면 한쪽만 고쳐진다.
+    """
+    if not isinstance(r, dict):
+        return type(r).__name__
+    사유 = r.get("_text") or r.get("error") or r.get("message")
+    if 사유 is None:
+        사유 = f"키 {sorted(str(k) for k in r.keys())[:8]}"
+    return 사유
+
+
 def 목록꺼내기(r, 키들, 맥락="", 이름="목록"):
     """응답 dict 에서 **처음으로 존재하는** 키의 리스트를 꺼낸다. 모양이 아니면 예외다.
 
@@ -80,11 +95,8 @@ def 목록꺼내기(r, 키들, 맥락="", 이름="목록"):
 
     # 여기부터는 전부 "우리가 못 봤다" 다. 서버가 준 문구를 **그대로** 싣는다 —
     # 요약하면 다음 사람이 같은 9초짜리 미스터리를 처음부터 푼다.
-    사유 = r.get("_text") or r.get("error") or r.get("message")
-    if 사유 is None:
-        사유 = f"키 {sorted(r.keys())[:8]}"
     키표기 = "/".join(f"'{k}'" for k in 키들)
-    raise RuntimeError(f"{이름} 응답에 {키표기} 이 없다{맥락}: {str(사유)[:300]}")
+    raise RuntimeError(f"{이름} 응답에 {키표기} 이 없다{맥락}: {str(_사유(r))[:300]}")
 
 
 def 그룹꺼내기(r, 맥락=""):
@@ -119,6 +131,45 @@ def 항목꺼내기(r, 맥락=""):
     본체는 `목록꺼내기` 다 — `그룹꺼내기` 와 판단을 **한 벌로** 유지한다.
     """
     return 목록꺼내기(r, ("항목",), 맥락, "목록")
+
+
+def 워크데이터꺼내기(r, 맥락=""):
+    """`bulsaja_product_workdata` 응답에서 `data` dict 를 꺼낸다. **모양이 아니면 예외다.**
+
+    `목록꺼내기` 와 **같은 규약**이다 — 꺼내는 것이 리스트가 아니라 dict 라는 점만 다르다:
+      · `data` 키가 **없다**            → 예외. "못 물어봤다" 를 관측으로 적지 않는다
+      · `data` 가 dict 가 **아니다**    → 예외. 판이 바뀐 것이지 빈 결과가 아니다
+      · `data` 가 **있고 비었다**       → `{}`. 이건 정상이다 (업로드 안 된 수집상품)
+
+    **이 함수가 없을 때 무슨 일이 났나 (CR-03, 2026-09-21):**
+
+        d = (r or {}).get("data") or {}
+        값 = (d.get("uploadedSuccessUrl") or {}).get("smartstore")
+        ss, unresolved = (str(값) if 값 else None), 0      # ← 여기가 구멍이다
+
+    툴 레벨 오류 응답(`{"_text": "MCP error -32602: ..."}`)에는 `data` 키가 없다.
+    그러면 `d` 가 `{}` 가 되고 `값` 이 None 이 되어 **"smartstore 번호가 없는 정상 상품"**
+    으로 `unresolved = 0` 이 영구 기록된다. 그 한 줄로 두 가지가 동시에 굳는다:
+      · `ss_index_resume.처리완료()` 가 그 행을 **성공으로 세어 재개가 영영 건너뛴다**
+        (03-04 이탈 #1 의 계약: 미조회 행만 다시 시도한다). 같은 잡을 몇 번 돌려도
+        그 상품은 다시 조회되지 않는다
+      · 그룹이 `완결 = True` 로 굳어 화면이 "인덱스에 없음" 을 **확정**한다
+    크레딧이 0이라 아무 경보도 안 울린다 — 모듈 docstring 의 9.2초짜리 가짜 성공과
+    같은 고장이다.
+
+    ⚠️ **빈 `data` 를 여기서 막지 마라.** 업로드 안 된 수집상품이 대부분 그렇다
+       (실측 30,546건 중 대다수). 막으면 반대 방향으로 틀려서 멀쩡한 관측이 매번
+       미조회가 되고, 인덱스가 영원히 완결되지 않는다.
+    """
+    if not isinstance(r, dict) or "data" not in r:
+        raise RuntimeError(f"workdata 응답에 'data' 가 없다{맥락}: {str(_사유(r))[:300]}")
+
+    d = r.get("data")
+    if d is None:
+        return {}
+    if not isinstance(d, dict):
+        raise RuntimeError(f"workdata 의 'data' 가 dict 가 아니다{맥락}: {type(d).__name__}")
+    return d
 
 
 def 서버집계(r, 기본=None):

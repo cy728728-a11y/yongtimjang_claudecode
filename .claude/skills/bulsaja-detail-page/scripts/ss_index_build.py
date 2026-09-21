@@ -71,7 +71,7 @@ if SCRIPT_DIR not in sys.path:
 
 from bulsaja_mcp import BulsajaMCP  # noqa: E402
 from bulsaja_rate import 안전호출, 호출간격  # noqa: E402
-from ss_index_calls import 그룹아이디, 서버집계, 항목꺼내기  # noqa: E402
+from ss_index_calls import 그룹아이디, 서버집계, 워크데이터꺼내기, 항목꺼내기  # noqa: E402
 from ss_index_resume import 남은대상, 처리완료  # noqa: E402
 
 
@@ -285,10 +285,26 @@ def 그룹훑기(mcp, cx, 간격, gid, 인자, 순번, 전체그룹수):
             ss, unresolved = None, 1
             미조회수 += 1
         else:
-            d = (r or {}).get("data") or {}
-            값 = (d.get("uploadedSuccessUrl") or {}).get("smartstore")
-            # 업로드 안 된 상품은 **정상적으로** NULL 이다 (수집상품 대부분이 그렇다).
-            ss, unresolved = (str(값) if 값 else None), 0
+            # 🔴 응답에서 `data` 를 직접 까서 `or {}` 로 접으면 안 된다 (CR-03). 툴 레벨 오류는
+            #    예외가 아니라 `{"_text": "MCP error ..."}` dict 로 오고, 거기엔 `data`
+            #    키가 없다. 그걸 `{}` 로 접으면 **"smartstore 없는 정상 상품"** 으로
+            #    `unresolved = 0` 이 영구 기록되고, `처리완료()` 가 그 행을 성공으로 세어
+            #    **재개가 영영 다시 안 본다.** 그룹도 `완결` 로 굳어 화면이 "인덱스에 없음"
+            #    을 확정한다. 해석은 `ss_index_calls` 한 곳이다 — 규약이 두 벌이면
+            #    다음 사람이 한쪽만 고친다 (CR-01 이 정확히 그렇게 났다).
+            try:
+                d = 워크데이터꺼내기(r, 맥락=f" (pid {str(pid)[-8:]})")
+            except RuntimeError as e:
+                # ⚠️ **`미조회` 로 적는다.** `번호없음`(smartstore NULL + unresolved 0)
+                #    으로 적으면 이 페이즈 최대 오진이 된다 — 다음 실행이 다시 시도하는
+                #    길이 막히고, 그 상품이 화면에서 "미해소(= 광고 쪽 오류)" 로 굳는다.
+                말하기(f"{머리} [모양오류] {e} — 미조회로 적는다")
+                ss, unresolved = None, 1
+                미조회수 += 1
+            else:
+                값 = (d.get("uploadedSuccessUrl") or {}).get("smartstore")
+                # 업로드 안 된 상품은 **정상적으로** NULL 이다 (수집상품 대부분이 그렇다).
+                ss, unresolved = (str(값) if 값 else None), 0
 
         try:
             cx.execute(
