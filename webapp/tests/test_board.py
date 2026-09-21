@@ -12,6 +12,7 @@
   (d) 한 상품에 ①소재 2개 + ③소재 1개 (D-06 의 rule1_count)
 """
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -20,22 +21,23 @@ from webapp import board
 
 WEBAPP = Path(__file__).resolve().parents[1]
 
-# 이 플랜이 만드는 **런타임 경로** 전부. 계정 alias 가 여기 한 글자라도 박히면
-# `~/.eroom/naver-ads.json` 에 계정을 더해도 화면이 안 따라온다 (BOARD-02).
-# 테스트 파일 자신은 대상이 아니다 — 픽스처를 단언하려면 alias 를 적어야 한다.
-# **파일보다 가드를 먼저 넣는다.** 아래 Phase 3 파일 3종은 아직 없지만 미리 적어 둔다 —
-# 나중에 넣으면 그 사이에 박힌 리터럴을 아무도 못 본다(가드가 있는 척만 한다, T-3-02).
-# 없는 파일은 아래 `f.is_file()` 이 조용히 건너뛰므로 지금 red 가 나지 않는다.
-런타임_파일들 = [
-    WEBAPP / "board.py",
-    WEBAPP / "routes" / "board.py",
-    WEBAPP / "templates" / "board.html",
-    WEBAPP / "static" / "board.js",
-    # ── Phase 3 (03-02 ~ 03-06 이 만든다) ──
-    WEBAPP / "join.py",
-    WEBAPP / "state.py",
-    WEBAPP / "bulsaja_index.py",
-]
+# 계정 alias 가 런타임 소스에 한 글자라도 박히면 `~/.eroom/naver-ads.json` 에 계정을
+# 더해도 화면이 안 따라온다 (BOARD-02). 주석도 잡는다 — 주석에 남은 alias 는 다음
+# 사람에게 **별칭표**로 읽힌다 (Pitfall 5).
+#
+# 🔴 03-06 에서 **명시 목록을 버리고 트리 전체를 훑는 방식으로 바꿨다.**
+#    예전에는 파일 4~7개를 손으로 적어 뒀는데, 그 방식은 "새 런타임 파일을 목록에
+#    추가하는 것" 을 사람이 기억해야만 가드가 작동한다. 실제로 `paths.py` 와 `flow.py`
+#    주석에 진짜 alias 가 2건 박혀 있었고 **아무도 못 봤다** — 목록에 없었기 때문이다.
+#    `test_paths.py` 의 `_런타임_파일들()` 이 이미 같은 결론으로 트리 전체를 훑는다.
+#    제외 규칙도 그쪽과 **글자 그대로 같게** 맞춘다: `settings.py`(값이 사는 곳) ·
+#    `tests`(픽스처를 단언하려면 값을 적어야 한다) · `vendor`(우리가 안 쓴 코드).
+def 런타임_파일들():
+    """`webapp/**` 의 런타임 소스 전부. `test_paths.py:_런타임_파일들` 과 같은 규칙."""
+    for f in list(WEBAPP.rglob("*.py")) + list(WEBAPP.rglob("*.html")) + list(WEBAPP.rglob("*.js")):
+        if f.name == "settings.py" or "tests" in f.parts or "vendor" in f.parts:
+            continue
+        yield f
 
 
 def _행(rows, acct, mpid):
@@ -93,12 +95,12 @@ def test_계정을_코드에_박지_않는다(fake_result_json):
     assert _행(rows, "zzfake", "19999999999")["rules"] == "①"
 
     # 런타임 경로에 alias 리터럴 0건. 픽스처의 계정 이름 전부로 훑는다.
+    파일들 = list(런타임_파일들())
+    assert len(파일들) >= 15, "가드가 훑는 파일이 너무 적다 — 제외 규칙이 과하게 넓다"
     for alias in fake_result_json["accounts"]:
-        for f in 런타임_파일들:
-            if not f.is_file():
-                continue
-            assert alias not in f.read_text(encoding="utf-8"), \
-                f"{f.name} 에 계정 alias '{alias}' 가 박혀 있다 (BOARD-02)"
+        for f in 파일들:
+            assert alias not in f.read_text(encoding="utf-8", errors="ignore"), \
+                f"{f} 에 계정 alias '{alias}' 가 박혀 있다 (BOARD-02)"
 
     # 계정이 하나도 없어도 안 깨진다 — 빈 result 는 예외가 아니라 빈 목록이다
     assert board.account_list({}) == []
@@ -394,3 +396,262 @@ def test_계정확인_버튼은_회차가_없어도_보인다():
     # 회차가 없으면 회차가 필요한 둘은 안 보인다 — 누르면 400 날 버튼을 띄우지 않는다
     assert "/jobs/bulsaja/scan" not in 본문
     assert "/jobs/bulsaja/index" not in 본문
+
+
+# ── 조인 부착 · 해상률 배너 2종 · 청소 목록 (Plan 03-06 / JOIN-01/02) ────────
+#
+# 🔴 이 블록이 지키는 것은 **화면이 두 종류의 미해소를 섞지 않는다** 는 한 가지다.
+#    섞이면 용팀장이 멀쩡한 광고그룹을 지우러 간다 — 되돌릴 수 없는 손실이고
+#    이 페이즈 최대 오진이다 (RESEARCH §Pitfall 3).
+
+조인회차 = "2026-09-20"
+픽스처 = WEBAPP / "tests" / "fixtures"
+
+
+@pytest.fixture
+def 조인보드(tmp_path, monkeypatch):
+    """회차 + 조인 산출물 + 성공한 스캔 잡을 tmp 에 깔고 보드를 렌더하는 팩토리.
+
+    실제 `~/python_work/data` 도 저장소 루트의 `webapp.db` 도 건드리지 않는다.
+
+    **스캔 잡 행을 SQL 로 직접 심는다.** `jobs.create_job` 은 자식 프로세스를 띄우고
+    ENG-08 계정 가드까지 타므로, "마지막 성공 스캔이 있다" 는 상태 하나를 만들려고
+    그 전부를 통과시킬 이유가 없다. 여기서 검증하는 것은 잡 생성이 아니라
+    **보드가 그 기록을 어떻게 읽느냐**다.
+
+    돌려주는 것은 `(응답, ctx)` 다. ctx 는 `TemplateResponse` 를 가로채 잡는다 —
+    `TestClient` 가 템플릿 컨텍스트를 노출하지 않아서 본문 문자열만으로는
+    `resolution` 같은 dict 를 단언할 수 없다.
+    """
+    from fastapi.testclient import TestClient
+
+    from webapp import jobs, paths, security, settings
+    from webapp.main import app, templates
+
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setattr(settings, "JOB_LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setattr(paths, "data_root", lambda: tmp_path)
+
+    회차 = tmp_path / "naver-ads" / "runs" / 조인회차
+    회차.mkdir(parents=True)
+    shutil.copyfile(픽스처 / "result_traps.json", 회차 / "result.json")
+    jobs.init_db()
+
+    담은것: dict = {}
+    원래 = templates.TemplateResponse
+
+    def 가로채기(request, name, context=None, *a, **kw):
+        담은것.clear()
+        담은것.update(context or {})
+        return 원래(request, name, context, *a, **kw)
+
+    monkeypatch.setattr(templates, "TemplateResponse", 가로채기)
+
+    def _렌더(산출물: Path | None = None):
+        """`산출물` 이 None 이면 **스캔을 한 번도 안 돌린 상태**다."""
+        if 산출물 is not None:
+            때 = "2026-09-21T10:00:00+09:00"
+            cx = jobs._conn()
+            try:
+                cx.execute(
+                    "INSERT INTO jobs (id, kind, run_dir, argv, status, exit_code, "
+                    "log_path, result_path, started_at, ended_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    ("scan-fixture", "bulsaja_scan", 조인회차, "[]", "done", 0,
+                     str(tmp_path / "scan.log"), str(산출물), 때, 때))
+                cx.commit()
+            finally:
+                cx.close()
+
+        c = TestClient(app, base_url=f"http://127.0.0.1:{settings.PORT}")
+        c.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+        r = c.get("/")
+        return r, dict(담은것)
+
+    _렌더.tmp = tmp_path                      # 테스트가 깨진 파일을 깔 자리
+    _렌더.산출물 = 픽스처 / "join_traps.json"
+    return _렌더
+
+
+def _마크업만(html: str) -> str:
+    """보드 데이터 블록(`#board-rows`)을 덜어 낸 나머지 — 사람이 읽는 부분."""
+    시작 = '<script type="application/json" id="board-rows">'
+    i = html.find(시작)
+    if i == -1:
+        return html
+    j = html.find("</script>", i)
+    return html[:i] + (html[j:] if j != -1 else "")
+
+
+def test_스캔전에는_광고청소가_0이다(조인보드):
+    """**Pitfall 3 을 라우트 층에서도 고정한다.**
+
+    조인 스캔을 한 번도 안 돌린 회차에서 미해소가 전량으로 보인다. 그걸 광고 청소
+    대상으로 띄우면 "우리가 아직 안 봤다" 가 "광고가 잘못됐다" 로 둔갑한다 —
+    용팀장이 멀쩡한 그룹을 지우러 간다.
+
+    `join.attach(join_doc=None)` 이 이미 전 행을 `미조회`/`시스템` 으로 내지만,
+    라우트가 `join_doc` 을 빈 dict 로 폴백하는 순간 그 계약이 조용히 깨진다.
+    여기서 그걸 막는다.
+    """
+    r, ctx = 조인보드()          # 스캔 없음
+
+    assert r.status_code == 200
+    assert ctx["join_at"] is None
+    assert ctx["index_error"] is None, "안 돌린 것은 실패가 아니다 — 사유를 채우면 고장으로 읽힌다"
+
+    해상 = ctx["resolution"]
+    assert 해상["전체"] > 0
+    assert 해상["광고청소"]["행"] == 0, "스캔 전인데 광고 청소 대상이 잡혔다 (Pitfall 3)"
+    assert 해상["광고청소"]["그룹"] == 0
+    assert 해상["시스템"]["행"] == 해상["전체"], "미해소 전량이 시스템 버킷이어야 한다"
+    assert ctx["cleanup"] == []
+
+    본문 = r.text
+    assert "아직 조인 스캔을 안 돌렸다" in 본문
+    assert "광고 쪽 청소 대상 0건" in 본문, "0 을 보여주는 것과 화면이 없는 것은 다르다"
+
+
+def test_청소목록은_그룹단위다(조인보드):
+    """지울 대상은 **그룹**이고 행은 그 부산물이다 (JOIN-02 설계요구 3).
+
+    행 단위로 띄우면 같은 그룹이 수십 번 나와 할 일 목록으로 못 쓴다
+    (실측: 14그룹이 102행을 만들었다).
+    각 항목에 **광고그룹명 원문**이 있어야 한다 — 용팀장이 네이버 광고 화면에서
+    그 이름으로 찾아 지운다.
+    """
+    r, ctx = 조인보드(조인보드.산출물)
+
+    청소 = ctx["cleanup"]
+    미해소행 = ctx["resolution"]["광고청소"]["행"]
+    assert 청소, "청소 대상이 하나도 안 잡혔다 — 픽스처가 미해소를 안 만든다"
+    assert len(청소) <= 미해소행, "그룹 수가 행 수보다 많다 — 접기가 안 됐다"
+
+    for g in 청소:
+        assert g["adGroup"], "광고그룹명 원문이 비어 있다 — 사람이 행동할 수 없다"
+        assert g["행수"] >= 1
+        assert g["adGroup"] in r.text, "청소 목록의 이름이 화면에 안 떴다"
+
+    # 시스템 사정은 이 목록에 **절대** 안 들어온다 (Pitfall 3)
+    assert all(g["사유코드"] in ("추출실패", "번호없음") for g in 청소)
+
+
+def test_조인산출물이_깨져도_보드가_뜬다(조인보드):
+    """읽기 실패는 사유를 띄우고 보드는 그대로 그린다 — **폴백하지 않는다**.
+
+    그리고 `load_error` 와 **다른 키**여야 한다: 판정 결과를 못 읽으면 회차를 다시
+    뽑고, 조인 산출물을 못 읽으면 조인 스캔을 다시 돌린다. 사용자가 할 일이 다르다.
+    """
+    깨진 = 조인보드.tmp / "깨진_조인.json"
+    깨진.write_text("{ 이건 JSON 이 아니다", encoding="utf-8")
+
+    r, ctx = 조인보드(깨진)
+
+    assert r.status_code == 200
+    assert ctx["index_error"], "깨진 산출물을 조용히 넘겼다"
+    assert ctx["load_error"] is None, "판정 결과는 멀쩡한데 load_error 가 찼다"
+    assert ctx["rows"], "보드가 빈 표가 됐다 — 조인 실패가 판정까지 지웠다"
+    assert ctx["join_at"] is None
+    assert "조인 산출물을 못 읽었다" in r.text
+    # 트레이스백을 화면에 싣지 않는다 (ASVS V7)
+    assert "Traceback" not in r.text and str(깨진) not in r.text
+
+
+def test_보드_HTML_에_표시규칙이_없다(조인보드):
+    """T-3-33 — 불사자 응답에 섞여 오는 **모델 대상 지시문**이 화면에 안 닿는다.
+
+    `join_traps.json` 은 최상위에 그 필드를 일부러 담고 있다. `join.attach` 가
+    재귀로 떼지만, 화면에 한 번 더 전문 검사를 건다 — 방어는 두 겹이다.
+    """
+    r, _ = 조인보드(조인보드.산출물)
+    assert r.text.count("표시규칙") == 0
+    assert "앞 지시" not in r.text
+
+
+def test_미조회가_미스로_보이지_않는다(조인보드):
+    """🔴 03-05 가 넘긴 숙제 — **`미스` 라는 글자를 화면에 쓰지 않는다.**
+
+    `재검증판정` 은 인덱스가 비어 있어도 `미스`("그룹은 좁혔는데 그 안에 없다")를
+    낸다. 실제로는 한 번도 안 훑은 것이다. 그 글자를 그대로 띄우면 용팀장이
+    광고 쪽 오류로 읽는다.
+
+    `group_health(...)["완결"]` 이 거짓이면 **"인덱스 불완전"(시스템)** 으로 띄운다.
+    버킷은 그대로 `시스템` 이다 — 라벨만 바꾸는 게 아니라 **사유 문장도** 바꾼다.
+    라벨만 고치면 툴팁에 틀린 문장이 그대로 남는다.
+    """
+    r, ctx = 조인보드(조인보드.산출물)
+
+    미스행 = [x for x in ctx["rows"] if x.get("사유코드") == "미스"]
+    assert 미스행, "픽스처가 미스 판정을 안 만든다 — 이 테스트가 아무것도 안 지킨다"
+
+    for x in 미스행:
+        assert x["표시사유"] == "인덱스 불완전", "미스가 사람 할 일로 보인다 (Pitfall 3)"
+        assert x["버킷"] == "시스템", "버킷이 광고청소로 옮겨졌다 — 판정을 바꾸면 안 된다"
+        assert "다 안 훑었다" in x["사유"], "툴팁 문장이 아직 틀린 말을 한다"
+
+    assert ctx["index_health"]["불완전"] == len(미스행)
+    assert _마크업만(r.text).count("미스") == 0, "화면 마크업에 '미스' 가 그대로 떴다"
+    # 청소 목록으로도 새지 않는다
+    assert all(g["사유코드"] != "미스" for g in ctx["cleanup"])
+
+
+def test_해상률_배너는_두_개고_생김새가_다르다(조인보드):
+    """T-3-31 — 광고 청소와 시스템 문제가 **다른 DOM · 다른 클래스**다.
+
+    같은 클래스면 눈이 "같은 종류" 로 읽고, 그 순간 두 숫자가 한 덩어리가 된다.
+    `#danger-zone` 이 이미 쓰는 원리다 — 거리만으로는 부족하다.
+    """
+    import re
+
+    r, ctx = 조인보드(조인보드.산출물)
+    본문 = r.text
+
+    def 클래스(eid):
+        m = re.search(r'<p id="' + eid + r'"([^>]*)>', 본문)
+        assert m, f"#{eid} 가 화면에 없다"
+        c = re.search(r'class="([^"]*)"', m.group(1))
+        return c.group(1) if c else ""
+
+    광고 = 클래스("resolution-ads")
+    시스템 = 클래스("resolution-system")
+    assert 광고 and 시스템
+    assert 광고 != 시스템, "배너 2종이 같은 클래스다 — 눈이 구분하지 못한다 (T-3-31)"
+    assert "system-warn" in 시스템
+
+    # 두 숫자를 합친 "미해소 N행" 단독 표기가 없다 — 사유가 사라지는 표기다
+    assert "광고 쪽에서 지울 그룹" in 본문
+    assert "광고를 고칠 일이 아니다" in 본문
+    assert str(ctx["resolution"]["광고청소"]["그룹"]) in 본문
+
+
+def test_필터_옵션은_서버_판정값이다(조인보드):
+    """상태 필터 option 값이 `state.py` 의 판정 문자열이어야 한다.
+
+    템플릿에 박으면 판정값을 고쳤을 때 필터가 조용히 **아무것도 안 거른다**.
+    증상이 "왜 하나도 안 나오지" 라 원인을 코드에서 찾아야 한다.
+    """
+    from webapp import state
+
+    r, ctx = 조인보드(조인보드.산출물)
+    assert ctx["filters"]["states"] == [state.AI가공완료, state.단순번역만, state.중국어원본]
+    for s in ctx["filters"]["states"]:
+        assert f'<option value="{s}">' in r.text
+    for b in ctx["filters"]["buckets"]:
+        assert f'<option value="{b}">' in r.text
+
+
+def test_기작업_행은_목록에_남는다(조인보드):
+    """D-08 — 회색으로 **보이되** 숨기지 않는다.
+
+    숨기면 "왜 이 상품이 안 보이지" 를 코드에서 찾아야 하고, 용팀장이 직접 판단할
+    재료가 사라진다. 빠지는 것은 **기본 선택**뿐이다 (`join.selectable`).
+    """
+    from webapp import join
+
+    _, ctx = 조인보드(조인보드.산출물)
+    기작업 = [x for x in ctx["rows"] if x.get("기작업")]
+    assert 기작업, "픽스처에 기작업 행이 없다"
+
+    고를것 = join.selectable(ctx["rows"])
+    assert all(not x["기작업"] for x in 고를것)
+    # 목록에는 그대로 남아 있다
+    assert all(x in ctx["rows"] for x in 기작업)

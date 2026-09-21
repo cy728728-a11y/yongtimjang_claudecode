@@ -22,13 +22,33 @@
 이벤트 루프가 멈춰 SSE 진행 로그가 같이 끊긴다(Anti-Patterns).
 """
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
 
-from webapp import board, bulsaja_index, jobs, paths, security, settings
+from webapp import board, bulsaja_index, jobs, join, paths, security, settings, state
 
 router = APIRouter()
+
+# 미해소 사유코드 → **화면에 쓸 이름**. 코드값을 그대로 띄우지 않는 이유는 하나다.
+#
+# `join.미스` 의 뜻은 "마켓그룹은 좁혔는데 그 안에 이 상품이 없다" 인데, 인덱스를 한 번도
+# 안 훑은 상태에서도 그 판정이 난다(03-05 실측: 스캔 후·인덱스 전에 84행). 서버가 기동하며
+# 빈 인덱스 테이블을 만들어 두기 때문이다. 그 글자를 화면에 그대로 쓰면 용팀장이 광고 쪽
+# 오류로 읽는다 — 이 페이즈 최대 오진(Pitfall 3)의 입구다.
+# 그래서 `group_health(...)["완결"]` 로 한 번 더 갈라 "인덱스 불완전" 으로 띄운다.
+#
+# ⚠️ `join.py` 의 사유코드 자체는 **건드리지 않는다.** 판정의 정본은 거기 하나이고,
+#    여기는 그 값에 사람이 읽을 이름을 덧붙일 뿐이다(화이트리스트 투영과 같은 성질).
+_인덱스불완전 = "인덱스 불완전"
+_사유이름 = {
+    join.추출실패: "번호 추출 실패",
+    join.번호없음: "번호 없음",
+    join.미조회: "인덱스 미보유",
+    join.불일치: "인덱스 불일치",
+    join.미스: "그룹에 없음",
+}
 
 
 def _불사자표시() -> dict:
@@ -86,6 +106,106 @@ def _load_result(run_dir_name: str) -> tuple[dict, str | None]:
         return json.loads(raw), None
     except Exception as e:
         return {}, f"{type(e).__name__}: {e}"
+
+
+def _load_join(run_dir_name: str) -> tuple[dict | None, str | None, str | None]:
+    """마지막 성공 스캔의 조인 산출물을 읽는다 — `(문서, 스캔시각, 사유)`.
+
+    `_load_result` 와 **같은 모양**이다: 실패하면 값을 지어내지 않고 사유를 들고 온다.
+    다만 돌려주는 빈값이 `{}` 가 아니라 `None` 인 것에 뜻이 있다 — 조인 부착 함수는
+    `None` 을 "아직 조인을 안 돌렸다" 로 읽어 전 행을 `미조회`/`시스템` 으로 낸다.
+    빈 dict 를 주면 "마켓그룹 목록이 비었다" 가 되어 전 행이 **광고 청소 대상**으로
+    둔갑한다 — 그게 Pitfall 3 그 자체다.
+
+    어느 잡이 성공했는지는 **레지스트리가 정본**이다. 회차 폴더의 파일을 뒤져서 찾지
+    마라 — 파일이 있다는 것과 그 잡이 성공했다는 것은 다르다(중간에 죽은 잡도 반쯤
+    쓴 파일을 남긴다). `jobs.latest_done` 이 그 질문에 답하려고 있는 함수다.
+
+    **스캔을 한 번도 안 돌린 것은 실패가 아니다** — 사유 없이 `(None, None, None)` 이고,
+    화면이 "아직 조인 스캔을 안 돌렸다" 를 말한다. 사유를 채우면 고장으로 읽힌다.
+    """
+    try:
+        잡 = jobs.latest_done("bulsaja_scan", run_dir_name)
+    except Exception as e:
+        return None, None, f"{type(e).__name__}: {e}"
+    if not 잡:
+        return None, None, None
+
+    경로 = 잡.get("result_path")
+    시각 = 잡.get("ended_at") or 잡.get("started_at")
+    if not 경로:
+        return None, None, "스캔 작업에 산출물 경로가 없다 — 조인 스캔을 다시 돌려라"
+    try:
+        문서 = json.loads(Path(경로).read_text(encoding="utf-8"))
+    except Exception as e:
+        # 트레이스백을 화면에 싣지 않는다 — 경로·내부 구조가 그대로 나간다(ASVS V7).
+        return None, None, f"{type(e).__name__}: {e}"
+    if not isinstance(문서, dict):
+        return None, None, "조인 산출물의 모양이 다르다 — 조인 스캔을 다시 돌려라"
+    return 문서, 시각, None
+
+
+def _인덱스표시(rows, join_doc) -> dict:
+    """미해소 행에 **화면용 사유 이름**을 붙이고 인덱스 불완전 규모를 센다.
+
+    03-05 가 넘긴 숙제다. `join.미스` 행을 그 그룹의 `group_health(...)["완결"]` 로
+    한 번 더 갈라, 아직 다 안 훑은 그룹의 행은 "인덱스 불완전"(시스템 사정)으로
+    띄운다. 광고 청소 버킷으로 옮기는 게 **아니다** — 버킷은 `join.py` 가 정한 그대로고,
+    여기서 바뀌는 것은 사람이 읽는 글자뿐이다.
+
+    인덱스를 못 읽으면 `완결` 을 거짓으로 본다(fail-closed). "모른다" 를 "다 훑었다" 로
+    접으면 화면이 없는 확신을 만든다.
+    """
+    그룹색인 = (join.group_index((join_doc or {}).get("마켓그룹"))
+               if isinstance(join_doc, dict) else {})
+
+    # `미스` 행이 가리키는 그룹만 건강을 묻는다 — 전 그룹을 묻는 질의로 키우지 않는다.
+    번호별그룹: dict = {}
+    for r in rows:
+        if r.get("사유코드") != join.미스:
+            continue
+        gid = (그룹색인.get(r.get("번호")) or {}).get("groupId")
+        if gid:
+            번호별그룹[r.get("번호")] = str(gid)
+
+    try:
+        건강 = bulsaja_index.group_health(sorted(set(번호별그룹.values()))) if 번호별그룹 else {}
+    except Exception:
+        건강 = {}
+
+    집계 = {"불완전": 0, "그룹": 0, "미보유": 0, "불일치": 0, "그룹에없음": 0}
+    불완전그룹 = set()
+
+    for r in rows:
+        코드 = r.get("사유코드")
+        if r.get("해소") or not 코드:
+            r["표시사유"] = None
+            continue
+        if 코드 == join.미스:
+            gid = 번호별그룹.get(r.get("번호"))
+            완결 = bool((건강.get(gid) or {}).get("완결")) if gid else False
+            if not 완결:
+                r["표시사유"] = _인덱스불완전
+                # **사유 문장도 같이 고친다.** 원래 문장("그 안에 이 상품이 없다")은
+                # 이 행에 대해 **사실이 아니다** — 아직 다 안 훑었을 뿐이다.
+                # 툴팁에 그대로 두면 라벨만 바꾸고 오독은 그대로 남는다.
+                r["사유"] = (
+                    f"이 마켓그룹을 아직 다 안 훑었다 — 인덱스가 불완전하다(시스템 사정). "
+                    f"번호 '{r.get('번호')}'. **광고 쪽은 멀쩡하다.** "
+                    f"인덱스 구축을 끝내고 조인 스캔을 다시 돌리면 판정이 바뀐다")
+                집계["불완전"] += 1
+                if gid:
+                    불완전그룹.add(gid)
+                continue
+            집계["그룹에없음"] += 1
+        elif 코드 == join.미조회:
+            집계["미보유"] += 1
+        elif 코드 == join.불일치:
+            집계["불일치"] += 1
+        r["표시사유"] = _사유이름.get(코드, 코드)
+
+    집계["그룹"] = len(불완전그룹)
+    return 집계
 
 
 @router.get("/")
@@ -153,6 +273,21 @@ def home(request: Request, t: str | None = None, run_dir: str | None = None):
         "rules": [],
         "rows": [],
         "load_error": None,
+        # ── 조인 (Phase 3) ──────────────────────────────────────────────
+        # `load_error` 와 **다른 키**다. 두 실패는 사용자가 할 일이 다르다 —
+        # 판정 결과를 못 읽으면 회차를 다시 뽑고, 조인 산출물을 못 읽으면
+        # 조인 스캔을 다시 돌린다. 한 칸에 담으면 어느 쪽인지 알 수 없다.
+        "index_error": None,
+        "join_at": None,
+        "resolution": None,
+        "index_health": None,
+        "cleanup": [],
+        # 필터 옵션 값은 **서버가 아는 판정 문자열**이어야 한다. 템플릿에 박으면
+        # `state.py` 의 판정값을 고쳤을 때 필터가 조용히 아무것도 안 거른다.
+        "filters": {
+            "states": [state.AI가공완료, state.단순번역만, state.중국어원본],
+            "buckets": [join.광고청소, join.시스템],
+        },
     }
 
     if 선택 is None:
@@ -167,6 +302,19 @@ def home(request: Request, t: str | None = None, run_dir: str | None = None):
     # (SAFE-03 화이트리스트 투영). 웹앱은 계정 자격증명 파일을 아예 열지 않는다.
     ctx["accounts"] = board.account_list(result)
     ctx["rules"] = board.rule_list(result)
-    ctx["rows"] = board.fold_products(result)
+
+    # 조인 산출물을 얹는다. `board.fold_products` 는 **고치지 않는다** — 그 모듈이
+    # "네트워크도 크레딧도 0" 인 계약을 지키게 두고, 조인은 그 위에 얹는 층이다.
+    # 산출물이 없어도(`None`) 보드는 그대로 뜬다: 전 행이 `미조회`/`시스템` 이 되고
+    # 배너가 "아직 조인 스캔을 안 돌렸다" 를 말한다.
+    join_doc, ctx["join_at"], ctx["index_error"] = _load_join(선택)
+    ctx["rows"] = join.attach(
+        board.fold_products(result), result, join_doc,
+        excluded=settings.cfg("index_excluded_groups",
+                              settings.DEFAULTS["index_excluded_groups"]),
+        done_tags=settings.cfg("done_tags", settings.DEFAULTS["done_tags"]))
+    ctx["index_health"] = _인덱스표시(ctx["rows"], join_doc)
+    ctx["resolution"] = join.resolution(ctx["rows"])
+    ctx["cleanup"] = join.cleanup_groups(ctx["rows"])
 
     return templates.TemplateResponse(request, "board.html", ctx)

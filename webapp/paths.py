@@ -152,7 +152,9 @@ def run_dir_path(name: str) -> Path:
 def _windows_of(raw: dict):
     """`prep_summary.json` 에서 (window7, window30) 을 꺼낸다.
 
-    실데이터는 계정 alias 로 한 겹 감싸져 있다(`{"cy728": {..., "window7": [...]}}`).
+    실데이터는 계정 alias 로 한 겹 감싸져 있다(`{"<계정 alias>": {..., "window7": [...]}}`).
+    ⚠️ 여기에 진짜 alias 를 적지 마라 — 주석에 남은 이름은 다음 사람에게 별칭표로 읽히고,
+       `test_board.py` 의 계정 리터럴 가드가 이 파일도 훑는다(BOARD-02 / Pitfall 5).
     `--account` 로 나눠 돌려도 통계기간은 같으므로 처음 찾은 것을 쓴다.
     평평한 모양도 받는다 — 테스트 픽스처와 미래의 요약 포맷 변화를 같이 견딘다.
     """

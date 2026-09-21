@@ -122,7 +122,8 @@ def collect_targets(rows: list[dict], ad_ids) -> dict[str, list[str]]:
 def check_limits(by_account: dict[str, list[str]]) -> None:
     """계정별 건수가 상한을 넘으면 `LimitError` (D-08 / T-1-29).
 
-    **총합이 아니라 계정별이다.** 실측 최대가 ownway1 1,195 · pogeunae 1,028 이라
+    **총합이 아니라 계정별이다.** 실측 최대가 계정 하나에 1,195 · 다른 하나에 1,028 이라
+    (alias 는 일부러 안 적는다 — 주석에 남은 이름이 별칭표로 읽힌다 / Pitfall 5)
     평상시 마찰이 0 이고, 이 가드는 "계정이 이상하게 불어났다" 는 사고만 잡는다.
     숫자를 여기 박지 않는다 — `settings.PER_ACCOUNT_LIMIT` 에서 **매번 읽는다**.
     모듈 상수로 굳히면 설정을 고쳐도 동작이 안 따라와 가드가 있는 척만 한다.

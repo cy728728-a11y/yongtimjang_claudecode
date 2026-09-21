@@ -28,6 +28,28 @@
       color: var(--pico-mark-color, inherit);
       padding: .6rem .8rem; border-radius: .25rem;
     }
+    /* 시스템 사정 배너 (Pitfall 3). **`.stale` 과 생김새가 달라야 한다.**
+       `.stale` 은 "사람이 지금 뭔가를 해야 한다" 는 빨간 경고고, 이쪽은 "기계가 더
+       돌면 채워진다" 는 파란 안내다. `#danger-zone` 이 같은 원리를 이미 쓴다 —
+       거리만으로는 부족하고, 눈이 "여기는 다른 종류" 라고 읽어야 한다.
+       색만으로 가르지 않는다(흑백 출력·색맹): 테두리 위치와 기울임까지 바꾼다. */
+    .system-warn {
+      border-left: .4rem dashed var(--pico-primary, #0172ad);
+      border-bottom: 1px solid var(--pico-primary, #0172ad);
+      background: var(--pico-code-background-color, #f4f4f4);
+      color: var(--pico-color, inherit);
+      font-style: italic;
+      padding: .6rem .8rem; border-radius: 0 .25rem .25rem 0;
+    }
+
+    /* 기작업 행 회색 처리 (D-08). **숨기는 게 아니다** — 목록에 남고 태그가 보이며
+       사용자가 직접 체크하면 대상에 들어간다. 기본 선택에서만 빠진다.
+       `pointer-events` 를 막지 마라: 못 고르게 하는 순간 D-08 이 깨진다. */
+    .tabulator-row.ct-done { opacity: .5; font-style: italic; }
+
+    #cleanup table { font-size: .9rem; }
+    #cleanup td { overflow-wrap: anywhere; }
+
     .board-filters { display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end; }
     .board-filters > label { margin-bottom: 0; flex: 1 1 12rem; }
     .board-filters select[multiple] { height: 6.5rem; }
@@ -269,6 +291,16 @@
     </article>
   {% endif %}
 
+  {# 조인 산출물 읽기 실패. **`load_error` 와 다른 자리·다른 생김새다** — 고치는 방법이
+     다르다. 판정 결과를 못 읽으면 회차를 다시 뽑고, 이쪽은 조인 스캔을 다시 돌린다. #}
+  {% if index_error %}
+    <article class="system-warn">
+      <strong>조인 산출물을 못 읽었다 — {{ index_error }}</strong><br>
+      판정 결과(회차)는 멀쩡하다. 아래 보드는 그대로 뜨고, 상세 상태만 비어 있다.
+      <strong>조인 스캔</strong>을 다시 눌러라.
+    </article>
+  {% endif %}
+
   {# 실행 중인 작업 패널 + SSE 진행 로그 (Plan 01-05 / 01-06).
      `job` 은 라우트가 넣는 **도는 작업**이다. 탭을 닫았다 다시 열었을 때 이게
      비어 있으면 패널이 안 뜨고, 스트림도 안 열려 성공기준 3 이 성립하지 않는다. #}
@@ -324,6 +356,43 @@
   <section>
     <h2>상품 보드</h2>
 
+    {# ── 해상률 배너 2종 (JOIN-01 / JOIN-02 / Pitfall 3) ─────────────────────
+       **이 둘을 절대 한 숫자로 합치지 마라.** 합치면 용팀장이 멀쩡한 광고그룹을
+       지우러 간다 — 이 페이즈 최대 오진이고 되돌릴 수 없다.
+
+       신선도 배너(위)와 같은 성격이다: 숫자만 띄우면 오독되는 값에 해석을 붙인다.
+       "92/194 (47%)" 만 보면 시스템 고장처럼 읽히지만 실제 뜻은 "광고 쪽에 청소할
+       그룹이 그만큼 있다" 다.
+
+       숫자는 전부 서버가 조인 산출물에서 낸 값이다 — 여기 박지 않는다. #}
+    {% if resolution %}
+      <p id="resolution-ads" class="stale">
+        번호 해소 <strong>{{ resolution.번호해소 }}</strong>/{{ resolution.전체 }} ·
+        미해소 {{ resolution.번호미해소 }}행 =
+        <strong>광고 쪽에서 지울 그룹 {{ resolution.광고청소.그룹 }}개</strong>
+        <br><small>해상률이 낮은 건 고장이 아니라 <strong>청소 대상이 그만큼 많다</strong>는 뜻이다.
+          아래 <strong>광고 쪽 청소 목록</strong>의 이름 그대로 네이버 광고에서 찾아 지워라.
+          여기 숫자는 <strong>사람이 고칠 것</strong>이다.</small>
+      </p>
+
+      <p id="resolution-system" class="system-warn">
+        {% if join_at %}
+          상품 연결 <strong>{{ resolution.상품해소 }}</strong>/{{ resolution.번호해소 }} ·
+          인덱스 불완전 {{ index_health.불완전 }}행({{ index_health.그룹 }}그룹) ·
+          인덱스 미보유 {{ index_health.미보유 }}행 ·
+          인덱스 불일치 {{ index_health.불일치 }}행
+          <br><small><strong>이건 시스템 문제다. 광고를 고칠 일이 아니다.</strong>
+            아직 다 안 훑었거나(인덱스 구축 미완) 물갈이로 번호가 재발급된 것이다 —
+            <strong>인덱스 구축</strong>을 끝내고 <strong>조인 스캔</strong>을 다시 돌리면 줄어든다.
+            마지막 조인 스캔 {{ join_at }}.</small>
+        {% else %}
+          <strong>아직 조인 스캔을 안 돌렸다 — 먼저 위의 조인 스캔을 눌러라.</strong>
+          <br><small>지금 미해소로 보이는 {{ resolution.시스템.행 }}행은 광고 쪽 오류가 아니다.
+            우리가 아직 안 본 것이다. 스캔을 돌리기 전의 이 화면을 청소 목록으로 읽지 마라.</small>
+        {% endif %}
+      </p>
+    {% endif %}
+
     {# 필터 위젯. 옵션은 전부 서버가 넘긴 accounts/rules 로 그린다.
        규칙 option 의 value 는 기호 한 글자다 — 보드 행의 rules 가 "①③" 같은
        기호 문자열이라 부분일치로 거른다. #}
@@ -346,10 +415,37 @@
         상품명 검색
         <input type="search" id="f-title" placeholder="상품명 일부" autocomplete="off">
       </label>
+      {# 상태 필터 (STATE-03) — 이 화면의 목적이 여기 있다. 🔴만 남기면 그게
+         Phase 5 가 크레딧을 태울 목록이다.
+         option value 는 **서버가 아는 판정 문자열**이다(`state.py`). 템플릿에 박으면
+         판정값을 고쳤을 때 필터가 조용히 아무것도 안 거른다.
+         "미판정" 은 값이 **없는** 행이다 — 🔴로 대체하지 않는다(T-3-35). #}
+      <label>
+        상세 상태
+        <select id="f-state" aria-label="상세 상태 필터">
+          <option value="">전체</option>
+          {% for s in filters.states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+          <option value="__none__">미판정</option>
+        </select>
+      </label>
+      {# 해소 필터 — 버킷 이름도 서버(`join.py`)에서 온다. 두 버킷이 **선택지에서부터**
+         갈려 있어야 "미해소 N행" 을 한 덩어리로 보는 일이 안 생긴다. #}
+      <label>
+        해소
+        <select id="f-join" aria-label="해소 필터">
+          <option value="">전체</option>
+          <option value="__done__">해소</option>
+          {% for b in filters.buckets %}<option value="{{ b }}">{{ b }}</option>{% endfor %}
+        </select>
+      </label>
       <label>
         <button type="button" id="f-reset" class="secondary outline">필터 초기화</button>
       </label>
     </div>
+
+    {# D-08 이 요구한 "사용자가 인지할 방법". 회색은 못 고른다는 뜻이 아니다. #}
+    <p><small>회색 줄은 <strong>이미 가공된 상품</strong>이다 — 목록에 그대로 남고,
+      <strong>기본 선택에서만 빠진다.</strong> 직접 체크하면 대상에 들어간다.</small></p>
 
     <p><strong id="board-count">0</strong> / {{ rows | length }}건
       <small>(보이는 줄 / 이 회차 전체 · 한 줄 = 상품 1개)</small></p>
@@ -387,6 +483,44 @@
     </div>
 
     <div id="board"></div>
+  </section>
+
+  {# ── 광고 쪽 청소 목록 (JOIN-02 / 성공기준 1) ────────────────────────────
+     **행 단위가 아니라 광고그룹 단위다.** 지울 대상은 그룹이고 행은 그 부산물이다 —
+     실측에서 14개 그룹이 102행을 만들었다. 행으로 띄우면 같은 그룹이 57번 나와
+     할 일 목록으로 못 쓴다.
+
+     비어 있어도 섹션을 숨기지 않는다. "0건" 을 보여주는 것과 화면이 아예 없는 것은
+     다르다 — 없으면 사용자가 "아직 안 돈 건가" 로 읽는다.
+
+     ⚠️ 광고그룹명에 `|safe` 를 붙이지 마라. 사람이 네이버 광고 화면에서 지은
+        외부 문자열이다(T-1-17 / T-3-32). Jinja2 자동 이스케이프가 유일한 방어다. #}
+  <section id="cleanup">
+    <h2>광고 쪽 청소 목록</h2>
+    {% if cleanup %}
+      <p><small>아래 <strong>{{ cleanup | length }}개 광고그룹</strong>이 불사자 마켓그룹과 안 이어진다.
+        이름 그대로 네이버 광고에서 찾아 지우거나 번호를 고쳐라 —
+        <strong>여기 있는 것만</strong>이 사람이 고칠 것이다. 시스템 사정(인덱스)은 위 배너가 따로 말한다.</small></p>
+      <table>
+        <thead>
+          <tr><th>광고그룹명(원문)</th><th>번호</th><th>사유</th><th>행수</th><th>계정</th></tr>
+        </thead>
+        <tbody>
+          {% for g in cleanup %}
+            <tr>
+              <td>{{ g.adGroup }}</td>
+              <td>{{ g.번호 if g.번호 else "—" }}</td>
+              <td>{{ g.사유코드 }}</td>
+              <td>{{ g.행수 }}</td>
+              <td>{{ g.계정들 | join(", ") }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>광고 쪽 청소 대상 0건.
+        {% if not join_at %}<strong>— 아직 조인 스캔을 안 돌렸다.</strong>{% endif %}</p>
+    {% endif %}
   </section>
 
   {# ── 위험 구역: 이 회차 전체 되돌리기 (D-14 / T-1-43) ─────────────────────
