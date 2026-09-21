@@ -8,6 +8,9 @@
     POST /jobs/bids/commit  입찰가 인상 실행                            [쓰기 — 토큰 필요]
     POST /jobs/revert/job   **이 작업분만** 되돌리기 (D-13)             [쓰기 — 토큰 필요]
     POST /jobs/revert/round **이 회차 전체** 되돌리기 (D-14)            [쓰기 — 토큰 필요]
+    POST /jobs/bulsaja/profile  불사자 계정 확인 (0.14초, 읽기)         [쓰기 — 토큰 필요]
+    POST /jobs/bulsaja/scan     회차 조인 스캔 (수 분, 읽기)            [쓰기 — 토큰 필요]
+    POST /jobs/bulsaja/index    마켓그룹 인덱스 구축 (수 시간, 읽기)     [쓰기 — 토큰 필요]
     GET  /jobs/revert/round/count  회차 전체 되돌리기 예상 건수         [읽기 — 쿠키]
     GET  /jobs/{id}         작업 상태 조각 (2초 폴링용)                 [읽기 — 쿠키]
     GET  /jobs/{id}/panel   작업 패널 조각 (SSE 배선 포함)              [읽기 — 쿠키]
@@ -26,6 +29,12 @@
 부수효과 있는 엔드포인트를 추가하는 순간 SAFE-01 이 죽는다(T-1-01b).
 `webapp/tests/security_curl.sh` 의 V-SAFE-01d 가 이 파일의 GET 핸들러 본문을 실제로
 훑어서 기계로 집행한다 — 그래서 **GET 핸들러는 이 파일 맨 아래**에 모아 둔다.
+
+**불사자 잡 3종은 불사자에 아무것도 쓰지 않는데도 POST 이고 토큰이 필요하다.**
+이유는 같다: 교차 사이트 단순 GET 에는 `Origin` 헤더가 없어 `security.guard` 가
+아무것도 못 거른다. 남의 페이지를 열어 뒀다는 이유로 내 맥북에서 **수 시간짜리**
+인덱스 잡이 뜨는 길을 만들 이유가 없다 (T-1-01b / T-3-25). "읽기니까 GET" 은
+HTTP 의미론으로는 맞지만 이 앱의 방어 모델에서는 곧 무방비다.
 
 **핸들러는 얇다.** 작업을 만드는 판단은 전부 `jobs.create_job` 안에 있다(D-17 / ENG-07):
 회차 화이트리스트도, 쓰기 잡 전역 가드도, 대상 파일 쓰기도 거기다. 여기서 하는 일은
@@ -52,7 +61,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, StringConstraints, ValidationError, field_validator
 from sse_starlette import EventSourceResponse
 
-from webapp import board, flow, jobs, logtail, paths, security, settings
+from webapp import board, flow, jobs, join, logtail, paths, security, settings
 from webapp.argv import Alias
 
 router = APIRouter()
@@ -342,16 +351,42 @@ def _응답(request: Request, 상태: dict, 전체: bool = True):
     return templates.TemplateResponse(request, 조각, {"job": 상태})
 
 
-def _작업만들기(request: Request, kind: str, req: JobReq):
-    """POST 핸들러 3줄의 공통부. **kind 는 호출부가 고정한다** — 요청에서 오지 않는다."""
+def _작업만들기(request: Request, kind: str, req: JobReq, **더):
+    """POST 핸들러 3줄의 공통부. **kind 는 호출부가 고정한다** — 요청에서 오지 않는다.
+
+    예외 → 상태코드 표. **`except` 의 순서가 곧 동작이다** (상속 관계가 있다):
+
+      | 예외                       | 코드 | 뜻                                   |
+      |----------------------------|------|--------------------------------------|
+      | `jobs.AccountMismatchError`| 409  | 붙어 있는 불사자 계정이 다르다 (ENG-08) |
+      | `jobs.BusyError`           | 409  | 지금은 때가 아니다 (같은 kind 중복 포함) |
+      | `ValueError`               | 400  | 요청이 틀렸다 (모르는 회차 등)         |
+      | `KeyError`                 | 500  | 설정이 비었다                          |
+      | `RuntimeError`             | 500  | 그 밖의 서버 문제                      |
+
+    `AccountMismatchError` 는 `ValueError` 를 **상속**하므로 반드시 그보다 **먼저**
+    와야 한다. 뒤에 두면 영원히 400 으로 새고 "때가 아니다(409)" 와 "요청이
+    틀렸다(400)" 의 구분이 사라진다 — 화면은 "회차를 다시 골라라" 로 안내하는데
+    진짜 원인은 계정이다. `SameKindBusyError` 는 `BusyError` 상속이라 아래에서 함께 잡힌다.
+    """
     try:
-        job_id = jobs.create_job(kind, run_dir=req.run_dir, accounts=req.accounts)
+        job_id = jobs.create_job(kind, run_dir=req.run_dir, accounts=req.accounts, **더)
+    except jobs.AccountMismatchError as e:
+        # 409 — 요청은 멀쩡하다. 지금 붙어 있는 계정이 기대와 다를 뿐이다 (ENG-08).
+        # **기대 닉네임은 싣지 않는다.** `profile_ok` 가 준 사유를 그대로 쓴다 (T-3-29).
+        raise HTTPException(status_code=409, detail=str(e))
     except jobs.BusyError as e:
         # 409 = "지금은 안 된다". 400 이 아닌 이유: 요청이 틀린 게 아니라 때가 아니다.
         raise HTTPException(status_code=409,
                             detail=f"이미 도는 작업이 있다 — 끝나고 다시 눌러라 ({e})")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except KeyError:
+        # `settings.cfg(..., required=True)` 가 던진다. 사유를 지어내지 않고 고칠
+        # 자리를 말한다 — 가드가 없는 채로 도는 것보다 500 이 낫다 (T-1-12).
+        raise HTTPException(status_code=500,
+                            detail="설정 `webapp.expected_bulsaja_nick` 이 비었다 — "
+                                   "workspace.toml 의 [webapp] 에 채워라")
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -564,6 +599,153 @@ def post_revert_round(request: Request, req: RevertRoundReq):
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"job_id": job_id}
+
+
+# ── 불사자 잡 3종 (Phase 3) ─────────────────────────────────────────────────
+# 셋 다 불사자에 **아무것도 쓰지 않고** 크레딧도 0 이다. 그런데도 POST 인 이유는
+# 파일 상단 docstring 에 있다 — GET 이면 교차 사이트에서 수 시간짜리 잡이 뜬다.
+#
+# 대상은 **전부 서버가 계산한다.** 클라이언트가 groupId 나 상품 키를 보내는 인자가
+# 아예 없다 (D-11 / T-3-27) — `JobReq` 에 그런 필드가 없는 것이 그 방어의 전부다.
+
+# 이 페이즈의 작업 대상 후보 = 규칙③ + ⑤. ROADMAP 의 범위 정의이고
+# `03-CONTEXT.md` §domain 의 실측 모수(130 + 64 = 194행)가 이 둘이다.
+# `board.RULE_ORDER` 에서 가져오지 않는다 — 그건 **표시 순서**라 뜻이 다르고,
+# 거기에 규칙이 하나 추가되는 날 이 잡의 대상이 조용히 늘어난다.
+불사자_대상규칙 = ("③원인분석", "⑤효자확정")
+
+
+def _스캔대상키(판정: dict) -> list[str]:
+    """③⑤ 행 → `"<계정alias>|<mallProductId>"` 목록. **중복은 없애고 순서는 지킨다.**
+
+    같은 상품이 ③과 ⑤에 동시에 있을 수 있다(그럴 일은 드물지만 규칙이 배타적이지
+    않다). 중복을 그대로 넘기면 같은 상품을 두 번 조회해 레이트리밋 예산을 버린다.
+    정렬하지 않는 이유는 진행 로그의 순서가 판정 결과의 순서와 같아야 사람이
+    "어디쯤 돌고 있나" 를 읽을 수 있기 때문이다.
+    """
+    키들: list[str] = []
+    본것: set[str] = set()
+    for alias, 계정 in ((판정 or {}).get("accounts") or {}).items():
+        규칙들 = (계정 or {}).get("rules") or {}
+        for 규칙 in 불사자_대상규칙:
+            for r in (규칙들.get(규칙) or []):
+                if not isinstance(r, dict):
+                    continue
+                mall = r.get("mallProductId")
+                if not mall:
+                    continue
+                키 = f"{alias}|{mall}"
+                if 키 in 본것:
+                    continue
+                본것.add(키)
+                키들.append(키)
+    return 키들
+
+
+@router.post("/jobs/bulsaja/profile")
+def post_bulsaja_profile(request: Request, req: JobReq = Depends(요청_풀기)):
+    """불사자 **계정 확인**. `bulsaja_my_profile` 한 번(실측 0.14초, 크레딧 0).
+
+    회차도 대상도 없다 — 회차가 하나도 없는 상태에서도 눌러야 하는 버튼이다.
+
+    **이 잡만 ENG-08 계정 가드를 타지 않는다.** 닭·달걀이기 때문이다: 가드가 보는
+    프로필 파일을 만드는 게 바로 이 잡이라, 여기에도 가드를 걸면 계정이 틀렸을 때
+    고칠 방법이 화면에서 사라진다. 가드 제외는 `jobs.BULSAJA_KINDS` 가 정한다 —
+    라우트가 아니다(v2 스케줄러가 같은 함수를 부른다).
+    """
+    # `req.run_dir` 을 일부러 버린다. 화면이 회차를 같이 보내와도(htmx 의
+    # `hx-include` 가 그렇게 한다) 이 잡은 회차를 모르는 게 맞다.
+    return _작업만들기(request, "bulsaja_profile", JobReq())
+
+
+@router.post("/jobs/bulsaja/scan")
+def post_bulsaja_scan(request: Request, req: JobReq = Depends(요청_풀기)):
+    """회차 **조인 스캔**. ③⑤ 행을 불사자에서 다시 읽어 산출물에 적는다 (읽기·크레딧 0).
+
+    대상은 여기서 만든다 — 화면이 고른 행 목록을 받지 않는다. 회차의 판정 결과가
+    정본이고, 그래야 "본 것과 다른 게 돈다" 가 성립하지 않는다 (D-11 / FLOW-02).
+
+    **빈 대상으로 잡을 만들지 않는다.** `create_job` 은 빈 목록도 파일로 떨구고
+    자식은 `exit 2` 로 거부하지만, 그 잡은 레지스트리에 `failed` 로 남아 화면이
+    "인덱스가 비었나?" 로 오독한다. 원인은 회차에 ③⑤ 행이 없는 것뿐이고, 그건
+    사용자가 고칠 것(다른 회차를 고르거나 판정을 다시 돌린다)이다.
+    """
+    if not req.run_dir:
+        raise HTTPException(status_code=400, detail="조인 스캔에는 회차가 필요하다")
+    try:
+        대상 = _스캔대상키(_판정읽기(req.run_dir))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not 대상:
+        raise HTTPException(
+            status_code=400,
+            detail="이 회차에 ③원인분석·⑤효자확정 행이 없다 — 스캔할 대상이 0건이다. "
+                   "다른 회차를 고르거나 판정을 다시 돌려라")
+
+    return _작업만들기(request, "bulsaja_scan", req, only_ads=대상)
+
+
+@router.post("/jobs/bulsaja/index")
+def post_bulsaja_index(request: Request, req: JobReq = Depends(요청_풀기)):
+    """마켓그룹 **인덱스 구축**. 수십 분~수 시간이 걸리지만 호출은 즉시 돌아온다.
+
+    훑을 그룹을 **서버가 계산한다** (D-11 / T-3-27): 회차 판정 → 보드 투영 →
+    직전 스캔 산출물의 마켓그룹 목록과 조인 → `join.index_targets` 가 번호 기준으로
+    중복 제거한 `groupId` 목록. 클라이언트가 그룹을 지정하는 인자는 없다.
+
+    거부 둘 다 이유가 다르다:
+      · 스캔 산출물이 없다 → **409.** 요청은 멀쩡하고 순서가 아직 아니다.
+        마켓그룹 목록 없이 돌리면 대상이 빈 목록이 되고, 빈 목록을 "전량" 으로 읽는
+        경로가 하나라도 생기면 75,335 상품(5시간 39분)을 통째로 훑는다
+      · 계산 결과가 빈 목록이다 → **400.** 이을 번호가 하나도 없다는 뜻이다
+        (광고그룹 번호를 먼저 고쳐야 한다 — 보드의 청소 목록이 그걸 말해 준다)
+
+    **빈 목록이 전량이 되는 길은 3층으로 막혀 있다:** 여기 400 ·
+    `jobs._build_argv` 의 ValueError · CLI 의 `exit 2`.
+
+    `caffeinate -i` 프리픽스는 `jobs._build_argv` 가 붙인다. 라우트는 kind 만 고른다.
+    """
+    if not req.run_dir:
+        raise HTTPException(status_code=400, detail="인덱스 구축에는 회차가 필요하다")
+
+    마지막스캔 = jobs.latest_done("bulsaja_scan", req.run_dir)
+    산출물 = (마지막스캔 or {}).get("result_path")
+    if not 산출물:
+        raise HTTPException(
+            status_code=409,
+            detail="먼저 조인 스캔을 돌려라 — 마켓그룹 목록이 있어야 훑을 대상을 계산한다. "
+                   "목록 없이 돌리면 전 그룹이 대상이 된다")
+    try:
+        조인 = json.loads(Path(산출물).read_text(encoding="utf-8"))
+    except Exception as e:
+        # 파일이 사라졌거나 깨졌다. **빈 dict 로 삼키지 않는다** — 그러면 대상이
+        # 0건이 되고 그게 "전량" 으로 읽히는 길이 열린다.
+        raise HTTPException(status_code=409,
+                            detail=f"조인 산출물을 못 읽었다 — 스캔을 다시 돌려라 "
+                                   f"({type(e).__name__})")
+
+    try:
+        판정 = _판정읽기(req.run_dir)      # 한 번만 읽는다 — 두 번 읽으면 두 스냅샷이 된다
+        rows = board.fold_products(판정)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # 제외 설정(D-18)의 정본은 `settings` 한 곳이다. 스캔 산출물의 `제외그룹` 은
+    # `null`(= 모른다)이라 여기서 읽으면 안 된다 (03-04 결정).
+    제외 = settings.cfg("index_excluded_groups",
+                       settings.DEFAULTS["index_excluded_groups"])
+    붙임 = join.attach(rows, 판정, 조인,
+                      excluded=제외,
+                      done_tags=settings.cfg("done_tags", settings.DEFAULTS["done_tags"]))
+    대상 = join.index_targets(붙임, 조인, excluded=제외)
+    if not 대상:
+        raise HTTPException(
+            status_code=400,
+            detail="훑을 마켓그룹이 0개다 — **빈 목록은 전량이 아니다.** "
+                   "광고그룹 번호가 불사자 마켓그룹과 하나도 안 이어졌다는 뜻이다. "
+                   "보드의 광고 청소 목록을 먼저 처리해라")
+
+    return _작업만들기(request, "bulsaja_index", req, only_ads=대상)
 
 
 # ── 여기서부터 읽기 전용 ─────────────────────────────────────────────────────
