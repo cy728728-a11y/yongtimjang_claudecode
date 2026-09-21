@@ -30,6 +30,17 @@ HTTP 요청을 쏘는 모양이 되면 그때 다시 짜야 한다.
 셋이 전역 가드를 **안 타는** 이유는 `WRITE_KINDS` 주석에 있다. 대신 `bulsaja_index`·
 `bulsaja_scan` 은 `SINGLETON_KINDS` 로 **같은 kind 끼리만** 겹치는 걸 막는다(레이트리밋).
 
+배너 판정 잡 1종 (Phase 4). **불사자 MCP 도 광고 API 도 한 번도 안 부른다:**
+
+| kind          | 스크립트         | 디스크 쓰기                      | 외부 쓰기 | 전역 가드 |
+|---------------|------------------|----------------------------------|-----------|-----------|
+| `banner_scan` | `banner_scan.py` | `banner_*.json` · 원본캐시 · 썸네일 | 없음     | 안 탄다   |
+
+입력은 직전 성공 `bulsaja_scan` 의 조인 산출물 JSON 하나뿐이고, 거기 이미 들어 있는
+이미지 URL 을 CDN 에서 받아 온디바이스 OCR 로 판정한다 — 크레딧 0 · MCP 0회.
+전역 가드를 안 타는 이유는 `WRITE_KINDS` 주석에, 같은 잡 중복만 막는 이유는
+`SINGLETON_KINDS` 주석에 따로 적어 뒀다(둘이 **다른 이유**다).
+
 `prep` 이 가드를 타는 이유: 같은 회차 디렉터리에 스냅샷을 통째로 다시 쓰는데,
 그 사이에 `bids` 가 돌면 읽는 스냅샷이 발밑에서 바뀐다.
 
@@ -56,11 +67,13 @@ argv = argv_mod
 # 안 되는" 부류의 고장이다.
 JobKind = Literal["prep", "run", "bids_preview", "bids_commit",
                   "revert_only", "revert_all", "synthetic",
-                  "bulsaja_profile", "bulsaja_index", "bulsaja_scan"]
+                  "bulsaja_profile", "bulsaja_index", "bulsaja_scan",
+                  "banner_scan"]
 
 KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
                           "revert_only", "revert_all", "synthetic",
-                          "bulsaja_profile", "bulsaja_index", "bulsaja_scan")
+                          "bulsaja_profile", "bulsaja_index", "bulsaja_scan",
+                          "banner_scan")
 
 # 전역 1개 가드의 대상. **왜 전역인가:**
 # ENG-04(대상별 잠금)는 Phase 2 지만 **위험은 Phase 1 에 있다.** `run_bids` 가
@@ -73,6 +86,10 @@ WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "
 # **불사자 잡 3종을 여기 넣지 마라.** 셋 다 불사자에 아무것도 안 쓴다(workdata·프로필 조회는
 # 읽기 전용이다). 넣으면 3시간 32분짜리 인덱스가 도는 동안 입찰가 인상·되돌리기가 전부
 # 409 가 된다 — 위 "쓰기가 아닌 것까지 막는 가드는 사람이 가드를 끄게 만든다" 가 바로 이 경우다.
+# **`banner_scan` 도 여기 넣지 마라 — 4분 동안 입찰가 인상이 409 가 되면 사람이 가드를 끈다.**
+# 그 잡이 만지는 것은 CDN 에서 받은 이미지 캐시·썸네일·자기 산출물 JSON 뿐이고, 광고에도
+# 불사자에도 한 글자를 안 쓴다. `BULSAJA_KINDS` 에도 넣지 않는다 — MCP 를 0회 부르므로
+# ENG-08 계정 사전점검의 대상 자체가 아니다(계정이 뭐든 판정 결과가 같다).
 
 # ENG-08 사전 점검 대상. **불사자 MCP 를 부르는 잡**이다.
 # `bulsaja_profile` 은 **일부러 뺐다** — 그 잡이 프로필을 만드는 잡이라, 가드 대상에 넣으면
@@ -93,10 +110,16 @@ BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan"})
 # 화면의 `hx-disabled-elt` 는 이 방어의 대체물이 **아니다.** POST 왕복 중에만 버튼을 잠그므로
 # 새로고침한 뒤 다시 누르면 두 번째 프로세스가 그대로 뜬다.
 #
-# ⚠️ `BULSAJA_KINDS` 와 멤버가 같지만 **뜻이 다르다.** 앞은 "불사자 MCP 를 부른다",
-#    이쪽은 "둘이 동시에 돌면 레이트리밋 예산이 깨진다" 다. 합치지 마라 — 싸고 빠른 MCP 잡
-#    (계정 확인)이 늘면 둘은 갈라진다.
-SINGLETON_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan"})
+# ⚠️ `BULSAJA_KINDS` 와 멤버가 **더 이상 같지 않다.** 앞은 "불사자 MCP 를 부른다",
+#    이쪽은 "둘이 동시에 돌면 안 되는 이유가 있다" 다. 합치지 마라 — 아래 `banner_scan`
+#    이 그 차이의 실물이다(MCP 를 0회 부르는데 이 집합에는 들어 있다).
+#
+# 🔵 **`banner_scan` 은 레이트리밋 때문이 아니다.** 불사자 MCP 를 0회 부르므로 갉아먹을
+#    예산 자체가 없다. 같은 잡 둘이 **271MB 를 두 번 받는 낭비**를 막으려는 것이다 —
+#    거기에 둘이 같은 회차 캐시 디렉터리에 같은 파일명(`<상품순번>_<장순번>.bin`)으로
+#    동시에 쓰면 반쪽 파일이 서로의 입력이 된다. 사유가 다르니 같은 집합에 있다는 이유로
+#    위 레이트리밋 서술을 이 잡에 옮겨 읽지 마라.
+SINGLETON_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan", "banner_scan"})
 
 # **살아 있는 잡의 상태 두 가지.** `starting` 은 "행은 들어갔는데 자식이 아직 안 떴다" 다.
 # 왜 둘로 쪼갰나: 예전에는 INSERT 가 바로 `running` 이었는데, 그 행의 `pid` 는 spawn 뒤에야
@@ -147,6 +170,23 @@ CREATE TABLE IF NOT EXISTS ss_index (
 );
 CREATE INDEX IF NOT EXISTS idx_ss_index_smartstore ON ss_index(smartstore);
 CREATE INDEX IF NOT EXISTS idx_ss_index_group ON ss_index(market_group_id);
+
+CREATE TABLE IF NOT EXISTS banner_label (
+  run_dir        TEXT NOT NULL,
+  타오바오상품번호 TEXT NOT NULL,
+  판매자상품코드  TEXT NOT NULL,
+  이미지순번      INTEGER NOT NULL,
+  사람판정        TEXT NOT NULL,
+  기록시각        TEXT NOT NULL,
+  PRIMARY KEY (run_dir, 타오바오상품번호, 이미지순번)
+);
+
+CREATE TABLE IF NOT EXISTS banner_confirm (
+  run_dir        TEXT NOT NULL,
+  타오바오상품번호 TEXT NOT NULL,
+  확인시각        TEXT NOT NULL,
+  PRIMARY KEY (run_dir, 타오바오상품번호)
+);
 """
 # ※ RESEARCH §5.7 의 DDL 에서 `run_dir` 만 NOT NULL 을 뺐다. `prep` 은 회차 이름을
 #    **CLI 가 오늘 날짜로 정한다** — 웹앱이 미리 지어내면 진실이 둘이 된다.
@@ -169,6 +209,25 @@ CREATE INDEX IF NOT EXISTS idx_ss_index_group ON ss_index(market_group_id);
 #    적으면 그 행이 화면에서 "미해소(광고 쪽 오류)" 로 둔갑한다(Pitfall 3).
 # ※ `group_total` 은 관측 시점의 그룹 전체 상품수다. 행수와 비교해야 "중간에 끊긴 잡" 을
 #    "다 훑었다" 와 구분할 수 있다 (`bulsaja_index.group_health`).
+#
+# ── banner_label · banner_confirm (Phase 4 / BANNER-02b) ────────────────────
+# ※ **사람 라벨은 재생성 불가다 — 사람의 시간이다.** 그래서 캐시가 아니라 기록이고,
+#    위 "보드용 캐시 테이블은 만들지 않는다" 와 충돌하지 않는다. `ss_index` 를 예외로
+#    인정한 것과 **똑같은 판별 기준**이다: 재생성이 공짜가 아니면 그건 캐시가 아니라 기록이다.
+#    기계 판정은 정반대다 — `banner_scan.py` 를 다시 돌리면 몇 분에 다시 나오는 투영이라
+#    산출물 JSON 하나가 정본이다.
+# ※ **기계 판정(배너/제품/무내용)을 이 테이블에 복사하지 마라.** 복사하는 순간 진실이
+#    둘이 되고, 어휘군을 고쳐 다시 돌린 회차에서 화면과 산출물이 다른 말을 한다(S-1).
+#    여기 적히는 `사람판정` 은 사람이 화면에서 뒤집은 것 **하나뿐**이다.
+# ※ 키가 URL 이 아니라 `(run_dir, 타오바오상품번호, 이미지순번)` 인 이유: 불사자는 수집할
+#    때마다 같은 이미지를 **새 CDN 경로에 복사**한다(D-01a 실측). URL 을 키로 잡으면 같은
+#    장에 붙인 라벨이 다음 수집에서 통째로 미아가 된다. 타오바오상품번호는 물갈이 사본을
+#    가로질러 같은 원본을 가리키는 유일한 번호라 그 문제가 없다(04-03 이 조인 산출물에 실었다).
+# ※ `banner_confirm` 을 `banner_label` 에 합치지 마라. **"이 장을 뒤집었다" 와 "이 줄을
+#    다 봤다" 는 다른 사실이다.** 합치면 확인 표시가 라벨로 둔갑해 게이트 집계의 분모가
+#    조용히 틀어진다 (`join.py:36-48` 의 "사유코드는 서로 다른 값" 과 같은 규율).
+# ※ **스키마 정본은 여기 하나다.** `banner_scan.py` 는 SQLite 를 아예 안 만진다 —
+#    `ss_index_build.py:165-176`(스키마를 만들지 않고 확인만 하고 exit 4)과 같은 선이다.
 
 
 class BusyError(RuntimeError):
@@ -226,6 +285,21 @@ def log_dir() -> Path:
 def log_path_of(job_id: str) -> Path:
     """진행 로그 파일. append-only 로 쌓이고 Plan 01-06 의 SSE 가 여기를 tail 한다."""
     return log_dir() / f"{job_id}.log"
+
+
+def banner_dir(키: str) -> Path:
+    """배너 스캔의 원본 캐시·썸네일 **루트**. 상대경로면 저장소 루트 기준.
+
+    `db_path()`·`bulsaja_index.profile_path()` 와 같은 규칙이다 — 설정에 적힌 상대경로를
+    저장소 루트에 붙인다. 숫자·경로를 이 파일에 리터럴로 베끼지 않는다(S-4): 정본은
+    `settings.DEFAULTS` 고 여기서는 키 이름만 안다.
+
+    **회차 하위 디렉터리(`<루트>/<run_dir>/`)는 만들지 않는다.** 자식이 만든다 —
+    `banner_scan.회차정리()` 가 오래된 회차를 지워 271MB×N 을 회수하는데, 웹앱이 미리
+    만들어 두면 방금 지운 회차 폴더가 빈 채로 되살아나 "남길 회차 수" 계산이 흐려진다.
+    """
+    p = Path(str(settings.cfg(키, settings.DEFAULTS[키]))).expanduser()
+    return p if p.is_absolute() else paths.repo_root() / p
 
 
 def _web_dir(run_dir: str) -> Path:
@@ -468,6 +542,10 @@ def _count_targets(path: Path) -> int | None:
 #
 # 인덱스에만 붙인다: 계정 확인은 실측 0.14초, 조인 스캔은 18초다. 수 초짜리 잡에
 # 전력 assertion 을 거는 건 비용만 있고 얻는 게 없다.
+#
+# **배너 스캔도 붙인다 — 실측 4분 12초다.** 수 초짜리에 안 붙인다는 위 판단은 그대로이고,
+# 4분은 그 선을 넘는다. 특히 그 4분의 대부분이 CDN 다운로드(271MB)라, idle sleep 으로
+# 끊기면 받다 만 회차를 처음부터 다시 받는다.
 CAFFEINATE = "/usr/bin/caffeinate"
 
 
@@ -481,7 +559,7 @@ def _수면방지_프리픽스(kind: str) -> list[str]:
     exit code 가 그대로 넘어오는 것을 실측 확인했다(`caffeinate -i sh -c 'exit 3'` → 3).
     `ss_index_build.py` 의 종료코드 2/3/4 계약이 이 래퍼를 통과해도 살아 있다는 뜻이다.
     """
-    if kind != "bulsaja_index":
+    if kind not in ("bulsaja_index", "banner_scan"):
         return []
     try:
         return [CAFFEINATE, "-i"] if os.path.exists(CAFFEINATE) else []
@@ -561,6 +639,51 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
             run_dir=run_dir if kind == "bulsaja_scan" else None,
             groups=targets_path if kind == "bulsaja_index" else None,
             targets=targets_path if kind == "bulsaja_scan" else None,
+            prefix=_수면방지_프리픽스(kind),
+        ).build()
+
+    if kind == "banner_scan":
+        # 배너 스캔의 "대상" 은 상품 목록이 아니라 **직전 성공 조인 스캔의 산출물 파일**
+        # 하나다(`--join`). 그래서 `targets_path` 에 그 파일을 그대로 가리킨다 —
+        # 새로 쓰지 않는다(`_override_targets` / D-11).
+        #
+        # 없으면 여기서 터뜨린다. `revert_only`·`bulsaja_index` 와 **똑같은 이유**다:
+        # 빈 값이 조용히 '전량' 으로 미끄러지는 경로를 막는 자리는 한 곳이어야 한다.
+        if targets_path is None:
+            raise ValueError("배너 스캔에는 조인 산출물이 반드시 있어야 한다 — "
+                             "빈 값은 전량이 아니다")
+        if not run_dir:
+            raise ValueError("배너 스캔에는 회차가 필요하다 — 원본 캐시·썸네일·산출물이 "
+                             "회차별로 갈린다")
+        if result_path is None:
+            raise ValueError("배너 스캔에는 산출물 경로가 필요하다")
+
+        # 임계값·리비전·워커 수는 **전부 여기서 `settings.cfg()` 로 읽어 넘긴다.**
+        # 모델이나 CLI 기본값에 기대면 `workspace.toml` 을 고쳐도 동작이 안 바뀌는
+        # 가짜 설정이 된다(T-1-12). 그리고 넘긴 값이 그대로 산출물의 `판정규칙` 블록에
+        # 찍히므로, 안 넘기면 **"무슨 규칙으로 판정했나" 의 출처가 둘**이 된다.
+        return argv_mod.BannerArgv(
+            join=targets_path,
+            out=result_path,
+            run_dir=run_dir,
+            cache=banner_dir("banner_cache_dir"),
+            thumbs=banner_dir("banner_thumb_dir"),
+            workers=int(settings.cfg("banner_workers",
+                                     settings.DEFAULTS["banner_workers"])),
+            vision_revision=int(settings.cfg("banner_vision_revision",
+                                             settings.DEFAULTS["banner_vision_revision"])),
+            blank_ar=float(settings.cfg("banner_blank_ar",
+                                        settings.DEFAULTS["banner_blank_ar"])),
+            blank_short_px=int(settings.cfg("banner_blank_short_px",
+                                            settings.DEFAULTS["banner_blank_short_px"])),
+            skip_min_keep=int(settings.cfg("banner_skip_min_keep",
+                                           settings.DEFAULTS["banner_skip_min_keep"])),
+            skip_max_removal=float(settings.cfg("banner_skip_max_removal",
+                                                settings.DEFAULTS["banner_skip_max_removal"])),
+            lexicon_version=str(settings.cfg("banner_lexicon_version",
+                                             settings.DEFAULTS["banner_lexicon_version"])),
+            keep_runs=int(settings.cfg("banner_keep_runs",
+                                       settings.DEFAULTS["banner_keep_runs"])),
             prefix=_수면방지_프리픽스(kind),
         ).build()
 
@@ -725,6 +848,15 @@ def create_job(kind: str, *, run_dir: str | None = None,
                                  "회차의 web/ 밑에 같이 남아야 추적이 된다")
             else:
                 result_path = _web_dir(run_dir) / f"{BULSAJA_접두[kind]}_{job_id}.json"
+        elif kind == "banner_scan":
+            # `BULSAJA_접두` 에 얹지 않고 분기를 따로 둔다 — 이 잡은 불사자 계열이
+            # 아니다(MCP 0회). 한 조건문에 섞으면 다음 사람이 "배너도 불사자 잡" 으로
+            # 읽고 `BULSAJA_KINDS` 에 넣는다. 자리는 조인 산출물과 **같은 폴더**다:
+            # `<회차>/web/banner_<job_id>.json` — 무엇을 넣어 무엇이 나왔나가 한 곳에 모인다.
+            if not run_dir:
+                raise ValueError("배너 스캔에는 회차가 필요하다 — 산출물과 조인 입력이 "
+                                 "회차의 web/ 밑에 같이 남아야 추적이 된다")
+            result_path = _web_dir(run_dir) / f"banner_{job_id}.json"
 
         # ④ argv
         if argv_override:

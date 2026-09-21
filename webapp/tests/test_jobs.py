@@ -457,18 +457,22 @@ def test_고아_잡은_orphaned_로_남는다(잡판, synthetic_job):
     assert 상태["exit_code"] is None
 
 
-def test_스키마는_jobs_와_ss_index_뿐이다(잡판):
-    """허용 테이블은 `jobs` 와 `ss_index` 둘뿐이다. **보드 캐시 금지는 여전히 유효하다.**
+def test_스키마는_기록_테이블만_있다(잡판):
+    """허용 테이블은 `jobs`·`ss_index`·`banner_label`·`banner_confirm` 넷뿐이다.
 
-    Phase 1 에서는 `jobs` 하나뿐이었다. Phase 3 이 `ss_index` 를 더하면서 이 가드를
-    **일부러** 넓혔다(D-20 / 위협 T-3-03). 조용히 고치면 다음 사람이 "보드 캐시 금지" 원칙이
-    통째로 풀린 줄 안다 — 그래서 예외 사유를 여기 못 박아 둔다.
+    **보드 캐시 금지는 여전히 유효하다.** Phase 1 에서는 `jobs` 하나뿐이었고, Phase 3 이
+    `ss_index`(D-20 / T-3-03), Phase 4 가 라벨 2종(BANNER-02b)을 더하면서 이 가드를
+    **일부러** 넓혔다. 조용히 고치면 다음 사람이 "보드 캐시 금지" 원칙이 통째로 풀린 줄
+    안다 — 그래서 예외 사유를 매번 여기 못 박는다.
 
-    왜 `ss_index` 는 되고 보드 캐시는 안 되는가 — **성격이 다르다**:
-      - 보드 캐시: `result.json` 에서 **언제든 재생성 가능한 투영**이다. 캐시를 두는 순간
+    판별 기준은 세 번 다 하나다 — **재생성이 공짜가 아니면 그건 캐시가 아니라 기록이다**:
+      - 보드 캐시(금지): `result.json` 에서 **언제든 재생성 가능한 투영**이다. 두는 순간
         진실이 둘이 되고, 회차를 다시 판정해도 화면이 안 따라오는 사고가 난다.
-      - `ss_index`: `smartstore번호 → productId` 는 **3시간 반을 태워야 다시 얻는 외부 관측
-        기록**이다(36그룹 / 47,105 상품, D-18). 재생성이 공짜가 아니면 그건 캐시가 아니라 기록이다.
+      - `ss_index`: `smartstore번호 → productId` 는 3시간 반을 태워야 다시 얻는 **외부 관측
+        기록**이다(36그룹 / 47,105 상품, D-18).
+      - `banner_label`/`banner_confirm`: **사람의 시간**이다. 다시 얻으려면 사람이 그 장을
+        다시 다 봐야 한다. 반대로 기계 판정은 몇 분이면 다시 나오는 투영이라 산출물 JSON
+        하나가 정본이고, 이 테이블에 복사하지 않는다(그래서 `사람판정` 컬럼만 있다).
 
     **대상별 잠금 테이블은 여전히 Phase 2(ENG-04)다.** 지금 만들면 안 쓰는 스키마가 굳는다.
     """
@@ -477,7 +481,43 @@ def test_스키마는_jobs_와_ss_index_뿐이다(잡판):
     이름들 = {r[0] for r in cx.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     cx.close()
     assert "jobs" in 이름들
-    assert 이름들 - {"jobs", "ss_index"} == set(), f"예상 밖 테이블: {이름들}"
+    assert 이름들 - {"jobs", "ss_index",
+                   "banner_label", "banner_confirm"} == set(), f"예상 밖 테이블: {이름들}"
+
+
+def test_라벨_테이블이_DDL_한곳에서_생긴다(잡판):
+    """`init_db()` 만으로 라벨 2종이 생긴다 — 스키마 정본이 `jobs.DDL` 하나다.
+
+    `banner_scan.py` 는 SQLite 를 아예 안 만진다. 자식이 테이블을 만들기 시작하면
+    스키마가 두 곳에서 자라고, 둘이 어긋난 날 "라벨을 저장했는데 화면에 없다" 가 된다
+    (`ss_index_build.py:165-176` 이 만들지 않고 확인만 하는 것과 같은 선).
+
+    **기계 판정 컬럼이 없다는 것**도 같이 못박는다 (T-4-20). 여기 배너/제품/무내용을
+    복사하면 진실이 둘이 되고, 어휘군을 고쳐 다시 돌린 회차에서 화면과 산출물이 다른
+    말을 한다.
+    """
+    import sqlite3
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        라벨 = {r[1] for r in cx.execute("PRAGMA table_info(banner_label)")}
+        확인 = {r[1] for r in cx.execute("PRAGMA table_info(banner_confirm)")}
+        라벨키 = [r[1] for r in cx.execute("PRAGMA table_info(banner_label)") if r[5]]
+    finally:
+        cx.close()
+
+    assert 라벨 == {"run_dir", "타오바오상품번호", "판매자상품코드",
+                  "이미지순번", "사람판정", "기록시각"}, 라벨
+    assert 확인 == {"run_dir", "타오바오상품번호", "확인시각"}, 확인
+
+    # 키가 URL 이 아니다. 불사자는 수집할 때마다 같은 이미지를 **새 CDN 경로에 복사**하므로
+    # (D-01a 실측), URL 을 키로 잡으면 다음 수집에서 라벨이 통째로 미아가 된다.
+    assert 라벨키 == ["run_dir", "타오바오상품번호", "이미지순번"], 라벨키
+
+    # 🔴 "이 장을 뒤집었다" 와 "이 줄을 다 봤다" 는 **다른 사실**이다. 합치면 확인 표시가
+    #    라벨로 둔갑해 게이트 집계의 분모가 조용히 틀어진다.
+    assert "사람판정" not in 확인, "확인 표시에 판정이 섞였다 — 두 테이블을 합치지 마라"
+    for 기계 in ("판정", "배너", "제품", "무내용", "사유"):
+        assert 기계 not in 라벨, f"banner_label 에 기계 판정('{기계}')이 복사됐다 (T-4-20)"
 
 
 def test_자식_환경에_버퍼링해제가_들어간다(잡판, tmp_path):
@@ -1069,3 +1109,126 @@ def test_latest_done_은_디비를_만들지_않는다(tmp_path, monkeypatch):
 
     assert jobs.latest_done("bulsaja_scan") is None
     assert not 없는디비.exists()
+
+
+# ── 배너 스캔 잡 (Phase 4 / BANNER-01) ──────────────────────────────────────
+#
+# 자식을 **한 번도 띄우지 않는다.** 실측 4분 12초 · CDN 271MB 짜리라, 테스트가
+# 실수로 태우면 그 회차 캐시가 통째로 다시 받아진다.
+
+
+def _배너잡(run_dir: Path) -> str:
+    """배너 스캔 잡 하나를 만든다.
+
+    "대상" 은 상품 목록이 아니라 **직전 성공 조인 스캔의 산출물 파일**이다. 그래서
+    `only_ads`(새로 쓴다)가 아니라 `targets_path_override`(있는 파일을 그대로 가리킨다)
+    로 넘어간다 — D-11 의 "본 것과 다른 게 돌지 않는다" 가 여기서도 같은 모양이다.
+    """
+    조인 = run_dir / "web" / "join_zzprev.json"
+    조인.parent.mkdir(parents=True, exist_ok=True)
+    조인.write_text(json.dumps({"행": []}, ensure_ascii=False), encoding="utf-8")
+    return jobs.create_job("banner_scan", run_dir=run_dir.name,
+                           targets_path_override=조인)
+
+
+def test_배너잡_kind_가_등록돼_있다():
+    """`JobKind` 만 고치고 `KINDS` 를 빠뜨리면 런타임이 거부한다 — 둘 다 본다."""
+    assert "banner_scan" in jobs.KINDS
+    assert "banner_scan" in jobs.JobKind.__args__
+
+
+def test_배너잡은_전역_쓰기가드에_안_들어간다():
+    """🔴 **이 플랜의 1순위 위험이다** (T-4-19).
+
+    `WRITE_KINDS` 에 넣으면 4분 동안 입찰가 인상·되돌리기가 전부 409 가 되고,
+    그러면 사람이 가드를 끈다 — `WRITE_KINDS` 주석이 이미 세워 둔 판단 그대로다.
+    `BULSAJA_KINDS`(ENG-08 계정 사전점검)에도 없다: MCP 를 0회 부르므로 계정이
+    뭐든 판정 결과가 같다.
+
+    집합을 **눈으로 읽어** 확인하지 마라 — 그래서 이게 테스트다.
+    """
+    assert "banner_scan" not in jobs.WRITE_KINDS
+    assert "banner_scan" not in jobs.BULSAJA_KINDS
+    # 같은 잡 중복만 막는다. 사유는 레이트리밋이 아니라 271MB 이중 다운로드다.
+    assert "banner_scan" in jobs.SINGLETON_KINDS
+
+
+def test_배너잡이_도는_동안에도_쓰기잡이_들어간다(잡판, 안띄운다, tmp_run_dir):
+    """🔴 위 집합 검사의 **행동 판**이다 — 멤버십이 맞아도 동작이 틀릴 수 있다.
+
+    `WRITE_KINDS` 조회가 `IN (...)` 이라 집합만 보면 맞는데, 다른 가드를 잘못 넓히면
+    같은 증상이 난다. 그래서 실제로 두 잡을 연달아 만든다.
+    """
+    배너 = _배너잡(tmp_run_dir)
+    assert jobs.job_status(배너)["status"] in jobs.LIVE_STATUSES
+
+    # 배너가 도는 중에도 쓰기 잡이 만들어진다. 여기서 BusyError 가 나면 4분 동안
+    # 입찰가 버튼이 죽는다는 뜻이다.
+    쓰기 = jobs.create_job("prep")
+    assert jobs.job_status(쓰기)["status"] in jobs.LIVE_STATUSES
+
+
+def test_배너잡_둘은_동시에_안_돈다(잡판, 안띄운다, tmp_run_dir):
+    """같은 잡 둘이 271MB 를 두 번 받는 낭비를 막는다 (`SINGLETON_KINDS`).
+
+    **레이트리밋 때문이 아니다** — 불사자 MCP 를 0회 부른다. 거기에 둘이 같은 회차
+    캐시에 같은 파일명으로 동시에 쓰면 반쪽 파일이 서로의 입력이 된다.
+    """
+    _배너잡(tmp_run_dir)
+    with pytest.raises(jobs.SameKindBusyError):
+        _배너잡(tmp_run_dir)
+
+
+def test_배너잡은_조인_산출물이_없으면_안_만들어진다(잡판, tmp_run_dir):
+    """빈 값이 조용히 '전량' 으로 미끄러지는 경로를 예외로 터뜨린다.
+
+    `revert_only`·`bulsaja_index` 와 **똑같은 모양**이다. 막는 자리는 한 곳
+    (`jobs._build_argv`)이고, CLI 의 exit 2 가 그 뒤를 받는 2층이다.
+    """
+    with pytest.raises(ValueError) as 터진것:
+        jobs._build_argv("banner_scan", "zzjob", tmp_run_dir.name, [], None,
+                         Path("/tmp/zz-banner.json"), False)
+    assert "조인" in str(터진것.value)
+
+
+def test_배너잡_argv_가_설정에서_온다(잡판, 안띄운다, tmp_run_dir, monkeypatch):
+    """`workspace.toml` 을 고치면 자식에게 가는 값이 **실제로** 바뀐다 (S-4 / T-1-12).
+
+    모델이나 CLI 기본값에 기대면 이 테스트가 빨개진다 — 그게 "있는 척만 하는 설정"
+    이고, 배너 쪽은 그 값이 그대로 산출물 `판정규칙` 에 찍히므로 한 겹 더 나쁘다.
+    `caffeinate` 가 실제로 붙는지도 같이 본다 — 4분 12초짜리다(ENG-06 / T-3-37).
+    """
+    원래 = settings.load()
+    monkeypatch.setattr(settings, "_cache", {**원래, "banner_workers": 3,
+                                             "banner_vision_revision": 2,
+                                             "banner_skip_max_removal": 0.75,
+                                             "banner_lexicon_version": "zz9999-01-01"})
+    job_id = _배너잡(tmp_run_dir)
+
+    av = json.loads(jobs._row(job_id)["argv"])
+    assert av[av.index("--workers") + 1] == "3"
+    assert av[av.index("--vision-revision") + 1] == "2"
+    assert av[av.index("--skip-max-removal") + 1] == "0.75"
+    assert av[av.index("--lexicon-version") + 1] == "zz9999-01-01"
+
+    # 산출물은 조인 입력과 **같은 폴더**다 — 무엇을 넣어 무엇이 나왔나가 한 곳에 모인다.
+    나온것 = Path(av[av.index("--out") + 1])
+    assert 나온것.parent == (tmp_run_dir / "web")
+    assert 나온것.name == f"banner_{job_id}.json"
+    # `--join` 은 새로 쓴 파일이 아니라 넘긴 그 파일이다 (D-11)
+    assert Path(av[av.index("--join") + 1]).name == "join_zzprev.json"
+
+    if os.path.exists(jobs.CAFFEINATE):
+        assert av[:2] == [jobs.CAFFEINATE, "-i"], "4분짜리 잡에 절전 방지가 안 붙었다"
+
+
+def test_배너잡은_회차밖_파일을_안_받는다(잡판, tmp_run_dir, tmp_path):
+    """대상 파일은 **회차의 `web/` 밑**이어야 한다 (`_override_targets` / ASVS V12).
+
+    경로를 받아 그대로 믿으면 조인 산출물인 척하는 아무 파일이나 자식에게 넘어간다.
+    """
+    남의것 = tmp_path / "join_zz남의것.json"
+    남의것.write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError):
+        jobs.create_job("banner_scan", run_dir=tmp_run_dir.name,
+                        targets_path_override=남의것)
