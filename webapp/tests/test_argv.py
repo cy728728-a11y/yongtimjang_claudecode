@@ -187,6 +187,42 @@ def test_sys_executable_을_쓰지_않는다():
             f"{f} 에 sys.executable 이 있다 — .venv-web 으로 CLI 를 띄우게 된다"
 
 
+def test_웹앱에_다운로더도_Pillow도_없다():
+    """`webapp/**` 런타임 전체에 다운로더·이미지 라이브러리 import 0건 (D-19 / T-4-02).
+
+    **왜 파일 지정형이 아니라 트리 순회인가.** `test_join.py` 의 가드는 파일 이름을
+    나열한다 — 지금은 `join.py`·`state.py`·`banner.py` 셋이다. 그건 그 셋만 지킨다.
+    다음 사람이 `routes/banner.py` 에 썸네일 생성을 한 줄 넣으면 파일 지정형은 그냥
+    통과한다. D-19 가 대상으로 삼는 것은 **`webapp/` 전체**이므로, 순회형이어야
+    "웹앱은 네트워크와 이미지에 손대지 않는다" 는 주장이 기계로 성립한다.
+    바로 위 두 가드(`shell=True`·`sys.executable`)가 같은 논리로 서 있다.
+
+    Phase 4 가 이걸 처음 필요하게 만들었다 — 이미지 891장을 받아 OCR 을 돌리는 코드가
+    저장소에 생겼기 때문이다(`banner_scan.py`). 그건 **CLI 자식**이고 `.venv` 에서 돈다.
+    `.venv-web` 에는 그 패키지들이 아예 없어서, 웹앱이 부르면 ImportError 다 —
+    이 테스트는 그 물리적 사실이 **우연이 아니라 설계**임을 고정한다.
+
+    **금지 문자열을 이 파일에 글자로 남기지 않는다.** 이 파일 맨 위 docstring 의
+    규율과 같다 — 가드가 감시하는 문자열을 테스트가 들고 있으면 "테스트에는 있어도
+    된다" 는 예외가 생기고, 그 예외가 언젠가 진짜 코드로 자란다. 런타임에 조립한다.
+    """
+    금지목록 = ("from " + "PIL", "import " + "PIL", "urllib" + ".request",
+              "import " + "requests", "httpx" + ".", "urlopen" + "(")
+    웹앱 = Path(A.__file__).resolve().parent
+    본것 = 0
+    for f in 웹앱.rglob("*.py"):
+        if "tests" in f.parts:
+            continue
+        본문 = f.read_text(encoding="utf-8", errors="ignore")
+        본것 += 1
+        for 금지 in 금지목록:
+            assert 금지 not in 본문, (
+                f"{f} 에 '{금지}' 가 있다 (D-19) — 이미지 다운로드·OCR 은 전부 "
+                "CLI 자식(banner_scan.py) 몫이다")
+    # 순회가 실제로 무언가를 훑었는가. 0개를 훑고 통과하면 있는 척만 하는 가드다(T-1-12).
+    assert 본것 >= 5, f"런타임 파일을 {본것}개밖에 안 훑었다 — 순회가 고장났다"
+
+
 # ── 불사자 argv (Phase 3) ───────────────────────────────────────────────────
 #
 # 여기서도 서브프로세스를 띄우지 않는다. 불사자 MCP 는 **조회만** 하는 잡이지만

@@ -587,15 +587,26 @@ def test_원본_행을_고치지_않는다(result_traps, join_traps):
 
 
 def test_조인은_네트워크도_파일도_안_연다():
-    """`join.py`·`state.py` 는 dict 만 받는다 — MCP·DB·파일 접촉 0 (D-19 / T-3-10).
+    """`join.py`·`state.py`·`banner.py` 는 dict 만 받는다 — MCP·DB·파일 접촉 0 (D-19).
 
     웹앱 전용 venv 에는 불사자 클라이언트가 쓰는 HTTP 패키지가 없다. import 하는 순간
     ImportError 이고, 그게 이 설계의 물리적 근거다. 문자열 검사로 그 선을 고정한다.
+
+    Phase 4 에서 `banner.py` 가 이 목록에 들어왔다(T-4-01/T-4-02). 같은 성질의 순수
+    모듈이고, 같은 선 위에 서야 한다. 이미지 라이브러리 금지도 여기서 처음 붙는다 —
+    이 페이즈 전에는 웹앱이 이미지를 만질 이유 자체가 없었다.
+
+    **이건 파일 지정형이다.** `webapp/` **전체**를 덮는 것은
+    `test_argv.py::test_웹앱에_다운로더도_Pillow도_없다` 이고, 둘은 상보적이다:
+    여기는 세 파일에 대해 더 넓은 목록(DB·서브프로세스·웹프레임워크)을 보고,
+    저기는 좁은 목록을 트리 전체에 본다.
     """
-    for 파일 in ("join.py", "state.py"):
+    # 금지 문자열을 이 파일에 글자로 남기지 않으려고 조립한다 (`test_argv.py:9-14` 규율).
+    이미지라이브러리 = "P" + "IL"
+    for 파일 in ("join.py", "state.py", "banner.py"):
         src = (WEBAPP / 파일).read_text(encoding="utf-8")
-        for 금지 in ("eroomlib", "requests", "fastapi", "starlette",
-                     "APIRouter", "sqlite3", "subprocess", "httpx", "urllib"):
+        for 금지 in ("eroomlib", "requests", "fastapi", "starlette", "APIRouter",
+                     "sqlite3", "subprocess", "httpx", "urllib", 이미지라이브러리):
             assert 금지 not in src, f"{파일} 에 '{금지}' 가 있다 (D-19)"
         assert "open(" not in src, f"{파일} 이 파일을 연다 — dict 만 받아야 한다"
 
