@@ -496,3 +496,208 @@ def test_템플릿이_표도_safe_도_안_쓴다():
     assert "| " + "safe" not in 소스
     assert "토큰 0 · 크레딧 0" in 소스
     assert 'hx-headers=\'{"X-CT-Token": "{{ token }}"}\'' in 소스
+
+
+# ── 7. D-03a — 전장 노출 (04-07) ────────────────────────────────────────────
+#
+# **이 절이 이 페이즈의 측정 장치 그 자체다.** 배너로 판정한 장만 깔린 화면은 오탐만
+# 잡고 미탐을 구조적으로 증명할 수 없다(D-03a). 그래서 "배너가 보인다" 가 아니라
+# **"전장이 보인다"** 를 단언한다 — 배너 수와 같으면 실패다.
+
+
+def _산출물_여러상품(코드들=("zz01", "zz02"), 장수=(16, 3), 배너들=((0, 5), (1,)),
+                스킵들=(None, banner.제거율초과)):
+    """상품 여러 건 · 장 여럿. `_산출물()` 은 장이 2개뿐이라 전장을 못 센다.
+
+    **장 수와 배너 수가 다르게** 만드는 것이 요점이다 — 둘이 같으면 "배너만 깔렸다"
+    는 버그가 통과한다.
+    """
+    상품들 = []
+    총장 = 총배너 = 0
+    for 코드, n, 배너순번, 스킵 in zip(코드들, 장수, 배너들, 스킵들):
+        장 = []
+        for i in range(n):
+            판정 = banner.배너 if i in 배너순번 else banner.제품
+            장.append({"순번": i, "url": f"https://zzcdn.example/{코드}-{i}.jpg",
+                       "w": 800, "h": 900, "판정": 판정,
+                       "사유": ("어휘군:공장직판" if 판정 == banner.배너 else None),
+                       "썸네일": f"{코드}_{i:02d}.webp"})
+        총장 += n
+        총배너 += len(배너순번)
+        상품들.append({
+            "판매자상품코드": 코드, "불사자코드": "b" + 코드,
+            "타오바오상품번호": "tb-" + 코드, "상세상태": "중국어원본",
+            "장수": n, "스킵사유": 스킵, "사유": ("제거율 82%" if 스킵 else None),
+            "제거율": 0.82 if 스킵 else 0.1, "제품이미지": [], "장": 장,
+        })
+    return {
+        "소요초": 252.4,
+        "판정규칙": {"어휘군버전": "2026-09-21", "vision_revision": 3},
+        "집계": {"상품": len(상품들), "장": 총장, "판정완료": 총장, "미판정": 0,
+               banner.배너: 총배너, banner.제품: 총장 - 총배너,
+               banner.무내용: 0, "스킵상품": sum(1 for s in 스킵들 if s)},
+        "상품": 상품들,
+    }
+
+
+def test_전장이_다_깔린다(화면, 돌린척, tmp_run_dir):
+    """`figure` 개수 == 산출물 `집계.장`. **배너 수와 같으면 실패다** (D-03a).
+
+    판정된 것만 접으면 "기계가 자신있게 틀린" 장을 사람이 볼 기회 자체가 없어진다 —
+    그러면 미탐 0% 는 측정한 적 없는 숫자가 된다. 경계선 구간만 더 보여주는 절충안도
+    같은 이유로 이미 기각됐다(04-CONTEXT D-03a).
+
+    `data-slot="strip"` 만 센다 — 같은 장이 기준 확인 섹션에도 다시 나오기 때문이다
+    (그쪽은 `sample` 이다). 둘을 안 가르면 전장 수가 부풀어 보인다.
+    """
+    문서 = _산출물_여러상품()
+    돌린척(문서)
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+
+    깔린장 = 본문.count('data-slot="strip"')
+    assert 깔린장 == 문서["집계"]["장"] == 19, (
+        f"전장 노출이 깨졌다 — figure {깔린장}개 / 산출물 장 {문서['집계']['장']}개. "
+        "배너만 깔면 미탐을 구조적으로 못 본다(D-03a)")
+    assert 깔린장 != 문서["집계"][banner.배너], "배너 수만큼만 깔렸다 (D-03a)"
+
+
+def test_스킵_상품도_전장을_깐다(화면, 돌린척, tmp_run_dir):
+    """스킵 **판단 자체가 틀렸을 수 있다.** 줄은 흐려지되 전장은 그대로 깔린다 (D-09).
+
+    그리고 못 누르게 막지 않는다 — `pointer-events` 를 막는 순간 스킵 오판정을
+    영원히 못 잡는다(`board.html` 의 `.ct-done` 과 같은 판단).
+    """
+    돌린척(_산출물_여러상품())
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+
+    assert "⏭ 스킵" in 본문 and banner.제거율초과 in 본문, "스킵 사유가 화면에 없다"
+    # 스킵 상품(zz02)의 장 3개가 전부 깔렸다 — 썸네일 경로로 센다.
+    깔림 = [i for i in range(3)
+          if f'/banner/thumb/{tmp_run_dir.name}/1/{i}"' in 본문]
+    assert 깔림 == [0, 1, 2], f"스킵 상품의 장이 {깔림} 만 깔렸다 (D-03a)"
+    # 스킵 줄의 장에도 라벨 POST 가 걸려 있어야 한다 — 흐리게만 하고 클릭은 산다.
+    스킵줄 = 본문.split('id="p-1"', 1)[1]
+    assert 'hx-post="/banner/label"' in 스킵줄, "스킵 줄에서 클릭이 사라졌다 (D-09)"
+    # 클릭을 죽이는 CSS 도 없다. 금지 낱말을 이 파일에 글자로 안 남긴다(런타임 조립).
+    assert ("pointer" + "-events") not in 본문, "스킵 줄의 클릭을 막았다 — 오판정을 못 잡는다"
+
+
+def test_장_클릭이_hx_post_다(화면, 돌린척, tmp_run_dir):
+    """`hx-get` 으로 바꾸면 Origin 층이 통째로 무력화된다 (T-1-01b / T-4-05).
+
+    교차 사이트 단순 GET 에는 Origin 헤더가 없다 — 쓰기를 GET 으로 만드는 순간
+    `security.guard` 의 첫 층이 아무것도 못 거른다.
+    """
+    돌린척(_산출물_여러상품())
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+
+    assert 'hx-post="/banner/label"' in 본문
+    assert 'hx-post="/banner/confirm"' in 본문
+    assert "hx-" + "get" not in 본문, "쓰기를 GET 으로 걸었다 (T-1-01b)"
+    assert 'hx-swap="outerHTML"' in 본문
+    assert 'loading="lazy"' in 본문, "891개 <img> 를 한 번에 로드하게 뒀다"
+
+
+def test_토글이_기계판정으로_되돌아온다():
+    """클릭 순환: 기계 → 반대 → 무내용 → **기계**. 되돌리기 버튼을 따로 두지 않는다.
+
+    상태를 하나 더 만들면 그게 곧 사람 판단 큐의 입구다(D-09). 원래 판정을 다시
+    찍는 것이 되돌리기다.
+    """
+    from webapp.routes import banner as 라우트
+
+    # 기계가 배너라 한 장
+    assert 라우트._다음판정(banner.배너, None) == banner.제품
+    assert 라우트._다음판정(banner.배너, banner.제품) == banner.무내용
+    assert 라우트._다음판정(banner.배너, banner.무내용) == banner.배너      # 복귀
+    # 기계가 제품이라 한 장 — 한 번 누르면 배너다(미탐을 찍는 동선이 가장 짧아야 한다)
+    assert 라우트._다음판정(banner.제품, None) == banner.배너
+    assert 라우트._다음판정(banner.제품, banner.배너) == banner.무내용
+    assert 라우트._다음판정(banner.제품, banner.무내용) == banner.제품      # 복귀
+    # 기계가 미판정인 장은 복귀 자리가 없다 — 사람은 '모르겠다'를 찍지 못한다(D-09).
+    순환 = []
+    현재 = None
+    for _ in range(3):
+        현재 = 라우트._다음판정(banner.미판정, 현재)
+        순환.append(현재)
+    assert set(순환) == set(banner.사람판정허용값)
+    assert banner.미판정 not in 순환
+
+
+def test_라벨_응답이_그_장_하나의_조각이다(화면, 돌린척, tmp_run_dir):
+    """응답은 `<figure>` 하나다 — 줄 전체를 돌려주면 가로 스크롤이 매 클릭마다 초기화된다.
+
+    그리고 조각의 테두리·글자는 **서버가 산출물을 다시 읽어** 정한다. 요청이 보낸
+    값으로 그리면 화면이 DB 가 아니라 자기 자신을 비추게 되고, 그 순간 "미탐 0%" 의
+    근거가 사라진다.
+    """
+    돌린척(_산출물_여러상품())
+    응답 = 화면.post("/banner/label", data={
+        "run_dir": tmp_run_dir.name, "타오바오상품번호": "tb-zz01",
+        "판매자상품코드": "zz01", "이미지순번": 3, "사람판정": banner.배너})
+
+    assert 응답.status_code == 200
+    조각 = 응답.text
+    assert 조각.count("<figure") == 1, "조각이 장 하나가 아니다"
+    assert 'data-i="3"' in 조각 and "ct-banner" in 조각 and "배너" in 조각
+    assert "✋" in 조각, "사람이 찍은 장과 기계 판정이 구분되지 않는다"
+    # 기계는 `제품` 이라 한 장이다 — 다음 클릭은 `무내용` 이어야 순환이 성립한다.
+    assert banner.무내용 in 조각
+    # 썸네일은 정수 인덱스 둘로만 부른다 (T-4-04). 파일명이 조각에 실리면 안 된다.
+    assert f"/banner/thumb/{tmp_run_dir.name}/0/3" in 조각
+    assert "zz01_03.webp" not in 조각
+
+
+def test_모르는_회차로는_라벨이_안_들어간다(화면, tmp_path, tmp_run_dir):
+    """회차 화이트리스트 밖 라벨은 **DB 에 남는데 어느 화면에도 안 보인다.**
+
+    사람은 클릭이 먹혔다고 믿고 게이트는 그 라벨을 영원히 못 센다 — 저장은 됐는데
+    화면이 거짓말을 하는 그 모양이다. 400 으로 끊는다.
+    """
+    db = tmp_path / "webapp.db"
+    for 길, 몸통 in (("/banner/label",
+                    {"run_dir": "2099-01-01", "타오바오상품번호": "tb-1",
+                     "판매자상품코드": "zz01", "이미지순번": 0, "사람판정": banner.배너}),
+                   ("/banner/confirm",
+                    {"run_dir": "2099-01-01", "타오바오상품번호": "tb-1"})):
+        assert 화면.post(길, json=몸통).status_code == 400
+    assert _행수(db, "banner_label") == 0 and _행수(db, "banner_confirm") == 0
+
+
+def test_확인함이_라벨과_섞이지_않는다(화면, 돌린척, tmp_path, tmp_run_dir):
+    """"뒤집었다" 와 "다 봤다" 는 **다른 사실**이라 테이블도 다르다 (Pitfall 8).
+
+    안 본 상품을 "기계 판정에 동의" 로 세면 미탐 0% 가 거짓말이 된다. 그래서 확인은
+    라벨 수를 건드리지 않는다.
+    """
+    돌린척(_산출물_여러상품())
+    db = tmp_path / "webapp.db"
+
+    응답 = 화면.post("/banner/confirm", data={"run_dir": tmp_run_dir.name,
+                                          "타오바오상품번호": "tb-zz01"})
+    assert 응답.status_code == 200 and "확인함" in 응답.text
+    assert _행수(db, "banner_confirm") == 1
+    assert _행수(db, "banner_label") == 0, "확인이 라벨 테이블을 건드렸다"
+
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    assert "ct-done" in 본문, "확인한 줄이 화면에서 안 바뀐다"
+
+
+def test_판정이_색만으로_갈리지_않는다(화면, 돌린척, tmp_run_dir):
+    """흑백 출력·색맹에서도 살아야 한다 — **테두리 스타일과 글자까지** 다르다.
+
+    `board.html:22-46` 이 세운 규율이다. 색 하나로 가르면 화면이 절반의 사람에게
+    아무 말도 안 한다.
+    """
+    from pathlib import Path as _P
+
+    from webapp import main as _main
+
+    css = (_P(_main.BASE) / "templates" / "banner_review.html").read_text(encoding="utf-8")
+    for 스타일 in ("border-style: solid", "border-style: dashed", "border-style: double"):
+        assert 스타일 in css, f"{스타일} 이 없다 — 색만으로 가르고 있다"
+
+    돌린척(_산출물_여러상품())
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    assert "ct-banner" in 본문 and "ct-product" in 본문
+    assert "0 배너" in 본문, "테두리 옆에 글자가 없다"

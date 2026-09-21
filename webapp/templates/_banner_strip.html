@@ -1,0 +1,60 @@
+{# 장 한 개 조각 — 검수 스트립의 최소 단위.
+
+   세 곳에서 같은 파일이 쓰인다:
+     · `banner_review.html` 의 상품 줄 (전장 스트립 · data-slot="strip")
+     · `banner_review.html` 의 기준 확인 섹션 (경계 4장 · data-slot="sample")
+     · `POST /banner/label` 의 응답 조각 → `hx-swap="outerHTML"` 로 이 `<figure>` 만 교체
+
+   **라벨이 저장 안 됐는데 테두리만 바뀌면 "미탐 0%"가 거짓말이 된다.**
+   그래서 테두리는 클라이언트가 칠하지 않는다 — 서버가 저장에 성공한 뒤 돌려준 조각이
+   자기 자신을 갈아 끼우는 방식뿐이다. 저장이 실패하면 응답이 200 이 아니므로 교체가
+   일어나지 않고, `hx-on::response-error` 가 상단 오류 배너를 띄운다.
+
+   **이 쓰기를 GET 으로 바꾸지 마라.** 교차 사이트 단순 GET 에는 Origin 헤더가 없어서
+   `security.guard` 의 Origin 층이 통째로 무력화된다 (T-1-01b · `board.html:204` 주석).
+   (그 htmx 속성 이름을 주석에도 안 남긴다 — 회귀가 이 파일에서 글자로 찾는다.)
+
+   **판정 로직이 여기 없다.** 다음에 찍을 값(`장.다음판정`)도, 테두리 클래스도,
+   글자도 전부 서버가 정해 `ctx` 에 실어 준다 — 템플릿에 순환 규칙을 넣으면 그 순간
+   판정의 정본이 둘이 된다(S-1).
+
+   **조각이 `<figure>` 하나여야 한다.** 줄 전체나 페이지를 돌려주면 htmx 가 스트립을
+   통째로 다시 그리고, 891장을 훑던 가로 스크롤 위치가 매 클릭마다 처음으로 돌아간다.
+
+   `data-p`/`data-i` 는 04-06 의 회귀가 보는 이름이라 유지한다. `data-장순번` 은
+   브라우저 회귀(`banner_cdp.mjs`)가 전장 노출을 세는 이름이고, `data-slot` 은
+   스트립과 기준 확인 섹션을 가른다 — 같은 장이 두 곳에 나오므로 둘을 안 가르면
+   전장 수가 부풀어 보인다. #}
+<figure class="ct-chap {{ 장.판정클래스 }}{% if 장.사람이찍음 %} ct-human{% endif %}{% if 큰것 %} ct-big{% endif %}"
+        data-p="{{ 상품.상품키 }}" data-i="{{ 장.순번 }}"
+        data-장순번="{{ 장.순번 }}"
+        data-slot="{{ 자리 | default('strip', true) }}"
+        {%- if 상품.순번 is not none %} data-상품순번="{{ 상품.순번 }}"{% endif %}
+        {%- if 장.라벨요청 %}
+        hx-post="/banner/label"
+        hx-vals='{{ 장.라벨요청 | tojson }}'
+        hx-target="this" hx-swap="outerHTML" hx-disabled-elt="this"
+        hx-on::before-request="var b = document.getElementById('label-error'); if (b) { b.hidden = true; }"
+        hx-on::response-error="var b = document.getElementById('label-error');
+          if (b) { b.textContent = '라벨을 저장하지 못했다 (' + event.detail.xhr.status
+            + ') — 테두리는 그대로다. 저장 안 된 클릭을 저장된 것처럼 보여 주지 않는다. 다시 눌러라';
+            b.hidden = false; }"
+        role="button" tabindex="0"
+        title="{{ 장.순번 }}번 · 기계 {{ 장.판정 }}{% if 장.사유 %} ({{ 장.사유 }}){% endif %} — 누르면 {{ 장.다음판정 }} 로 기록된다"
+        {%- else %}
+        title="{{ 장.순번 }}번 · {{ 장.라벨불가 }}"
+        {%- endif %}>
+  {% if 장.썸네일있음 and 상품.순번 is not none %}
+  {# 썸네일 주소는 **정수 인덱스 둘**로만 만든다. 파일명도 CDN 주소도 화면에 싣지 않는다
+     (T-4-04 / T-4-22). 높이 고정 + 너비 자동이라 한 줄의 세로 크기가 일정하다. #}
+  <img src="/banner/thumb/{{ run_dir }}/{{ 상품.순번 }}/{{ 장.순번 }}"
+       loading="lazy" height="200"
+       alt="{{ 상품.판매자상품코드 }} {{ 장.순번 }}번 장">
+  {% else %}
+  {# 미판정·다운로드 실패 장이다. `<img>` 를 걸면 깨진 그림이 되고, 빼 버리면 전장이
+     아니게 된다(D-03a) — 자리를 남기고 없다고 말한다. #}
+  <span class="ct-nothumb">썸네일 없음</span>
+  {% endif %}
+  {# 색만으로 가르지 않는다(흑백 출력·색맹) — 테두리 스타일이 다르고 글자도 다르다. #}
+  <figcaption>{{ 장.순번 }}{% if 장.판정글자 %} {{ 장.판정글자 }}{% endif %}{% if 장.사람이찍음 %} ✋{% endif %}</figcaption>
+</figure>

@@ -1,4 +1,4 @@
-{# 배너 검수 화면 — 04-06 이 헤더까지 만들고, 전장 스트립은 04-07 이 얹는다.
+{# 배너 검수 화면 — 헤더(04-06) + 전장 스트립(04-07).
 
    정적파일은 전부 /static/vendor/ 다. CDN 을 런타임에 부르지 않는다 —
    맥북이 오프라인이거나 CDN 이 흔들리면 관제탑이 통째로 안 뜬다.
@@ -7,6 +7,11 @@
    **전장 스트립**이다 — 행 확장으로 만들면 100상품 = 100클릭이 되고, D-03 이 요구한
    "훑기" 가 "클릭" 이 된다. 그 라이브러리 이름을 주석에도 남기지 않는다(grep 가드가
    이 파일을 훑는다 — `test_argv.py:9-14` 규율).
+
+   **전장 노출은 협상 불가다 (D-03a).** 배너로 판정한 장만 깔면 오탐만 잡히고 미탐은
+   구조적으로 안 보인다 — 그러면 이 페이즈의 통과 조건(미탐 0)을 증명할 길이 없다.
+   스킵된 상품도 전장을 깐다: 스킵 판단 자체가 틀렸을 수 있다(D-09).
+   `webapp/tests/banner_cdp.sh` 의 검사 ①이 이 문장을 기계로 집행한다.
 
    자동 이스케이프를 끄는 필터를 쓰지 마라 — 상품명·사유에 중국어 원문과 특수문자가
    섞여 들어온다(T-1-17). grep 가드가 집행한다.
@@ -34,6 +39,45 @@
                 padding-left: .6rem; }
     .ct-head dl { display: grid; grid-template-columns: auto 1fr; gap: .1rem .8rem; margin: 0; }
     .ct-head dt { font-weight: bold; }
+
+    /* ── 전장 스트립 (D-03) ─────────────────────────────────────────────
+       한 상품이 **가로 한 줄**이고 스크롤만으로 훑인다. 펼치기 클릭이 0회여야
+       "3초 훑기" 가 성립한다. 줄이 넘치면 그 줄만 가로로 스크롤한다. */
+    .ct-strip { display: flex; gap: .45rem; overflow-x: auto; padding: .3rem 0 .5rem; }
+    /* 썸네일 높이 고정 · 너비는 종횡비대로. 줄의 세로 크기가 일정해야 눈이 훑는다. */
+    .ct-chap img { height: 200px; width: auto; display: block; }
+    .ct-chap { flex: 0 0 auto; margin: 0; text-align: center; cursor: pointer;
+               /* 제품 장도 같은 두께의 **투명** 테두리를 갖는다 — 클릭으로 판정이
+                  바뀔 때 줄이 덜컹 밀리지 않게 하려는 것이다. */
+               border: .25rem solid transparent; border-radius: .2rem; }
+    .ct-chap figcaption { font-size: .78rem; line-height: 1.3; white-space: nowrap; }
+    .ct-chap .ct-nothumb { display: flex; align-items: center; justify-content: center;
+                           height: 200px; width: 120px; font-size: .75rem; font-style: italic;
+                           background: var(--pico-code-background-color, #f4f4f4); }
+    /* **색만으로 가르지 않는다** (흑백 출력·색맹) — 테두리 *스타일*이 넷 다 다르고
+       `figcaption` 에 글자도 같이 나온다. 색은 거들 뿐이다. */
+    .ct-banner   { border-style: solid;  border-color: var(--pico-del-color, #d93526); }
+    .ct-blank    { border-style: dashed; border-color: var(--pico-muted-color, #777); }
+    .ct-unjudged { border-style: double; border-color: #d98026; }
+    .ct-product  { border-style: none; border-width: .25rem; border-color: transparent; }
+    /* 사람이 찍은 장. 기계 판정과 **구분돼야 한다** — 둘을 같게 그리면 화면이
+       "사람이 봤다" 를 증명하지 못한다. 밑줄 한 줄과 ✋ 글자로 가른다. */
+    .ct-human { box-shadow: 0 .25rem 0 0 var(--pico-primary, #0172ad); }
+
+    /* 상품 줄. 화면 밖 상품은 브라우저가 렌더를 미룬다 — 891개 `<img>` 를 한 번에
+       붙여도 가볍다(`loading="lazy"` 와 한 쌍이다). */
+    .ct-row { content-visibility: auto; contain-intrinsic-size: auto 280px;
+              border-top: 1px solid var(--pico-muted-border-color, #ccc);
+              padding-top: .6rem; margin-bottom: .4rem; }
+    .ct-row > header { display: flex; flex-wrap: wrap; gap: .6rem; align-items: baseline; }
+    .ct-row > header code { font-size: .85rem; }
+    /* 스킵·확인된 줄은 흐려지되 **못 누르게 하지 않는다.** 클릭 자체를 죽이는 CSS 를
+       여기 넣지 마라 — 못 고르게 하는 순간 스킵 오판정을 영영 못 잡는다
+       (`board.html` 의 `.ct-done` 과 같은 판단). 그 속성 이름을 주석에도 안 남긴다:
+       회귀가 이 파일 전체에서 글자로 찾는다(`test_argv.py:9-14` 규율). */
+    .ct-skip, .ct-done { opacity: .5; font-style: italic; }
+    .ct-badge { font-size: .8rem; border: 1px dashed var(--pico-muted-color, #777);
+                border-radius: .2rem; padding: 0 .35rem; }
   </style>
 </head>
 {# 이 한 줄이 모든 htmx 쓰기 요청에 X-CT-Token 을 붙인다.
@@ -61,13 +105,17 @@
   <p class="ct-error" role="status">{{ load_error }}</p>
   {% endif %}
 
+  {# 라벨 저장 실패 배너. **저장 안 된 클릭을 저장된 것처럼 보여 주지 않는다** —
+     조각 교체는 200 일 때만 일어나고, 아니면 여기에 사유가 뜬다. #}
+  <p id="label-error" class="ct-error" role="status" hidden></p>
+
   {% if run_dir is none %}
   <p class="ct-empty">회차가 하나도 없다 — 보드에서 새로 수집부터 돌려라.</p>
 
   {% elif 집계 is none %}
   {# **실패가 아니다.** 사유 없이 여기로 오면 "아직 안 돌렸다" 이고, 그게 정상 출발점이다. #}
   <p class="ct-empty">아직 배너 스캔을 안 돌렸다 — 아래 버튼으로 접수해라 (약 4분 · 크레딧 0).</p>
-  {# hx-post 다. hx-get 으로 바꾸지 마라 — 교차 사이트 단순 GET 에는 Origin 헤더가 없어서
+  {# hx-post 다. 이 쓰기를 GET 으로 바꾸지 마라 — 교차 사이트 단순 GET 에는 Origin 헤더가 없어서
      security.guard 의 Origin 층이 통째로 무력화된다(T-1-01b).
      409 가 오면 그 사유를 그대로 띄운다 — 순서를 알려주는 것이 그 응답의 전부다. #}
   <button type="button"
@@ -119,9 +167,62 @@
     </dl>
   </section>
 
-  {# 전장 스트립은 04-07 이 얹는다. 여기서는 줄이 실제로 몇 개인지만 드러낸다 —
-     빈 화면이 "대상이 없다" 로 읽히지 않게 하는 최소한이다. #}
-  <p>상품 {{ 상품 | length }}줄이 준비됐다. 전장 스트립은 다음 플랜이 얹는다.</p>
+  {# ── 전장 스트립 — 상품 하나가 한 줄 ────────────────────────────────────── #}
+  <h2>상품 {{ 상품 | length }}줄 — 전장</h2>
+  {% set 상태기호 = {"AI가공완료": "⚪", "단순번역만": "🟡", "중국어원본": "🔴"} %}
+  {% for 줄 in 상품 %}
+  {% with 상품 = 줄 %}
+  <article class="ct-row{% if 상품.스킵사유 %} ct-skip{% endif %}{% if 상품.확인됨 %} ct-done{% endif %}"
+           id="p-{{ 상품.순번 }}" data-상품순번="{{ 상품.순번 }}"
+           data-스킵="{{ 1 if 상품.스킵사유 else 0 }}">
+    <header>
+      <strong>{{ loop.index }}/{{ loop.length }}</strong>
+      <code>{{ 상품.판매자상품코드 }}</code>
+      {# ⚪🟡🔴 는 화면에서 붙인다 (`state.py:49-57` 관례). 기호만 내지 않고 **글자를
+         같이** 낸다 — 기호는 흑백 출력·색맹에서 구분이 안 된다. #}
+      {% if 상품.상세상태 %}<span>{{ 상태기호.get(상품.상세상태, "") }} {{ 상품.상세상태 }}</span>{% endif %}
+      <span>{{ 상품.장 | length }}장 → 제품 {{ 상품.줄집계[제품값] }} /
+        배너 {{ 상품.줄집계[배너값] }}{% if 상품.줄집계[미판정값] %} ·
+        <strong>미판정 {{ 상품.줄집계[미판정값] }}</strong>{% endif %}</span>
+      {% if 상품.스킵사유 %}
+      {# 스킵도 **왜** 스킵인지 눈으로 봐야 한다. 줄은 흐려지되 전장은 그대로 깔리고
+         클릭도 막지 않는다 — 스킵 판단 자체가 틀렸을 수 있다(D-09 / D-03a). #}
+      <span class="ct-badge">⏭ 스킵 — {{ 상품.스킵사유 }}{% if 상품.사유 %} ({{ 상품.사유 }}){% endif %}</span>
+      {% endif %}
+      {% if 상품.확인됨 %}
+      <span class="ct-confirmed" data-p="{{ 상품.상품키 }}">확인함</span>
+      {% elif 상품.확인요청 %}
+      {# "이 줄 다 봤다" — 장 단위가 아니라 **상품 단위**다. 확인 안 한 상품은 게이트
+         분모에서 빠진다(Pitfall 8): 안 본 것을 "기계 판정에 동의" 로 세면 미탐 0% 가
+         거짓말이 된다. 응답은 배지 조각이고, 줄 흐리기는 교체 직전에 건다. #}
+      <button type="button" class="ct-confirm-btn" data-p="{{ 상품.상품키 }}"
+              hx-post="/banner/confirm"
+              hx-vals='{{ 상품.확인요청 | tojson }}'
+              hx-target="this" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-on::before-swap="if (event.detail.xhr.status === 200) {
+                this.closest('.ct-row').classList.add('ct-done'); }"
+              hx-on::response-error="var b = document.getElementById('label-error');
+                b.textContent = '확인을 저장하지 못했다 (' + event.detail.xhr.status + ')';
+                b.hidden = false;">확인함</button>
+      {% else %}
+      <span class="ct-badge">확인 못 한다 — {{ 상품.키사유 }}</span>
+      {% endif %}
+    </header>
+
+    {% if 상품.키사유 %}
+    {# 키를 못 만드는 상품도 **목록에 남는다.** 빼면 전장을 깐다는 D-03a 가 조용히
+       깨진다 — 화면은 그 줄에 라벨을 못 거는 사유를 말해야 한다. #}
+    <p class="ct-error"><small>라벨을 못 건다: {{ 상품.키사유 }}</small></p>
+    {% endif %}
+
+    <div class="ct-strip">
+      {% for 장 in 상품.장 %}
+      {% with 자리 = "strip", 큰것 = false %}{% include "_banner_strip.html" %}{% endwith %}
+      {% endfor %}
+    </div>
+  </article>
+  {% endwith %}
+  {% endfor %}
   {% endif %}
 
 </main>
