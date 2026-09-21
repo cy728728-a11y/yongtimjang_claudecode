@@ -178,7 +178,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 04-05-PLAN.md — 잡 배선: `banner_scan` 등록 · `BannerArgv` · `banner_label`/`banner_confirm` DDL · 접수 라우트
+- [x] 04-05-PLAN.md — 잡 배선: `banner_scan` 등록 · `BannerArgv` · `banner_label`/`banner_confirm` DDL · 접수 라우트
 
 **Wave 6** *(blocked on Wave 5)*
 
@@ -252,7 +252,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 9/9 | Complete   | 2026-09-20 |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
-| 4. 홍보배너 식별 | 4/8 | In Progress|  |
+| 4. 홍보배너 식별 | 5/8 | In Progress|  |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 0/TBD | Not started | - |
 | 6. 마켓 수정업로드 | 0/TBD | Not started | - |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |
