@@ -17,9 +17,9 @@
 - [x] **ENG-03**: 자식 프로세스의 출력을 append-only 로그 파일에 쌓고, 화면은 그 파일의 오프셋부터 재생한다 (스트림 직결 금지 — 닫힌 사이 출력이 사라진다)
 - [ ] **ENG-04**: 같은 대상에 같은 작업이 동시에 두 번 돌지 않는다 (작업 잠금)
 - [ ] **ENG-05**: 서버를 재시작하면 고아가 된 작업을 감지해 상태를 정리한다
-- [ ] **ENG-06**: 수십 분짜리 작업 중 맥북이 절전으로 자지 않는다 (`caffeinate -i`)
+- [x] **ENG-06**: 수십 분짜리 작업 중 맥북이 절전으로 자지 않는다 (`caffeinate -i`)
 - [x] **ENG-07**: 작업 생성이 HTTP 핸들러가 아니라 **호출 가능한 함수**로 존재한다 (3단계 스케줄 자동화가 같은 경로를 쓰게 하기 위함)
-- [ ] **ENG-08**: 작업 시작 전 `bulsaja_my_profile` 로 계정을 확인하고, 기대 계정(부킹/용쌤)이 아니면 실행을 거부한다
+- [x] **ENG-08**: 작업 시작 전 `bulsaja_my_profile` 로 계정을 확인하고, 기대 계정(부킹/용쌤)이 아니면 실행을 거부한다
       — 화면에 현재 계정이 항상 표시된다 (토큰을 바꿔 끼우는 구조라 틀린 계정으로 도는 걸 알아챌 방법이 이것뿐이다)
 
 ### 기반 — 안전 (SAFE)
@@ -66,18 +66,18 @@
 
 ### 엔티티 해소 (JOIN)
 
-- [ ] **JOIN-01**: 광고 소재와 불사자 상품을 잇고, **해상률을 숫자로 보여준다** (몇 건 중 몇 건이 이어졌는지)
-- [ ] **JOIN-02**: 이어지지 않은 항목을 숨기지 않고 "미해소"로 표시한다 (조용히 빠지면 대상 누락을 모른다)
-- [ ] **JOIN-03**: 불사자코드 하나에 사본이 여러 개 붙는 팬아웃을 감지해, 실행 전에 "이 버튼이 N건에 적용됩니다"를 보여준다 (실측: 코드 1개에 사본 27건)
-- [ ] **JOIN-04**: 채널상품ID는 물갈이로 재발급되므로 **영구 키로 쓰지 않는다** (실측: 교집합 0/160)
+- [x] **JOIN-01**: 광고 소재와 불사자 상품을 잇고, **해상률을 숫자로 보여준다** (몇 건 중 몇 건이 이어졌는지)
+- [x] **JOIN-02**: 이어지지 않은 항목을 숨기지 않고 "미해소"로 표시한다 (조용히 빠지면 대상 누락을 모른다)
+- [x] **JOIN-03**: 불사자코드 하나에 사본이 여러 개 붙는 팬아웃을 감지해, 실행 전에 "이 버튼이 N건에 적용됩니다"를 보여준다 (실측: 코드 1개에 사본 27건)
+- [x] **JOIN-04**: 채널상품ID는 물갈이로 재발급되므로 **영구 키로 쓰지 않는다** (실측: 교집합 0/160)
 
 ### 상세페이지 상태 판정 (STATE)
 
 - [x] **STATE-01**: `detail_batch.py` 의 윈도 경로 하드코딩을 고쳐 이 맥북에서 돌게 한다 (로직 무변경 shim)
-- [ ] **STATE-02**: `imageTranslated` 를 **타입 안전하게** 해석한다 — 실측 4종(`'0'` `'1'` `False` `1`)을 모두 올바로 처리한다
-- [ ] **STATE-03**: 상품 상태를 3단계로 판정한다 — 🔴 중국어 원본 / 🟡 단순번역만 / ⚪ AI 가공 완료
-- [ ] **STATE-04**: 불사자 외부 경로로 상세를 반영해도 `aiImageGenerated` 가 찍히는지 **1건 실측으로 확인**하고, 안 찍히면 보완 인덱스를 둔다 (안 하면 크레딧 무한 루프)
-- [ ] **STATE-05**: 기작업 스킵 조건을 **목표 장수와 분리된 절대 조건**으로 둔다 (동적 장수가 스킵을 무력화하지 않게)
+- [x] **STATE-02**: `imageTranslated` 를 **타입 안전하게** 해석한다 — 실측 4종(`'0'` `'1'` `False` `1`)을 모두 올바로 처리한다
+- [x] **STATE-03**: 상품 상태를 3단계로 판정한다 — 🔴 중국어 원본 / 🟡 단순번역만 / ⚪ AI 가공 완료
+- [x] **STATE-04**: 불사자 외부 경로로 상세를 반영해도 `aiImageGenerated` 가 찍히는지 **1건 실측으로 확인**하고, 안 찍히면 보완 인덱스를 둔다 (안 하면 크레딧 무한 루프)
+- [x] **STATE-05**: 기작업 스킵 조건을 **목표 장수와 분리된 절대 조건**으로 둔다 (동적 장수가 스킵을 무력화하지 않게)
 
 ### 홍보배너 식별 (BANNER)
 
@@ -154,9 +154,9 @@
 | ENG-03 | Phase 1 | Complete |
 | ENG-04 | Phase 2 | Pending |
 | ENG-05 | Phase 2 | Pending |
-| ENG-06 | Phase 2 | Pending |
+| ENG-06 | Phase 2 → **Phase 3 에서 선취 완료** | Complete |
 | ENG-07 | Phase 1 | Complete |
-| ENG-08 | Phase 3 | Pending |
+| ENG-08 | Phase 3 | Complete |
 | SAFE-01 | Phase 1 | Complete |
 | SAFE-02 | Phase 1 | Complete |
 | SAFE-03 | Phase 1 | Complete |
@@ -184,15 +184,15 @@
 | PRUNE-01 | Phase 2 | Pending |
 | PRUNE-02 | Phase 2 | Pending |
 | PRUNE-03 | Phase 2 | Pending |
-| JOIN-01 | Phase 3 | Pending |
-| JOIN-02 | Phase 3 | Pending |
-| JOIN-03 | Phase 3 | Pending |
-| JOIN-04 | Phase 3 | Pending |
+| JOIN-01 | Phase 3 | Complete |
+| JOIN-02 | Phase 3 | Complete ⚠️ |
+| JOIN-03 | Phase 3 | Complete |
+| JOIN-04 | Phase 3 | Complete |
 | STATE-01 | Phase 3 | Complete |
-| STATE-02 | Phase 3 | Pending |
-| STATE-03 | Phase 3 | Pending |
-| STATE-04 | Phase 3 | Pending |
-| STATE-05 | Phase 3 | Pending |
+| STATE-02 | Phase 3 | Complete |
+| STATE-03 | Phase 3 | Complete |
+| STATE-04 | Phase 3 | Complete |
+| STATE-05 | Phase 3 | Complete |
 | BANNER-01 | Phase 4 | Pending |
 | BANNER-02 | Phase 4 | Pending |
 | BANNER-03 | Phase 4 | Pending |
@@ -235,3 +235,10 @@
 
 ---
 *Requirements defined: 2026-09-19*
+
+> **⚠️ JOIN-02 각주 (2026-09-21 · Phase 3 마감):** 기계 검증은 전부 green 이고(사유 3종 구분 ·
+> 광고그룹명 원문 · 청소 목록 19그룹 883행이 원본 `adGroups` 와 정확히 일치 — CDP V-BOARD-20/21),
+> 용팀장이 보드를 **포괄 승인**했다. 다만 플랜이 요구한 수동 검증 한 줄 —
+> **"미해소 사유만 보고 네이버 광고에서 그 그룹을 실제로 찾을 수 있었는가"** — 은 아직 받지 못했다.
+> 그 문구를 들고 광고 화면에 가서 찾아본 사람이 아직 없다.
+> 전문: `.planning/phases/03-join-detail-state/03-VALIDATION.md` §미해결 2번.

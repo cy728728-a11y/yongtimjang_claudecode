@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-08-PLAN.md (첫 실제 인상 — cy728 472건 성공 · 되돌리기 미완)
-last_updated: "2026-09-20T23:18:18.371Z"
-last_activity: 2026-09-20 -- Phase 03 execution started
+stopped_at: Completed 03-07-PLAN.md (실탄 인덱스 30,546행 완주 · Phase 3 7/7 · verify-work 대기)
+last_updated: "2026-09-21T05:30:00.000Z"
+last_activity: 2026-09-21 -- Phase 03 execution complete (7/7)
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 16
-  completed_plans: 9
-  percent: 14
+  completed_plans: 16
+  percent: 29
 ---
 
 # Project State
@@ -25,15 +25,15 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 
 ## Current Position
 
-Phase: 03 (join-detail-state) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 03
-Last activity: 2026-09-20 -- Phase 03 execution started
+Phase: 03 (join-detail-state) — **7/7 실행 완료.** `/gsd:verify-work` 대기
+Plan: 7 of 7
+Status: Phase 03 execution complete
+Last activity: 2026-09-21 -- 03-07 실탄 인덱스 완주 + VALIDATION 마감
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
 Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
 
-Progress: [██▒▒▒▒▒▒▒▒] 1 of 7 phases
+Progress: [███▒▒▒▒▒▒▒] 2 of 7 phases
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [██▒▒▒▒▒▒▒▒] 1 of 7 phases
 | Phase 01 P07 | 26min | 4 tasks | 13 files |
 | Phase 01 P08 | 140min | 3 tasks | 12 files |
 | Phase 01 P09 | 30m | 3 tasks | 12 files |
+| Phase 03 P07 | 258min | 4 tasks | 8 files |  *(그중 128min 이 인덱스 완주 대기)*
 
 ## Accumulated Context
 
@@ -108,15 +109,30 @@ Recent decisions affecting current work:
 - [Phase ?]: 회차 전체 되돌리기는 물리적으로 다른 버튼 + 기본 접힘 + 건수 확인 + 1,625px 거리 (D-14/T-1-43)
 - [Phase ?]: 쓰기 전 dry-run 으로 CLI 에게 범위를 되묻는다 — 부모 성공 건수와 다르면 409 (Pitfall 2)
 - [Phase ?]: 실제 광고 API 되돌리기는 Phase 1 에서 미실행 — 인상 472건 유지(용팀장 지시)
+- [Phase 03]: 3시간짜리 루프의 규율은 루프를 돌려서 검증할 수 없다 — 재개 계산을 `ss_index_resume.py`(import 0줄)로 **추출만** 해 1초 테스트로 고정
+- [Phase 03]: 미조회(`unresolved=1`)를 '처리완료'로 세지 않는다 — 세면 429 로 빠진 상품이 영원히 굳어 Phase 5 대상에서 영구 소실. 다시 시도하되 해소로 승격은 금지
+- [Phase 03]: `r.get(키) or []` 는 **오류를 0건으로 접는 관용구**다 — `groupId` 문자열 오류가 30그룹 9.2초 '성공'으로 둔갑했다. 호출 규약을 `ss_index_calls.py` 한 자리로 모았다
+- [Phase 03]: **크레딧 0인 작업은 틀려도 경보가 없다** — 돈이 안 드니 계량기가 없다. 그래서 '성공했는데 0건'을 의심하는 테스트가 따로 필요하다
+- [Phase 03]: 조립 테스트가 green 이어도 호출부가 그 필드를 안 넘기면 아무 일도 안 일어난다 (`BulsajaArgv.prefix` 가 2시간 동안 그랬다 — caffeinate 미부착)
+- [Phase 03]: 스캔은 `mode=full`, 인덱스는 `mode=summary` — `uploadBulsajaCode` 가 summary 14키엔 없고 full 38키엔 있다
+- [Phase 03]: 인덱스 모수는 **서버가 계산한 30그룹**이 정본 (플랜·CONTEXT 의 36그룹/47,105건은 옛 숫자)
+- [Phase 03]: 그룹 단계 429 구멍은 Phase 3 범위 밖 이월 — 2026-09-21 용팀장 "그냥 두고 기록만"
+- [Phase 03]: 사람이 하지 않은 말을 검증 문서에 적지 않는다 — Task 3 은 **포괄 승인**으로만 기록하고 항목별 진술 미수령을 미해결로 남겼다 (T-3-40)
 
 ### Pending Todos
 
-None yet.
+- 🔴 `429-group-stage-silent-completion.md` — 그룹 목록 조회 단계의 HTTP 429 가 "완주"로 둔갑한다.
+  2026-09-21 용팀장 결정으로 Phase 3 범위 밖 이월("그냥 두고 기록만").
+  **첫 구축을 다시 돌릴 일이 생기면(물갈이 후) 그때 문다.**
+  당분간 회피책: 인덱스 잡과 스캔 잡을 동시에 띄우지 마라.
 
 ### Blockers/Concerns
 
-- **[Phase 3 선행]** `detail_batch.py` 가 이 맥북에서 `ModuleNotFoundError` 로 안 돈다 (윈도 경로 하드코딩) — Core Value 경로가 막혀 있다 (STATE-01)
-- **[Phase 3 선행]** `aiImageGenerated` 가 외부 반영 경로에서 찍히는지 미확인 — 답이 안 나오면 중복방지 설계가 확정되지 않고 크레딧 무한 루프 위험 (STATE-04)
+- ~~**[Phase 3 선행]** `detail_batch.py` ModuleNotFoundError (STATE-01)~~ — **해소(03-01).** shim 으로 이 맥북에서 돈다
+- ~~**[Phase 3 선행]** `aiImageGenerated` 외부 반영 경로 기록 여부 미확인 (STATE-04)~~ — **해소(03-02·03-07).**
+  **안 찍는다.** 음성대조 26건 + 실탄 재확인(해소 51행 중 ⚪ **0건** · `uploadDetailContents` 키가
+  `{imageTranslated, renderContent}` 둘뿐). **중복방지는 태그 쪽을 봐야 한다** — `aiImageGenerated`
+  만 보면 기작업 29건을 다시 태운다. 확정 실험(외부 반영 1건 실측)은 예정대로 Phase 5
 - **[Phase 6 게이트]** 수정업로드가 상하단 안내이미지를 어느 시점 기준으로 올리는지 모순 미해결 — 1건 육안 확인으로 깬다 (MARKET-02)
 - **[Phase 4 미검증]** 홍보배너 식별은 기성 해법이 없는 가설. 100건 라벨링 미탐 0% 를 통과해야 실작업 투입
 - **[환경]** 이 맥북에 `bulsaja-yongssaem` MCP 서버 항목이 없다 — 용쌤 계정 전환 경로가 끊겨 있음 (ENG-08 착수 시 확인)
@@ -134,6 +150,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T12:41:59.506Z
-Stopped at: Completed 01-08-PLAN.md (첫 실제 인상 — cy728 472건 성공 · 되돌리기 미완)
-Resume file: None
+Last session: 2026-09-21T05:30:00.000Z
+Stopped at: Completed 03-07-PLAN.md — Phase 3 실행 7/7. 다음은 `/gsd:verify-work`
+Resume file: .planning/phases/03-join-detail-state/.continue-here.md
