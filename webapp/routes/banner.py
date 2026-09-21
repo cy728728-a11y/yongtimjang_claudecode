@@ -40,7 +40,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field, StringConstraints, ValidationError
 
-from webapp import banner, banner_store, jobs, paths, security
+from webapp import banner, banner_store, jobs, paths, security, settings
 
 router = APIRouter()
 
@@ -473,6 +473,73 @@ def _화면투영(문서: dict, 라벨: dict, 확인: set, run_dir: str = "") ->
     return 나온것
 
 
+# RESEARCH Appendix A §경계 4장 의 "물어볼 것" 한 줄씩. **순서가 계약이다** —
+# `settings.DEFAULTS["banner_boundary_samples"]` 와 같은 자리끼리 짝이다.
+#
+# 왜 설정이 아니라 여기 있나: 설정에는 `"코드:순번"` 만 있고 질문 문장이 없다. 질문을
+# 설정으로 옮기면 실제 판매자상품코드가 한 벌 더 생기고(익명화 불가 값이 둘), 여기에
+# 코드를 다시 적으면 정본이 둘이 된다. 그래서 **코드를 한 글자도 다시 적지 않고**
+# `DEFAULTS` 의 자리(index)로 join 한다 — `workspace.toml` 이 표본을 갈아 끼우면
+# 그 표본은 질문 없이(`None`) 뜨고, 자리가 밀려 엉뚱한 질문이 붙는 일은 없다.
+_경계질문 = (
+    "수상·브랜드 배너지만 제품이 크게 나온다. 뺄까?",
+    "첫 장 타이틀 이미지는 제품인가 배너인가?",
+    "장식 포스터. 제품(밥그릇)이 나온다",
+    "사용 장면 배너. 제품은 안 나온다",
+)
+
+
+def _기준표본(상품목록: list) -> tuple[list, list, int]:
+    """경계 4장을 이 회차 산출물에서 찾는다 — `(찾음, 못찾음, 전체)`.
+
+    **표본을 못 찾아도 섹션을 조용히 감추지 않는다.** 물갈이가 한 번 돌면 판매자상품
+    코드가 재발급돼 이 값은 반드시 낡는다(`settings.py` 의 ⚠️ 주석). 그때 섹션이
+    사라지면 다음 사람은 **기준 확인이 끝난 줄 안다** — 없는 것과 끝난 것은 다른
+    사실이다. 그래서 못 찾은 것은 "무엇을 못 찾았는지"까지 들고 화면으로 간다.
+
+    숫자·코드를 이 함수에 박지 않는다. 정본은 `settings.DEFAULTS` 다(S-4).
+    """
+    토큰들 = settings.cfg("banner_boundary_samples",
+                       settings.DEFAULTS["banner_boundary_samples"]) or []
+    기본 = list(settings.DEFAULTS["banner_boundary_samples"])
+
+    찾음: list = []
+    못찾음: list = []
+    for 토큰 in 토큰들:
+        토큰 = str(토큰)
+        try:
+            질문 = _경계질문[기본.index(토큰)]
+        except (ValueError, IndexError):
+            # 설정이 표본을 갈아 끼웠다. 질문을 지어내지 않는다 — 없는 것은 없다고 둔다.
+            질문 = None
+
+        코드, 구분, 순번글자 = 토큰.partition(":")
+        if not 구분:
+            못찾음.append({"토큰": 토큰, "물어볼것": 질문,
+                        "사유": "모양이 '판매자상품코드:순번' 이 아니다"})
+            continue
+        try:
+            순번 = int(순번글자)
+        except ValueError:
+            못찾음.append({"토큰": 토큰, "물어볼것": 질문,
+                        "사유": f"순번이 정수가 아니다: {순번글자!r}"})
+            continue
+
+        상품 = next((p for p in 상품목록 if p["판매자상품코드"] == 코드), None)
+        if 상품 is None:
+            못찾음.append({"토큰": 토큰, "물어볼것": 질문,
+                        "사유": "이 회차에 그 판매자상품코드가 없다 (물갈이로 재발급됐을 수 있다)"})
+            continue
+        장 = next((c for c in 상품["장"] if c["순번"] == 순번), None)
+        if 장 is None:
+            못찾음.append({"토큰": 토큰, "물어볼것": 질문,
+                        "사유": f"그 상품에 {순번}번 장이 없다 (장수 {len(상품['장'])})"})
+            continue
+
+        찾음.append({"토큰": 토큰, "물어볼것": 질문, "상품": 상품, "장": 장})
+
+    return 찾음, 못찾음, len(토큰들)
+
 
 @router.get("/banner/review")
 def get_review(request: Request, run_dir: str | None = None):
@@ -509,6 +576,13 @@ def get_review(request: Request, run_dir: str | None = None):
         "소요초": None,
         "라벨수": 0,
         "상품": [],
+        # 기준 확인 섹션(경계 4장). 산출물을 읽은 뒤에 채운다.
+        "기준표본": [],
+        "기준못찾음": [],
+        "기준전체": 0,
+        # 진행 패널. **활성 잡 하나만** 스트림을 연다 — 잡마다 열면 HTTP/1.1 의
+        # 호스트당 6커넥션을 다 먹고 페이지의 나머지 요청이 굶는다(T-1-24).
+        "job": jobs.active_job(),
         # 줄집계를 꺼낼 키. 판정값 문자열을 템플릿에 박지 않는다 — 어휘가 바뀌는 날
         # 화면이 조용히 0 을 띄우게 된다(`banner.py` 의 상수가 정본이다).
         "배너값": banner.배너,
@@ -537,6 +611,7 @@ def get_review(request: Request, run_dir: str | None = None):
         라벨, 확인 = {}, set()
 
     ctx["상품"] = _화면투영(문서, 라벨, 확인, 선택)
+    ctx["기준표본"], ctx["기준못찾음"], ctx["기준전체"] = _기준표본(ctx["상품"])
     ctx["집계"] = 문서.get("집계")
     ctx["판정규칙"] = 문서.get("판정규칙")
     # **소요시간은 산출물의 `소요초` 다** (S-5). 잡 레코드의 시각 차이로 계산하지 마라 —

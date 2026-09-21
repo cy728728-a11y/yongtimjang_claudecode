@@ -1,4 +1,4 @@
-{# 배너 검수 화면 — 헤더(04-06) + 전장 스트립(04-07).
+{# 배너 검수 화면 — 헤더(04-06) + 전장 스트립 · 기준 확인 · 접수(04-07).
 
    정적파일은 전부 /static/vendor/ 다. CDN 을 런타임에 부르지 않는다 —
    맥북이 오프라인이거나 CDN 이 흔들리면 관제탑이 통째로 안 뜬다.
@@ -54,6 +54,7 @@
     .ct-chap .ct-nothumb { display: flex; align-items: center; justify-content: center;
                            height: 200px; width: 120px; font-size: .75rem; font-style: italic;
                            background: var(--pico-code-background-color, #f4f4f4); }
+    .ct-big img, .ct-big .ct-nothumb { height: 320px; }
     /* **색만으로 가르지 않는다** (흑백 출력·색맹) — 테두리 *스타일*이 넷 다 다르고
        `figcaption` 에 글자도 같이 나온다. 색은 거들 뿐이다. */
     .ct-banner   { border-style: solid;  border-color: var(--pico-del-color, #d93526); }
@@ -78,6 +79,8 @@
     .ct-skip, .ct-done { opacity: .5; font-style: italic; }
     .ct-badge { font-size: .8rem; border: 1px dashed var(--pico-muted-color, #777);
                 border-radius: .2rem; padding: 0 .35rem; }
+    #standard-check { border: .2rem solid var(--pico-primary, #0172ad);
+                      border-radius: .3rem; padding: .8rem 1rem; margin-bottom: 1.2rem; }
   </style>
 </head>
 {# 이 한 줄이 모든 htmx 쓰기 요청에 X-CT-Token 을 붙인다.
@@ -109,25 +112,36 @@
      조각 교체는 200 일 때만 일어나고, 아니면 여기에 사유가 뜬다. #}
   <p id="label-error" class="ct-error" role="status" hidden></p>
 
+  {# 접수 버튼 — 산출물이 없을 때도, 다시 돌리고 싶을 때도 같은 버튼이다.
+     hx-post 다. 이 쓰기를 GET 으로 바꾸지 마라 — 교차 사이트 단순 GET 에는 Origin 헤더가 없어서
+     security.guard 의 Origin 층이 통째로 무력화된다(T-1-01b).
+     409 가 오면 그 사유를 그대로 띄운다 — 순서를 알려주는 것이 그 응답의 전부다. #}
+  {% macro 스캔버튼() %}
+  <p>
+    <button type="button"
+            hx-post="/jobs/banner/scan"
+            hx-vals='{"run_dir": "{{ run_dir }}"}'
+            hx-target="#job-panel" hx-swap="outerHTML"
+            hx-disabled-elt="this"
+            hx-on::before-request="document.getElementById('job-error').hidden = true"
+            hx-on::response-error="var b = document.getElementById('job-error');
+              b.textContent = event.detail.xhr.responseText || '접수에 실패했다';
+              b.hidden = false;">배너 스캔 돌리기</button>
+    <small>토큰 0 · 크레딧 0 · 실측 약 4분</small>
+  </p>
+  <p id="job-error" class="ct-error" role="status" hidden></p>
+  {% endmacro %}
+
   {% if run_dir is none %}
   <p class="ct-empty">회차가 하나도 없다 — 보드에서 새로 수집부터 돌려라.</p>
 
   {% elif 집계 is none %}
   {# **실패가 아니다.** 사유 없이 여기로 오면 "아직 안 돌렸다" 이고, 그게 정상 출발점이다. #}
   <p class="ct-empty">아직 배너 스캔을 안 돌렸다 — 아래 버튼으로 접수해라 (약 4분 · 크레딧 0).</p>
-  {# hx-post 다. 이 쓰기를 GET 으로 바꾸지 마라 — 교차 사이트 단순 GET 에는 Origin 헤더가 없어서
-     security.guard 의 Origin 층이 통째로 무력화된다(T-1-01b).
-     409 가 오면 그 사유를 그대로 띄운다 — 순서를 알려주는 것이 그 응답의 전부다. #}
-  <button type="button"
-          hx-post="/jobs/banner/scan"
-          hx-vals='{"run_dir": "{{ run_dir }}"}'
-          hx-target="#job-panel" hx-swap="outerHTML"
-          hx-disabled-elt="this"
-          hx-on::response-error="var b = document.getElementById('job-error');
-            b.textContent = event.detail.xhr.responseText || '접수에 실패했다';
-            b.hidden = false;">배너 스캔 돌리기</button>
-  <p id="job-error" class="ct-error" role="status" hidden></p>
-  <div id="job-panel"></div>
+  {{ 스캔버튼() }}
+  {# 스트림은 **활성 잡 하나만** 연다 (T-1-24). 최근 작업 목록의 다른 행에 스트림을
+     달지 마라 — HTTP/1.1 은 호스트당 6커넥션이라 잡마다 열면 페이지가 굶는다. #}
+  {% include "_job_panel.html" %}
 
   {% else %}
   <section class="ct-head">
@@ -166,6 +180,55 @@
       {% endif %}
     </dl>
   </section>
+
+  {{ 스캔버튼() }}
+  {% include "_job_panel.html" %}
+
+  {# ── 기준 확인 (RESEARCH Appendix A §경계 4장) ─────────────────────────────
+     **미리 묻지 않는다. 화면에 배치해 클릭으로 답을 받는다** — 사람에게 질문을 쌓지
+     않는 원칙과 같은 결이다(D-09). 이 네 장의 답이 어휘군을 얼마나 넓힐지를 정한다.
+
+     같은 장이 **아래 상품 목록에도 그대로 다시 나온다.** 전장 노출(D-03a)이 깨지면
+     안 되기 때문이다. 라벨 키(회차 + 상품키 + 이미지순번)가 같으므로 한쪽에서 누르면
+     다른 쪽도 다음 렌더에 같은 값으로 보인다 — 두 벌의 라벨이 생기지 않는다.
+     (그래서 전장 수를 세는 회귀는 `data-slot="strip"` 만 센다.) #}
+  {% if 기준전체 %}
+  <section id="standard-check">
+    <h2>기준 확인 — 이 4장은 배너인가? 누르면 기준이 기록된다</h2>
+    <p><small>용팀장의 "배너" 정의 경계다. 눌러서 답하면 그 값이 그대로 라벨이 되고,
+      아래 전장 목록에도 같은 값으로 반영된다.</small></p>
+
+    {% if 기준표본 %}
+    <div class="ct-strip">
+      {% for 표본 in 기준표본 %}
+      {% with 상품 = 표본.상품, 장 = 표본.장, 자리 = "sample", 큰것 = true %}
+        {% include "_banner_strip.html" %}
+      {% endwith %}
+      {% endfor %}
+    </div>
+    <ol>
+      {% for 표본 in 기준표본 %}
+      <li><code>{{ 표본.상품.판매자상품코드 }}</code> {{ 표본.장.순번 }}번 —
+        {% if 표본.물어볼것 %}{{ 표본.물어볼것 }}{% else %}
+        <em>물어볼 것이 안 적힌 표본이다 — 이 장이 배너인지만 답해라</em>{% endif %}</li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+
+    {% if 기준못찾음 %}
+    {# **조용히 감추지 않는다.** 사라지면 다음 사람이 기준 확인이 끝난 줄 안다.
+       물갈이가 한 번 돌면 이 코드들은 반드시 낡는다 — 그때 무엇이 없어졌는지 말한다. #}
+    <p class="ct-empty">기준 표본 {{ 기준못찾음 | length }}/{{ 기준전체 }} 를
+      이 회차에서 못 찾았다 — 어느 것인지:</p>
+    <ul>
+      {% for 빠진것 in 기준못찾음 %}
+      <li><code>{{ 빠진것.토큰 }}</code> — {{ 빠진것.사유 }}
+        {% if 빠진것.물어볼것 %}<br><small>({{ 빠진것.물어볼것 }})</small>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+  {% endif %}
 
   {# ── 전장 스트립 — 상품 하나가 한 줄 ────────────────────────────────────── #}
   <h2>상품 {{ 상품 | length }}줄 — 전장</h2>
@@ -227,5 +290,6 @@
 
 </main>
 <script src="/static/vendor/htmx-2.0.10.min.js"></script>
+<script src="/static/vendor/htmx-ext-sse-2.2.4.js"></script>
 </body>
 </html>

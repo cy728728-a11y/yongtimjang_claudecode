@@ -701,3 +701,113 @@ def test_판정이_색만으로_갈리지_않는다(화면, 돌린척, tmp_run_d
     본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
     assert "ct-banner" in 본문 and "ct-product" in 본문
     assert "0 배너" in 본문, "테두리 옆에 글자가 없다"
+
+
+# ── 8. 기준 확인 (경계 4장) · 접수 버튼 (04-07 Task 2) ──────────────────────
+
+
+def _경계코드들() -> list:
+    """설정의 경계 표본에서 `(판매자상품코드, 순번)` 을 꺼낸다.
+
+    **실코드를 테스트 파일에 적지 않는다** (conftest 의 익명화 규율). 정본은
+    `settings.DEFAULTS` 하나이고, 여기서는 그 값을 읽어 픽스처를 만든다 —
+    설정이 바뀌면 이 테스트가 저절로 따라온다.
+    """
+    나온것 = []
+    for 토큰 in settings.DEFAULTS["banner_boundary_samples"]:
+        코드, _, 순번 = str(토큰).partition(":")
+        나온것.append((코드, int(순번)))
+    return 나온것
+
+
+def test_경계_4장이_첫화면에_있고_아래_목록에도_또_나온다(화면, 돌린척, tmp_run_dir):
+    """**미리 묻지 않는다 — 화면에 배치해 클릭으로 답을 받는다** (D-09 와 같은 결).
+
+    그리고 같은 장이 **아래 전장 목록에도 그대로 다시 나온다.** 기준 확인을 위해
+    전장 노출을 깎으면 D-03a 가 조용히 깨진다.
+    """
+    코드들 = _경계코드들()
+    필요장수: dict = {}
+    for 코드, 순번 in 코드들:
+        필요장수[코드] = max(필요장수.get(코드, 0), 순번 + 1)
+
+    이름들 = list(필요장수)
+    문서 = _산출물_여러상품(
+        코드들=tuple(이름들), 장수=tuple(필요장수[c] for c in 이름들),
+        배너들=tuple(() for _ in 이름들), 스킵들=tuple(None for _ in 이름들))
+    돌린척(문서)
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+
+    assert "기준 확인" in 본문, "경계 4장 섹션이 없다"
+    assert 본문.count('data-slot="sample"') == len(코드들)
+    assert "못 찾았다" not in 본문
+    # 물어볼 것 한 줄이 그대로 실린다 (RESEARCH Appendix A).
+    assert "첫 장 타이틀 이미지는 제품인가 배너인가?" in 본문
+
+    # **전장 노출이 유지된다** — 기준 섹션이 목록을 대체하지 않는다.
+    assert 본문.count('data-slot="strip"') == 문서["집계"]["장"]
+    for 코드, 순번 in 코드들:
+        상품순번 = 이름들.index(코드)
+        assert 본문.count(f'/banner/thumb/{tmp_run_dir.name}/{상품순번}/{순번}"') == 2, \
+            f"{코드}:{순번} 이 기준 섹션과 전장 목록 양쪽에 안 나온다"
+
+
+def test_경계_표본을_못_찾으면_조용히_감추지_않는다(화면, 돌린척, tmp_run_dir):
+    """**물갈이가 한 번 돌면 이 코드들은 반드시 낡는다** (`settings.py` 의 ⚠️ 주석).
+
+    그때 섹션이 사라지면 다음 사람은 기준 확인이 끝난 줄 안다 — 없는 것과 끝난 것은
+    다른 사실이다. 무엇을 못 찾았는지까지 말한다.
+    """
+    돌린척(_산출물_여러상품())       # zz01·zz02 — 경계 표본이 하나도 없다
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+
+    assert "기준 확인" in 본문, "섹션이 통째로 사라졌다"
+    전체 = len(settings.DEFAULTS["banner_boundary_samples"])
+    assert f"기준 표본 {전체}/{전체} 를" in 본문 and "못 찾았다" in 본문
+    # 그래도 전장은 그대로 깔린다.
+    assert 본문.count('data-slot="strip"') == 19
+
+
+def test_경계표본_코드를_템플릿에_박지_않았다():
+    """숫자·코드의 정본은 `settings.DEFAULTS` 다 (S-4).
+
+    템플릿에 박으면 `workspace.toml` 을 고쳐도 화면이 안 따라온다 — 있는 척만 하는
+    설정이 된다.
+    """
+    from pathlib import Path as _P
+
+    from webapp import main as _main
+    from webapp.routes import banner as 라우트
+
+    소스 = open(라우트.__file__, encoding="utf-8").read()
+    assert "banner_boundary_samples" in 소스, "라우트가 설정을 안 읽는다"
+
+    템플릿 = (_P(_main.BASE) / "templates" / "banner_review.html").read_text(encoding="utf-8")
+    for 토큰 in settings.DEFAULTS["banner_boundary_samples"]:
+        코드 = str(토큰).partition(":")[0]
+        assert 코드 not in 템플릿, f"템플릿에 실코드 {코드} 가 박혀 있다"
+
+
+def test_접수버튼과_잡패널이_양쪽_분기에_있다(화면, 돌린척, tmp_run_dir):
+    """산출물이 없을 때도, 다시 돌리고 싶을 때도 같은 버튼이다.
+
+    스트림은 **활성 잡 하나만** 연다 (T-1-24) — HTTP/1.1 은 호스트당 6커넥션이라
+    잡마다 열면 페이지의 나머지 요청이 굶는다.
+    """
+    from pathlib import Path as _P
+
+    from webapp import main as _main
+
+    템플릿 = (_P(_main.BASE) / "templates" / "banner_review.html").read_text(encoding="utf-8")
+    assert "_job_panel.html" in 템플릿
+
+    스캔전 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    돌린척(_산출물_여러상품())
+    스캔후 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+
+    for 본문 in (스캔전, 스캔후):
+        assert 'hx-post="/jobs/banner/scan"' in 본문
+        assert "토큰 0 · 크레딧 0 · 실측 약 4분" in 본문
+        assert 'id="job-panel"' in 본문
+        # 스트림 연결 속성은 활성 잡이 있을 때만, 그것도 하나만 붙는다.
+        assert 본문.count("sse-connect") <= 1, "스트림을 여러 개 열었다 (T-1-24)"
