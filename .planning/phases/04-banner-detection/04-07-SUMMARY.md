@@ -305,3 +305,16 @@ PASS V-BANNER-04   확인함은 banner_confirm 에만 쓴다                (con
 ---
 *Phase: 04-banner-detection*
 *Completed: 2026-09-22*
+
+## Self-Check: PASSED
+
+- 파일 7개 전부 존재: `webapp/templates/_banner_strip.html` · `webapp/tests/banner_cdp.mjs` · `webapp/tests/banner_cdp.sh` · `webapp/routes/banner.py` · `webapp/templates/banner_review.html` · `webapp/tests/test_routes_banner.py` · `04-07-SUMMARY.md`
+- 커밋 4개 전부 존재: `7fb4294` · `cac0b20` · `f02e281` · `f4475d1`
+- **삭제된 파일 0건** (`git diff --diff-filter=D --name-only 93c8d9b..HEAD`)
+- **공유 산출물 미수정:** base 이후 변경 파일이 플랜 `files_modified` 6개 + SUMMARY 뿐이다. `STATE.md`·`ROADMAP.md`·`REQUIREMENTS.md` 변경 0건 (오케스트레이터 몫)
+- 커밋되지 않아야 할 것이 안 들어갔다: `.venv`/`.venv-web` 심링크 디렉터리 · `workspace.toml` 사본 · `webapp-banner/thumbs` 산출물 · scratchpad 전부 staged 0건. `git status` 깨끗
+- `.venv-web` **441 green** (exit 0) · `.venv` `webapp/tests/cli` **4 green** (exit 0)
+- `bash webapp/tests/banner_cdp.sh` **exit 0** — V-BANNER-00·01·01b·02·03·04 전부 PASS
+- `bash webapp/tests/no_commit_guard.sh` **OK**
+- acceptance grep 실측: `hx-post="/banner/label"` 1 · `hx-get` 0/0 · `loading="lazy"` 1 · `content-visibility|overflow-x` 2 · `hx-on::response-error` 2 · `banner_boundary_samples`(라우트) 4 · `_job_panel.html` 2 · `_banner_strip`(라우트) 2 · `banner_scan.py`(cdp.sh) 0 · `| safe` 0/0 · 표 라이브러리 0/0 · D-09 금지낱말 0 · `StaticFiles` 0 · `ended_at` 0
+- **전장 노출 역검증:** 템플릿을 "배너만 렌더"로 바꾸면 `V-BANNER-01`(figure 3 / 장 19)·`V-BANNER-02` 와 pytest 4건이 FAIL 하는 것을 1회 확인하고 되돌렸다
