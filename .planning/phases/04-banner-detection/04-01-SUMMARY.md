@@ -220,3 +220,10 @@ dnb2lYw0omRnoG121KzBL:6 · fElaVlxOzkeSVkDotMrAJ:0 · sLix0885VmdKsGxunAznE:0 ·
 ---
 *Phase: 04-banner-detection*
 *Completed: 2026-09-22*
+
+## Self-Check: PASSED
+
+- 파일 8개 전부 존재: `banner_labels.json` · `render_content.json` · `anonymize_labels.py` · `test_banner_fixtures.py` · `settings.py` · `conftest.py` · `.gitignore` · `04-01-SUMMARY.md`
+- 커밋 4개 전부 존재: `f2ee8ed` · `204f23c` · `c7403f4` · `21ed227`
+- 삭제된 파일 0건 (`git diff --diff-filter=D fe457c09..HEAD`)
+- 커밋되지 않아야 할 것이 안 들어갔다: `.venv` · `.venv-web` 심링크 · `workspace.toml` 사본 전부 gitignore 대상이라 staged 0건
