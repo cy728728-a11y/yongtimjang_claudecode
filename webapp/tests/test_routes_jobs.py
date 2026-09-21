@@ -466,5 +466,142 @@ def test_불사자_라우트_목차가_docstring_에_있다():
     from webapp.routes import jobs as 라우터
 
     문서 = 라우터.__doc__ or ""
-    for 경로 in 불사자경로:
+    for 경로 in (*불사자경로, 배너경로):
         assert 경로 in 문서, f"{경로} 가 목차에 없다"
+
+
+# ── 배너 스캔 라우트 (Phase 4 / BANNER-01) ──────────────────────────────────
+#
+# 실제 스캐너는 한 번도 안 뜬다. 4분 12초 · CDN 271MB 짜리라 한 번만 새도 비싸다.
+
+배너경로 = "/jobs/banner/scan"
+
+
+@pytest.fixture
+def 안띄운다(monkeypatch):
+    """`jobs.spawn` 을 가짜로 바꾼다 — 가드만 겨누는 테스트가 진짜 자식을 안 띄우게.
+
+    `엿듣기` 와 다르다: 저쪽은 `create_job` 자체를 가로채 `kind="synthetic"` 으로
+    바꾸므로 **중복 가드가 통째로 우회된다.** `SINGLETON_KINDS` 회귀는 진짜
+    `create_job` 이 돌아야 무언가를 검증한다.
+    """
+    class 가짜프로세스:
+        def __init__(self, argv):
+            self.argv = argv
+            self.pid = 999_000 + len(argv)
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(jobs, "spawn", lambda argv_list, log_path: 가짜프로세스(argv_list))
+
+
+@pytest.fixture
+def 직전조인(tmp_run_dir, monkeypatch):
+    """직전 성공 조인 스캔이 남긴 산출물을 깔고 `latest_done` 이 그걸 가리키게 한다.
+
+    잡 레지스트리에 진짜 행을 넣지 않고 `latest_done` 을 돌린다 — 이 테스트가 보는
+    것은 "라우트가 **레지스트리에** 물어보는가" 이지 레지스트리 자체가 아니다
+    (그건 `test_jobs.py::test_latest_done_은_성공한_잡만_준다` 가 본다).
+    """
+    def _깔기(있게: bool = True):
+        if not 있게:
+            monkeypatch.setattr(jobs, "latest_done", lambda kind, run_dir=None: None)
+            return None
+        산출물 = tmp_run_dir / "web" / "join_zzprev.json"
+        산출물.parent.mkdir(parents=True, exist_ok=True)
+        산출물.write_text(json.dumps({"행": []}, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(jobs, "latest_done", lambda kind, run_dir=None: (
+            {"result_path": str(산출물)} if kind == "bulsaja_scan" else None))
+        return 산출물
+    return _깔기
+
+
+def test_배너스캔은_토큰없이_안된다(화면, 엿듣기):
+    """SAFE-02 / T-1-02 — 토큰이 틀리면 **자식이 안 뜬다.**
+
+    상태코드만 보면 "막혔다" 를 증명 못 한다. `엿듣기` 가 비어 있어야 작업 생성까지
+    가지도 않았다는 뜻이다.
+    """
+    응답 = 화면.post(배너경로, json={}, headers={"X-CT-Token": "wrong-token"})
+    assert 응답.status_code == 403
+    assert not 엿듣기, "토큰이 틀렸는데 작업 생성까지 갔다"
+
+
+def test_배너스캔은_타사이트_origin_도_403(화면, 엿듣기):
+    """SAFE-01 / T-4-05 — 남의 탭이 열려 있다는 이유로 4분짜리 잡이 뜨지 않는다."""
+    응답 = 화면.post(배너경로, json={}, headers={"Origin": "https://evil.com"})
+    assert 응답.status_code == 403
+    assert not 엿듣기
+
+
+def test_배너스캔은_GET이_아니다(화면):
+    """T-1-01b — GET 이면 `Origin` 없는 교차 사이트 요청이 그대로 통과한다.
+
+    405 여야 한다. 200 이면 방어가 통째로 죽은 것이고, 404 면 라우트가 사라진 것이다.
+    """
+    assert 화면.get(배너경로).status_code == 405
+
+
+def test_배너스캔은_조인_없이_409(화면, 엿듣기, 직전조인, tmp_run_dir):
+    """순서 문제라 409 다 — 요청은 멀쩡하다.
+
+    400 으로 내리면 화면이 "요청 값을 고쳐라" 로 안내하는데, 사용자가 할 일은
+    조인 스캔 버튼을 먼저 누르는 것뿐이다.
+    """
+    직전조인(있게=False)
+    응답 = 화면.post(배너경로, json={"run_dir": tmp_run_dir.name})
+    assert 응답.status_code == 409, 응답.text
+    assert "조인 스캔을 먼저 돌려라" in 응답.json()["detail"]
+    assert not 엿듣기
+
+
+def test_배너스캔_대상은_서버가_고른다(화면, 엿듣기, 직전조인, tmp_run_dir):
+    """D-11 / T-4-18 — 화면이 고른 행 목록을 받지 않는다.
+
+    대상은 `jobs.latest_done("bulsaja_scan")` 의 `result_path` **하나뿐**이고,
+    그것도 새로 쓰지 않고 그 파일을 그대로 가리킨다(`targets_path_override`).
+    본문에 목록을 실어 보내도 모델이 안 받는다.
+    """
+    산출물 = 직전조인()
+    응답 = 화면.post(배너경로, json={"run_dir": tmp_run_dir.name,
+                                  "targets": ["zz|111"], "only_ads": ["zz|222"]})
+    assert 응답.status_code == 200, 응답.text
+    assert 엿듣기["kind"] == "banner_scan"
+    assert str(엿듣기["targets_path_override"]) == str(산출물)
+    # 새로 쓰는 통로(`only_ads`)는 아예 안 쓴다 — 둘을 같이 주면 create_job 이 터진다
+    assert "only_ads" not in 엿듣기
+    assert "zz|111" not in 응답.text and "zz|222" not in 응답.text
+
+
+def test_배너스캔_중복은_409(화면, 안띄운다, 직전조인, tmp_run_dir):
+    """`SINGLETON_KINDS` 회귀 — 같은 잡 둘이 271MB 를 두 번 받지 않는다.
+
+    **`엿듣기` 를 일부러 안 쓴다.** 그 픽스처는 `create_job` 을 가로채
+    `kind="synthetic"` 으로 바꾸므로 중복 가드가 통째로 우회된다.
+    """
+    직전조인()
+    첫번째 = 화면.post(배너경로, json={"run_dir": tmp_run_dir.name})
+    assert 첫번째.status_code == 200, 첫번째.text
+
+    두번째 = 화면.post(배너경로, json={"run_dir": tmp_run_dir.name})
+    assert 두번째.status_code == 409, 두번째.text
+    사유 = 두번째.json()["detail"]
+    # 전역 쓰기 락과 헷갈리지 않게 어느 kind 가 막았는지 밝힌다
+    assert "banner_scan" in 사유
+
+
+def test_배너스캔이_도는_동안_쓰기버튼이_안_막힌다(화면, 안띄운다, 직전조인, tmp_run_dir):
+    """🔴 T-4-19 — 라우트 층에서 확인하는 행동 회귀.
+
+    `test_jobs.py` 가 집합과 `create_job` 을 본다면 여기는 **실제 HTTP 응답**을 본다.
+    4분 동안 입찰가 인상이 409 가 되면 사람이 가드를 끈다.
+    """
+    직전조인()
+    assert 화면.post(배너경로, json={"run_dir": tmp_run_dir.name}).status_code == 200
+
+    쓰기 = 화면.post("/jobs/prep", json={})
+    assert 쓰기.status_code == 200, f"배너 스캔이 쓰기 버튼을 막았다: {쓰기.text}"

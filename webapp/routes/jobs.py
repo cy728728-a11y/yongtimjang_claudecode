@@ -11,6 +11,7 @@
     POST /jobs/bulsaja/profile  불사자 계정 확인 (0.14초, 읽기)         [쓰기 — 토큰 필요]
     POST /jobs/bulsaja/scan     회차 조인 스캔 (수 분, 읽기)            [쓰기 — 토큰 필요]
     POST /jobs/bulsaja/index    마켓그룹 인덱스 구축 (수 시간, 읽기)     [쓰기 — 토큰 필요]
+    POST /jobs/banner/scan      배너 판정 스캔 (4분, MCP 0회·크레딧 0)   [쓰기 — 토큰 필요]
     GET  /jobs/revert/round/count  회차 전체 되돌리기 예상 건수         [읽기 — 쿠키]
     GET  /jobs/{id}         작업 상태 조각 (2초 폴링용)                 [읽기 — 쿠키]
     GET  /jobs/{id}/panel   작업 패널 조각 (SSE 배선 포함)              [읽기 — 쿠키]
@@ -760,6 +761,52 @@ def post_bulsaja_index(request: Request, req: JobReq = Depends(요청_풀기)):
                    "보드의 광고 청소 목록을 먼저 처리해라")
 
     return _작업만들기(request, "bulsaja_index", req, only_ads=대상)
+
+
+@router.post("/jobs/banner/scan")
+def post_banner_scan(request: Request, req: JobReq = Depends(요청_풀기)):
+    """**배너 판정 스캔.** 실측 4분 12초, 불사자 MCP 0회 · 크레딧 0.
+
+    **대상은 여기서 만든다 — 화면이 고른 행 목록을 받지 않는다** (D-11 / FLOW-02).
+    입력은 직전 성공한 조인 스캔의 산출물 파일 하나이고, 그 파일을 고르는 근거는
+    잡 레지스트리다(`jobs.latest_done`). `web/join_*.json` 을 glob 으로 뒤지지 않는다 —
+    파일이 있다는 것과 그 잡이 성공했다는 것은 다르다(중간에 죽은 잡도 반쯤 쓴 파일을
+    남긴다). 그리고 **새로 쓰지 않고 그 파일을 그대로 가리킨다**(`targets_path_override`):
+    다시 만들면 조인 스캔이 본 것과 배너 스캔이 읽는 것이 갈라진다.
+
+    산출물이 없으면 **409 다 — 400 이 아니다.** 요청은 멀쩡하고 **순서가 아직 아니다**
+    (`post_bulsaja_index` 의 판단 그대로). 400 으로 내리면 화면이 "요청 값을 고쳐라" 로
+    안내하는데 사용자가 할 일은 조인 스캔 버튼을 먼저 누르는 것뿐이다.
+
+    **이 잡은 전역 쓰기 가드를 안 탄다** — 4분 동안 입찰가 인상이 409 가 되면 사람이
+    가드를 끈다(`jobs.WRITE_KINDS` 주석 / T-4-19). 대신 `SINGLETON_KINDS` 로 같은 잡
+    중복만 막는다(271MB 이중 다운로드). 그 판단은 전부 `jobs.py` 에 있고 여기엔 없다.
+
+    쓰기 메서드이므로 `security.guard` 미들웨어의 Origin + `sec-fetch-site` + 부팅 토큰
+    3층을 **자동으로** 탄다. 라우트에 추가 코드가 없고, **예외를 만들지 않는다**(ASVS V4).
+    `kind` 는 호출부가 고정한다 — 요청에서 오지 않는다(T-1-23).
+    """
+    if not req.run_dir:
+        raise HTTPException(status_code=400, detail="배너 스캔에는 회차가 필요하다")
+
+    마지막스캔 = jobs.latest_done("bulsaja_scan", req.run_dir)
+    산출물 = (마지막스캔 or {}).get("result_path")
+    if not 산출물:
+        raise HTTPException(
+            status_code=409,
+            detail="조인 스캔을 먼저 돌려라 — 배너 스캔은 그 산출물을 입력으로 쓴다")
+    # 파일이 사라진 경우를 여기서 잡는다. 안 잡으면 `_override_targets` 의 ValueError 가
+    # 400 + "미리보기부터 다시 해라" 로 번역되는데, 이 흐름에 미리보기는 없다 —
+    # 사용자가 엉뚱한 버튼을 찾으러 간다. 사유가 틀린 안내는 사유가 없는 것보다 나쁘다.
+    if not Path(산출물).is_file():
+        raise HTTPException(
+            status_code=409,
+            detail="조인 산출물 파일이 사라졌다 — 조인 스캔을 다시 돌려라")
+
+    # 조인 산출물을 **읽지 않는다.** 대상 계산이 필요한 인덱스 잡과 다르다 —
+    # 여기서는 파일 경로 하나를 그대로 자식에게 넘기고, 모양 검증은 자식이 한 번만
+    # 한다(`banner_scan.py` 의 exit 2). 웹앱이 같은 파싱을 또 하면 진실이 둘이 된다(S-1).
+    return _작업만들기(request, "banner_scan", req, targets_path_override=산출물)
 
 
 # ── 여기서부터 읽기 전용 ─────────────────────────────────────────────────────
