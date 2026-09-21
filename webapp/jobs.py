@@ -457,6 +457,39 @@ def _count_targets(path: Path) -> int | None:
     return len(ids) if isinstance(ids, list) else None
 
 
+# ── 수면 방지 프리픽스 (ENG-06 / T-3-37) ────────────────────────────────────
+# 인덱스 구축은 실측 3시간 32분짜리 폴링이다. 그 사이 맥북이 idle sleep 에 들어가면
+# 자식이 통째로 멈춘다. `man caffeinate` 기준 **utility 를 인자로 주면 그 프로세스
+# 수명 동안만** assertion 이 유지되므로 따로 해제할 일이 없다 — 켜 두고 잊어버려
+# 배터리를 태우는 실수가 구조적으로 불가능하다.
+#
+# 붙는 자리가 여기인 이유: 조립은 `BulsajaArgv.prefix` 가 하지만 **무엇에 붙일지는
+# 잡 종류가 정한다.** 라우트는 kind 만 고른다(03-05-PLAN §197).
+#
+# 인덱스에만 붙인다: 계정 확인은 실측 0.14초, 조인 스캔은 18초다. 수 초짜리 잡에
+# 전력 assertion 을 거는 건 비용만 있고 얻는 게 없다.
+CAFFEINATE = "/usr/bin/caffeinate"
+
+
+def _수면방지_프리픽스(kind: str) -> list[str]:
+    """`["/usr/bin/caffeinate", "-i"]` 또는 빈 리스트.
+
+    바이너리 존재를 확인하고 없으면 **안 붙인다.** 맥 전용 바이너리라, 없는데 붙이면
+    자식이 아예 안 뜬다 — "절전 방지" 하나 때문에 잡 전체가 실행 불가가 되는 건
+    바꿔치기가 너무 나쁘다. 끊기면 재개가 복구하지만, 안 뜨면 복구할 것도 없다.
+
+    exit code 가 그대로 넘어오는 것을 실측 확인했다(`caffeinate -i sh -c 'exit 3'` → 3).
+    `ss_index_build.py` 의 종료코드 2/3/4 계약이 이 래퍼를 통과해도 살아 있다는 뜻이다.
+    """
+    if kind != "bulsaja_index":
+        return []
+    try:
+        return [CAFFEINATE, "-i"] if os.path.exists(CAFFEINATE) else []
+    except OSError:
+        # 경로 확인조차 실패하면 붙이지 않는다. 잡은 돌아야 한다.
+        return []
+
+
 def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str],
                 targets_path: Path | None, result_path: Path | None,
                 commit: bool) -> list[str]:
@@ -528,6 +561,7 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
             run_dir=run_dir if kind == "bulsaja_scan" else None,
             groups=targets_path if kind == "bulsaja_index" else None,
             targets=targets_path if kind == "bulsaja_scan" else None,
+            prefix=_수면방지_프리픽스(kind),
         ).build()
 
     raise ValueError(f"argv 를 조립할 수 없는 작업 종류다: {kind}")

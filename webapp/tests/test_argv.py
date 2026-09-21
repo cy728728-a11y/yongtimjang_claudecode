@@ -247,6 +247,51 @@ def test_caffeinate_프리픽스가_앞에_붙는다():
     assert _불사자().build()[0] == str(A.PY_CLI)      # 기본은 비어 있다
 
 
+def test_인덱스_잡만_caffeinate_로_감싸진다(tmp_path, monkeypatch):
+    """**`prefix` 필드가 있는 것과 실제로 붙는 것은 다르다** (ENG-06 / T-3-37).
+
+    위 `test_caffeinate_프리픽스가_앞에_붙는다` 는 조립 계층만 본다 — `prefix` 를
+    넘기면 앞에 붙는다는 것. 그런데 03-05 가 `jobs._build_argv` 에서 그걸 **안 넘겨서**,
+    3시간 32분짜리 인덱스가 맥북 idle sleep 에 무방비인 채로 돌 뻔했다(03-07 실측 발견).
+    조립 테스트만으로는 그 구멍이 안 보인다. 그래서 잡 계층에서 한 번 더 문다.
+
+    계정 확인(0.14초)·조인 스캔(18초)에는 안 붙는 것도 같이 고정한다 — 수 초짜리 잡에
+    전력 assertion 을 거는 건 비용만 있고 얻는 게 없다.
+    """
+    from webapp import paths as P
+
+    (tmp_path / "workspace.toml").write_text(
+        '[webapp]\nexpected_bulsaja_nick = "zz기대계정"\n', encoding="utf-8")
+    monkeypatch.setattr(P, "repo_root", lambda: tmp_path)
+    S.reload()
+    try:
+        인덱스 = J._build_argv("bulsaja_index", "zzjob", None, [],
+                             tmp_path / "zzg.json", tmp_path / "zzout.json", False)
+        스캔 = J._build_argv("bulsaja_scan", "zzjob", "2026-09-20", [],
+                           tmp_path / "zzt.json", tmp_path / "zzout.json", False)
+        계정 = J._build_argv("bulsaja_profile", "zzjob", None, [],
+                           None, None, False)
+    finally:
+        monkeypatch.undo()
+        S.reload()
+
+    assert 인덱스[:2] == [J.CAFFEINATE, "-i"]
+    assert 인덱스[2] == str(A.PY_CLI)          # 프리픽스 다음이 인터프리터
+    assert 인덱스[3] == str(A.SS_INDEX_BUILD)
+    assert 스캔[0] == str(A.PY_CLI)            # 짧은 잡에는 안 붙는다
+    assert 계정[0] == str(A.PY_CLI)
+
+
+def test_caffeinate_가_없는_기계에서는_안_붙인다(monkeypatch):
+    """바이너리가 없으면 **잡이 안 뜨는 것보다 절전 방지를 포기하는 쪽**이다.
+
+    끊기면 재개(`ss_index` productId 집합)가 복구한다. 그런데 자식이 아예 안 뜨면
+    복구할 것도 없다 — 바꿔치기의 방향이 한쪽으로 분명하다.
+    """
+    monkeypatch.setattr(J.os.path, "exists", lambda p: False)
+    assert J._수면방지_프리픽스("bulsaja_index") == []
+
+
 def test_limit_0_이면_플래그가_없다():
     """0 은 "상한 없음" 이다. `--limit 0` 을 넘기면 자식이 "0건만" 으로 읽을 수 있다."""
     assert "--limit" not in _불사자().build()
