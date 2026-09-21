@@ -148,7 +148,8 @@ Plans:
 **Goal**: 기존 상세 이미지에서 중국 판매사 홍보배너만 골라내고, 실제 작업에 쓰기 전에 100건 라벨링으로 미탐 0%를 증명한다
 **Mode:** mvp
 **Depends on**: Phase 3
-**Requirements**: BANNER-01, BANNER-02, BANNER-03, BANNER-04, BANNER-05
+**Requirements**: BANNER-01, BANNER-02b, BANNER-03b, BANNER-04, BANNER-05
+**Canonical refs**: `.planning/phases/04-banner-detection/04-CONTEXT.md` — BANNER-02·03(pHash 코퍼스 빈도)은 2026-09-21 실측으로 대체됐다. CONTEXT 가 정본이다.
 **Success Criteria** (what must be TRUE):
 
   1. 사용자가 아무 상품이나 골라 "이 상세의 몇 번째 이미지를 배너로 봤는지"와 남는 제품 이미지 목록을 눈으로 확인한다

@@ -82,8 +82,17 @@
 ### 홍보배너 식별 (BANNER)
 
 - [ ] **BANNER-01**: `renderContent` 에서 상세페이지 이미지 목록을 뽑는다
-- [ ] **BANNER-02**: 이미지를 **pHash** 로 지문화해 코퍼스 빈도를 센다 (URL 로 세면 물갈이 사본이 다른 이미지로 잡힌다)
-- [ ] **BANNER-03**: 빈도를 **타오바오상품번호 distinct** 기준으로 센다 (productId 기준이면 제품 사진도 배너로 판정되어 전량 오탐)
+- [ ] ~~**BANNER-02**: 이미지를 **pHash** 로 지문화해 코퍼스 빈도를 센다~~ → **대체됨 (2026-09-21, 04-CONTEXT.md D-01a)**
+      실측 결과 빈도 방식이 성립하지 않는다: 불사자가 수집 시 이미지를 **상품별로 복사해 자기 CDN 에 올려**
+      (`cdn.bulsaja.com/products/<상품마다다른코드>/...`) 872개 고유 URL 중 2개 이상 상품에 중복 등장하는 것이
+      **44개뿐, 최대 반복 2회**였다. ※ 이 요구사항의 경고("URL 로 세면 안 된다")는 **실측으로 재확인됐다** —
+      폐기되는 건 "빈도로 센다"는 방법이지 "URL 은 못 믿는다"는 사실이 아니다.
+- [ ] ~~**BANNER-03**: 빈도를 **타오바오상품번호 distinct** 기준으로 센다~~ → **대체됨 (BANNER-02 와 같은 이유)**
+      ※ 빈도 방식을 되살릴 경우 이 기준은 **여전히 유효하다**. productId 기준으로 세면 물갈이 사본 때문에 전량 오탐.
+- [ ] **BANNER-02b**: 배너 판정은 **상품 내부에서 끝나는 신호**로 한다 — 위치(상단·하단) · 가로세로비(넓고 납작) ·
+      단색/저엔트로피 비율(로고·QR). 다른 상품을 긁어 빈도를 세지 않는다. 토큰·크레딧 0 (2026-09-21 용팀장 결정)
+- [ ] **BANNER-03b**: 산출물은 **제품 이미지 목록 — 원래 순서 유지, 개수 제한 없음**. 10장 상한(API `imageUrls` maxItems)
+      처리는 **Phase 5 로 이관**한다 — 1건 분할 생성 실측 후 결정. 우선순위: **내용 누락 > 크레딧 절약**
 - [ ] **BANNER-04**: 100건 라벨링으로 검증하고 **미탐 0%** 를 통과해야 실제 작업에 쓴다 (중국 점포 로고·위챗·QR이 스마트스토어에 게시되는 게 오탐보다 비싸다)
 - [ ] **BANNER-05**: 제거율 상한(50%)과 잔여 장수 하한(2장)을 두고, 애매하면 그 상품을 통째로 스킵한다 (사람 큐를 만들지 않는다)
 
@@ -194,8 +203,10 @@
 | STATE-04 | Phase 3 | Complete |
 | STATE-05 | Phase 3 | Complete |
 | BANNER-01 | Phase 4 | Pending |
-| BANNER-02 | Phase 4 | Pending |
-| BANNER-03 | Phase 4 | Pending |
+| BANNER-02 | Phase 4 | Superseded → BANNER-02b |
+| BANNER-03 | Phase 4 | Superseded → BANNER-03b |
+| BANNER-02b | Phase 4 | Pending |
+| BANNER-03b | Phase 4 | Pending |
 | BANNER-04 | Phase 4 | Pending |
 | BANNER-05 | Phase 4 | Pending |
 | DETAIL-01 | Phase 5 | Pending |
