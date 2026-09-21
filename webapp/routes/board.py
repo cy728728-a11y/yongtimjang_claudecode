@@ -26,9 +26,48 @@ import json
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
 
-from webapp import board, jobs, paths, security
+from webapp import board, bulsaja_index, jobs, paths, security, settings
 
 router = APIRouter()
+
+
+def _불사자표시() -> dict:
+    """보드 상단에 상시로 띄울 불사자 계정 정보 (ENG-08 / 성공기준 6).
+
+    **필요한 값만 뽑아 싣는다.** `bulsaja_index.profile()` 응답을 통째로 넘기지 않는
+    이유는 두 가지다: ① 이 파일의 화이트리스트 투영 관례(SAFE-03) ② 불사자 응답에
+    섞여 오는 모델 대상 지시문(`표시규칙`)이 화면으로 새는 길을 구조적으로 막는 것.
+    `profile()` 이 이미 그 필드를 버리지만, 투영이 두 번째 벽이다.
+
+    **MCP 를 부르지 않는다** (D-19). 자식 프로세스가 써 둔 파일을 읽을 뿐이라
+    네트워크도 크레딧도 0 이고, 파일이 없으면 "계정 확인을 먼저" 라고 말한다.
+
+    `expected_bulsaja_nick` 이 비면 `cfg(..., required=True)` 가 KeyError 를 던진다.
+    보드는 **읽기 라우트**라 그게 500 이 되면 화면이 통째로 안 뜬다 — 그러면 사용자는
+    "설정이 비었다" 를 영영 못 본다. 그래서 **여기서만** 잡아서 배너 문구로 바꾼다.
+    조용히 통과시키는 게 아니라 **화면이 그 사실을 말하게** 하는 것이다.
+    쓰기 경로(`jobs.create_job`)는 계속 터뜨린다 — 거기선 가드가 죽으면 안 된다.
+    """
+    받은것 = bulsaja_index.profile()
+    표시 = {
+        "닉네임": (받은것 or {}).get("닉네임") or None,
+        "크레딧": (받은것 or {}).get("크레딧") or None,
+        "확인시각": (받은것 or {}).get("확인시각") or None,
+        "일치": False,
+        "사유": None,
+    }
+    try:
+        기대 = settings.cfg("expected_bulsaja_nick", required=True)
+    except KeyError:
+        표시["사유"] = "설정 webapp.expected_bulsaja_nick 이 비었다 — workspace.toml 을 채워라"
+        return 표시
+
+    통과, 사유 = bulsaja_index.profile_ok(
+        기대, int(settings.cfg("profile_max_age_min",
+                              settings.DEFAULTS["profile_max_age_min"])))
+    표시["일치"] = bool(통과)
+    표시["사유"] = 사유 or None          # 통과면 빈 문자열이 온다 — 0 이 아니라 None 규약
+    return 표시
 
 
 def _load_result(run_dir_name: str) -> tuple[dict, str | None]:
@@ -104,6 +143,9 @@ def home(request: Request, t: str | None = None, run_dir: str | None = None):
         # 죽은 줄 안다 — 실제로는 자식이 세션 분리되어 잘 돌고 있는데.
         # 읽기만 한다: 레지스트리가 없으면 만들지 않고 None 이다.
         "job": jobs.active_job(),
+        # 지금 붙어 있는 불사자 계정. **회차가 하나도 없어도 뜬다** — 계정 확인은
+        # 회차와 무관하고, 회차가 없는 상태에서 제일 먼저 눌러야 할 버튼이다.
+        "bulsaja": _불사자표시(),
         "runs": 회차들,
         "run_dir": 선택,
         "freshness": None,
