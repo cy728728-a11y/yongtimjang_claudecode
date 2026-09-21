@@ -726,9 +726,23 @@ def post_bulsaja_index(request: Request, req: JobReq = Depends(요청_풀기)):
 
     try:
         판정 = _판정읽기(req.run_dir)      # 한 번만 읽는다 — 두 번 읽으면 두 스냅샷이 된다
-        rows = board.fold_products(판정)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # 🔴 **③⑤ 행으로 먼저 좁힌다.** `board.fold_products` 는 6규칙 전부를 접어
+    #    실측 6,945행을 준다(③⑤ 는 194행이다). 안 좁히면 `index_targets` 가
+    #    41그룹(제외 후 40)을 내는데, ③⑤ 만 보면 31그룹(제외 후 30)이다 —
+    #    작업 대상이 하나도 없는 마켓그룹 10개를 **수 시간 동안** 더 훑는다.
+    #    이 페이즈가 D-18 로 2시간 7분을 깎아 낸 바로 그 비용이 도로 붙는다.
+    #    좁히는 기준은 스캔과 **같은 함수**에서 온다 — 둘이 갈라지면 스캔한 것과
+    #    인덱스한 것이 달라진다.
+    대상키 = set(_스캔대상키(판정))
+    rows = [r for r in board.fold_products(판정)
+            if f"{r.get('acct')}|{r.get('mallProductId')}" in 대상키]
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail="이 회차에 ③원인분석·⑤효자확정 행이 없다 — 훑을 대상이 0건이다")
 
     # 제외 설정(D-18)의 정본은 `settings` 한 곳이다. 스캔 산출물의 `제외그룹` 은
     # `null`(= 모른다)이라 여기서 읽으면 안 된다 (03-04 결정).

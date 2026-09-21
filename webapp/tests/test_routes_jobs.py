@@ -403,6 +403,46 @@ def test_인덱스_대상은_서버가_만든다(화면, 프로필, 기대닉, t
     assert "9999999" not in 응답.text
 
 
+def test_인덱스는_작업대상_행으로만_대상을_고른다(화면, 프로필, 기대닉, 엿듣기, tmp_run_dir):
+    """🔴 비용 회귀 — `fold_products` 는 **6규칙 전부**를 접는다 (실측 6,945행).
+
+    안 좁히면 `index_targets` 가 작업 대상이 하나도 없는 마켓그룹까지 집어
+    **수 시간을 더 훑는다** (실측 2026-09-20 회차: 30그룹 → 40그룹).
+    D-18 이 2시간 7분을 깎아 낸 바로 그 비용이 도로 붙는다.
+
+    여기서는 ③ 행 1개와 ① 행 1개가 **서로 다른 마켓그룹**에 걸리게 만들어,
+    대상에 ③ 쪽 그룹 하나만 들어오는지 본다.
+    """
+    # ⚠️ `adId` 를 반드시 서로 다르게 준다. `board._dedupe_ads` 가 adId 로 접으므로
+    #    둘 다 없으면 `None` 키로 **한 줄로 뭉개져** 이 테스트가 통과하는 척만 한다
+    #    (실제로 그랬다 — 네거티브 확인에서 잡았다).
+    _회차판정_갈아끼우기(tmp_run_dir, {"accounts": {"zz01": {"rules": {
+        "③원인분석": [{"adId": "nad-aaa", "mallProductId": "111",
+                    "adGroup": "판매상품_15-2_zzfakeA"}],
+        "①노출0": [{"adId": "nad-bbb", "mallProductId": "222",
+                  "adGroup": "판매상품_20-3_zzfakeB"}],
+    }}}})
+    조인 = {"마켓그룹": [{"groupId": "9000001", "그룹명": "zzfake15-2"},
+                      {"groupId": "9000002", "그룹명": "zzfake20-3"}],
+           "제외그룹": None, "행": []}
+    잡 = tmp_run_dir.parent.parent.parent / "scan_out.json"
+    잡.write_text(json.dumps(조인, ensure_ascii=False), encoding="utf-8")
+
+    진짜 = jobs.latest_done
+    try:
+        jobs.latest_done = lambda kind, run_dir=None: (
+            {"result_path": str(잡)} if kind == "bulsaja_scan" else 진짜(kind, run_dir))
+        프로필()
+        응답 = 화면.post("/jobs/bulsaja/index", json={"run_dir": tmp_run_dir.name})
+    finally:
+        jobs.latest_done = 진짜
+
+    assert 응답.status_code == 200, 응답.text
+    assert 엿듣기["kind"] == "bulsaja_index"
+    # ③ 쪽 그룹만 들어온다. ①노출0 의 그룹이 섞이면 이 회귀가 깨진 것이다.
+    assert 엿듣기["only_ads"] == ["9000001"], "①노출0 의 마켓그룹까지 훑는다"
+
+
 def test_스캔대상키는_중복을_없애고_순서를_지킨다():
     """같은 상품이 ③과 ⑤에 동시에 있으면 한 번만 조회한다 (레이트리밋 예산)."""
     from webapp.routes.jobs import _스캔대상키
