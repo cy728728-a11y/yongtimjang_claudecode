@@ -164,3 +164,335 @@ def test_저장소는_스키마를_만들지_않는다():
         assert 금지 not in 소스, f"banner_store.py 에 '{금지}' 가 있다 — DDL 정본은 jobs.py 다"
     assert "from webapp import " + "jobs" not in 소스, \
         "banner_store.py 가 jobs 를 import 한다 — import 그래프를 엉키게 하지 마라"
+
+
+# ── 2. 라우트 픽스처 ────────────────────────────────────────────────────────
+
+
+def _산출물(썸네일="0000_00.webp"):
+    """배너 스캔 산출물 최소본. `banner_scan.집계내기`·`상품골격` 의 키를 그대로 쓴다."""
+    return {
+        "소요초": 252.4,
+        "판정규칙": {"어휘군버전": "2026-09-21", "vision_revision": 3},
+        "게이트통과": False,
+        "집계": {"상품": 1, "장": 2, "판정완료": 2, "미판정": 0,
+               banner.배너: 1, banner.제품: 1, banner.무내용: 0, "스킵상품": 0},
+        "상품": [{
+            "판매자상품코드": "zz01", "불사자코드": "zzb01", "타오바오상품번호": "tb-1",
+            "상세상태": "중국어원본", "장수": 2, "스킵사유": None, "사유": None,
+            "제거율": 0.5,
+            "제품이미지": [{"순번": 1, "url": "https://zzcdn.example/b.jpg"}],
+            "장": [
+                {"순번": 0, "url": "https://zzcdn.example/a.jpg", "w": 800, "h": 900,
+                 "판정": banner.배너, "사유": "어휘군:공장직판", "썸네일": 썸네일},
+                {"순번": 1, "url": "https://zzcdn.example/b.jpg", "w": 800, "h": 900,
+                 "판정": banner.제품, "사유": None, "썸네일": None},
+            ],
+        }],
+    }
+
+
+@pytest.fixture
+def 화면(client, tmp_run_dir, tmp_path, monkeypatch):
+    """쿠키까지 붙인 클라이언트 + tmp 회차 + tmp 잡 DB + 라벨 스키마.
+
+    `jobs.init_db()` 가 **반드시 먼저** 돌아야 한다 — `banner_label`·`banner_confirm`
+    DDL 이 거기 있다(04-05). 안 돌리면 라벨 POST 가 전부 500 이고, 그 500 을
+    "가드가 막았다" 로 오독하게 된다.
+    """
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "webapp.db"))
+    monkeypatch.setattr(settings, "JOB_LOG_DIR", str(tmp_path / "logs"))
+    jobs.init_db()
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+    return client
+
+
+@pytest.fixture
+def 돌린척(tmp_run_dir, tmp_path):
+    """배너 스캔이 **성공한 것처럼** 레지스트리에 기록하고 산출물 파일을 깐다.
+
+    `create_job` 을 가로채지 않는다. 그건 `kind` 를 바꿔치기해 가드를 통째로 우회하는
+    픽스처가 되고(04-05-SUMMARY 이탈 5), 여기서는 `latest_done("banner_scan", ...)`
+    자체가 검증 대상이라 그 우회가 테스트를 무의미하게 만든다.
+
+    대신 **가장 바깥의 부작용 하나**(자식이 실제로 돌았다는 사실)만 가짜로 만든다 —
+    잡 행을 직접 넣고 산출물 JSON 을 디스크에 둔다. 라우트가 타는 경로
+    (`latest_done` → `result_path` → JSON 읽기 → 투영)는 전부 진짜다.
+    """
+    def _깔기(문서=None, 회차=None):
+        회차 = 회차 or tmp_run_dir.name
+        web = tmp_run_dir / "web"
+        web.mkdir(parents=True, exist_ok=True)
+        out = web / "banner_zz.json"
+        out.write_text(json.dumps(문서 if 문서 is not None else _산출물(),
+                                  ensure_ascii=False), encoding="utf-8")
+        cx = jobs._conn()
+        try:
+            cx.execute(
+                "INSERT INTO jobs (id, kind, run_dir, argv, status, log_path, "
+                "result_path, started_at) VALUES (?,?,?,?,?,?,?,?)",
+                ("zzjob-0001", "banner_scan", 회차, "[]", "done",
+                 str(tmp_path / "logs" / "zz.log"), str(out), "2026-09-22T10:00:00+09:00"))
+            cx.commit()
+        finally:
+            cx.close()
+        return out
+    return _깔기
+
+
+def _행수(db_path, 테이블):
+    cx = sqlite3.connect(db_path)
+    try:
+        return cx.execute(f"SELECT COUNT(*) FROM {테이블}").fetchone()[0]
+    finally:
+        cx.close()
+
+
+# ── 3. T-4-03 — GET 이 상태를 안 바꾼다 ─────────────────────────────────────
+
+
+def test_GET_무부작용(화면, 돌린척, tmp_path, tmp_run_dir):
+    """`GET /banner/review` 를 두 번 불러도 DB 행 수·mtime·산출물 mtime 이 불변이다.
+
+    **이게 `security.guard` 의 Origin 방어를 성립시키는 전제다** (T-4-03 / T-1-01b).
+    교차 사이트 단순 GET(`<img src>`)에는 Origin 헤더가 없어서, 부수효과가 있는 GET 을
+    하나라도 만들면 그 층이 통째로 뚫린다. 여기가 빨개지면 고칠 것은 이 테스트가
+    아니라 라우트다.
+    """
+    산출물 = 돌린척()
+    db = tmp_path / "webapp.db"
+
+    전_db = db.stat().st_mtime_ns
+    전_산출물 = 산출물.stat().st_mtime_ns
+    전_라벨 = _행수(db, "banner_label")
+    전_확인 = _행수(db, "banner_confirm")
+
+    for _ in range(2):
+        응답 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}")
+        assert 응답.status_code == 200
+        assert "배너 검수" in 응답.text
+
+    assert _행수(db, "banner_label") == 전_라벨 == 0
+    assert _행수(db, "banner_confirm") == 전_확인 == 0
+    assert db.stat().st_mtime_ns == 전_db, "GET 이 잡 DB 를 건드렸다"
+    assert 산출물.stat().st_mtime_ns == 전_산출물, "GET 이 산출물 파일을 건드렸다"
+
+
+def test_스캔_전에는_실패가_아니다(화면, tmp_run_dir):
+    """한 번도 안 돌린 것은 고장이 아니다 (S-3). 사유 배너 없이 "아직 안 돌렸다" 다."""
+    응답 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}")
+    assert 응답.status_code == 200
+    assert "아직 배너 스캔을 안 돌렸다" in 응답.text
+
+
+def test_상품_0건은_사유를_들고_온다(화면, 돌린척, tmp_run_dir):
+    """0건은 관측이 아니라 조회 실패일 수 있다 — 빈 화면을 "대상 없음" 으로 읽게 두지 않는다."""
+    돌린척({"집계": {}, "상품": []})
+    응답 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}")
+    assert 응답.status_code == 200
+    assert "상품이 0건이다" in 응답.text
+
+
+def test_트레이스백이_화면에_안_실린다(화면, 돌린척, tmp_run_dir, tmp_path):
+    """산출물이 깨져도 사유는 한 줄 요약이다 (ASVS V7 / T-4-21)."""
+    경로 = 돌린척()
+    경로.write_text("{이건 JSON 이 아니다", encoding="utf-8")
+    응답 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}")
+    assert 응답.status_code == 200
+    assert "Traceback" not in 응답.text
+    assert "JSONDecodeError" in 응답.text and str(tmp_path) not in 응답.text
+
+
+def test_쿠키_없으면_403(client, tmp_run_dir):
+    """읽기 라우트의 유일한 문이다. 썸네일에도 같은 문이 걸린다."""
+    client.cookies.clear()
+    assert client.get(f"/banner/review?run_dir={tmp_run_dir.name}").status_code == 403
+    assert client.get(f"/banner/thumb/{tmp_run_dir.name}/0/0").status_code == 403
+
+
+# ── 4. T-4-04 — 썸네일 경로 탈출 ────────────────────────────────────────────
+
+
+def test_경로탈출(화면, 돌린척, tmp_run_dir, tmp_path, monkeypatch):
+    """썸네일 라우트는 **파일명을 받지 않는다** — 정수 인덱스만 받는다 (T-4-04).
+
+    경로 탈출이 막히는 게 아니라 **구조적으로 불가능하다.** 그래도 변형을 전부
+    쏴 보고, 어느 것도 파일 내용을 흘리지 않는지 확인한다.
+    """
+    돌린척()
+    썸루트 = tmp_path / "thumbs"
+    (썸루트 / tmp_run_dir.name).mkdir(parents=True)
+    (썸루트 / tmp_run_dir.name / "0000_00.webp").write_bytes(b"RIFFzzWEBP")
+    monkeypatch.setattr(jobs, "banner_dir", lambda 키: 썸루트)
+
+    # 정상 경로가 실제로 200 이어야 한다 — 전부 404 인 서버에서도 아래 단언은 통과한다.
+    좋은것 = 화면.get(f"/banner/thumb/{tmp_run_dir.name}/0/0")
+    assert 좋은것.status_code == 200 and 좋은것.content == b"RIFFzzWEBP"
+
+    비밀 = tmp_path / "secret.txt"
+    비밀.write_text("zz-비밀-내용", encoding="utf-8")
+
+    변형 = [
+        f"/banner/thumb/{tmp_run_dir.name}/../../etc/passwd",
+        f"/banner/thumb/{tmp_run_dir.name}/%2e%2e%2f%2e%2e%2fetc%2fpasswd",
+        f"/banner/thumb/{tmp_run_dir.name}/-1/-1",          # 음수는 파이썬 리스트가 받는다
+        f"/banner/thumb/{tmp_run_dir.name}/0/{비밀}",        # 절대경로 문자열
+        f"/banner/thumb/{tmp_run_dir.name}/99/0",           # 범위 밖
+        "/banner/thumb/../0/0",                             # 회차 자리에 ..
+        "/banner/thumb/모르는회차/0/0",                       # 화이트리스트 밖
+    ]
+    for 길 in 변형:
+        응답 = 화면.get(길)
+        assert 응답.status_code in (400, 404, 422), f"{길} → {응답.status_code}"
+        assert "root:" not in 응답.text
+        assert "zz-비밀-내용" not in 응답.text
+
+
+def test_썸네일이_회차_밖을_가리키면_거부한다(화면, 돌린척, tmp_run_dir, tmp_path, monkeypatch):
+    """2층 방어 — 산출물이 파일명 대신 경로를 들고 있어도 열리지 않는다.
+
+    **접두 비교가 아니라 경로 비교다.** `startswith` 로 하면 `thumbs-남의것/` 같은
+    형제 디렉터리가 통과한다(`jobs.py:437-444` 의 규율).
+    """
+    돌린척(_산출물(썸네일="../../secret.txt"))
+    썸루트 = tmp_path / "thumbs"
+    (썸루트 / tmp_run_dir.name).mkdir(parents=True)
+    (tmp_path / "secret.txt").write_text("zz-비밀-내용", encoding="utf-8")
+    monkeypatch.setattr(jobs, "banner_dir", lambda 키: 썸루트)
+
+    응답 = 화면.get(f"/banner/thumb/{tmp_run_dir.name}/0/0")
+    assert 응답.status_code == 404
+    assert "zz-비밀-내용" not in 응답.text
+
+
+def test_썸네일_없는_장은_404(화면, 돌린척, tmp_run_dir, tmp_path, monkeypatch):
+    """미판정·다운로드 실패 장은 썸네일이 `null` 이다. 500 이 아니라 404 다."""
+    돌린척()
+    monkeypatch.setattr(jobs, "banner_dir", lambda 키: tmp_path / "thumbs")
+    assert 화면.get(f"/banner/thumb/{tmp_run_dir.name}/0/1").status_code == 404
+
+
+# ── 5. T-4-05 — 라벨 쓰기는 POST 전용 ───────────────────────────────────────
+
+
+def test_라벨_POST_토큰(화면, tmp_path, tmp_run_dir):
+    """토큰 없음 403 · 타 사이트 Origin 403 · GET 405 · 허용값 밖 422 (T-4-05).
+
+    전부 **DB 에 한 행도 안 들어간다** — 403 만 확인하면 "거부됐다" 와
+    "거부는 됐는데 그 전에 썼다" 를 구분하지 못한다.
+    """
+    db = tmp_path / "webapp.db"
+    몸통 = {"run_dir": tmp_run_dir.name, "타오바오상품번호": "tb-1",
+          "판매자상품코드": "zz01", "이미지순번": 0, "사람판정": banner.배너}
+
+    assert 화면.post("/banner/label", json=몸통,
+                    headers={"X-CT-Token": "wrong-token"}).status_code == 403
+    assert 화면.post("/banner/label", json=몸통,
+                    headers={"Origin": "https://evil.com"}).status_code == 403
+    assert 화면.get("/banner/label").status_code == 405
+    assert 화면.get("/banner/confirm").status_code == 405
+
+    # `사람판정` 화이트리스트 회귀. 자유 문자열이면 DB 에 아무 값이나 들어가
+    # `게이트집계` 분모가 조용히 틀어진다 — Literal 이 그 1차선이다.
+    assert 화면.post("/banner/label",
+                    json=dict(몸통, 사람판정="보" + "류")).status_code == 422
+    assert 화면.post("/banner/label", json=dict(몸통, 사람판정=banner.미판정)).status_code == 422
+    assert 화면.post("/banner/label", json=dict(몸통, 이미지순번=-1)).status_code == 422
+    assert 화면.post("/banner/label",
+                    json=dict(몸통, 타오바오상품번호="../../x")).status_code == 422
+
+    assert _행수(db, "banner_label") == 0, "거부된 요청이 DB 에 남았다"
+
+
+def test_라벨과_확인이_실제로_저장된다(화면, tmp_path, tmp_run_dir):
+    """403 만 확인하는 검증은 서버를 뽑아 놔도 통과한다 — 정상 경로를 같이 본다."""
+    db = tmp_path / "webapp.db"
+    몸통 = {"run_dir": tmp_run_dir.name, "타오바오상품번호": "tb-1",
+          "판매자상품코드": "zz01", "이미지순번": 0, "사람판정": banner.배너}
+
+    응답 = 화면.post("/banner/label", json=몸통)
+    assert 응답.status_code == 200 and "figure" in 응답.text
+    # htmx 폼 인코딩도 받는다 — hx-post 가 JSON 을 안 보낸다.
+    assert 화면.post("/banner/confirm",
+                    data={"run_dir": tmp_run_dir.name,
+                          "타오바오상품번호": "tb-1"}).status_code == 200
+
+    assert _행수(db, "banner_label") == 1
+    assert _행수(db, "banner_confirm") == 1
+    assert banner_store.라벨읽기(tmp_run_dir.name) == {"tb-1": {0: banner.배너}}
+    assert banner_store.확인읽기(tmp_run_dir.name) == {"tb-1"}
+
+
+def test_라벨_테이블이_없으면_고칠_자리를_말한다(client, tmp_run_dir, tmp_path, monkeypatch):
+    """테이블 부재는 400(요청 잘못)이 아니라 500 + "서버를 한 번 재시작해라" 다.
+
+    400 으로 번역하면 사용자가 자기 클릭을 탓하며 계속 누른다 — 실제로 필요한 것은
+    `init_db()` 를 한 번 더 태우는 재시작이다.
+    """
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "webapp.db"))
+    monkeypatch.setattr(settings, "JOB_LOG_DIR", str(tmp_path / "logs"))
+    sqlite3.connect(tmp_path / "webapp.db").close()      # 빈 파일 — 스키마 없음
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+
+    응답 = client.post("/banner/label", json={
+        "run_dir": tmp_run_dir.name, "타오바오상품번호": "tb-1",
+        "판매자상품코드": "zz01", "이미지순번": 0, "사람판정": banner.배너})
+    assert 응답.status_code == 500
+    assert "재시작" in 응답.text
+
+
+# ── 6. D-09 — 사람 판단 큐가 없다 ───────────────────────────────────────────
+
+
+def test_사람큐_엔드포인트_없음():
+    """`routes/banner.py` 에 새 상태값도 큐 경로도 없다 (D-09 / 성공기준 3).
+
+    D-07·D-08 은 "애매하면 사람에게 묻는다" 가 아니라 **"애매하면 그 상품을 건너뛴다"** 다.
+    사람이 하는 일은 "뒤집기" 와 "다 봤다" 둘뿐이고 둘 다 즉시 확정된다 —
+    중간 상태가 하나라도 생기면 그게 곧 사람 판단 큐다(`minimize-user-queues`).
+
+    금지 문자열을 이 파일에 글자로 남기지 않으려고 런타임에 조립한다.
+    """
+    from webapp.routes import banner as 라우트
+
+    소스 = open(라우트.__file__, encoding="utf-8").read()
+    for 금지 in ("보" + "류", "대" + "기", "검토" + "요청"):
+        assert 금지 not in 소스, f"routes/banner.py 에 '{금지}' 가 있다 — 사람 판단 큐다 (D-09)"
+    for 큐경로 in ("/qu" + "eue", "/pen" + "ding"):
+        assert 큐경로 not in 소스, f"routes/banner.py 에 '{큐경로}' 경로가 있다 (D-09)"
+
+    # 실제로 붙은 경로도 본다 — 소스 문자열만 보면 데코레이터로 붙인 다섯 번째 경로를
+    # 놓친다. `app.routes` 가 아니라 라우터를 보는 이유: FastAPI 0.137 부터
+    # `app.routes` 가 리스트가 아니라 포함관계 트리라서 `_IncludedRouter` 가 나온다.
+    경로들 = sorted(r.path for r in 라우트.router.routes)
+    assert 경로들 == ["/banner/confirm", "/banner/label", "/banner/review",
+                    "/banner/thumb/{run_dir}/{product_i}/{chap_i}"], 경로들
+
+
+def test_라우트가_정적마운트도_ended_at_도_안_쓴다():
+    """썸네일을 정적 마운트로 대신하면 271MB 원본이 토큰 없이 열린다 (Pitfall 7).
+
+    D-19(이미지 라이브러리 금지)는 `test_argv.py` 의 트리 순회 가드가 이미 집행한다 —
+    여기서는 이 페이즈가 새로 만든 유혹 둘만 따로 못박는다.
+    """
+    from webapp.routes import banner as 라우트
+
+    소스 = open(라우트.__file__, encoding="utf-8").read()
+    assert "Static" + "Files" not in 소스
+    assert "ended" + "_at" not in 소스, "소요시간은 산출물의 `소요초` 를 읽는다 (S-5)"
+
+
+def test_템플릿이_표도_safe_도_안_쓴다():
+    """행 확장 표로 만들면 100상품 = 100클릭이다 — D-03 의 "훑기" 가 "클릭" 이 된다.
+
+    `| safe` 는 자동 이스케이프를 끄는 필터다. 사유 문자열에 중국어 원문이 섞여 온다.
+    """
+    from pathlib import Path as _P
+
+    from webapp import main as _main
+
+    소스 = (_P(_main.BASE) / "templates" / "banner_review.html").read_text(encoding="utf-8")
+    assert "tabul" + "ator" not in 소스.lower()
+    assert "| " + "safe" not in 소스
+    assert "토큰 0 · 크레딧 0" in 소스
+    assert 'hx-headers=\'{"X-CT-Token": "{{ token }}"}\'' in 소스
