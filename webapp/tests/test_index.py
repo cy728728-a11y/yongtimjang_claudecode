@@ -799,3 +799,161 @@ def test_스캔은_full_로_읽고_인덱스는_summary_로_읽는다():
     assert '"mode": "summary"' not in 스캔, "스캔에 summary 호출이 남아 있다"
     assert '"mode": "summary"' in 빌더, "인덱스 빌더가 summary 를 버렸다 — 3만건에 불필요한 비용"
     assert '"mode": "full"' not in 빌더
+
+
+# ── 11. 마켓그룹 조회 규약 — 0개는 관측이 아니다 (CR-01 / Pitfall 3 · T-3-38) ──
+#
+# §10 과 **같은 고장의 두 번째 얼굴**이다. `bulsaja_market_groups` 가 오류 dict 를 주면
+# `그룹응답.get("그룹") or 그룹응답.get("항목") or []` 가 그걸 "마켓그룹이 0개구나" 로 읽고
+# 스캔이 `exit 0` 으로 `"마켓그룹": []` 산출물을 쓴다. 그러면 `join.attach` 는
+# `그룹색인 = {}` 으로 정상 경로를 타 **번호가 있는 모든 행을 `번호없음`(= 광고청소)** 으로
+# 떨어뜨리고, 화면은 "이 광고그룹들을 네이버 광고에서 찾아 지워라" 라고 말한다.
+# 시스템 고장이 사람의 삭제 작업 목록이 된다 — 되돌릴 수 없다.
+#
+# 실측 86개다. 0개는 이 워크플로에서 **유효한 관측이 아니다.**
+
+
+def test_마켓그룹_오류응답을_빈목록으로_읽지_않는다():
+    """`그룹꺼내기` 는 `항목꺼내기` 와 **같은 규약**이다 — 모양이 아니면 예외다.
+
+    규약이 둘로 갈라지면 다음 사람이 어느 쪽을 믿을지 모른다. 그래서 구현도
+    `ss_index_calls` 한 곳에 있어야 하고, 그 사실을 여기서 고정한다.
+    """
+    오류응답 = {"_text": 'MCP error -32602: Input validation error: '
+                       '[{"expected": "number", "path": ["groupId"]}]'}
+    with pytest.raises(RuntimeError) as e:
+        ss_index_calls.그룹꺼내기(오류응답, 맥락=" (bulsaja_market_groups)")
+    assert "-32602" in str(e.value), "서버 문구가 사유에서 사라졌다"
+    assert "bulsaja_market_groups" in str(e.value), "맥락이 사유에 없다"
+
+    with pytest.raises(RuntimeError):
+        ss_index_calls.그룹꺼내기(None)
+    with pytest.raises(RuntimeError):
+        ss_index_calls.그룹꺼내기({"그룹": "여덟 개"})
+
+    # 키가 **있으면** 그대로 돌려준다. 빈 목록 자체를 여기서 막지 않는 이유는
+    # "응답을 못 읽었다" 와 "0개라고 답했다" 가 다른 사실이기 때문이다 —
+    # 0개를 거부하는 것은 스캔의 일이고(아래 테스트), 여기는 해석만 한다.
+    assert ss_index_calls.그룹꺼내기({"그룹": []}) == []
+    assert ss_index_calls.그룹꺼내기({"success": True, "항목": None}) == []
+    assert ss_index_calls.그룹꺼내기(
+        {"그룹": [{"groupId": 1, "그룹명": "zzfake"}]}) == [{"groupId": 1, "그룹명": "zzfake"}]
+
+
+@pytest.fixture
+def 스캔모듈(monkeypatch):
+    """`bulsaja_scan` 을 **MCP 없이** import 한다 (네트워크 0 · 크레딧 0).
+
+    그 모듈은 최상단에서 `from bulsaja_mcp import BulsajaMCP` 를 한다. 진짜 모듈은
+    `requests` 를 끌고 오므로 `.venv-web` 에서는 import 자체가 안 되고(D-19), 된다 해도
+    테스트가 실제 서버를 때릴 길을 여는 셈이다. 그래서 import 전에 `sys.modules` 에
+    가짜를 먼저 꽂는다 — `from X import Y` 는 sys.modules 를 먼저 본다.
+
+    가짜 클래스의 메서드는 전부 **터진다.** 테스트가 진짜 호출 경로를 타면 조용히
+    통과하는 대신 여기서 죽어야 한다.
+    """
+    import importlib
+    import types
+
+    가짜 = types.ModuleType("bulsaja_mcp")
+
+    class _열면터진다:
+        def open(self):
+            raise AssertionError("테스트가 진짜 MCP 를 열려고 했다")
+
+        def close(self):
+            pass
+
+        def call_tool(self, *a, **k):
+            raise AssertionError("테스트가 진짜 MCP 를 때렸다")
+
+    가짜.BulsajaMCP = _열면터진다
+    monkeypatch.setitem(sys.modules, "bulsaja_mcp", 가짜)
+    sys.modules.pop("bulsaja_scan", None)
+    모듈 = importlib.import_module("bulsaja_scan")
+    yield 모듈
+    # 가짜 MCP 를 물고 있는 모듈을 다음 테스트에 남기지 않는다
+    sys.modules.pop("bulsaja_scan", None)
+
+
+def _스캔돌리기(스캔모듈, monkeypatch, tmp_path, 그룹응답):
+    """마켓그룹 응답 하나만 바꿔 스캔을 돌린다 → `(종료코드, 산출물경로)`.
+
+    프로필·마켓그룹 두 호출 말고는 **아무 도구도 부르지 않는다.** 그 뒤로 더 가면
+    가짜 MCP 가 터뜨린다 — "산출물을 안 쓴다" 를 파일 부재로만 재는 것보다 강하다.
+    """
+    닉 = "zznick"
+
+    class 가짜MCP:
+        def open(self):
+            pass
+
+        def close(self):
+            pass
+
+        def call_tool(self, 이름, 인자=None):
+            if 이름 == "bulsaja_my_profile":
+                return {"닉네임": 닉, "크레딧": "0"}
+            if 이름 == "bulsaja_market_groups":
+                return 그룹응답
+            raise AssertionError(f"마켓그룹 뒤로 더 갔다 — 도구 {이름}")
+
+    monkeypatch.setattr(스캔모듈, "BulsajaMCP", 가짜MCP)
+
+    대상 = tmp_path / "targets.json"
+    대상.write_text(json.dumps(["zzacct|zzmall1"], ensure_ascii=False), encoding="utf-8")
+    산출물 = tmp_path / "join_zzjob.json"
+
+    monkeypatch.setattr(sys, "argv", [
+        "bulsaja_scan.py",
+        "--run-dir", "2026-09-20",
+        "--targets", str(대상),
+        "--out", str(산출물),
+        "--db", str(tmp_path / "없는.db"),
+        "--profile-out", str(tmp_path / "profile.json"),
+        "--expect-nick", 닉,
+        "--min-interval", "0",
+        "--retry-after", "1",
+        "--batch-size", "50",
+    ])
+    return 스캔모듈.main(), 산출물
+
+
+def test_스캔은_마켓그룹_조회오류로_산출물을_쓰지_않는다(스캔모듈, monkeypatch, tmp_path):
+    """오류 dict 는 "0개" 가 아니다 — **exit 2 · 산출물 없음.**
+
+    `exit 0` 으로 끝나는 것이 이 고장의 핵심이다. 0 이면 `jobs.latest_done` 이 그 잡을
+    성공으로 집어 오고, 보드가 그 빈 목록을 믿는다. 종료코드 2 는 이미 이 CLI 가
+    "빈 목록은 전량이 아니다" 에 쓰는 코드다 — 같은 뜻이니 같은 코드를 쓴다.
+    """
+    코드, 산출물 = _스캔돌리기(스캔모듈, monkeypatch, tmp_path, {
+        "_text": "MCP error -32602: Input validation error"})
+
+    assert 코드 == 2, f"조회 오류인데 exit {코드} 다 — 잡이 성공으로 기록된다"
+    assert not 산출물.exists(), "조회 오류인데 산출물을 썼다 — 보드가 그걸 믿는다"
+
+
+def test_스캔은_마켓그룹이_0개면_산출물을_쓰지_않는다(스캔모듈, monkeypatch, tmp_path):
+    """키는 있는데 0개인 응답도 여기서는 거부다 — 실측 86개다.
+
+    `그룹꺼내기` 는 해석만 하므로 `{"그룹": []}` 를 통과시킨다. 그 빈 목록이 산출물에
+    실리면 결과는 오류 dict 와 **한 글자도 다르지 않다**(전 행 광고청소). 그래서
+    거부는 CLI 가 한다. 마켓그룹이 진짜 0개인 계정이라면 애초에 조인할 것이 없다.
+    """
+    코드, 산출물 = _스캔돌리기(스캔모듈, monkeypatch, tmp_path, {"그룹": []})
+
+    assert 코드 == 2, f"마켓그룹 0개인데 exit {코드} 다 — 잡이 성공으로 기록된다"
+    assert not 산출물.exists(), "마켓그룹 0개로 산출물을 썼다 (CR-01)"
+
+
+def test_스캔이_마켓그룹_응답을_직접_해석하지_않는다():
+    """문자열 가드 — `or []` 로 되돌아가는 길을 막는다 (§10 의 빌더 가드와 같은 수법).
+
+    그리고 **규약이 두 벌이 되는 것**도 막는다: 스캔은 `ss_index_calls.그룹꺼내기` 를
+    import 해서 쓴다. 같은 판단을 두 파일에 적으면 다음 사람이 한쪽만 고친다 —
+    §10 이 정확히 그렇게 났다(호출부 3곳 중 1곳에만 붙어 있었다).
+    """
+    소스 = (CLI_SCRIPTS / "bulsaja_scan.py").read_text(encoding="utf-8")
+    assert '.get("그룹")' not in 소스, "마켓그룹 응답을 직접 꺼내 쓴다 — 그룹꺼내기() 를 써라"
+    assert "그룹꺼내기" in 소스
+    assert "from ss_index_calls import" in 소스, "호출 규약 모듈을 안 쓴다 — 규약이 두 벌이 된다"
