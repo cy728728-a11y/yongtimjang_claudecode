@@ -22,7 +22,9 @@
   · **미검수 상품은 분모에서 빠진다** (D-03a). 안 본 것을 동의로 세면 미탐 0% 가
     거짓말이 된다 — `test_미검수_분모제외`
 """
+import importlib.util
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -30,6 +32,29 @@ import pytest
 from webapp import banner, state
 
 WEBAPP = Path(banner.__file__).resolve().parent
+
+# 어휘군은 **`banner_scan.py` 에 산다**(설정도 `banner.py` 도 아니다). 회귀가 그 정본을
+# 직접 때려야 의미가 있어서 파일 경로로 로드한다 — 스킬 스크립트라 `import` 문으로는
+# 못 가져온다(`test_banner_scan.py` 와 같은 관용구).
+#
+# ⚠️ 이 로드가 `.venv-web` 에서 살아 있으려면 `banner_scan.py` 의 `Vision`·`PIL` import 가
+#    **함수 안쪽 지연 import** 여야 한다. 최상단에 올라가는 순간 이 파일 전체가 collect
+#    단계에서 죽는다. `test_banner_scan.py` 헤더가 그 제약의 정본이다.
+스캐너경로 = (Path(__file__).resolve().parents[2] / ".claude" / "skills"
+          / "bulsaja-detail-page" / "scripts" / "banner_scan.py")
+
+
+@pytest.fixture(scope="module")
+def 스캐너():
+    assert 스캐너경로.exists(), f"스캐너가 없다: {스캐너경로}"
+    이전 = list(sys.path)
+    try:
+        규격 = importlib.util.spec_from_file_location("_banner_scan_어휘군", 스캐너경로)
+        모듈 = importlib.util.module_from_spec(규격)
+        규격.loader.exec_module(모듈)
+        yield 모듈
+    finally:
+        sys.path[:] = 이전
 
 
 # ── 산출물 상품 만들기 헬퍼 ─────────────────────────────────────────────────
@@ -416,20 +441,23 @@ def test_사람큐_없음():
     금지 문자열을 이 파일에 글자로 남기지 않으려고 런타임에 조립한다 —
     `test_argv.py:9-14` 의 "가드가 감시하는 문자열을 테스트가 들고 있으면 예외가 생긴다".
     """
-    소스 = (WEBAPP / "banner.py").read_text(encoding="utf-8")
-    for 금지 in ("보" + "류", "대" + "기", "검토" + "요청"):
-        assert 금지 not in 소스, f"banner.py 에 '{금지}' 가 있다 — 사람 판단 큐다 (D-09)"
+    # 판정의 정본은 `banner_scan.py` 다 — 화면(`banner.py`)만 깨끗하고 산출물에
+    # 새 상태값이 들어가면 큐는 그대로 생긴다. **둘 다** 본다.
+    for 대상 in (WEBAPP / "banner.py", 스캐너경로):
+        소스 = 대상.read_text(encoding="utf-8")
+        for 금지 in ("보" + "류", "대" + "기", "검토" + "요청"):
+            assert 금지 not in 소스, (
+                f"{대상.name} 에 '{금지}' 가 있다 — 사람 판단 큐다 (D-09)")
 
     # 스킵사유는 셋뿐이고 서로 다른 값이다 (`join.py:36-48` 의 사유코드 규율).
     assert len({banner.잔여부족, banner.제거율초과, banner.판정불가}) == 3
 
 
-def test_어휘군_한중(banner_labels):
-    """어휘군 회귀의 **분자가 어느 언어로 적혀 있는지**를 못박는다 (BANNER-02b 회귀 자리).
+def test_어휘군_한중(banner_labels, 스캐너):
+    """어휘군 8군이 **한국어와 중국어를 둘 다** 들고 있는지 못박는다 (BANNER-02b).
 
-    ⚠️ **이 플랜에는 어휘군이 없다.** 04-04 가 채울 자리다. 그래서 여기서는 그 분자가 될
-    정답지의 언어 구성을 고정한다. `pytest.skip`·`xfail` 로 덮지 않는다 — 덮으면 04-04 가
-    한국어 패스 하나만 만들어도 초록으로 보인다(Pitfall 4).
+    `pytest.skip`·`xfail` 로 덮지 않는다 — 덮으면 한국어 패스 하나만 만들어도
+    초록으로 보인다(Pitfall 4).
 
     ⚠️ **플랜의 전제를 실측으로 정정했다.** 플랜은 *"배너 9장 중 한국어 표기와 중국어
     표기가 함께 있다"* 고 적었지만, 실제 `banner_labels.json` 의 배너 9장 OCR 첫 줄에는
@@ -466,6 +494,58 @@ def test_어휘군_한중(banner_labels):
               if 한자.search(e["내용"])]
     assert len(한자경계) >= 2, (
         "경계 표본에서 한자가 사라졌다 — 중국어 어휘군을 '필요 없다'며 지우는 길이 열린다")
+
+    # ── 여기부터가 어휘군 자체의 검사다 (04-04 가 채운 뒤 살아난 부분) ──────
+    어휘군 = 스캐너.어휘군
+    assert len(어휘군) == 8, f"어휘군이 8군이 아니다: {sorted(어휘군)}"
+
+    # ④ 8군 **전부**가 한국어 항목과 중국어 항목을 둘 다 갖는다.
+    #    한쪽만 있는 군이 생기면 그 군은 한 언어의 상세에서만 도는 반쪽 규칙이 된다.
+    for 군, 항목들 in 어휘군.items():
+        assert any(한글.search(x) for x in 항목들), f"{군} 에 한국어 항목이 없다"
+        assert any(한자.search(x) for x in 항목들), (
+            f"{군} 에 중국어 항목이 없다 — 🔴 중국어원본 상품의 배너를 통째로 "
+            "놓치는 경로다(Pitfall 4)")
+
+    # ⑤ 2글자 이하 ASCII 토큰 0개. OCR 잡음에 우연히 걸린다
+    #    (개발 중 `"qr"` 이 `PANPAN physical shooting` 에 실제로 오탐).
+    짧은ASCII = [(군, x) for 군, 항목들 in 어휘군.items() for x in 항목들
+              if x.isascii() and len(x.strip()) <= 2]
+    assert 짧은ASCII == [], (
+        f"2글자 이하 ASCII 토큰이 있다: {짧은ASCII} — 최소 3글자이거나 "
+        "단어 경계를 강제해라")
+
+
+def test_라벨픽스처_미탐0(banner_labels, 스캐너):
+    """라벨 배너 9장이 어휘군에 **전부** 걸린다 — 미탐 0 (BANNER-02b 회귀).
+
+    ⚠️ **한계를 먼저 적는다.** 이 9장은 리서처(Claude)의 시각 판단이고, 어휘군은
+    바로 그 9장의 OCR 텍스트를 보고 만들었다 — **과적합이다**(Pitfall 3).
+    이건 **회귀 방지**이지 게이트 통과 근거가 아니다. 어휘군을 고치다 9장 중
+    하나를 놓치면 CI 가 잡는다, 그게 전부다.
+    증명은 04-08 의 전수 검수(D-12)가 하고, 게이트 세트는 리서처가 보지 않은
+    상품을 반드시 포함한다.
+
+    ⚠️ **이 9장으로 검증되는 것은 어휘군의 한국어 절반뿐이다.** 배너 9장의 OCR 첫 줄에
+    한자가 0건이기 때문이다(위 `test_어휘군_한중` ②가 그 사실을 고정한다). 중국어 절반은
+    `webapp/tests/cli/test_ocr_determinism.py::test_2패스가_한쪽_언어를_놓치지_않는다`
+    가 **합성 이미지**로 따로 건다 — 실제 코퍼스 근거는 아직 없다.
+    """
+    미탐 = []
+    for e in banner_labels["배너본문"]:
+        if not 스캐너.어휘군걸림([e["ocr_첫줄"]]):
+            미탐.append(f"{e['코드']}:{e['순번']} — {e['ocr_첫줄']!r}")
+    assert 미탐 == [], (
+        f"어휘군이 배너 {len(미탐)}/9 장을 놓쳤다:\n  " + "\n  ".join(미탐) +
+        "\n\n⚠️ 놓친 장을 보고 키워드를 추가했다면, **같은 세트로 다시 잰 숫자는 "
+        "게이트 통과 근거가 못 된다**(Pitfall 3). 게이트는 새 상품으로 재라")
+
+    # 경계 4장에는 걸리지 않아야 한다 — 어휘군이 "글자만 있으면 배너" 로 번지는 것을 막는다.
+    # (경계 4장은 용팀장이 판정할 몫이고, 기계가 미리 배너로 접으면 그 판단이 사라진다)
+    오탐 = [f"{e['코드']}:{e['순번']} → {스캐너.어휘군걸림([e['내용']])}"
+          for e in banner_labels["경계본문"] if 스캐너.어휘군걸림([e["내용"]])]
+    assert 오탐 == [], (
+        f"어휘군이 경계 표본에 걸렸다: {오탐} — 경계 판정은 용팀장 몫이다(D-12)")
 
 
 def test_배너는_네트워크도_파일도_안_연다():
