@@ -162,7 +162,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Wave 0: `.venv` 에 Vision·pytest + 라벨 308장 픽스처 + Phase 4 설정 키 10개
+- [x] 04-01-PLAN.md — Wave 0: `.venv` 에 Vision·pytest + 라벨 308장 픽스처 + Phase 4 설정 키 10개
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -252,7 +252,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 9/9 | Complete   | 2026-09-20 |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
-| 4. 홍보배너 식별 | 0/8 | Planned | - |
+| 4. 홍보배너 식별 | 1/8 | In Progress|  |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 0/TBD | Not started | - |
 | 6. 마켓 수정업로드 | 0/TBD | Not started | - |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |

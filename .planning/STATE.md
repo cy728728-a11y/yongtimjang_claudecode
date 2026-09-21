@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-09-21T15:56:32.592Z"
-last_activity: 2026-09-21 -- Phase 04 planning complete
+last_updated: "2026-09-21T16:29:36.302Z"
+last_activity: 2026-09-21 -- Phase 04 execution started
 progress:
   total_phases: 7
   completed_phases: 2
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-19)
 
 **Core value:** 유입이나 판매가 있는데 상세페이지가 중국어 원본·단순번역인 상품을, 중복 작업 없이 한 화면에서 골라 고치고 반영하는 것
-**Current focus:** Phase 4 — 홍보배너 식별
+**Current focus:** Phase 04 — banner-detection
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-09-21 -- Phase 04 planning complete
+Phase: 04 (banner-detection) — EXECUTING
+Plan: 1 of 8
+Status: Executing Phase 04
+Last activity: 2026-09-21 -- Phase 04 execution started
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
 Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
