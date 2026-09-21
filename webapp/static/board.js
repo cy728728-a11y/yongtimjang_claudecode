@@ -71,6 +71,52 @@
     return String(v);
   }
 
+  // 상세 상태 기호 (STATE-03). **판정값은 서버(state.py)가 내고 기호만 여기서 붙인다** —
+  // 판정을 화면이 다시 계산하면 진실이 둘이 된다.
+  //
+  // 기호만 내지 않고 **글자를 같이** 낸다. ⚪🟡🔴 은 흑백 출력·색맹에서 구분이
+  // 사라지고, 그 순간 "가공 완료" 와 "중국어 원본" 이 같은 회색 동그라미가 된다.
+  // 이 화면의 존재 이유가 그 구분이다.
+  var 상태기호 = { "AI가공완료": "⚪", "단순번역만": "🟡", "중국어원본": "🔴" };
+
+  // 미해소 버킷 (join.py). 같은 칸 안에서도 두 부류가 갈려야 한다 —
+  // 광고청소는 **사람이 고칠 것**, 시스템은 **기계가 더 돌면 될 것**이다.
+  // 섞으면 용팀장이 멀쩡한 광고그룹을 지우러 간다(Pitfall 3).
+  var 광고청소 = "광고청소";
+
+  function 상태(cell) {
+    var v = cell.getValue();
+    // **미판정은 빈칸이다.** 🔴로 대체하지 마라 — 그건 판정처럼 보이는데 실제로는
+    // 판정이 없는 것이고, Phase 5 가 그 줄에 크레딧을 태운다 (T-3-35).
+    if (빈칸이면(v)) { return ""; }
+    var 기호 = 상태기호[v];
+    return (기호 ? 기호 + " " : "") + v;
+  }
+
+  function 태그(cell) {
+    // 기작업 태그는 용팀장의 손자국이고 상태는 불사자의 기계 기록이다.
+    // **한 값으로 합치지 마라** (Pitfall 8) — 합치면 D-08 의 "인지하고 직접 판단" 이 죽는다.
+    var v = cell.getValue();
+    if (빈칸이면(v)) { return ""; }
+    return String(v);
+  }
+
+  function 해소(cell) {
+    var d = cell.getRow().getData();
+    if (d.해소) { return "해소"; }
+    // 서버가 붙인 **화면용 이름**을 쓴다. 판정 코드(`사유코드`)를 그대로 띄우면
+    // 인덱스를 한 번도 안 훑은 행까지 "그룹에 없음" 으로 읽힌다(03-05 숙제).
+    var 말 = d.표시사유;
+    if (빈칸이면(말)) { return ""; }
+    return (d.버킷 === 광고청소 ? "광고 · " : "시스템 · ") + 말;
+  }
+
+  /** 미해소 사유 전문. 잘린 칸을 hover 로 읽는다 — 이름 그대로 광고 화면에서 찾는다. */
+  function 사유전문(e, cell) {
+    var d = cell.getRow().getData();
+    return d.사유 || "";
+  }
+
   // 숫자 정렬에서 빈칸은 항상 아래로. 안 그러면 노출 내림차순 첫 페이지가
   // 통계 없는 ① 행으로 덮인다.
   var 빈칸아래 = { alignEmptyValues: "bottom" };
@@ -122,6 +168,20 @@
       formatter: 예아니오 },
     { title: "①소재수", field: "rule1_count", hozAlign: "right", width: 90,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
+    // ── 조인 · 상세 상태 (Phase 3) ─────────────────────────────────────────
+    // **상품ID 앞**에 둔다. 이 네 칸이 이 화면의 목적이라 오른쪽 끝에서 잘리면
+    // 안 된다 — 🔴 를 골라내는 게 Core Value 다.
+    { title: "상세", field: "상세상태", width: 110, formatter: 상태 },
+    { title: "기작업", field: "기작업태그", width: 100, formatter: 태그 },
+    { title: "사본", field: "사본N", hozAlign: "right", width: 70,
+      sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
+    // ⚠️ field 가 `사유코드` 가 **아니라** `표시사유` 다. 판정 코드는 데이터에 그대로
+    //    남아 있지만(기계의 기록 · 소스 보기로 되짚는 통로) 화면에 그리지 않는다 —
+    //    `사유코드` 의 `미스` 는 인덱스를 한 번도 안 훑은 행에도 붙어서, 그대로 띄우면
+    //    시스템 사정이 광고 쪽 오류로 읽힌다(03-05 가 넘긴 숙제 / Pitfall 3).
+    //    정렬도 표시 이름 기준이 맞다 — 사람이 보는 순서와 어긋나면 안 된다.
+    { title: "해소", field: "표시사유", width: 145,
+      formatter: 해소, tooltip: 사유전문 },
     { title: "상품ID", field: "mallProductId", width: 105, tooltip: true }
   ];
 
@@ -138,6 +198,15 @@
     // 숫자(상한)를 주지 않는다: 상한은 화면이 아니라 서버 `flow.check_limits` 가
     // 설정값으로 건다(D-08). 여기 숫자를 박으면 설정을 고쳐도 화면이 안 따라온다.
     selectableRows: true,
+    // 기작업 행 회색 처리 (D-08). **숨기는 게 아니다** — 목록에 남고 태그가 보이며
+    // 직접 체크하면 대상이 된다. 숨기면 "왜 이 상품이 안 보이지" 를 코드에서 찾아야 한다.
+    // 판단은 서버(`join.attach` 의 `기작업`)가 내고 화면은 따라갈 뿐이다.
+    rowFormatter: function (row) {
+      var el = row.getElement();
+      if (!el) { return; }
+      if (row.getData().기작업) { el.classList.add("ct-done"); }
+      else { el.classList.remove("ct-done"); }
+    },
     // 기본 정렬: 규칙 → 노출 내림차순. 배열의 첫 항목이 1차 정렬키다.
     initialSort: [
       { column: "rules", dir: "asc" },
@@ -149,8 +218,15 @@
   var 계정칸 = document.getElementById("f-acct");
   var 규칙칸 = document.getElementById("f-rule");
   var 검색칸 = document.getElementById("f-title");
+  var 상태칸 = document.getElementById("f-state");
+  var 해소칸 = document.getElementById("f-join");
   var 초기화 = document.getElementById("f-reset");
   var 건수 = document.getElementById("board-count");
+
+  // 상태 필터의 "미판정" 센티널. 빈 문자열은 이미 "전체" 라 쓸 수 없다 —
+  // 둘을 같은 값으로 두면 "판정이 없는 행만 보기" 가 영영 불가능해진다.
+  var 미판정 = "__none__";
+  var 해소됨 = "__done__";
 
   function 고른값(sel) {
     if (!sel) { return []; }
@@ -162,9 +238,12 @@
     var 계정 = 고른값(계정칸);
     var 규칙 = 고른값(규칙칸);
     var 말 = (검색칸 && 검색칸.value ? 검색칸.value : "").trim().toLowerCase();
+    var 상태값 = 상태칸 ? 상태칸.value : "";
+    var 해소값 = 해소칸 ? 해소칸.value : "";
 
-    // 세 조건을 함수 하나로 합친다. 필터를 따로 걸면 해제 순서에 따라
+    // 다섯 조건을 함수 하나로 합친다. 필터를 따로 걸면 해제 순서에 따라
     // 하나가 남아 "왜 안 보이지" 가 된다.
+    // **`table.setFilter` 호출이 이 파일에 하나뿐인 것이 그 규율의 증거다.**
     table.setFilter(function (d) {
       if (계정.length && 계정.indexOf(d.acct) === -1) { return false; }
       if (규칙.length) {
@@ -177,11 +256,22 @@
         var t = (d.title || "").toLowerCase();
         if (t.indexOf(말) === -1) { return false; }   // like 매칭
       }
+      if (상태값) {
+        // 미판정은 **값이 없는 것**이다. 기본값으로 대체하지 않는다.
+        if (상태값 === 미판정) {
+          if (!빈칸이면(d.상세상태)) { return false; }
+        } else if (d.상세상태 !== 상태값) { return false; }
+      }
+      if (해소값) {
+        if (해소값 === 해소됨) {
+          if (!d.해소) { return false; }
+        } else if (d.버킷 !== 해소값) { return false; }   // 광고청소 / 시스템
+      }
       return true;
     });
   }
 
-  [계정칸, 규칙칸].forEach(function (el) {
+  [계정칸, 규칙칸, 상태칸, 해소칸].forEach(function (el) {
     if (el) { el.addEventListener("change", 필터적용); }
   });
   if (검색칸) { 검색칸.addEventListener("input", 필터적용); }
@@ -191,6 +281,7 @@
         if (!sel) { return; }
         Array.prototype.forEach.call(sel.options, function (o) { o.selected = false; });
       });
+      [상태칸, 해소칸].forEach(function (sel) { if (sel) { sel.value = ""; } });
       if (검색칸) { 검색칸.value = ""; }
       필터적용();
     });
@@ -268,12 +359,19 @@
    * 조용히 유지된다. 그래서 이벤트가 넘겨주는 **갓 계산된 행 목록만** 믿는다.
    * (2026-09-20 preview_cdp.sh 의 V-PRE-07 이 실제로 이걸 잡았다.)
    */
+  /** 기본 선택 대상 — 기작업이 아닌 행만 (D-08 / STATE-05 · `join.selectable` 과 같은 규약). */
+  function 고를수있는(행들) {
+    return 행들.filter(function (r) { return !r.기작업; });
+  }
+
   function 요약갱신(활성데이터) {
     if (!요약칸) { return; }
     var 고른것 = table.getSelectedData();
     var 활성 = 활성데이터 || table.getData("active");
     var 대상 = 대상수(고른것);
     var 규칙1있는상품 = 고른것.filter(function (r) { return (r.rule1_count || 0) > 0; }).length;
+    var 빨강 = 고른것.filter(function (r) { return 상태기호[r.상세상태] === "🔴"; }).length;
+    var 제외됨 = 활성.length - 고를수있는(활성).length;
 
     // 필터를 바꿔도 선택은 남는다(Tabulator 기본 selectableRowsPersistence).
     // 그래서 "지금 화면 밖에 고른 게 몇 개 있다" 를 **반드시 말해야** 한다 —
@@ -288,6 +386,9 @@
       말 += " · 그중 규칙① 소재가 있는 건 " + 콤마(규칙1있는상품) + "개";
     }
     말 += " · 대상 " + 콤마(대상) + "건";
+    // 🔴 개수는 이 화면의 목적이다 — Phase 5 가 크레딧을 태울 줄이 몇 개인지.
+    if (빨강) { 말 += " · 🔴 " + 콤마(빨강) + "개"; }
+    if (제외됨) { 말 += " · 기작업 " + 콤마(제외됨) + "건 제외"; }
     if (필터밖) { 말 += " · 그중 " + 콤마(필터밖) + "개는 지금 필터 밖이다"; }
     if (!고른것.length) { 말 += " — 먼저 상품을 골라라"; }
     else if (!대상) { 말 += " — 고른 상품에 규칙① 소재가 없다(②③⑤ 소재는 인상 대상이 아니다)"; }
@@ -296,10 +397,17 @@
     if (미리보기버튼) { 미리보기버튼.disabled = 고른것.length === 0; }
 
     // "필터 전체 N건 선택" 은 **더 고를 게 남았을 때만** 띄운다.
+    //
+    // ⚠️ 기준이 `활성.length` 가 아니라 **고를 수 있는 행 중 아직 안 고른 것**이다.
+    //    기작업을 빼고 고르므로, 활성 전체와 비교하면 기작업 행이 남아 있는 한
+    //    링크가 영영 안 사라지고 눌러도 아무 일이 안 생긴다.
     if (전체링크칸) {
-      var 더있나 = 활성.length > 고른것.length;
-      전체링크칸.hidden = !더있나;
-      if (더있나 && 전체수칸) { 전체수칸.textContent = 콤마(활성.length); }
+      var 후보 = 고를수있는(활성);
+      var 선택키 = {};
+      고른것.forEach(function (r) { 선택키[r.key] = 1; });
+      var 남은 = 후보.filter(function (r) { return !선택키[r.key]; }).length;
+      전체링크칸.hidden = 남은 === 0;
+      if (남은 && 전체수칸) { 전체수칸.textContent = 콤마(후보.length); }
     }
   }
 
@@ -320,10 +428,14 @@
   if (전체링크) {
     전체링크.addEventListener("click", function () {
       var 활성 = table.getData("active");
+      var 후보 = 고를수있는(활성);
+      var 제외됨 = 활성.length - 후보.length;
       if (!배너 || !배너말) { return; }
       배너말.textContent =
-        "지금 필터를 통과한 상품 " + 콤마(활성.length) + "개 전부를 고른다 — 대상 소재 "
-        + 콤마(대상수(활성)) + "건. 진행할래?";
+        "지금 필터를 통과한 상품 " + 콤마(후보.length) + "개를 고른다 — 대상 소재 "
+        + 콤마(대상수(후보)) + "건."
+        + (제외됨 ? " 기작업 " + 콤마(제외됨) + "건은 빼고 고른다 (직접 체크하면 들어간다)." : "")
+        + " 진행할래?";
       배너.hidden = false;
     });
   }
@@ -331,8 +443,13 @@
   if (배너확인) {
     배너확인.addEventListener("click", function () {
       배너닫기();
+      // **기작업 행을 뺀다** (D-08 / STATE-05). 크레딧 재지불을 막는 마지막 자리다.
+      // 헤더 체크박스(`rowRange: "visible"`)는 건드리지 않는다 — 눈으로 보고 직접
+      // 고르는 경로는 그대로 열려 있어야 한다.
       // 행 객체를 통째로 넘긴다 — 한 번에 넘겨야 선택 변경 이벤트가 한 번만 돈다.
-      table.selectRow(table.getRows("active"));
+      table.selectRow(table.getRows("active").filter(function (row) {
+        return !row.getData().기작업;
+      }));
       요약갱신();
     });
   }
