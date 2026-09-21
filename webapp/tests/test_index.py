@@ -961,3 +961,227 @@ def test_스캔이_마켓그룹_응답을_직접_해석하지_않는다():
     assert "그룹응답.get(" not in 소스, "마켓그룹 응답을 직접 꺼내 쓴다 — 그룹꺼내기() 를 써라"
     assert "그룹꺼내기(" in 소스
     assert "from ss_index_calls import" in 소스, "호출 규약 모듈을 안 쓴다 — 규약이 두 벌이 된다"
+
+
+# ── 12. 팬아웃·workdata 호출 규약 — 조회 실패를 "값이 없다" 로 적지 않는다 ────────
+#     (CR-02 · CR-03 / Pitfall 3 · D-08 · 03-04 재개 계약)
+#
+# §10·§11 과 **같은 고장의 세 번째·네 번째 얼굴**이다. 불사자 MCP 의 툴 레벨 오류는
+# 예외가 아니라 `{"_text": "MCP error ..."}` dict 로 온다. 그걸
+#   · `find_by_code` 에서 `or []` 로 읽으면  → "사본 0건 · 기작업 아님" 이 되고
+#     `구매_가공완료` 상품이 기본 선택에 들어가 **Phase 5 가 크레딧을 재지불한다**(D-08)
+#   · `workdata` 에서 `or {}` 로 읽으면      → `unresolved = 0` 으로 **성공 관측이 영구 기록**되고
+#     `ss_index_resume.처리완료()` 가 그 행을 건너뛰어 **영원히 다시 안 본다**
+#
+# 둘 다 크레딧이 0이라 아무 경보도 안 울린다. 그래서 여기서 기계로 못박는다.
+
+
+def test_워크데이터_오류응답을_빈_data로_읽지_않는다():
+    """`워크데이터꺼내기` 는 `항목꺼내기` 와 **같은 규약**이다 — 모양이 아니면 예외다.
+
+    `(r or {}).get("data") or {}` 가 이 고장의 본체다: `data` 키가 없는 오류 응답이
+    `{}` 가 되고, 거기서 꺼낸 `None` 이 **"smartstore 번호가 없는 정상 상품"** 으로
+    확정 기록된다. "못 물어봤다" 와 "물어봤더니 없더라" 는 다른 사실이다.
+    """
+    오류응답 = {"_text": "MCP error -32602: Input validation error: "
+                       '[{"expected": "string", "path": ["productId"]}]'}
+    with pytest.raises(RuntimeError) as e:
+        ss_index_calls.워크데이터꺼내기(오류응답, 맥락=" (pid zzpid-01)")
+    assert "-32602" in str(e.value), "서버 문구가 사유에서 사라졌다"
+    assert "zzpid-01" in str(e.value), "맥락(어느 상품)이 사유에 없다"
+
+    with pytest.raises(RuntimeError):
+        ss_index_calls.워크데이터꺼내기(None)
+    with pytest.raises(RuntimeError):
+        ss_index_calls.워크데이터꺼내기({"data": "문자열이다"})
+
+    # 키가 **있으면** 그대로 돌려준다. 업로드 안 된 상품의 빈 data 는 정상 관측이다.
+    assert ss_index_calls.워크데이터꺼내기({"data": {}}) == {}
+    assert ss_index_calls.워크데이터꺼내기(
+        {"data": {"uploadedSuccessUrl": {"smartstore": "19000000001"}}}) == {
+            "uploadedSuccessUrl": {"smartstore": "19000000001"}}
+
+
+@pytest.fixture
+def 빌더모듈(monkeypatch):
+    """`ss_index_build` 를 **MCP 없이** import 한다 (`스캔모듈` 과 같은 수법).
+
+    그 모듈도 최상단에서 `from bulsaja_mcp import BulsajaMCP` 를 한다 — `.venv-web`
+    에서는 `requests` 가 없어 import 자체가 안 된다(D-19). 가짜를 `sys.modules` 에
+    먼저 꽂아 **네트워크 0 · 크레딧 0** 으로 `그룹훑기` 를 직접 때린다.
+    """
+    import importlib
+    import types
+
+    가짜 = types.ModuleType("bulsaja_mcp")
+
+    class _열면터진다:
+        def open(self):
+            raise AssertionError("테스트가 진짜 MCP 를 열려고 했다")
+
+        def close(self):
+            pass
+
+        def call_tool(self, *a, **k):
+            raise AssertionError("테스트가 진짜 MCP 를 때렸다")
+
+    가짜.BulsajaMCP = _열면터진다
+    monkeypatch.setitem(sys.modules, "bulsaja_mcp", 가짜)
+    sys.modules.pop("ss_index_build", None)
+    모듈 = importlib.import_module("ss_index_build")
+    yield 모듈
+    sys.modules.pop("ss_index_build", None)
+
+
+def test_빌더는_workdata_오류를_미조회로_적는다(빌더모듈, 잡판):
+    """오류 응답은 `unresolved = 1` 이다 — **`0` 이면 영원히 다시 안 본다** (CR-03).
+
+    세 겹을 한 자리에서 못박는다:
+      ① DB 에 `unresolved = 1` 로 적힌다 (성공 관측으로 확정하지 않는다)
+      ② `ss_index_resume.처리완료()` 가 그 행을 **안 센다** → 다음 실행이 다시 시도한다
+         (03-04 이탈 #1 의 계약 — 미조회를 처리완료로 세면 429 상품이 영원히 굳는다)
+      ③ 그룹이 `완결` 로 굳지 않는다 → 화면이 "인덱스에 없음" 을 확정하지 않는다
+
+    ⚠️ `미조회` 로 적어야지 `번호없음`(smartstore NULL + unresolved 0)으로 적으면
+       안 된다 — 그게 이 페이즈 최대 오진이다.
+    """
+    import types as _types
+
+    pid = "zzpid-shape"
+
+    class 가짜MCP:
+        def call_tool(self, 이름, 인자=None):
+            if 이름 == "bulsaja_market_group_products":
+                return {"항목": [{"productId": pid}], "총상품수": 1, "더있음": False}
+            if 이름 == "bulsaja_product_workdata":
+                # 툴 레벨 오류는 **예외가 아니라 평범한 dict** 로 온다
+                return {"_text": "MCP error -32602: Input validation error"}
+            raise AssertionError(f"예상 밖 도구 {이름}")
+
+    인자 = _types.SimpleNamespace(batch_size=50, retry_after=1, limit=None)
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        요약 = 빌더모듈.그룹훑기(가짜MCP(), cx, bulsaja_rate.호출간격(0),
+                               그룹A, 인자, 1, 1)
+        적힌값 = dict(cx.execute(
+            "SELECT product_id, unresolved FROM ss_index WHERE market_group_id = ?",
+            (그룹A,)))
+        완료 = ss_index_resume.처리완료(cx, 그룹A)
+    finally:
+        cx.close()
+
+    assert 적힌값 == {pid: 1}, f"오류 응답을 성공 관측으로 적었다: {적힌값}"
+    assert pid not in 완료, "미조회를 '처리완료' 로 셌다 — 다음 실행이 영원히 건너뛴다"
+    assert ss_index_resume.남은대상([pid], 완료) == [pid], "재개가 다시 조회하지 않는다"
+    assert 요약["미조회"] == 1 and 요약["완결"] is False, \
+        "그룹이 완결로 굳었다 — 화면이 '인덱스에 없음' 을 확정한다"
+    assert bulsaja_index.group_health([그룹A])[그룹A]["완결"] is False
+
+
+def test_빌더가_workdata_응답을_직접_해석하지_않는다():
+    """문자열 가드 — `(r or {}).get("data") or {}` 로 되돌아가는 길을 막는다."""
+    for 이름 in ("ss_index_build.py", "bulsaja_scan.py"):
+        소스 = (CLI_SCRIPTS / 이름).read_text(encoding="utf-8")
+        assert '.get("data")' not in 소스, \
+            f"{이름} 이 workdata 응답을 직접 꺼내 쓴다 — 워크데이터꺼내기() 를 써라"
+        assert "워크데이터꺼내기(" in 소스, f"{이름} 이 호출 규약 모듈을 안 쓴다"
+
+
+def test_팬아웃_조회오류를_사본0건으로_읽지_않는다(스캔모듈):
+    """`배치조회` 는 실패한 코드를 **들고 나온다** (CR-02).
+
+    오류 dict 는 `isinstance(r, dict)` 를 통과하므로 예전 가드에 안 걸렸고,
+    `.get("항목") or []` 가 **로그 한 줄 없이** 0건으로 접었다. 그러면 그 행은
+    `그룹태그 = None` 이 되어 `구매_가공완료` 상품이 기본 선택에 들어간다(D-08).
+    """
+    class 오류내는MCP:
+        def call_tool(self, 이름, 인자=None):
+            return {"_text": "MCP error -32602: Input validation error"}
+
+    항목들, 실패코드 = 스캔모듈.배치조회(
+        오류내는MCP(), bulsaja_rate.호출간격(0),
+        ["zzSeller0001", "zzSeller0002"], 1, 50)
+
+    assert 항목들 == [], "오류 응답에서 항목을 만들어 냈다"
+    assert 실패코드 == {"zzSeller0001", "zzSeller0002"}, \
+        f"실패한 코드를 안 들고 나왔다 — 행에 적을 근거가 사라진다: {실패코드}"
+
+    # 정상 응답은 그대로 통과한다 (반대 방향으로 틀리지 않는다)
+    class 정상MCP:
+        def call_tool(self, 이름, 인자=None):
+            return {"항목": [{"판매자상품코드": "zzSeller0001",
+                             "불사자코드": "zzBulsaja0001", "그룹": "구매_가공완료"}]}
+
+    항목들, 실패코드 = 스캔모듈.배치조회(
+        정상MCP(), bulsaja_rate.호출간격(0), ["zzSeller0001"], 1, 50)
+    assert len(항목들) == 1 and 실패코드 == set()
+
+
+def _스캔DB(tmp_path, smartstore, pid):
+    """`ss_index` 한 줄짜리 읽기 전용 인덱스 파일. DDL 정본은 `webapp/jobs.py` 다."""
+    경로 = tmp_path / "webapp.db"
+    cx = sqlite3.connect(경로)
+    try:
+        cx.execute("CREATE TABLE IF NOT EXISTS ss_index ("
+                   "product_id TEXT PRIMARY KEY, smartstore TEXT, "
+                   "market_group_id TEXT NOT NULL, group_total INTEGER, "
+                   "unresolved INTEGER NOT NULL DEFAULT 0, observed_at TEXT NOT NULL)")
+        cx.execute("INSERT OR REPLACE INTO ss_index (product_id, smartstore, "
+                   "market_group_id, group_total, unresolved, observed_at) "
+                   "VALUES (?,?,?,?,?,?)", (pid, smartstore, 그룹A, 1, 0, _지금()))
+        cx.commit()
+    finally:
+        cx.close()
+    return 경로
+
+
+def test_스캔은_팬아웃_미조회를_행에_적는다(스캔모듈, monkeypatch, tmp_path):
+    """산출물 행이 **"사본 0건" 과 "못 물어봤다" 를 구분**한다 (CR-02).
+
+    팬아웃만 조용히 실패한 행이 `사본 = []` · `그룹태그 = None` 으로 저장되면
+    웹앱이 그걸 확정값으로 읽어 화면이 "사본 0건" 을 단언하고, `구매_가공완료` 가
+    붙은 상품이 기본 선택 대상이 된다 — **D-08/STATE-05 가 무력화된다.**
+    """
+    닉, 번호, pid = "zznick", "19000000001", "U01ZZFAKE01"
+    db = _스캔DB(tmp_path, 번호, pid)
+
+    class 가짜MCP:
+        def open(self):
+            pass
+
+        def close(self):
+            pass
+
+        def call_tool(self, 이름, 인자=None):
+            if 이름 == "bulsaja_my_profile":
+                return {"닉네임": 닉, "크레딧": "0"}
+            if 이름 == "bulsaja_market_groups":
+                return {"그룹": [{"groupId": 1, "그룹명": "zzfake 15-2"}]}
+            if 이름 == "bulsaja_product_workdata":
+                return {"data": {"uploadedSuccessUrl": {"smartstore": 번호},
+                                 "uploadDetailContents": {"imageTranslated": "1"},
+                                 "uploadBulsajaCode": "zzSeller0001"}}
+            if 이름 == "bulsaja_product_find_by_code":
+                # 팬아웃만 실패한다 — 나머지는 전부 정상이다
+                return {"_text": "MCP error -32602: Input validation error"}
+            raise AssertionError(f"예상 밖 도구 {이름}")
+
+    monkeypatch.setattr(스캔모듈, "BulsajaMCP", 가짜MCP)
+
+    대상 = tmp_path / "targets.json"
+    대상.write_text(json.dumps([f"zzacct|{번호}"], ensure_ascii=False), encoding="utf-8")
+    산출물 = tmp_path / "join_zzjob.json"
+    monkeypatch.setattr(sys, "argv", [
+        "bulsaja_scan.py", "--run-dir", "2026-09-20", "--targets", str(대상),
+        "--out", str(산출물), "--db", str(db),
+        "--profile-out", str(tmp_path / "profile.json"), "--expect-nick", 닉,
+        "--min-interval", "0", "--retry-after", "1", "--batch-size", "50"])
+
+    assert 스캔모듈.main() == 0
+    행 = json.loads(산출물.read_text(encoding="utf-8"))["행"][0]
+
+    assert 행["팬아웃미조회"] is True, "팬아웃 실패가 행에 안 남았다 — 적을 칸이 없다"
+    assert 행["사본"] is None, f"못 물어본 것을 '사본 0건' 으로 적었다: {행['사본']}"
+    assert 행["그룹태그"] is None
+    # 재검증 자체는 성공했다 — 팬아웃 실패가 번호층 관측까지 죽이면 안 된다
+    assert 행["관측_smartstore"] == 번호 and 행["미조회"] is False

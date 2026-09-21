@@ -598,3 +598,79 @@ def test_조인은_네트워크도_파일도_안_연다():
                      "APIRouter", "sqlite3", "subprocess", "httpx", "urllib"):
             assert 금지 not in src, f"{파일} 에 '{금지}' 가 있다 (D-19)"
         assert "open(" not in src, f"{파일} 이 파일을 연다 — dict 만 받아야 한다"
+
+
+# ── 팬아웃 미조회 — "사본 0건" 과 "못 물어봤다" 를 구분한다 (CR-02 / D-08) ──────
+
+def _팬아웃실패로_바꾼다(join_traps, mpid):
+    """조인 산출물 사본을 만들어 한 행만 **팬아웃 조회 실패** 모양으로 바꾼다.
+
+    CLI(`bulsaja_scan.배치조회`)가 `find_by_code` 를 못 받았을 때 적는 모양 그대로다:
+    사본은 `[]` 가 아니라 `None`(못 물어봤다), 그룹태그는 `None`, 그리고 그 사실을
+    `팬아웃미조회` 로 남긴다. 번호층 관측(`관측_smartstore`)은 멀쩡하다 —
+    팬아웃만 조용히 실패한 경우가 이 고장의 본체다.
+    """
+    문서 = json.loads(json.dumps(join_traps, ensure_ascii=False))
+    for 행 in 문서["행"]:
+        if 행.get("mallProductId") == mpid:
+            행["사본"] = None
+            행["그룹태그"] = None
+            행["팬아웃미조회"] = True
+            return 문서
+    raise AssertionError(f"픽스처에 {mpid} 행이 없다")
+
+
+def test_팬아웃_미조회는_사본0건을_단언하지_않는다(result_traps, join_traps):
+    """조회 실패 행의 `사본N` 은 **`0` 이 아니라 빈칸(None)** 이다 (JOIN-03 / CR-02).
+
+    `0` 은 "사본이 없다" 는 **판정처럼** 보이는데 실제로는 안 본 것이다
+    (`join.py:68-70` 의 "분모가 없으면 비율도 없다" 와 같은 정신).
+    """
+    문서 = _팬아웃실패로_바꾼다(join_traps, "19000000002")
+    붙임 = _붙인다(result_traps, join_traps, join_doc=문서)
+    행 = _행(붙임, "19000000002")
+
+    assert 행["해소"] is True, "팬아웃 실패가 번호층 해소까지 죽였다 — 과잉 방어다"
+    assert 행["팬아웃미조회"] is True
+    assert 행["사본N"] is None, f"못 물어본 것을 '사본 0건' 으로 단언했다: {행['사본N']}"
+    assert 행["잠금혼재"] is None
+
+    # 멀쩡히 물어본 행은 그대로다 — 한 행의 실패가 다른 행을 오염시키지 않는다
+    정상 = _행(붙임, "19000000003")
+    assert 정상["사본N"] == 3 and 정상["팬아웃미조회"] is False
+
+
+def test_팬아웃_미조회는_기본선택에서_빠진다(result_traps, join_traps):
+    """태그를 못 읽은 행에 크레딧을 태우지 않는다 (D-08 / STATE-05 / CR-02).
+
+    `그룹태그` 가 비어 `기작업 = False` 가 되는 것이 이 고장의 값비싼 얼굴이다 —
+    `구매_가공완료` 가 붙은 상품이 조회 실패 **한 번**으로 기본 선택에 들어가고,
+    Phase 5 가 크레딧을 재지불한다. 기작업과 **같은 수법**으로 막는다:
+    목록에는 남고(사람이 직접 체크하면 대상이 된다) 기본 선택에서만 빠진다.
+    """
+    문서 = _팬아웃실패로_바꾼다(join_traps, "19000000002")
+    붙임 = _붙인다(result_traps, join_traps, join_doc=문서)
+
+    # ① 목록에는 남는다 — 숨기면 "왜 이 상품이 안 보이지" 를 코드에서 찾아야 한다
+    assert _행(붙임, "19000000002")["해소"] is True
+
+    # ② 기본 선택에서는 빠진다
+    고른_id = {r["mallProductId"] for r in join.selectable(붙임)}
+    assert "19000000002" not in 고른_id, "팬아웃을 못 읽은 행에 기본으로 크레딧을 태운다"
+    assert 고른_id == {"19000000003"}
+
+    # ③ 팬아웃이 멀쩡한 회차는 아무것도 안 바뀐다 (과잉 방어로 대상이 사라지지 않는다)
+    정상선택 = {r["mallProductId"] for r in join.selectable(_붙인다(result_traps, join_traps))}
+    assert 정상선택 == {"19000000002", "19000000003"}
+
+
+def test_옛_산출물은_팬아웃미조회가_없어도_안깨진다(result_traps, join_traps):
+    """`팬아웃미조회` 키가 없는 옛 조인 산출물도 그대로 읽힌다 (하위호환).
+
+    디스크에 이미 남아 있는 산출물에는 이 키가 없다. 없으면 `False` 로 읽어
+    **예전과 같은 판정**을 낸다 — 새 키가 없다는 이유로 전 행이 기본 선택에서
+    빠지면 화면이 통째로 못 쓰게 된다.
+    """
+    붙임 = _붙인다(result_traps, join_traps)
+    assert all(r["팬아웃미조회"] is False or r["팬아웃미조회"] is None for r in 붙임)
+    assert _행(붙임, "19000000003")["사본N"] == 3
