@@ -259,3 +259,14 @@ completed: 2026-09-22
 ---
 *Phase: 04-banner-detection*
 *Completed: 2026-09-22*
+
+## Self-Check: PASSED
+
+- 파일 6개 전부 존재: `webapp/banner_store.py` · `webapp/routes/banner.py` · `webapp/templates/banner_review.html` · `webapp/tests/test_routes_banner.py` · `webapp/main.py` · `04-06-SUMMARY.md`
+- 커밋 4개 전부 존재: `dc2585c` · `6d0c6bb` · `2353c1c` · `0a30176`
+- **삭제된 파일 0건** (`git diff --diff-filter=D --name-only 0abafad..HEAD`)
+- **공유 산출물 미수정:** base 이후 변경 파일 5개가 전부 플랜 `files_modified` 안이다. `STATE.md`·`ROADMAP.md`·`REQUIREMENTS.md` 변경 0건 (오케스트레이터 몫)
+- 커밋되지 않아야 할 것이 안 들어갔다: `.venv`/`.venv-web` 심링크 디렉터리 · `workspace.toml` 사본 · scratchpad 산출물 전부 staged 0건. `git status` 깨끗
+- `.venv-web` **429 green** (exit 0) · `.venv` `webapp/tests/cli` **4 green** (exit 0)
+- acceptance grep 7종 실측: `page_cookie_ok` 2 · 사람큐 낱말 0 · 정적마운트 0 · `include_router(banner.router)` 1 · `ended_at` 0 · 템플릿 표라이브러리 0 · 템플릿 `| safe` 0 · 고정 문구 1
+- `security_curl.sh` V-SAFE-01d ast 스캐너 단독 실행 **exit 0** (GET 핸들러 10개를 호출관계로 훑어 상태 변경 0건)
