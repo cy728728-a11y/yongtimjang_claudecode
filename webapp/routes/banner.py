@@ -281,7 +281,7 @@ def _장조각(run_dir: str, 타오바오상품번호: str, 판매자상품코�
     상품 = None
     if 문서 is not None:
         라벨 = {타오바오상품번호: {이미지순번: 사람판정값}}
-        for 줄 in _화면투영(문서, 라벨, set()):
+        for 줄 in _화면투영(문서, 라벨, set(), run_dir):
             if 줄["상품키"] == 타오바오상품번호:
                 상품 = 줄
                 break
@@ -409,7 +409,7 @@ def _썸네일이름(문서: dict, 상품순번: int, 장순번: int) -> str | N
     return 이름 if isinstance(이름, str) and 이름 else None
 
 
-def _화면투영(문서: dict, 라벨: dict, 확인: set, run_dir: str = "") -> list:
+def _화면투영(문서: dict, 라벨: dict, 확인: set, run_dir: str) -> list:
     """산출물 → 템플릿이 쓸 **값만** (S-2 화이트리스트 투영).
 
     산출물 dict 를 통째로 넘기지 않는다. 이유 둘: ① `url` 같은 CDN 주소가 템플릿에

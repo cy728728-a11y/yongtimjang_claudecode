@@ -18,6 +18,7 @@
 가리키는 잡 레코드) 하나뿐이고, 라우트·저장소·순수층은 전부 진짜가 돈다.
 """
 import json
+import re
 import sqlite3
 
 import pytest
@@ -646,6 +647,33 @@ def test_라벨_응답이_그_장_하나의_조각이다(화면, 돌린척, tmp_
     # 썸네일은 정수 인덱스 둘로만 부른다 (T-4-04). 파일명이 조각에 실리면 안 된다.
     assert f"/banner/thumb/{tmp_run_dir.name}/0/3" in 조각
     assert "zz01_03.webp" not in 조각
+
+
+def test_돌려받은_조각을_또_누를_수_있다(화면, 돌린척, tmp_run_dir):
+    """조각의 `hx-vals` 가 **다시 보낼 수 있는 요청**이어야 한다.
+
+    이게 없으면 첫 클릭만 200 이고 같은 장의 두 번째 클릭부터 전부 422 가 난다.
+    화면은 멀쩡해 보이는데 — 테두리는 첫 클릭 결과로 바뀌어 있으니 — 사람이 62줄을
+    다 훑고 나서야 DB 가 비어 있는 걸 안다. 실제로 그렇게 검수 한 판을 날렸다.
+
+    `_화면투영` 의 `run_dir` 기본값이 `""` 였던 것이 원인이다. 기본값을 없애 같은
+    누락이 다시 조용히 지나가지 못하게 했고, 이 테스트가 그 계약을 잠근다.
+    """
+    돌린척(_산출물_여러상품())
+    몸통 = {"run_dir": tmp_run_dir.name, "타오바오상품번호": "tb-zz01",
+          "판매자상품코드": "zz01", "이미지순번": 3, "사람판정": banner.배너}
+
+    조각 = 화면.post("/banner/label", data=몸통).text
+
+    실린것 = re.search(r"hx-vals='([^']*)'", 조각)
+    assert 실린것, "조각에 hx-vals 가 없다 — 돌려받은 장을 더 못 누른다"
+    다음요청 = json.loads(실린것.group(1))
+    assert 다음요청["run_dir"] == tmp_run_dir.name, (
+        f"조각이 run_dir 을 잃었다({다음요청['run_dir']!r}) — 두 번째 클릭이 422 로 튕긴다")
+
+    # 계약을 말로만 믿지 않는다. 조각이 실어 보낸 그대로를 실제로 한 번 더 태운다.
+    다시 = 화면.post("/banner/label", data=다음요청)
+    assert 다시.status_code == 200, f"두 번째 클릭이 {다시.status_code} 다"
 
 
 def test_모르는_회차로는_라벨이_안_들어간다(화면, tmp_path, tmp_run_dir):
