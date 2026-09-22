@@ -473,7 +473,7 @@ def _배너(**덮기):
                 run_dir="2026-09-20", cache=Path("/tmp/zz-cache"),
                 thumbs=Path("/tmp/zz-thumbs"), workers=8, vision_revision=3,
                 blank_ar=6.0, blank_short_px=32, skip_min_keep=2,
-                skip_max_removal=0.5, lexicon_version="2026-09-21", keep_runs=2)
+                skip_max_removal=0.5, lexicon_version="2026-09-22", keep_runs=2)
     기본.update(덮기)
     return A.BannerArgv(**기본)
 
@@ -533,7 +533,7 @@ def test_배너_임계값에_모델_기본값이_없다():
                 run_dir="2026-09-20", cache=Path("/tmp/zz-cache"),
                 thumbs=Path("/tmp/zz-thumbs"), workers=8, vision_revision=3,
                 blank_ar=6.0, blank_short_px=32, skip_min_keep=2,
-                skip_max_removal=0.5, lexicon_version="2026-09-21", keep_runs=2)
+                skip_max_removal=0.5, lexicon_version="2026-09-22", keep_runs=2)
 
     for 뺄것 in 필수:
         모자란것 = {k: v for k, v in 온전.items() if k != 뺄것}
