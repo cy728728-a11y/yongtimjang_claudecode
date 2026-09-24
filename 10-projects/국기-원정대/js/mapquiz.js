@@ -18,6 +18,10 @@
 
   // 지도 파일 + 저장소 준비 (한 번만)
   function ready(playerKeys) {
+    // 지도 라이브러리(d3·topojson)를 못 불러왔으면 바로 안내
+    if (!root.d3 || !root.topojson) {
+      return Promise.reject(new Error("지도 도구를 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요"));
+    }
     if (!readyP) {
       readyP = Promise.all([
         fetch("data/world.json").then(function (r) {

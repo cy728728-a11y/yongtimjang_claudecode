@@ -520,7 +520,11 @@ function withMap(fn){
   var btn = document.getElementById("startBtn");
   var err = document.getElementById("mqError");
   if(btn){ btn.disabled = true; btn.textContent = "지도 불러오는 중…"; }
-  MQMapQuiz.ready(PLAYERS.map(function(p){ return p.key; })).then(fn).catch(function(e){
+  // ready() 실패만 여기서 안내 (fn 안의 오류는 삼키지 않음 → 콘솔에 그대로)
+  MQMapQuiz.ready(PLAYERS.map(function(p){ return p.key; })).then(function(){
+    if(btn){ btn.disabled = false; btn.textContent = "지도 탐험 시작 🗺️"; }
+    fn();
+  }, function(e){
     if(btn){ btn.disabled = false; btn.textContent = "지도 탐험 시작 🗺️"; }
     if(err){ err.hidden = false; err.textContent = "지도를 못 불러왔어요: " + e.message; }
   });
