@@ -24,11 +24,14 @@
    `data-p`/`data-i` 는 04-06 의 회귀가 보는 이름이라 유지한다. `data-장순번` 은
    브라우저 회귀(`banner_cdp.mjs`)가 전장 노출을 세는 이름이고, `data-slot` 은
    스트립과 기준 확인 섹션을 가른다 — 같은 장이 두 곳에 나오므로 둘을 안 가르면
-   전장 수가 부풀어 보인다. #}
+   전장 수가 부풀어 보인다.
+   `data-mark` 는 표식 장 필터(banner_review.js)가 보는 이름이다 — 있고 없음만 본다.
+   붙일지는 서버가 정한 `출처표식` 으로만 가른다(S-1). #}
 <figure class="ct-chap {{ 장.판정클래스 }}{% if 장.사람이찍음 %} ct-human{% endif %}{% if 큰것 %} ct-big{% endif %}"
         data-p="{{ 상품.상품키 }}" data-i="{{ 장.순번 }}"
         data-장순번="{{ 장.순번 }}"
         data-slot="{{ 자리 | default('strip', true) }}"
+        {%- if 장.출처표식 %} data-mark="{{ 장.출처 }}"{% endif %}
         {%- if 상품.순번 is not none %} data-상품순번="{{ 상품.순번 }}"{% endif %}
         {%- if 장.라벨요청 %}
         hx-post="/banner/label"

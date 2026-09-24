@@ -85,6 +85,16 @@
                 border-radius: .2rem; padding: 0 .35rem; }
     #standard-check { border: .2rem solid var(--pico-primary, #0172ad);
                       border-radius: .3rem; padding: .8rem 1rem; margin-bottom: 1.2rem; }
+
+    /* ── 표식 장 필터 (quick 260925-2d8) ─────────────────────────────────
+       👁·↩ 표식 장만 보기. **JS 가 요소를 지우지 않고 CSS 로만 숨긴다** — 라벨 클릭으로
+       figure 가 서버 조각으로 교체돼도 규칙이 자동으로 다시 걸리고, 숨긴 요소는 DOM 에
+       그대로 남아 끄면 전장이 돌아온다(D-03a). 기준 확인 섹션(sample)은 숨기지 않는다 —
+       `.ct-row` 안의 strip 만 대상이다. 선택자 값에 따옴표를 안 붙인다 — 전장 회귀가
+       본문에서 그 속성 글자(따옴표 포함)를 세므로 CSS 가 한 개를 더 보태면 안 된다. */
+    body.ct-only-marks .ct-row figure[data-slot=strip]:not([data-mark]) { display: none; }
+    body.ct-only-marks .ct-row:not(:has(figure[data-mark])) { display: none; }
+    #mark-filter-count { display: block; }
   </style>
 </head>
 {# 이 한 줄이 모든 htmx 쓰기 요청에 X-CT-Token 을 붙인다.
@@ -265,6 +275,12 @@
 
   {# ── 전장 스트립 — 상품 하나가 한 줄 ────────────────────────────────────── #}
   <h2>상품 {{ 상품 | length }}줄 — 전장</h2>
+  {# 표식 장 필터 — **화면 전용**이다. 서버는 상태를 모른다. `checked` 를 서버가 넣지
+     않는다: 기본 OFF 이고, 켠 상태는 banner_review.js 가 주소(?only=marks)에서 복원한다. #}
+  <p>
+    <label><input type="checkbox" id="mark-filter" role="switch"> 👁·↩ 표식 장만 보기</label>
+    <small id="mark-filter-count" aria-live="polite"></small>
+  </p>
   {% set 상태기호 = {"AI가공완료": "⚪", "단순번역만": "🟡", "중국어원본": "🔴"} %}
   {% for 줄 in 상품 %}
   {% with 상품 = 줄 %}
@@ -324,5 +340,6 @@
 </main>
 <script src="/static/vendor/htmx-2.0.10.min.js"></script>
 <script src="/static/vendor/htmx-ext-sse-2.2.4.js"></script>
+<script src="/static/banner_review.js"></script>
 </body>
 </html>
