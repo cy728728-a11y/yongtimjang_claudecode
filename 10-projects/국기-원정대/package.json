@@ -1,0 +1,11 @@
+{
+  "name": "gukgi-wonjeongdae",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "build:map": "node tools/build-map.mjs"
+  },
+  "devDependencies": {
+    "mapshaper": "^0.7.67"
+  }
+}
