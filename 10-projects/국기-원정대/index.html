@@ -1,4 +1,3 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>국기 원정대</title>
 <style>
 :root{
@@ -506,11 +505,11 @@ function renderStart(){
   });
   document.getElementById("startBtn").addEventListener("click", function(){
     if(state.selectedPlayers.length === 0){
-      alert("참가자를 한 명 이상 골라주세요!");
+      showStartError("참가자를 한 명 이상 골라주세요!");
       return;
     }
     if(state.selectedContinents.length === 0){
-      alert("대륙을 한 개 이상 골라주세요!");
+      showStartError("대륙을 한 개 이상 골라주세요!");
       return;
     }
     if(state.mode === "map"){
@@ -519,6 +518,12 @@ function renderStart(){
       beginGame();
     }
   });
+}
+
+/* 시작 화면 안내 문구 (아티팩트 화면에서는 alert 이 뜨지 않음) */
+function showStartError(msg){
+  var err = document.getElementById("mqError");
+  if(err){ err.hidden = false; err.textContent = msg; }
 }
 
 /* 지도 파일·기록을 불러온 뒤 실행 (실패하면 시작 화면에 안내)
@@ -834,5 +839,3 @@ renderStart();
 MQMapQuiz.ready(PLAYERS.map(function(p){ return p.key; })).catch(function(){});
 })();
 </script>
-
-</body></html>
