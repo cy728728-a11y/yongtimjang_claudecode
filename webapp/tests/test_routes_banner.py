@@ -936,3 +936,81 @@ def test_비전만_배너라_한_장에_눈_표식과_근거가_보인다(화면
     assert "출처 비전" in 본문
     assert "↩" in 본문
     assert "2차 실패: TimeoutError" in 본문
+
+
+# ── 8. 표식 장 필터 (quick 260925-2d8) ──────────────────────────────────────
+#
+# 👁(비전 추가 배너)·↩(뒤집기) 표식 장만 걸러 보는 **화면 전용** 토글이다. 표식 여부는
+# 서버가 `_장투영` 에서 정한 `출처표식` 에서만 나온다 — 템플릿·JS 가 출처 문자열로
+# 분기하면 판정의 정본이 둘이 된다(S-1).
+
+
+def _표식산출물():
+    """상품0: 장0 뒤집기(제품) · 장1 비전(배너) · 장2 어휘군(배너, 표식 없음 대조군)."""
+    문서 = _규칙산출물(dict(_켜진2차))
+    상품0 = 문서["상품"][0]
+    상품0["장"][0].update({"판정": banner.제품, "출처": "뒤집기"})
+    상품0["장"][1].update({"판정": banner.배너, "사유": "zz비전사유", "출처": "비전"})
+    상품0["장"].append({"순번": 2, "url": "https://zzcdn.example/c.jpg", "w": 800, "h": 900,
+                      "판정": banner.배너, "사유": "어휘군:공장직판", "썸네일": None,
+                      "출처": "어휘군"})
+    상품0["장수"] = 3
+    문서["집계"].update({"장": 3, "판정완료": 3, banner.배너: 2, banner.제품: 1})
+    return 문서
+
+
+def _스트립_figure들(본문):
+    """`data-slot="strip"` figure 여는 태그만. 기준 확인 표본(sample)은 세지 않는다."""
+    return [t for t in re.findall(r"<figure\b[^>]*>", 본문, flags=re.S)
+            if 'data-slot="strip"' in t]
+
+
+def test_표식_장에만_data_mark_가_붙는다(화면, 돌린척, tmp_run_dir, monkeypatch):
+    _맞춘설정(monkeypatch)
+    돌린척(_표식산출물())
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    태그들 = _스트립_figure들(본문)
+    assert len(태그들) == 3, 태그들
+    표식 = [t for t in 태그들 if "data-mark=" in t]
+    assert len(표식) == 2, 표식
+    assert any('data-mark="비전"' in t and 'data-i="1"' in t for t in 표식)
+    assert any('data-mark="뒤집기"' in t and 'data-i="0"' in t for t in 표식)
+    어휘군장 = [t for t in 태그들 if 'data-i="2"' in t]
+    assert len(어휘군장) == 1 and "data-mark" not in 어휘군장[0], "표식 없는 장에 data-mark 가 붙었다"
+
+
+def test_라벨_조각에도_data_mark_가_남는다(화면, 돌린척, tmp_run_dir, monkeypatch):
+    """라벨 클릭 뒤 교체된 figure 에서 속성이 빠지면 필터가 그 장을 숨겨 버린다."""
+    _맞춘설정(monkeypatch)
+    돌린척(_표식산출물())
+    응답 = 화면.post("/banner/label", data={
+        "run_dir": tmp_run_dir.name, "타오바오상품번호": "tb-1",
+        "판매자상품코드": "zz01", "이미지순번": 1, "사람판정": banner.제품})
+    assert 응답.status_code == 200, 응답.text
+    assert 'data-mark="비전"' in 응답.text
+
+
+def test_표식_필터는_기본_꺼짐이고_화면_전용이다(화면, 돌린척, tmp_run_dir, monkeypatch):
+    from pathlib import Path as _P
+
+    from webapp import main as _main
+
+    _맞춘설정(monkeypatch)
+    돌린척(_표식산출물())
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    입력 = re.search(r'<input[^>]*id="mark-filter"[^>]*>', 본문)
+    assert 입력, "표식 필터 토글이 없다"
+    assert "checked" not in 입력.group(0), "기본이 켜져 있다 — 끈 화면이 지금과 같아야 한다"
+    assert 'id="mark-filter-count"' in 본문
+    assert '<script src="/static/banner_review.js"></script>' in 본문
+    assert 화면.get("/static/banner_review.js").status_code == 200
+
+    # S-1: 템플릿·JS 가 출처 문자열로 분기하지 않는다. 금지 문자열은 런타임 조립.
+    기준 = _P(_main.BASE)
+    for 상대 in ("templates/_banner_strip.html", "templates/banner_review.html",
+                 "static/banner_review.js"):
+        소스 = (기준 / 상대).read_text(encoding="utf-8")
+        for 출처 in ("비" + "전", "뒤" + "집기"):
+            for 금지 in (f'== "{출처}"', f"== '{출처}'", f'=== "{출처}"', f"=== '{출처}'",
+                         f"'{출처}'", f'"{출처}"'):
+                assert 금지 not in 소스, f"{상대} 에 출처 문자열 비교 '{금지}' 가 있다 (S-1)"
