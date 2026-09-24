@@ -16,6 +16,9 @@
   --line:rgba(36,31,22,0.16);
   --card-bg:#FFFDF7;
   --shadow:rgba(36,31,22,0.18);
+  --sea:#DCE8EA;
+  --land:#CDBF9F;
+  --land-other:#E4DAC4;
 }
 :root:not([data-theme="light"]){
   @media (prefers-color-scheme: dark){
@@ -33,6 +36,9 @@
     --line:rgba(237,230,214,0.14);
     --card-bg:#1B2130;
     --shadow:rgba(0,0,0,0.45);
+    --sea:#101A26;
+    --land:#4A4536;
+    --land-other:#2A2D33;
   }
 }
 :root[data-theme="dark"]{
@@ -50,6 +56,9 @@
   --line:rgba(237,230,214,0.14);
   --card-bg:#1B2130;
   --shadow:rgba(0,0,0,0.45);
+  --sea:#101A26;
+  --land:#4A4536;
+  --land-other:#2A2D33;
 }
 
 *{box-sizing:border-box;}
@@ -228,6 +237,53 @@ footer.note{text-align:center;color:var(--ink-soft);font-size:0.78rem;margin-top
   .flag{width:150px;}
   .card{padding:28px 18px 24px;}
 }
+/* ---------- 지도 퀴즈 ---------- */
+.mq-modes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:22px;}
+.mbtn{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--parchment);border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;cursor:pointer;color:var(--ink);font-family:inherit;font-weight:700;font-size:1rem;transition:border-color .15s,background .15s;}
+.mbtn:hover{border-color:var(--gold-soft);}
+.mbtn.active{background:color-mix(in srgb, var(--gold) 20%, var(--card-bg));border-color:var(--gold);}
+.mbtn .micon{font-size:1.4rem;}
+.mq-prompt{display:flex;align-items:center;justify-content:center;gap:12px;text-align:left;font-size:1.1rem;font-weight:600;margin:4px 0 12px;}
+.mq-prompt small{display:block;font-weight:400;color:var(--ink-soft);font-size:.8rem;margin-top:2px;}
+.mq-flag{width:64px;height:auto;flex:none;border-radius:4px;border:1px solid var(--line);}
+.mq-map{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--sea);margin-bottom:12px;}
+.mq-map svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none;}
+.mq-land{fill:var(--land-other);stroke:var(--card-bg);stroke-width:.6;vector-effect:non-scaling-stroke;cursor:pointer;transition:fill .2s;}
+.mq-land.mq-quiz{fill:var(--land);}
+@media (hover:hover){.mq-land:hover{fill:var(--gold-soft);}}
+.mq-land.mq-cont{fill:color-mix(in srgb, var(--gold) 55%, var(--land));}
+.mq-land.mq-m1{fill:color-mix(in srgb, var(--teal) 35%, var(--land));}
+.mq-land.mq-m2{fill:color-mix(in srgb, var(--teal) 70%, var(--land));}
+.mq-land.mq-m3{fill:var(--teal);}
+.mq-land.mq-target{fill:var(--gold);animation:mqpulse .9s ease-in-out 4;}
+.mq-land.mq-correct{fill:var(--right);}
+.mq-land.mq-wrong{fill:var(--wrong);}
+.mq-dot{cursor:pointer;}
+.mq-dot .mq-hit{fill:transparent;}
+.mq-dot .mq-pin{fill:var(--land);stroke:var(--ink-soft);stroke-width:1;vector-effect:non-scaling-stroke;}
+.mq-dot.mq-m1 .mq-pin{fill:color-mix(in srgb, var(--teal) 35%, var(--land));}
+.mq-dot.mq-m2 .mq-pin{fill:color-mix(in srgb, var(--teal) 70%, var(--land));}
+.mq-dot.mq-m3 .mq-pin{fill:var(--teal);}
+.mq-dot.mq-target .mq-pin{fill:var(--gold);}
+.mq-dot.mq-correct .mq-pin{fill:var(--right);}
+.mq-dot.mq-wrong .mq-pin{fill:var(--wrong);}
+@keyframes mqpulse{50%{opacity:.45;}}
+.mq-label{font-family:"Libre Franklin",-apple-system,sans-serif;font-weight:700;fill:var(--ink);paint-order:stroke;stroke:var(--card-bg);stroke-linejoin:round;text-anchor:middle;pointer-events:none;}
+.mq-label.mq-label-soft{fill:var(--ink-soft);font-weight:500;}
+.mq-label.mq-label-wrong{fill:var(--wrong);}
+.mq-review{background:var(--parchment);border:1.5px dashed var(--gold-soft);border-radius:12px;padding:12px 14px;margin-top:12px;font-size:.92rem;line-height:1.55;}
+.mq-review-title{font-weight:700;margin-bottom:2px;}
+.mq-nb{color:var(--ink-soft);font-size:.85rem;margin-top:4px;}
+.mq-atlas-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px;}
+.mq-atlas-stats{text-align:center;margin:0 0 10px;font-size:.95rem;}
+.mq-atlas-stats span{color:var(--ink-soft);}
+.mq-legend{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;font-size:.78rem;color:var(--ink-soft);margin-bottom:6px;}
+.mq-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-2px;border:1px solid var(--line);}
+.mq-legend .lg0{background:var(--land);}
+.mq-legend .lg1{background:color-mix(in srgb, var(--teal) 35%, var(--land));}
+.mq-legend .lg2{background:color-mix(in srgb, var(--teal) 70%, var(--land));}
+.mq-legend .lg3{background:var(--teal);}
+.mq-error{color:var(--wrong);text-align:center;font-size:.9rem;margin-top:10px;}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=Libre+Franklin:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
@@ -253,7 +309,14 @@ footer.note{text-align:center;color:var(--ink-soft);font-size:0.78rem;margin-top
   <footer class="note" id="footNote">카드에 있는 112장의 국기 중 대륙을 골라 5지선다로 맞혀보세요.</footer>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script src="js/countries.js"></script>
+<script src="js/progress.js"></script>
+<script src="js/mapquiz-logic.js"></script>
+<script src="js/store.js"></script>
+<script src="js/mapview.js"></script>
+<script src="js/mapquiz.js"></script>
 <script>
 (function(){
 "use strict";
@@ -274,6 +337,7 @@ var PLAYERS = [
 
 var state = {
   screen: "start",     // start | quiz | results
+  mode: "flag",        // flag | map
   selectedPlayers: PLAYERS.map(function(p){return p.key;}),
   turnOrder: [],
   scores: {},
@@ -329,10 +393,16 @@ function continentLabel(keys){
 function renderStart(){
   document.getElementById("hud").hidden = true;
   document.getElementById("roundBadge").textContent = "누가 도전할까요?";
-  document.getElementById("footNote").textContent = "참가자와 대륙을 고르고 5지선다로 국기를 맞혀보세요.";
+  document.getElementById("footNote").textContent = state.mode === "map"
+    ? "대륙을 누르고 나라를 찾아요. 맞힐수록 내 세계지도가 색칠돼요."
+    : "참가자와 대륙을 고르고 5지선다로 국기를 맞혀보세요.";
 
   var card = document.getElementById("card");
-  var html = '<div class="mode-tag">오늘의 참가자</div>';
+  var html = '<div class="mq-modes">' +
+    '<button class="mbtn' + (state.mode === "flag" ? " active" : "") + '" data-mode="flag"><span class="micon">🚩</span>국기 퀴즈</button>' +
+    '<button class="mbtn' + (state.mode === "map" ? " active" : "") + '" data-mode="map"><span class="micon">🗺️</span>지도 퀴즈</button>' +
+    '</div>';
+  html += '<div class="mode-tag">오늘의 참가자</div>';
   html += '<div class="player-grid">';
   PLAYERS.forEach(function(p){
     var active = state.selectedPlayers.indexOf(p.key) > -1 ? " active" : "";
@@ -351,18 +421,27 @@ function renderStart(){
   });
   html += '</div>';
 
-  html += '<div class="toggle-row"><div><div class="label">수도 문제도 섞기</div><div class="desc">끄면 국기 → 나라 이름만 물어봐요</div></div>' +
-    '<label class="switch"><input type="checkbox" id="capitalToggle"' + (state.askCapitals ? " checked" : "") + '><span class="slider"></span></label></div>';
+  if (state.mode === "flag") {
+    html += '<div class="toggle-row"><div><div class="label">수도 문제도 섞기</div><div class="desc">끄면 국기 → 나라 이름만 물어봐요</div></div>' +
+      '<label class="switch"><input type="checkbox" id="capitalToggle"' + (state.askCapitals ? " checked" : "") + '><span class="slider"></span></label></div>';
 
-  html += '<div class="toggle-row"><div><div class="label">랜드마크 문제도 섞기</div><div class="desc">"세계의 랜드마크" 책 속 대표 건축물로 나라 맞히기</div></div>' +
-    '<label class="switch"><input type="checkbox" id="landmarkToggle"' + (state.askLandmarks ? " checked" : "") + '><span class="slider"></span></label></div>';
+    html += '<div class="toggle-row"><div><div class="label">랜드마크 문제도 섞기</div><div class="desc">"세계의 랜드마크" 책 속 대표 건축물로 나라 맞히기</div></div>' +
+      '<label class="switch"><input type="checkbox" id="landmarkToggle"' + (state.askLandmarks ? " checked" : "") + '><span class="slider"></span></label></div>';
 
-  var continentToggleDisabled = state.selectedContinents.length < 2;
-  html += '<div class="toggle-row"><div><div class="label">대륙 맞히기도 섞기</div><div class="desc">' +
-    (continentToggleDisabled ? '대륙을 2개 이상 골라야 이 문제가 나와요' : '국기를 보고 어느 대륙 나라인지 맞혀요') + '</div></div>' +
-    '<label class="switch"><input type="checkbox" id="continentToggle"' + (state.askContinents ? " checked" : "") + (continentToggleDisabled ? " disabled" : "") + '><span class="slider"></span></label></div>';
+    var continentToggleDisabled = state.selectedContinents.length < 2;
+    html += '<div class="toggle-row"><div><div class="label">대륙 맞히기도 섞기</div><div class="desc">' +
+      (continentToggleDisabled ? '대륙을 2개 이상 골라야 이 문제가 나와요' : '국기를 보고 어느 대륙 나라인지 맞혀요') + '</div></div>' +
+      '<label class="switch"><input type="checkbox" id="continentToggle"' + (state.askContinents ? " checked" : "") + (continentToggleDisabled ? " disabled" : "") + '><span class="slider"></span></label></div>';
+  } else {
+    html += '<div class="step-label">내 세계지도</div><div class="mq-atlas-row">' +
+      state.selectedPlayers.map(function (k) {
+        var p = playerByKey(k);
+        return '<button class="ghost-btn mq-atlas-btn" data-atlas="' + k + '" style="font-family:inherit;font-size:.9rem;padding:8px 14px;border-radius:99px;border:1.5px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;">' + p.icon + ' ' + p.name + '</button>';
+      }).join("") + '</div>';
+  }
 
-  html += '<button class="start-btn" id="startBtn">게임 시작하기 🚩</button>';
+  html += '<button class="start-btn" id="startBtn">' + (state.mode === "map" ? "지도 탐험 시작 🗺️" : "게임 시작하기 🚩") + '</button>';
+  html += '<div class="mq-error" id="mqError" hidden></div>';
   var playerNames = state.selectedPlayers.map(function(k){return playerByKey(k).name;}).join(" · ");
   var totalPreview = QUESTIONS_PER_PLAYER * state.selectedPlayers.length;
   html += '<div class="hint">참가자: <strong>' + (playerNames || "없음") + '</strong> · 대륙: <strong>' + continentLabel(state.selectedContinents) + '</strong></div>';
@@ -393,18 +472,32 @@ function renderStart(){
       renderStart();
     });
   });
-  document.getElementById("capitalToggle").addEventListener("change", function(e){
-    state.askCapitals = e.target.checked;
-  });
-  document.getElementById("landmarkToggle").addEventListener("change", function(e){
-    state.askLandmarks = e.target.checked;
-  });
-  var continentToggleEl = document.getElementById("continentToggle");
-  if(continentToggleEl && !continentToggleEl.disabled){
-    continentToggleEl.addEventListener("change", function(e){
-      state.askContinents = e.target.checked;
+  if (state.mode === "flag") {
+    document.getElementById("capitalToggle").addEventListener("change", function(e){
+      state.askCapitals = e.target.checked;
     });
+    document.getElementById("landmarkToggle").addEventListener("change", function(e){
+      state.askLandmarks = e.target.checked;
+    });
+    var continentToggleEl = document.getElementById("continentToggle");
+    if(continentToggleEl && !continentToggleEl.disabled){
+      continentToggleEl.addEventListener("change", function(e){
+        state.askContinents = e.target.checked;
+      });
+    }
   }
+  card.querySelectorAll(".mbtn").forEach(function(b){
+    b.addEventListener("click", function(){
+      state.mode = b.getAttribute("data-mode");
+      renderStart();
+    });
+  });
+  card.querySelectorAll(".mq-atlas-btn").forEach(function(b){
+    b.addEventListener("click", function(){
+      var p = playerByKey(b.getAttribute("data-atlas"));
+      withMap(function(){ MQMapQuiz.renderAtlas(card, p, renderStart); });
+    });
+  });
   document.getElementById("startBtn").addEventListener("click", function(){
     if(state.selectedPlayers.length === 0){
       alert("참가자를 한 명 이상 골라주세요!");
@@ -414,18 +507,72 @@ function renderStart(){
       alert("대륙을 한 개 이상 골라주세요!");
       return;
     }
-    var pool = poolFor(state.selectedContinents);
-    state.turnOrder = shuffle(state.selectedPlayers);
-    state.totalQ = QUESTIONS_PER_PLAYER * state.turnOrder.length;
-    buildQuiz(pool);
-    state.scores = {};
-    state.turnOrder.forEach(function(k){ state.scores[k] = 0; });
-    state.screen = "quiz";
-    state.current = 0;
-    state.score = 0;
-    document.getElementById("hud").hidden = false;
-    renderQuiz();
+    if(state.mode === "map"){
+      withMap(beginGame);
+    } else {
+      beginGame();
+    }
   });
+}
+
+/* 지도 파일·기록을 불러온 뒤 실행 (실패하면 시작 화면에 안내) */
+function withMap(fn){
+  var btn = document.getElementById("startBtn");
+  var err = document.getElementById("mqError");
+  if(btn){ btn.disabled = true; btn.textContent = "지도 불러오는 중…"; }
+  MQMapQuiz.ready(PLAYERS.map(function(p){ return p.key; })).then(fn).catch(function(e){
+    if(btn){ btn.disabled = false; btn.textContent = "지도 탐험 시작 🗺️"; }
+    if(err){ err.hidden = false; err.textContent = "지도를 못 불러왔어요: " + e.message; }
+  });
+}
+
+/* 게임 시작 (처음·다시하기 공통) */
+function beginGame(){
+  state.turnOrder = shuffle(state.selectedPlayers);
+  state.totalQ = QUESTIONS_PER_PLAYER * state.turnOrder.length;
+  if(state.mode === "map"){ state.quiz = []; }
+  else { buildQuiz(poolFor(state.selectedContinents)); }
+  state.scores = {};
+  state.turnOrder.forEach(function(k){ state.scores[k] = 0; });
+  state.screen = "quiz";
+  state.current = 0;
+  state.score = 0;
+  document.getElementById("hud").hidden = false;
+  renderQuiz();
+}
+
+/* 다음 문항 버튼 */
+function appendNextButton(){
+  var nextBtn = document.createElement("button");
+  nextBtn.className = "next-btn";
+  nextBtn.textContent = state.current === state.totalQ - 1 ? "결과 보기" : "다음 문항";
+  nextBtn.addEventListener("click", function(){
+    state.current++;
+    if(state.current >= state.totalQ){ renderResults(); }
+    else { renderQuiz(); }
+  });
+  document.getElementById("card").appendChild(nextBtn);
+}
+
+/* 지도 문제 한 개 */
+function renderMapQuiz(){
+  var turnKey = state.turnOrder[state.current % state.turnOrder.length];
+  state.answered = false;
+  MQMapQuiz.renderQuestion(document.getElementById("card"), {
+    playerKey: turnKey,
+    player: playerByKey(turnKey),
+    contKeys: state.selectedContinents,
+    onDone: function(r){
+      state.answered = true;
+      state.score += r.points;
+      state.scores[turnKey] += r.points;
+      state.quiz.push({ country:r.country, type:"map", userAnswer:r.userAnswer, correct:r.correctAnswer, wasCorrect:r.correct, turnKey:turnKey });
+      document.getElementById("scoreBox").textContent = state.score + " pt";
+      renderScoreBoard();
+      appendNextButton();
+    }
+  });
+  renderScoreBoard();
 }
 
 function continentBtn(key, icon, name, count, isActive){
@@ -477,12 +624,17 @@ function buildQuiz(pool){
 }
 
 function renderQuiz(){
-  var q = state.quiz[state.current];
   document.getElementById("roundBadge").textContent = continentLabel(state.selectedContinents);
   document.getElementById("footNote").textContent = "국기를 보고 나라 이름 또는 수도를 5지선다로 맞혀보세요.";
   document.getElementById("qCount").textContent = "문항 " + (state.current+1) + " / " + state.totalQ;
   document.getElementById("scoreBox").textContent = state.score + " pt";
   document.getElementById("progressFill").style.width = ((state.current)/state.totalQ*100) + "%";
+  if(state.mode === "map"){
+    document.getElementById("footNote").textContent = "지도에서 나라를 찾아보세요. 맞힐수록 내 세계지도가 색칠돼요.";
+    renderMapQuiz();
+    return;
+  }
+  var q = state.quiz[state.current];
 
   var turnKey = state.turnOrder[state.current % state.turnOrder.length];
   var turnPlayer = playerByKey(turnKey);
@@ -573,18 +725,7 @@ function selectAnswer(opt, btn){
   document.getElementById("scoreBox").textContent = state.score + " pt";
   renderScoreBoard();
 
-  var nextBtn = document.createElement("button");
-  nextBtn.className = "next-btn";
-  nextBtn.textContent = state.current === state.totalQ - 1 ? "결과 보기" : "다음 문항";
-  nextBtn.addEventListener("click", function(){
-    state.current++;
-    if(state.current >= state.totalQ){
-      renderResults();
-    } else {
-      renderQuiz();
-    }
-  });
-  document.getElementById("card").appendChild(nextBtn);
+  appendNextButton();
 }
 
 function rankFor(score, totalQ){
@@ -633,21 +774,22 @@ function renderResults(){
   html += '<div class="results-actions">' +
     '<button class="next-btn" id="retryBtn">같은 대륙 다시</button>' +
     '<button class="ghost-btn" id="menuBtn">대륙 다시 고르기</button>' +
+    (state.mode === "map" ? state.turnOrder.map(function(k){
+      var p = playerByKey(k);
+      return '<button class="ghost-btn mq-atlas-btn" data-atlas="' + k + '">' + p.icon + ' ' + p.name + ' 지도</button>';
+    }).join("") : '') +
     '</div></div>';
   card.innerHTML = html;
 
   document.getElementById("retryBtn").addEventListener("click", function(){
-    var pool = poolFor(state.selectedContinents);
-    state.turnOrder = shuffle(state.selectedPlayers);
-    state.totalQ = QUESTIONS_PER_PLAYER * state.turnOrder.length;
-    buildQuiz(pool);
-    state.scores = {};
-    state.turnOrder.forEach(function(k){ state.scores[k] = 0; });
-    state.current = 0;
-    state.score = 0;
-    renderQuiz();
+    beginGame();
   });
   document.getElementById("menuBtn").addEventListener("click", goToStart);
+  card.querySelectorAll(".mq-atlas-btn").forEach(function(b){
+    b.addEventListener("click", function(){
+      MQMapQuiz.renderAtlas(card, playerByKey(b.getAttribute("data-atlas")), renderResults);
+    });
+  });
 }
 
 function goToStart(){
