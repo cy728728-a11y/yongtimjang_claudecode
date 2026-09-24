@@ -3,7 +3,7 @@ phase: 04-banner-detection
 plan: 10
 subsystem: banner-webapp
 tags: [banner, d22, vision2, argv, settings, 검수화면, 판정출처, 규칙불일치, gap-closure]
-status: Task 1·2 완료 · Task 3(uat-verifier) 오케스트레이터 몫으로 대기. 실제 Gemini 호출 0회 · 실탄 스캔 0회.
+status: 완료 — Task 3 uat-verifier PASS (2026-09-24). 실제 Gemini 호출 0회 · 실탄 스캔 0회.
 
 requires:
   - phase: 04-banner-detection
@@ -42,7 +42,7 @@ decisions:
 metrics:
   duration: 12min
   completed: 2026-09-24
-  tasks: 2 of 3 (Task 3 = uat-verifier 대기)
+  tasks: 3 of 3
   files: 8
 ---
 
@@ -108,3 +108,13 @@ UAT 판정: **미실행** (PASS/FLAKY/FAIL/BLOCKED 없음. P0 "검증 중 소스
 없음.
 
 ## Self-Check: PASSED
+
+
+## Task 3 — uat-verifier 결과 (2026-09-24 · 오케스트레이터 실행)
+
+- **판정: PASS** — truths 1·3·4·5 전량 pass · P0~P3 없음 · 검증 중 소스 변경 없음(HEAD `992b71b` 불변)
+- truth 1: 격리 서버 재시작 없이 `banner_vision2_model` A→B 변경이 두 잡 argv 에 그대로 반영. argv 에 키 값 0건(경로만)
+- truth 3·4·5: 합성 산출물 4종(켜짐 일치 / 켜짐 모델 다름 / 꺼짐 / 옛 회차)으로 👁·↩ 표식, 불일치 경고, 3갈래 문구 확인
+- `workspace.toml` md5 원복 확인 · 신규 `vision2_*.jsonl` 0 · Gemini/불사자/네이버 호출 0
+- ⚠ **검증 중 데이터 사고 1건(복구됨):** 실회차 썸네일 `webapp-banner/thumbs/2026-09-20/0000_00·01·03.webp` 를 합성 이미지로 덮어썼다가 원본 캐시(`.bin`, 무손상)에서 `특징과썸네일()` 로 재생성. 00·01 은 사고 전 바이트 수와 일치, 03 은 같은 함수 재생성. 잘못 생긴 `0000_02.webp` 삭제. 소스·설정·DB 무관
+- 사람 몫: 표식·경고 블록 심미만 — 스크린샷 `~/.claude/uat/uat-artifacts/20260921-seller-control-tower/04-10-banner-review-소스뱃지.png`
