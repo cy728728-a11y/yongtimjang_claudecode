@@ -1,0 +1,788 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>국기 원정대</title>
+<style>
+:root{
+  --parchment:#F2E9D8;
+  --parchment-2:#E8DCC3;
+  --ink:#241F16;
+  --ink-soft:#5B5340;
+  --navy:#14213D;
+  --navy-2:#1D2E52;
+  --gold:#C08A2E;
+  --gold-soft:#DCB05F;
+  --teal:#3F6259;
+  --wrong:#A8412F;
+  --right:#3F6E4A;
+  --line:rgba(36,31,22,0.16);
+  --card-bg:#FFFDF7;
+  --shadow:rgba(36,31,22,0.18);
+}
+:root:not([data-theme="light"]){
+  @media (prefers-color-scheme: dark){
+    --parchment:#141821;
+    --parchment-2:#1B2029;
+    --ink:#EDE6D6;
+    --ink-soft:#B7AE99;
+    --navy:#0C1220;
+    --navy-2:#182238;
+    --gold:#D9A94E;
+    --gold-soft:#E9C783;
+    --teal:#7FA595;
+    --wrong:#D97361;
+    --right:#79B888;
+    --line:rgba(237,230,214,0.14);
+    --card-bg:#1B2130;
+    --shadow:rgba(0,0,0,0.45);
+  }
+}
+:root[data-theme="dark"]{
+  --parchment:#141821;
+  --parchment-2:#1B2029;
+  --ink:#EDE6D6;
+  --ink-soft:#B7AE99;
+  --navy:#0C1220;
+  --navy-2:#182238;
+  --gold:#D9A94E;
+  --gold-soft:#E9C783;
+  --teal:#7FA595;
+  --wrong:#D97361;
+  --right:#79B888;
+  --line:rgba(237,230,214,0.14);
+  --card-bg:#1B2130;
+  --shadow:rgba(0,0,0,0.45);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:
+    radial-gradient(1100px 700px at 12% -8%, color-mix(in srgb, var(--gold) 12%, transparent), transparent 60%),
+    var(--parchment);
+  color:var(--ink);
+  font-family:"Libre Franklin", -apple-system, "Segoe UI", sans-serif;
+  padding:32px 20px 56px;
+  min-height:100vh;
+}
+.stage{max-width:640px;margin:0 auto;}
+
+h1,h2,h3{font-family:"Fraunces","Noto Serif KR",serif;text-wrap:balance;margin:0;}
+
+/* header */
+.masthead{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px;border-bottom:2px solid var(--line);padding-bottom:16px;}
+.masthead .title{font-size:1.65rem;font-weight:600;letter-spacing:0.01em;}
+.masthead .subtitle{font-size:0.8rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-soft);margin-top:4px;}
+.masthead .badge{font-family:"Fraunces",serif;font-style:italic;color:var(--teal);font-size:0.95rem;}
+
+/* progress + stats row */
+.hud{display:flex;align-items:center;gap:14px;margin-bottom:26px;}
+.hud .track{flex:1;height:8px;border-radius:99px;background:var(--parchment-2);overflow:hidden;border:1px solid var(--line);}
+.hud .fill{height:100%;background:linear-gradient(90deg,var(--gold-soft),var(--gold));width:0%;transition:width .45s ease;}
+.hud .count{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:0.82rem;color:var(--ink-soft);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.hud .score{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:0.9rem;font-weight:600;color:var(--navy-2);background:var(--parchment-2);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-variant-numeric:tabular-nums;}
+:root:not([data-theme="light"]) .hud .score{color:var(--gold-soft);}
+:root[data-theme="dark"] .hud .score{color:var(--gold-soft);}
+.hud .back{font-family:"Libre Franklin",sans-serif;font-size:0.78rem;color:var(--ink-soft);background:none;border:1px solid var(--line);border-radius:8px;padding:4px 9px;cursor:pointer;white-space:nowrap;}
+.hud .back:hover{border-color:var(--gold-soft);color:var(--ink);}
+
+/* card */
+.card{
+  background:var(--card-bg);
+  border:1px solid var(--line);
+  border-radius:18px;
+  box-shadow:0 18px 40px -22px var(--shadow);
+  padding:38px 30px 30px;
+}
+.mode-tag{display:inline-block;font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--teal);border:1px solid color-mix(in srgb, var(--teal) 45%, transparent);border-radius:99px;padding:3px 11px;margin-bottom:18px;}
+.flag-wrap{display:flex;justify-content:center;margin-bottom:8px;}
+.flag{width:200px;max-width:70%;height:auto;border-radius:6px;border:1px solid var(--line);box-shadow:0 14px 26px -12px var(--shadow);}
+.prompt{text-align:center;font-size:1.28rem;font-weight:600;margin:14px 0 28px;padding:0 8px;}
+
+.landmark-wrap{display:flex;justify-content:center;margin-bottom:8px;}
+.landmark-card{
+  background:linear-gradient(160deg, color-mix(in srgb, var(--gold) 14%, var(--parchment)), var(--parchment));
+  border:1.5px dashed var(--gold-soft);
+  border-radius:14px;
+  padding:28px 24px;
+  text-align:center;
+  max-width:90%;
+}
+.landmark-card .eyebrow{font-size:0.72rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--teal);margin-bottom:8px;}
+.landmark-card .lname{font-family:"Fraunces",serif;font-weight:600;font-size:1.7rem;color:var(--ink);text-wrap:balance;}
+
+.choices{display:grid;grid-template-columns:1fr;gap:10px;}
+.choice{
+  font-family:inherit;font-size:1.08rem;text-align:left;
+  background:var(--parchment);
+  border:1.5px solid var(--line);
+  border-radius:11px;
+  padding:15px 16px;
+  color:var(--ink);
+  cursor:pointer;
+  display:flex;align-items:center;gap:12px;
+  transition:border-color .15s, background .15s, transform .1s;
+}
+.choice .letter{font-family:"Fraunces",serif;font-weight:600;color:var(--gold);width:1.3em;flex:none;}
+.choice:hover:not(:disabled){border-color:var(--gold-soft);transform:translateY(-1px);}
+.choice:disabled{cursor:default;}
+.choice.correct{background:color-mix(in srgb, var(--right) 18%, var(--card-bg));border-color:var(--right);}
+.choice.correct .letter{color:var(--right);}
+.choice.wrong{background:color-mix(in srgb, var(--wrong) 16%, var(--card-bg));border-color:var(--wrong);}
+.choice.wrong .letter{color:var(--wrong);}
+.choice.dim{opacity:0.55;}
+
+.feedback{min-height:1.4em;text-align:center;margin-top:18px;font-size:0.95rem;font-weight:600;}
+.feedback.correct{color:var(--right);}
+.feedback.wrong{color:var(--wrong);}
+
+.next-btn{display:block;margin:20px auto 0;font-family:"Fraunces",serif;font-weight:600;font-size:0.98rem;background:var(--navy);color:var(--parchment);border:none;border-radius:99px;padding:11px 30px;cursor:pointer;transition:transform .12s, background .15s;}
+.next-btn:hover{background:var(--navy-2);transform:translateY(-1px);}
+:root:not([data-theme="light"]) .next-btn{background:var(--gold);color:#1B1404;}
+:root:not([data-theme="light"]) .next-btn:hover{background:var(--gold-soft);}
+:root[data-theme="dark"] .next-btn{background:var(--gold);color:#1B1404;}
+:root[data-theme="dark"] .next-btn:hover{background:var(--gold-soft);}
+
+/* start screen */
+.continent-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:22px;}
+@media (max-width:460px){.continent-grid{grid-template-columns:1fr;}}
+.cbtn{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--parchment);border:1.5px solid var(--line);border-radius:12px;
+  padding:14px 16px;cursor:pointer;text-align:left;color:var(--ink);
+  font-family:inherit;transition:border-color .15s, transform .1s, background .15s;
+}
+.cbtn:hover{border-color:var(--gold-soft);transform:translateY(-1px);}
+.cbtn.active{background:color-mix(in srgb, var(--gold) 20%, var(--card-bg));border-color:var(--gold);}
+.cbtn .cname{font-weight:600;font-size:1rem;}
+.cbtn .cicon{font-size:1.5rem;}
+.cbtn .ccount{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:0.75rem;color:var(--ink-soft);}
+
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--parchment);border:1px solid var(--line);border-radius:12px;padding:13px 16px;margin-bottom:24px;}
+.toggle-row .label{font-size:0.92rem;font-weight:600;}
+.toggle-row .desc{font-size:0.78rem;color:var(--ink-soft);margin-top:2px;}
+.switch{position:relative;width:46px;height:26px;flex:none;}
+.switch input{opacity:0;width:0;height:0;}
+.switch .slider{position:absolute;inset:0;background:var(--parchment-2);border:1px solid var(--line);border-radius:99px;cursor:pointer;transition:background .15s;}
+.switch .slider::before{content:"";position:absolute;width:20px;height:20px;left:2px;top:2px;background:var(--card-bg);border-radius:50%;transition:transform .15s;box-shadow:0 1px 3px var(--shadow);}
+.switch input:checked + .slider{background:var(--teal);}
+.switch input:checked + .slider::before{transform:translateX(20px);}
+
+.start-btn{display:block;width:100%;font-family:"Fraunces",serif;font-weight:600;font-size:1.1rem;background:var(--navy);color:var(--parchment);border:none;border-radius:14px;padding:16px;cursor:pointer;transition:transform .12s, background .15s;}
+.start-btn:hover{background:var(--navy-2);transform:translateY(-1px);}
+:root:not([data-theme="light"]) .start-btn{background:var(--gold);color:#1B1404;}
+:root:not([data-theme="light"]) .start-btn:hover{background:var(--gold-soft);}
+:root[data-theme="dark"] .start-btn{background:var(--gold);color:#1B1404;}
+:root[data-theme="dark"] .start-btn:hover{background:var(--gold-soft);}
+
+.hint{text-align:center;font-size:0.82rem;color:var(--ink-soft);margin-top:14px;}
+
+.player-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:22px;}
+@media (max-width:460px){.player-grid{grid-template-columns:1fr;}}
+.pbtn{
+  display:flex;align-items:center;gap:10px;
+  background:var(--parchment);border:1.5px solid var(--line);border-radius:12px;
+  padding:13px 14px;cursor:pointer;text-align:left;color:var(--ink);
+  font-family:inherit;font-weight:600;font-size:0.98rem;transition:border-color .15s, transform .1s, background .15s;
+}
+.pbtn:hover{border-color:var(--gold-soft);transform:translateY(-1px);}
+.pbtn.active{background:color-mix(in srgb, var(--teal) 22%, var(--card-bg));border-color:var(--teal);}
+.pbtn .picon{font-size:1.4rem;}
+.pbtn .pcheck{margin-left:auto;font-size:0.95rem;color:var(--teal);visibility:hidden;}
+.pbtn.active .pcheck{visibility:visible;}
+.step-label{font-size:0.78rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft);margin:22px 0 10px;}
+.step-label:first-of-type{margin-top:0;}
+
+.turn-banner{display:flex;align-items:center;justify-content:center;gap:8px;font-family:"Fraunces",serif;font-weight:600;font-size:1rem;color:var(--teal);margin-bottom:14px;}
+.turn-banner .picon{font-size:1.25rem;}
+
+.score-board{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:18px 0 4px;}
+.score-chip{display:flex;align-items:center;gap:6px;background:var(--parchment);border:1px solid var(--line);border-radius:99px;padding:5px 12px;font-size:0.82rem;}
+.score-chip .pts{font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:600;font-variant-numeric:tabular-nums;color:var(--navy-2);}
+:root:not([data-theme="light"]) .score-chip .pts{color:var(--gold-soft);}
+:root[data-theme="dark"] .score-chip .pts{color:var(--gold-soft);}
+.score-chip.leader{border-color:var(--gold);}
+.score-chip.leader .pts::before{content:"👑 ";}
+
+/* results */
+.results{text-align:center;}
+.results .tally{font-family:"Fraunces",serif;font-size:3.4rem;font-weight:600;margin:6px 0 2px;color:var(--navy-2);}
+:root:not([data-theme="light"]) .results .tally{color:var(--gold-soft);}
+:root[data-theme="dark"] .results .tally{color:var(--gold-soft);}
+.results .rank{font-style:italic;font-family:"Fraunces",serif;color:var(--teal);margin-bottom:22px;font-size:1.1rem;}
+.miss-list{text-align:left;border-top:1px dashed var(--line);margin-top:22px;padding-top:16px;display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;}
+.miss-row{display:flex;gap:10px;align-items:baseline;font-size:0.9rem;}
+.miss-row .f{width:28px;height:auto;border-radius:3px;border:1px solid var(--line);flex:none;}
+.miss-row .name{font-weight:600;}
+.miss-row .ans{color:var(--ink-soft);}
+.miss-row .correct-ans{color:var(--right);}
+.results-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:20px;}
+.results-actions .next-btn{margin:0;}
+.results-actions .ghost-btn{
+  font-family:"Fraunces",serif;font-weight:600;font-size:0.98rem;background:transparent;color:var(--ink);
+  border:1.5px solid var(--line);border-radius:99px;padding:11px 26px;cursor:pointer;transition:border-color .15s;
+}
+.results-actions .ghost-btn:hover{border-color:var(--gold-soft);}
+
+footer.note{text-align:center;color:var(--ink-soft);font-size:0.78rem;margin-top:22px;letter-spacing:0.02em;}
+
+@media (max-width:420px){
+  .flag{width:150px;}
+  .card{padding:28px 18px 24px;}
+}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=Libre+Franklin:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+
+<div class="stage">
+  <div class="masthead">
+    <div>
+      <div class="title">국기 원정대</div>
+      <div class="subtitle">Flag &amp; Capital Expedition</div>
+    </div>
+    <div class="badge" id="roundBadge">대륙을 골라보세요</div>
+  </div>
+
+  <div class="hud" id="hud" hidden>
+    <button class="back" id="backBtn">← 대륙 선택</button>
+    <span class="count" id="qCount">문항 1 / 10</span>
+    <div class="track"><div class="fill" id="progressFill"></div></div>
+    <span class="score" id="scoreBox">0 pt</span>
+  </div>
+
+  <div class="card" id="card"></div>
+
+  <footer class="note" id="footNote">카드에 있는 112장의 국기 중 대륙을 골라 5지선다로 맞혀보세요.</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* 대륙 7장 카드 + 국기 105장 = 총 112장 구성을 그대로 옮겼어요 */
+var CONTINENTS = [
+  {key:"europe",   name:"유럽",       icon:"🏰", count:25},
+  {key:"africa",   name:"아프리카",   icon:"🦁", count:21},
+  {key:"asia",     name:"아시아",     icon:"🏯", count:31},
+  {key:"oceania",  name:"오세아니아", icon:"🏝️", count:6},
+  {key:"namerica", name:"북아메리카", icon:"🗽", count:12},
+  {key:"samerica", name:"남아메리카", icon:"⛰️", count:10}
+];
+
+var COUNTRIES = [
+  // 유럽 25
+  {flag:"🇬🇧", name:"영국", capital:"런던", continent:"europe", landmark:"빅벤(엘리자베스 타워)"},
+  {flag:"🇫🇷", name:"프랑스", capital:"파리", continent:"europe", landmark:"에펠탑"},
+  {flag:"🇩🇪", name:"독일", capital:"베를린", continent:"europe", landmark:"쾰른 대성당"},
+  {flag:"🇮🇹", name:"이탈리아", capital:"로마", continent:"europe", landmark:"콜로세움"},
+  {flag:"🇪🇸", name:"스페인", capital:"마드리드", continent:"europe", landmark:"세비아 대성당"},
+  {flag:"🇵🇹", name:"포르투갈", capital:"리스본", continent:"europe"},
+  {flag:"🇳🇱", name:"네덜란드", capital:"암스테르담", continent:"europe", landmark:"잔세스칸스"},
+  {flag:"🇧🇪", name:"벨기에", capital:"브뤼셀", continent:"europe"},
+  {flag:"🇨🇭", name:"스위스", capital:"베른", continent:"europe", landmark:"그로스뮌스터 대성당"},
+  {flag:"🇦🇹", name:"오스트리아", capital:"빈", continent:"europe", landmark:"슈테판 대성당"},
+  {flag:"🇸🇪", name:"스웨덴", capital:"스톡홀름", continent:"europe", landmark:"스톡홀름 왕궁"},
+  {flag:"🇳🇴", name:"노르웨이", capital:"오슬로", continent:"europe"},
+  {flag:"🇫🇮", name:"핀란드", capital:"헬싱키", continent:"europe", landmark:"헬싱키 대성당"},
+  {flag:"🇩🇰", name:"덴마크", capital:"코펜하겐", continent:"europe"},
+  {flag:"🇮🇸", name:"아이슬란드", capital:"레이캬비크", continent:"europe"},
+  {flag:"🇵🇱", name:"폴란드", capital:"바르샤바", continent:"europe", landmark:"비엘리치카 소금 광산"},
+  {flag:"🇨🇿", name:"체코", capital:"프라하", continent:"europe"},
+  {flag:"🇭🇺", name:"헝가리", capital:"부다페스트", continent:"europe", landmark:"부다성"},
+  {flag:"🇬🇷", name:"그리스", capital:"아테네", continent:"europe", landmark:"아크로폴리스"},
+  {flag:"🇮🇪", name:"아일랜드", capital:"더블린", continent:"europe"},
+  {flag:"🇷🇴", name:"루마니아", capital:"부쿠레슈티", continent:"europe", landmark:"브란성"},
+  {flag:"🇭🇷", name:"크로아티아", capital:"자그레브", continent:"europe"},
+  {flag:"🇷🇺", name:"러시아", capital:"모스크바", continent:"europe", landmark:"성 바실리 대성당"},
+  {flag:"🇺🇦", name:"우크라이나", capital:"키이우", continent:"europe"},
+  {flag:"🇹🇷", name:"튀르키예", capital:"앙카라", continent:"europe", landmark:"아야소피아 성당"},
+
+  // 아프리카 21
+  {flag:"🇪🇬", name:"이집트", capital:"카이로", continent:"africa", landmark:"쿠푸 왕 피라미드"},
+  {flag:"🇿🇦", name:"남아프리카공화국", capital:"프리토리아", continent:"africa", landmark:"테이블 마운틴"},
+  {flag:"🇰🇪", name:"케냐", capital:"나이로비", continent:"africa"},
+  {flag:"🇳🇬", name:"나이지리아", capital:"아부자", continent:"africa"},
+  {flag:"🇲🇦", name:"모로코", capital:"라바트", continent:"africa"},
+  {flag:"🇩🇿", name:"알제리", capital:"알제", continent:"africa"},
+  {flag:"🇪🇹", name:"에티오피아", capital:"아디스아바바", continent:"africa"},
+  {flag:"🇬🇭", name:"가나", capital:"아크라", continent:"africa"},
+  {flag:"🇹🇿", name:"탄자니아", capital:"도도마", continent:"africa", landmark:"세렝게티 국립공원"},
+  {flag:"🇹🇳", name:"튀니지", capital:"튀니스", continent:"africa"},
+  {flag:"🇱🇾", name:"리비아", capital:"트리폴리", continent:"africa"},
+  {flag:"🇸🇩", name:"수단", capital:"하르툼", continent:"africa"},
+  {flag:"🇸🇳", name:"세네갈", capital:"다카르", continent:"africa"},
+  {flag:"🇲🇬", name:"마다가스카르", capital:"안타나나리보", continent:"africa"},
+  {flag:"🇿🇼", name:"짐바브웨", capital:"하라레", continent:"africa"},
+  {flag:"🇺🇬", name:"우간다", capital:"캄팔라", continent:"africa"},
+  {flag:"🇨🇲", name:"카메룬", capital:"야운데", continent:"africa"},
+  {flag:"🇨🇮", name:"코트디부아르", capital:"야무수크로", continent:"africa"},
+  {flag:"🇲🇿", name:"모잠비크", capital:"마푸투", continent:"africa"},
+  {flag:"🇿🇲", name:"잠비아", capital:"루사카", continent:"africa", landmark:"빅토리아 폭포"},
+  {flag:"🇨🇩", name:"콩고민주공화국", capital:"킨샤사", continent:"africa"},
+
+  // 아시아 31
+  {flag:"🇰🇷", name:"대한민국", capital:"서울", continent:"asia", landmark:"N서울타워"},
+  {flag:"🇰🇵", name:"북한", capital:"평양", continent:"asia"},
+  {flag:"🇨🇳", name:"중국", capital:"베이징", continent:"asia", landmark:"만리장성"},
+  {flag:"🇯🇵", name:"일본", capital:"도쿄", continent:"asia", landmark:"히메지성"},
+  {flag:"🇲🇳", name:"몽골", capital:"울란바토르", continent:"asia"},
+  {flag:"🇻🇳", name:"베트남", capital:"하노이", continent:"asia", landmark:"하롱베이"},
+  {flag:"🇹🇭", name:"태국", capital:"방콕", continent:"asia", landmark:"타이 왕궁"},
+  {flag:"🇮🇩", name:"인도네시아", capital:"자카르타", continent:"asia"},
+  {flag:"🇲🇾", name:"말레이시아", capital:"쿠알라룸푸르", continent:"asia"},
+  {flag:"🇸🇬", name:"싱가포르", capital:"싱가포르", continent:"asia", landmark:"마리나 베이 샌즈"},
+  {flag:"🇵🇭", name:"필리핀", capital:"마닐라", continent:"asia", landmark:"인트라무로스"},
+  {flag:"🇲🇲", name:"미얀마", capital:"네피도", continent:"asia"},
+  {flag:"🇰🇭", name:"캄보디아", capital:"프놈펜", continent:"asia", landmark:"앙코르와트"},
+  {flag:"🇱🇦", name:"라오스", capital:"비엔티안", continent:"asia"},
+  {flag:"🇮🇳", name:"인도", capital:"뉴델리", continent:"asia", landmark:"타지마할"},
+  {flag:"🇵🇰", name:"파키스탄", capital:"이슬라마바드", continent:"asia"},
+  {flag:"🇧🇩", name:"방글라데시", capital:"다카", continent:"asia"},
+  {flag:"🇱🇰", name:"스리랑카", capital:"스리자야와르데네푸라코테", continent:"asia"},
+  {flag:"🇳🇵", name:"네팔", capital:"카트만두", continent:"asia", landmark:"부다나트 스투파"},
+  {flag:"🇧🇹", name:"부탄", capital:"팀부", continent:"asia", landmark:"파로 탁상 사원"},
+  {flag:"🇸🇦", name:"사우디아라비아", capital:"리야드", continent:"asia", landmark:"카바 신전"},
+  {flag:"🇦🇪", name:"아랍에미리트", capital:"아부다비", continent:"asia", landmark:"부르즈 할리파"},
+  {flag:"🇮🇱", name:"이스라엘", capital:"예루살렘", continent:"asia", landmark:"바위 사원"},
+  {flag:"🇮🇷", name:"이란", capital:"테헤란", continent:"asia", landmark:"반크 대성당"},
+  {flag:"🇮🇶", name:"이라크", capital:"바그다드", continent:"asia"},
+  {flag:"🇶🇦", name:"카타르", capital:"도하", continent:"asia", landmark:"어스파이어 타워"},
+  {flag:"🇰🇼", name:"쿠웨이트", capital:"쿠웨이트시티", continent:"asia", landmark:"쿠웨이트 타워"},
+  {flag:"🇯🇴", name:"요르단", capital:"암만", continent:"asia"},
+  {flag:"🇰🇿", name:"카자흐스탄", capital:"아스타나", continent:"asia"},
+  {flag:"🇺🇿", name:"우즈베키스탄", capital:"타슈켄트", continent:"asia"},
+  {flag:"🇾🇪", name:"예멘", capital:"사나", continent:"asia"},
+
+  // 오세아니아 6
+  {flag:"🇦🇺", name:"호주", capital:"캔버라", continent:"oceania", landmark:"시드니 오페라하우스"},
+  {flag:"🇳🇿", name:"뉴질랜드", capital:"웰링턴", continent:"oceania", landmark:"통가리로 국립공원"},
+  {flag:"🇫🇯", name:"피지", capital:"수바", continent:"oceania"},
+  {flag:"🇵🇬", name:"파푸아뉴기니", capital:"포트모르즈비", continent:"oceania"},
+  {flag:"🇼🇸", name:"사모아", capital:"아피아", continent:"oceania"},
+  {flag:"🇹🇴", name:"통가", capital:"누쿠알로파", continent:"oceania"},
+
+  // 북아메리카 12
+  {flag:"🇺🇸", name:"미국", capital:"워싱턴 D.C.", continent:"namerica", landmark:"자유의 여신상"},
+  {flag:"🇨🇦", name:"캐나다", capital:"오타와", continent:"namerica", landmark:"나이아가라 폭포"},
+  {flag:"🇲🇽", name:"멕시코", capital:"멕시코시티", continent:"namerica", landmark:"치첸이트사"},
+  {flag:"🇨🇺", name:"쿠바", capital:"아바나", continent:"namerica"},
+  {flag:"🇯🇲", name:"자메이카", capital:"킹스턴", continent:"namerica"},
+  {flag:"🇵🇦", name:"파나마", capital:"파나마시티", continent:"namerica"},
+  {flag:"🇨🇷", name:"코스타리카", capital:"산호세", continent:"namerica"},
+  {flag:"🇬🇹", name:"과테말라", capital:"과테말라시티", continent:"namerica"},
+  {flag:"🇭🇳", name:"온두라스", capital:"테구시갈파", continent:"namerica"},
+  {flag:"🇭🇹", name:"아이티", capital:"포르토프랭스", continent:"namerica"},
+  {flag:"🇩🇴", name:"도미니카공화국", capital:"산토도밍고", continent:"namerica"},
+  {flag:"🇧🇸", name:"바하마", capital:"나소", continent:"namerica"},
+
+  // 남아메리카 10
+  {flag:"🇧🇷", name:"브라질", capital:"브라질리아", continent:"samerica", landmark:"코르코바도 예수상"},
+  {flag:"🇦🇷", name:"아르헨티나", capital:"부에노스아이레스", continent:"samerica", landmark:"이구아수 폭포"},
+  {flag:"🇨🇱", name:"칠레", capital:"산티아고", continent:"samerica", landmark:"모아이 석상"},
+  {flag:"🇵🇪", name:"페루", capital:"리마", continent:"samerica", landmark:"마추픽추"},
+  {flag:"🇨🇴", name:"콜롬비아", capital:"보고타", continent:"samerica", landmark:"라스 라하스 성당"},
+  {flag:"🇻🇪", name:"베네수엘라", capital:"카라카스", continent:"samerica"},
+  {flag:"🇪🇨", name:"에콰도르", capital:"키토", continent:"samerica"},
+  {flag:"🇧🇴", name:"볼리비아", capital:"라파스", continent:"samerica", landmark:"우유니 소금사막"},
+  {flag:"🇵🇾", name:"파라과이", capital:"아순시온", continent:"samerica"},
+  {flag:"🇺🇾", name:"우루과이", capital:"몬테비데오", continent:"samerica"}
+];
+
+var letters = ["A","B","C","D","E"];
+var QUESTIONS_PER_PLAYER = 10;
+
+var PLAYERS = [
+  {key:"dad",  name:"아빠", icon:"👨"},
+  {key:"mom",  name:"엄마", icon:"👩"},
+  {key:"seoi", name:"서이", icon:"🧒"},
+  {key:"seoha",name:"서하", icon:"👦"}
+];
+
+var state = {
+  screen: "start",     // start | quiz | results
+  selectedPlayers: PLAYERS.map(function(p){return p.key;}),
+  turnOrder: [],
+  scores: {},
+  selectedContinents: CONTINENTS.map(function(c){return c.key;}),
+  askCapitals: false,
+  askLandmarks: true,
+  askContinents: false,
+  totalQ: 10,
+  quiz: [],
+  current: 0,
+  score: 0,
+  answered: false
+};
+
+function playerByKey(key){
+  return PLAYERS.filter(function(p){return p.key===key;})[0];
+}
+
+function flagSrc(emoji){
+  var cps = Array.from(emoji);
+  var a = cps[0].codePointAt(0) - 0x1F1E6 + 65;
+  var b = cps[1].codePointAt(0) - 0x1F1E6 + 65;
+  var iso = String.fromCharCode(a, b).toLowerCase();
+  return "flags/" + iso + ".svg";
+}
+
+function shuffle(arr){
+  var a = arr.slice();
+  for(var i=a.length-1;i>0;i--){
+    var j = Math.floor(Math.random()*(i+1));
+    var t=a[i]; a[i]=a[j]; a[j]=t;
+  }
+  return a;
+}
+
+function continentNameByKey(key){
+  var c = CONTINENTS.filter(function(x){return x.key===key;})[0];
+  return c ? c.name : key;
+}
+
+function poolFor(keys){
+  if(keys.length === CONTINENTS.length) return COUNTRIES;
+  return COUNTRIES.filter(function(c){ return keys.indexOf(c.continent) > -1; });
+}
+
+function continentLabel(keys){
+  if(keys.length === CONTINENTS.length) return "전체 국기 105장";
+  if(keys.length === 0) return "없음";
+  return keys.map(continentNameByKey).join(" · ");
+}
+
+/* ---------- start screen ---------- */
+function renderStart(){
+  document.getElementById("hud").hidden = true;
+  document.getElementById("roundBadge").textContent = "누가 도전할까요?";
+  document.getElementById("footNote").textContent = "참가자와 대륙을 고르고 5지선다로 국기를 맞혀보세요.";
+
+  var card = document.getElementById("card");
+  var html = '<div class="mode-tag">오늘의 참가자</div>';
+  html += '<div class="player-grid">';
+  PLAYERS.forEach(function(p){
+    var active = state.selectedPlayers.indexOf(p.key) > -1 ? " active" : "";
+    html += '<button class="pbtn' + active + '" data-pkey="' + p.key + '">' +
+      '<span class="picon">' + p.icon + '</span><span>' + p.name + '</span>' +
+      '<span class="pcheck">✓</span></button>';
+  });
+  html += '</div>';
+
+  var allSelected = state.selectedContinents.length === CONTINENTS.length;
+  html += '<div class="step-label">대륙 선택 <span style="text-transform:none;letter-spacing:0;color:var(--ink-soft);">(여러 개 선택 가능)</span></div>';
+  html += '<div class="continent-grid">';
+  html += continentBtn("all", "🌍", "전체", 105, allSelected);
+  CONTINENTS.forEach(function(c){
+    html += continentBtn(c.key, c.icon, c.name, c.count, state.selectedContinents.indexOf(c.key) > -1);
+  });
+  html += '</div>';
+
+  html += '<div class="toggle-row"><div><div class="label">수도 문제도 섞기</div><div class="desc">끄면 국기 → 나라 이름만 물어봐요</div></div>' +
+    '<label class="switch"><input type="checkbox" id="capitalToggle"' + (state.askCapitals ? " checked" : "") + '><span class="slider"></span></label></div>';
+
+  html += '<div class="toggle-row"><div><div class="label">랜드마크 문제도 섞기</div><div class="desc">"세계의 랜드마크" 책 속 대표 건축물로 나라 맞히기</div></div>' +
+    '<label class="switch"><input type="checkbox" id="landmarkToggle"' + (state.askLandmarks ? " checked" : "") + '><span class="slider"></span></label></div>';
+
+  var continentToggleDisabled = state.selectedContinents.length < 2;
+  html += '<div class="toggle-row"><div><div class="label">대륙 맞히기도 섞기</div><div class="desc">' +
+    (continentToggleDisabled ? '대륙을 2개 이상 골라야 이 문제가 나와요' : '국기를 보고 어느 대륙 나라인지 맞혀요') + '</div></div>' +
+    '<label class="switch"><input type="checkbox" id="continentToggle"' + (state.askContinents ? " checked" : "") + (continentToggleDisabled ? " disabled" : "") + '><span class="slider"></span></label></div>';
+
+  html += '<button class="start-btn" id="startBtn">게임 시작하기 🚩</button>';
+  var playerNames = state.selectedPlayers.map(function(k){return playerByKey(k).name;}).join(" · ");
+  var totalPreview = QUESTIONS_PER_PLAYER * state.selectedPlayers.length;
+  html += '<div class="hint">참가자: <strong>' + (playerNames || "없음") + '</strong> · 대륙: <strong>' + continentLabel(state.selectedContinents) + '</strong></div>';
+  html += '<div class="hint">참가자 1명당 ' + QUESTIONS_PER_PLAYER + '문제씩, 총 ' + (totalPreview || 0) + '문제</div>';
+
+  card.innerHTML = html;
+
+  card.querySelectorAll(".pbtn").forEach(function(b){
+    b.addEventListener("click", function(){
+      var key = b.getAttribute("data-pkey");
+      var idx = state.selectedPlayers.indexOf(key);
+      if(idx > -1){ state.selectedPlayers.splice(idx,1); }
+      else { state.selectedPlayers.push(key); }
+      renderStart();
+    });
+  });
+  var buttons = card.querySelectorAll(".cbtn");
+  buttons.forEach(function(b){
+    b.addEventListener("click", function(){
+      var key = b.getAttribute("data-key");
+      if(key === "all"){
+        state.selectedContinents = CONTINENTS.map(function(c){return c.key;});
+      } else {
+        var idx = state.selectedContinents.indexOf(key);
+        if(idx > -1){ state.selectedContinents.splice(idx,1); }
+        else { state.selectedContinents.push(key); }
+      }
+      renderStart();
+    });
+  });
+  document.getElementById("capitalToggle").addEventListener("change", function(e){
+    state.askCapitals = e.target.checked;
+  });
+  document.getElementById("landmarkToggle").addEventListener("change", function(e){
+    state.askLandmarks = e.target.checked;
+  });
+  var continentToggleEl = document.getElementById("continentToggle");
+  if(continentToggleEl && !continentToggleEl.disabled){
+    continentToggleEl.addEventListener("change", function(e){
+      state.askContinents = e.target.checked;
+    });
+  }
+  document.getElementById("startBtn").addEventListener("click", function(){
+    if(state.selectedPlayers.length === 0){
+      alert("참가자를 한 명 이상 골라주세요!");
+      return;
+    }
+    if(state.selectedContinents.length === 0){
+      alert("대륙을 한 개 이상 골라주세요!");
+      return;
+    }
+    var pool = poolFor(state.selectedContinents);
+    state.turnOrder = shuffle(state.selectedPlayers);
+    state.totalQ = QUESTIONS_PER_PLAYER * state.turnOrder.length;
+    buildQuiz(pool);
+    state.scores = {};
+    state.turnOrder.forEach(function(k){ state.scores[k] = 0; });
+    state.screen = "quiz";
+    state.current = 0;
+    state.score = 0;
+    document.getElementById("hud").hidden = false;
+    renderQuiz();
+  });
+}
+
+function continentBtn(key, icon, name, count, isActive){
+  var active = isActive ? " active" : "";
+  return '<button class="cbtn' + active + '" data-key="' + key + '">' +
+    '<span class="cicon">' + icon + '</span>' +
+    '<span style="flex:1"><span class="cname">' + name + '</span><br><span class="ccount">국기 ' + count + '장</span></span>' +
+    '</button>';
+}
+
+/* ---------- quiz ---------- */
+function pickWithRepeats(pool, count){
+  var picks = [];
+  while(picks.length < count){
+    var batch = shuffle(pool);
+    picks = picks.concat(batch);
+  }
+  return picks.slice(0, count);
+}
+
+function buildQuiz(pool){
+  var picks = pickWithRepeats(pool, state.totalQ);
+  state.quiz = picks.map(function(c){
+    var types = ["name"];
+    if(state.askCapitals) types.push("capital");
+    if(state.askLandmarks && c.landmark){ types.push("landmark"); types.push("landmarkName"); }
+    if(state.askContinents && state.selectedContinents.length > 1) types.push("continent");
+    var type = types[Math.floor(Math.random()*types.length)];
+
+    if(type === "continent"){
+      var correctContinent = continentNameByKey(c.continent);
+      var otherContinents = shuffle(CONTINENTS.filter(function(x){return x.key !== c.continent;}).map(function(x){return x.name;}));
+      var cOptions = shuffle([correctContinent].concat(otherContinents.slice(0,4)));
+      return { country:c, type:type, correct:correctContinent, options:cOptions };
+    }
+
+    var field = type === "capital" ? "capital" : type === "landmarkName" ? "landmark" : "name";
+    var correct = c[field];
+
+    var basePool = (type === "landmark" || type === "landmarkName") ? pool.filter(function(o){return o.landmark;}) : pool;
+    var distractorPool = shuffle(basePool.filter(function(o){return o[field] !== correct;}));
+    if(distractorPool.length < 4){
+      var fallback = (type === "landmark" || type === "landmarkName") ? COUNTRIES.filter(function(o){return o.landmark;}) : COUNTRIES;
+      distractorPool = shuffle(fallback.filter(function(o){return o[field] !== correct;}));
+    }
+    var options = shuffle([correct].concat(distractorPool.slice(0,4).map(function(o){return o[field];})));
+    return { country:c, type:type, correct:correct, options:options };
+  });
+}
+
+function renderQuiz(){
+  var q = state.quiz[state.current];
+  document.getElementById("roundBadge").textContent = continentLabel(state.selectedContinents);
+  document.getElementById("footNote").textContent = "국기를 보고 나라 이름 또는 수도를 5지선다로 맞혀보세요.";
+  document.getElementById("qCount").textContent = "문항 " + (state.current+1) + " / " + state.totalQ;
+  document.getElementById("scoreBox").textContent = state.score + " pt";
+  document.getElementById("progressFill").style.width = ((state.current)/state.totalQ*100) + "%";
+
+  var turnKey = state.turnOrder[state.current % state.turnOrder.length];
+  var turnPlayer = playerByKey(turnKey);
+
+  var modeLabel = q.type === "capital" ? "수도 맞히기" :
+    q.type === "landmark" ? "랜드마크 맞히기" :
+    q.type === "landmarkName" ? "랜드마크 맞히기" :
+    q.type === "continent" ? "대륙 맞히기" : "나라 이름 맞히기";
+  var promptText = q.type === "capital" ? "이 나라의 수도는 어디일까요?" :
+    q.type === "landmark" ? "이 랜드마크는 어느 나라에 있을까요?" :
+    q.type === "landmarkName" ? "이 나라의 랜드마크는 무엇일까요?" :
+    q.type === "continent" ? "이 나라는 어느 대륙에 있을까요?" :
+    "이 국기는 어느 나라의 국기일까요?";
+  var visualHtml = q.type === "landmark"
+    ? '<div class="landmark-wrap"><div class="landmark-card"><div class="eyebrow">세계의 랜드마크</div><div class="lname">' + q.country.landmark + '</div></div></div>'
+    : '<div class="flag-wrap"><img class="flag" src="' + flagSrc(q.country.flag) + '" alt="국기"></div>';
+
+  var card = document.getElementById("card");
+  card.innerHTML =
+    '<div class="mode-tag">' + modeLabel + '</div>' +
+    '<div class="turn-banner"><span class="picon">' + turnPlayer.icon + '</span>' + turnPlayer.name + '의 차례!</div>' +
+    visualHtml +
+    '<div class="prompt">' + promptText + '</div>' +
+    '<div class="choices" id="choices"></div>' +
+    '<div class="feedback" id="feedback"></div>' +
+    '<div class="score-board" id="scoreBoard"></div>';
+  renderScoreBoard();
+
+  var choicesEl = document.getElementById("choices");
+  q.options.forEach(function(opt, i){
+    var btn = document.createElement("button");
+    btn.className = "choice";
+    btn.innerHTML = '<span class="letter">' + letters[i] + '</span><span>' + opt + '</span>';
+    btn.addEventListener("click", function(){ selectAnswer(opt, btn); });
+    choicesEl.appendChild(btn);
+  });
+  state.answered = false;
+}
+
+function renderScoreBoard(){
+  var board = document.getElementById("scoreBoard");
+  if(!board) return;
+  var maxScore = Math.max.apply(null, state.turnOrder.map(function(k){return state.scores[k];}));
+  board.innerHTML = state.turnOrder.map(function(k){
+    var p = playerByKey(k);
+    var isLeader = state.scores[k] === maxScore && maxScore > 0;
+    return '<span class="score-chip' + (isLeader?" leader":"") + '">' + p.icon + ' ' + p.name +
+      ' <span class="pts">' + state.scores[k] + '</span></span>';
+  }).join("");
+}
+
+function selectAnswer(opt, btn){
+  if(state.answered) return;
+  state.answered = true;
+  var q = state.quiz[state.current];
+  var isCorrect = opt === q.correct;
+  var turnKey = state.turnOrder[state.current % state.turnOrder.length];
+  if(isCorrect){
+    state.score += 10;
+    state.scores[turnKey] += 10;
+  }
+  q.userAnswer = opt;
+  q.wasCorrect = isCorrect;
+  q.turnKey = turnKey;
+
+  var buttons = document.querySelectorAll("#choices .choice");
+  buttons.forEach(function(b){
+    b.disabled = true;
+    var label = b.querySelector("span:last-child").textContent;
+    if(label === q.correct){
+      b.classList.add("correct");
+    } else if(b === btn){
+      b.classList.add("wrong");
+    } else {
+      b.classList.add("dim");
+    }
+  });
+
+  var fb = document.getElementById("feedback");
+  var turnPlayerName = playerByKey(turnKey).name;
+  var needsCountryName = q.type === "capital" || q.type === "continent";
+  var answerText = needsCountryName ? q.correct + " (" + q.country.name + ")" : q.correct;
+  fb.textContent = isCorrect
+    ? turnPlayerName + " 정답입니다! " + (needsCountryName ? "(" + q.country.name + ") " : "") + "(+10pt)"
+    : "아쉬워요. 정답은 " + answerText + "예요.";
+  fb.className = "feedback " + (isCorrect ? "correct" : "wrong");
+
+  document.getElementById("scoreBox").textContent = state.score + " pt";
+  renderScoreBoard();
+
+  var nextBtn = document.createElement("button");
+  nextBtn.className = "next-btn";
+  nextBtn.textContent = state.current === state.totalQ - 1 ? "결과 보기" : "다음 문항";
+  nextBtn.addEventListener("click", function(){
+    state.current++;
+    if(state.current >= state.totalQ){
+      renderResults();
+    } else {
+      renderQuiz();
+    }
+  });
+  document.getElementById("card").appendChild(nextBtn);
+}
+
+function rankFor(score, totalQ){
+  var pct = score / (totalQ*10);
+  if(pct === 1) return "만점! 세계지도가 머릿속에 있네요 🗺️";
+  if(pct >= 0.8) return "베테랑 여행가";
+  if(pct >= 0.6) return "성실한 지리 탐험가";
+  if(pct >= 0.4) return "초보 항해사";
+  return "다시 도전해볼까요?";
+}
+
+function renderResults(){
+  document.getElementById("progressFill").style.width = "100%";
+  document.getElementById("qCount").textContent = "완료 · " + state.totalQ + "문항";
+
+  var missed = state.quiz.filter(function(q){ return !q.wasCorrect; });
+  var ranking = state.turnOrder.slice().sort(function(a,b){ return state.scores[b]-state.scores[a]; });
+  var medals = ["🥇","🥈","🥉","🎖️"];
+
+  var card = document.getElementById("card");
+  var html =
+    '<div class="results">' +
+    '<div class="mode-tag">최종 결과 · ' + continentLabel(state.selectedContinents) + '</div>' +
+    '<div class="tally">' + state.score + ' / ' + (state.totalQ*10) + '</div>' +
+    '<div class="rank">' + rankFor(state.score, state.totalQ) + '</div>';
+
+  if(ranking.length > 1){
+    html += '<div class="score-board" style="margin-bottom:6px;">' + ranking.map(function(k, i){
+      var p = playerByKey(k);
+      return '<span class="score-chip' + (i===0?" leader":"") + '">' + (medals[i]||"🏅") + ' ' + p.icon + ' ' + p.name +
+        ' <span class="pts">' + state.scores[k] + '</span></span>';
+    }).join("") + '</div>';
+  }
+
+  if(missed.length){
+    html += '<div class="miss-list">';
+    missed.forEach(function(q){
+      html += '<div class="miss-row"><img class="f" src="' + flagSrc(q.country.flag) + '" alt="국기">' +
+        '<span class="name">' + q.country.name + '</span>' +
+        '<span class="ans">내 답: ' + q.userAnswer + ' → </span>' +
+        '<span class="correct-ans">' + q.correct + '</span></div>';
+    });
+    html += '</div>';
+  }
+
+  html += '<div class="results-actions">' +
+    '<button class="next-btn" id="retryBtn">같은 대륙 다시</button>' +
+    '<button class="ghost-btn" id="menuBtn">대륙 다시 고르기</button>' +
+    '</div></div>';
+  card.innerHTML = html;
+
+  document.getElementById("retryBtn").addEventListener("click", function(){
+    var pool = poolFor(state.selectedContinents);
+    state.turnOrder = shuffle(state.selectedPlayers);
+    state.totalQ = QUESTIONS_PER_PLAYER * state.turnOrder.length;
+    buildQuiz(pool);
+    state.scores = {};
+    state.turnOrder.forEach(function(k){ state.scores[k] = 0; });
+    state.current = 0;
+    state.score = 0;
+    renderQuiz();
+  });
+  document.getElementById("menuBtn").addEventListener("click", goToStart);
+}
+
+function goToStart(){
+  state.screen = "start";
+  renderStart();
+}
+
+document.getElementById("backBtn").addEventListener("click", goToStart);
+
+renderStart();
+})();
+</script>
+
+</body></html>
