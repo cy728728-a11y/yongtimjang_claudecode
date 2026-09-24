@@ -432,7 +432,9 @@ def test_2차_연속_10장_실패면_중단_성공분은_남는다(스캐너, �
     비전목.실패 = {f"0000_{i:02d}.bin" for i in range(2, 14)}
     with pytest.raises(스캐너.비전2차불가):
         _2차(스캐너, [{"장": 장들}], tmp_path)
-    assert len(비전목.호출) == 12                  # 성공 2 + 연속 실패 10 에서 멈춘다
+    # 성공 2 + 연속 실패 10 장에서 멈춘다. 실패 장은 재시도 3회를 포함해 4번씩 두드린다.
+    assert len({c for c, _ in 비전목.호출}) == 12
+    assert len(비전목.호출) == 2 + 10 * 4
     경로 = 스캐너.체크포인트경로(str(tmp_path / "cache"), "zzrun", "gemini-3.6-flash")
     assert set(스캐너.체크포인트읽기(경로)) == {"sha-0000_00.bin", "sha-0000_01.bin"}
 
