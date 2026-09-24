@@ -149,6 +149,12 @@ Recent decisions affecting current work:
 - **04-11 uat-verifier 미실행** — SSE 재접속·검수 화면 새 규칙 표기(잡 232c3bb3). 스캔 버튼 재클릭 금지 조건으로 메인 세션이 부를 것
 - 🔴 **04-12 입력:** 재검수 128장 중 치수·스펙표 15장이 비전 `배너` — 새 오탐(내용 누락) 의심. 무내용 띠 31장이 배너로 승격(합성 규칙) (GATE §16-4·16-6)
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260925-2d8 | 배너 검수 화면 👁·↩ 표식 장만 보기 토글 (04-12 재검수용) | 2026-09-25 | 73eb8a2 | [260925-2d8-banner-review-mark-filter](./quick/260925-2d8-banner-review-mark-filter/) |
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
