@@ -3,7 +3,8 @@
 #
 # sse_cdp.sh 와 같은 계층이다: pytest 밖, 살아 있는 서버 대상. 헤드리스 크롬을 띄워
 # 실제 htmx 클릭을 하고, 그 클릭이 DB 에 남았는지 sqlite3 로 확인한다.
-# `banner_review.html` · `_banner_strip.html` · `routes/banner.py` 를 건드렸으면 돌려라.
+# `banner_review.html` · `_banner_strip.html` · `static/banner_review.js` · `routes/banner.py`
+# 를 건드렸으면 돌려라.
 #
 # 쓰는 법:
 #   bash webapp/tests/banner_cdp.sh
@@ -93,7 +94,9 @@ WEBP = bytes.fromhex(
     "52494646 1a000000 57454250 5650384c 0d000000 2f000000 00071011 11888888 fe07"
     .replace(" ", ""))
 
-def 상품(코드, 장수, 배너순번, 스킵=None):
+def 상품(코드, 장수, 배너순번, 스킵=None, 출처맵=None):
+    # 출처맵: {순번: 출처}. 👁·↩ 표식 필터(quick 260925-2d8) 검사용 — 판정값은 안 바꾼다.
+    출처맵 = 출처맵 or {}
     장 = []
     for i in range(장수):
         판정 = banner.배너 if i in 배너순번 else banner.제품
@@ -103,12 +106,16 @@ def 상품(코드, 장수, 배너순번, 스킵=None):
                    "w": 800, "h": 900, "판정": 판정,
                    "사유": ("어휘군:공장직판" if 판정 == banner.배너 else None),
                    "썸네일": 이름})
+        if i in 출처맵:
+            장[-1]["출처"] = 출처맵[i]
     return {"판매자상품코드": 코드, "불사자코드": "b" + 코드,
             "타오바오상품번호": "tb-" + 코드, "상세상태": "중국어원본",
             "장수": 장수, "스킵사유": 스킵, "사유": ("제거율 82%" if 스킵 else None),
             "제거율": 0.82 if 스킵 else 0.1, "제품이미지": [], "장": 장}
 
-상품들 = [상품("zzcdp01", 16, (0, 5)),
+# zzcdp01: 5번(배너) 비전 · 3번(제품) 뒤집기 · 0번(배너) 어휘군(표식 없음 대조군).
+# zzcdp02(스킵): 표식 0 — 필터를 켜면 줄째 숨어야 한다.
+상품들 = [상품("zzcdp01", 16, (0, 5), 출처맵={5: "비전", 3: "뒤집기", 0: "어휘군"}),
         상품("zzcdp02", 3, (1,), 스킵=banner.제거율초과)]
 총장 = sum(len(p["장"]) for p in 상품들)
 총배너 = sum(1 for p in 상품들 for c in p["장"] if c["판정"] == banner.배너)
@@ -137,7 +144,11 @@ finally:
 
 # 셸이 쓸 값. **한 줄에 하나씩** 찍는다 — 저장소 경로에 공백이 있을 수 있어서
 # 한 줄을 단어로 쪼개는 방식은 쓰지 않는다.
-for 값 in ("OK", 회차, 총장, 총배너, 1, len(상품들[1]["장"]), 썸루트):
+표식장 = sum(1 for p in 상품들 for c in p["장"] if c.get("출처") in ("비전", "뒤집기"))
+표식상품 = sum(1 for p in 상품들
+             if any(c.get("출처") in ("비전", "뒤집기") for c in p["장"]))
+# 기존 7줄 순서는 그대로 두고 표식 두 줄을 뒤에 붙인다.
+for 값 in ("OK", 회차, 총장, 총배너, 1, len(상품들[1]["장"]), 썸루트, 표식장, 표식상품):
     print(값, flush=True)
 PY
 )
@@ -158,7 +169,9 @@ BANNERS=$(printf '%s\n' "$SETUP" | sed -n '4p')
 SKIP_I=$(printf '%s\n' "$SETUP" | sed -n '5p')
 SKIP_N=$(printf '%s\n' "$SETUP" | sed -n '6p')
 THUMB_DIR=$(printf '%s\n' "$SETUP" | sed -n '7p')
-echo "회차 $RUNDIR · 장 $TOTAL (배너 $BANNERS) · 스킵 상품 순번 $SKIP_I (${SKIP_N}장)"
+MARKS=$(printf '%s\n' "$SETUP" | sed -n '8p')
+MARK_P=$(printf '%s\n' "$SETUP" | sed -n '9p')
+echo "회차 $RUNDIR · 장 $TOTAL (배너 $BANNERS) · 스킵 상품 순번 $SKIP_I (${SKIP_N}장) · 표식 ${MARKS}장/${MARK_P}상품"
 
 # ── 임시 서버 ───────────────────────────────────────────────────────────────
 ./webapp/run-webapp.sh >"$WORK/server.log" 2>&1 &
@@ -194,7 +207,7 @@ fi
 
 # ── 화면 검사 ① ② + 클릭 ───────────────────────────────────────────────────
 node webapp/tests/banner_cdp.mjs "$DEVPORT" "$B" "$T" "$RUNDIR" \
-  "$TOTAL" "$BANNERS" "$SKIP_I" "$SKIP_N"
+  "$TOTAL" "$BANNERS" "$SKIP_I" "$SKIP_N" "$MARKS" "$MARK_P"
 SCREEN_RC=$?
 
 # ── 검사 ③ ④ — 클릭이 **DB 에 실제로 남았나** ───────────────────────────────

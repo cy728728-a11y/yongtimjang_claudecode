@@ -11,6 +11,9 @@
  *      (DB 확인은 `banner_cdp.sh` 가 `sqlite3` 로 한다. 여기서는 클릭과 화면 반영까지.)
  *   ④ `확인함` 은 확인 테이블에만 쓴다. 라벨 수를 늘리면 "뒤집었다" 와 "다 봤다" 가
  *      섞인 것이고, 안 본 상품이 동의로 세어진다(Pitfall 8).
+ *   ⑤ 👁·↩ 표식 장만 보기 토글(quick 260925-2d8). 기본 OFF 에서 화면 불변, 켜면
+ *      표식 장·표식 있는 줄만 보이되 DOM 에는 전장이 남고, 주소(?only=marks)로 복원되고,
+ *      끄면 전장이 돌아온다. **라벨·확인함을 더 누르지 않는다** — 셸의 1행 단언을 지킨다.
  *
  * 왜 pytest 가 아닌가 (Phase 1 결정): 클릭 → htmx POST → `outerHTML` 조각 교체는
  * **브라우저 JS 동작**이다. TestClient 는 JS 를 한 줄도 안 돌린다 — pytest 로 흉내
@@ -24,17 +27,19 @@
  * 쓰는 법: webapp/tests/banner_cdp.sh 가 임시 서버·크롬·합성 산출물을 깔고 이걸 부른다.
  */
 
-const [devport, base, token, runDir, 총장Arg, 배너Arg, 스킵iArg, 스킵장수Arg] =
-  process.argv.slice(2);
+const [devport, base, token, runDir, 총장Arg, 배너Arg, 스킵iArg, 스킵장수Arg,
+  표식장Arg, 표식상품Arg] = process.argv.slice(2);
 if (!devport || !base || !token || !runDir) {
   console.error("사용법: node banner_cdp.mjs <cdp포트> <서버주소> <토큰> <회차> " +
-    "<총장> <배너> <스킵상품순번> <스킵장수>");
+    "<총장> <배너> <스킵상품순번> <스킵장수> <표식장> <표식상품>");
   process.exit(2);
 }
 const 총장 = Number(총장Arg);
 const 배너 = Number(배너Arg);
 const 스킵i = Number(스킵iArg);
 const 스킵장수 = Number(스킵장수Arg);
+const 표식장 = Number(표식장Arg);
+const 표식상품 = Number(표식상품Arg);
 
 const 잠깐 = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -145,6 +150,38 @@ const 확인클릭 = `
   })();
 `;
 
+/* 표식 필터 상태 읽기. "보인다" 는 계산된 display 로 판단한다 — 클래스만 보면
+ * CSS 규칙이 실제로 먹는지 증명하지 못한다. */
+const 필터읽기 = `
+  (function () {
+    function 보임(el) { return getComputedStyle(el).display !== "none"; }
+    var 스트립 = Array.prototype.slice.call(
+      document.querySelectorAll('.ct-row figure[data-slot="strip"]'));
+    var 줄 = Array.prototype.slice.call(document.querySelectorAll(".ct-row"));
+    var 토글 = document.getElementById("mark-filter");
+    var 글귀 = document.getElementById("mark-filter-count");
+    return {
+      보이는장: 스트립.filter(function (f) { return 보임(f) && 보임(f.closest(".ct-row")); }).length,
+      보이는줄: 줄.filter(보임).length,
+      DOM장: 스트립.length,
+      토글있나: !!토글,
+      켜짐: !!(토글 && 토글.checked),
+      글귀: 글귀 ? (글귀.textContent || "") : null,
+      주소: location.search
+    };
+  })();
+`;
+
+async function 필터기다리기(세션, 조건, ms = 8000) {
+  const 한계 = Date.now() + ms;
+  let 값 = await 세션.평가(필터읽기);
+  while (Date.now() < 한계 && !조건(값)) {
+    await 잠깐(200);
+    값 = await 세션.평가(필터읽기);
+  }
+  return 값;
+}
+
 /** 조건이 참이 될 때까지 최대 ms 만큼 기다린다. htmx 왕복은 로컬이라 금방이다. */
 async function 기다리기(세션, 조건, ms = 8000) {
   const 한계 = Date.now() + ms;
@@ -236,6 +273,45 @@ async function main() {
       `확인배지 ${v.확인배지} · 사람찍은장 ${v.사람찍은장}` +
       `${v.오류배너 ? " · 오류 " + v.오류배너 : ""}`);
   }
+
+  /* ── ⑤ 표식 장 필터 (quick 260925-2d8) ─────────────────────────────────
+     정답 숫자는 인자(산출물 기준)에서만 온다. 라벨·확인함은 더 누르지 않는다. */
+  let f = await 탭.세션.평가(필터읽기);
+  check("V-BANNER-05a",
+    "표식 필터는 기본 꺼짐이고, 끈 화면은 전장 그대로다",
+    f.토글있나 && !f.켜짐 && f.보이는장 === 총장 && f.보이는줄 === 2 && f.글귀 === "",
+    `토글 ${f.토글있나 ? (f.켜짐 ? "켜짐" : "꺼짐") : "없음"} · 보이는 장 ${f.보이는장}/${총장}` +
+    ` · 보이는 줄 ${f.보이는줄}/2`);
+
+  await 탭.세션.평가(`document.getElementById("mark-filter").click(); true`);
+  f = await 필터기다리기(탭.세션, (x) => x.보이는장 === 표식장);
+  const 기대글귀 = `표식 ${표식장}장 / ${표식상품}상품`;
+  check("V-BANNER-05b",
+    "켜면 표식 장·표식 있는 줄만 보이고, DOM 에는 전장이 남는다 (숨김일 뿐 삭제 아님)",
+    f.켜짐 && f.보이는장 === 표식장 && f.보이는줄 === 표식상품 && f.DOM장 === 총장 &&
+      (f.글귀 || "").includes(기대글귀) && (f.글귀 || "").includes("화면 표식") &&
+      f.주소.includes("only=marks"),
+    `보이는 장 ${f.보이는장}/${표식장} · 줄 ${f.보이는줄}/${표식상품} · DOM ${f.DOM장}/${총장}` +
+    ` · 주소 ${f.주소} · 글귀 ${JSON.stringify(f.글귀)}`);
+
+  // 주소로 복원 — GET 재로딩뿐이라 DB 를 안 건드린다.
+  await 탭.세션.send("Page.navigate", {
+    url: `${base}/banner/review?run_dir=${encodeURIComponent(runDir)}&only=marks`,
+  });
+  await 잠깐(500);
+  f = await 필터기다리기(탭.세션, (x) => x.DOM장 > 0 && x.켜짐 && x.보이는장 === 표식장, 15000);
+  check("V-BANNER-05c",
+    "주소 ?only=marks 로 다시 열면 켜진 채로 복원된다",
+    f.켜짐 && f.보이는장 === 표식장 && f.DOM장 === 총장,
+    `켜짐 ${f.켜짐} · 보이는 장 ${f.보이는장}/${표식장} · DOM ${f.DOM장}/${총장}`);
+
+  await 탭.세션.평가(`document.getElementById("mark-filter").click(); true`);
+  f = await 필터기다리기(탭.세션, (x) => x.보이는장 === 총장);
+  check("V-BANNER-05d",
+    "끄면 전장이 돌아오고 주소에서 only 가 빠진다",
+    !f.켜짐 && f.보이는장 === 총장 && !f.주소.includes("only=") && f.글귀 === "" &&
+      f.주소.includes("run_dir="),
+    `보이는 장 ${f.보이는장}/${총장} · 주소 ${f.주소} · 글귀 ${JSON.stringify(f.글귀)}`);
 
   탭.세션.닫기();
 }
