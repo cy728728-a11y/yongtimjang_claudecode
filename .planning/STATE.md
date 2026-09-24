@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-09-PLAN.md
-last_updated: "2026-09-24T12:03:59.473Z"
-last_activity: 2026-09-24 -- 04-10 완료 (비전 2차 웹앱 배선 · 검수 화면 규칙 표기 · API 0회)
+stopped_at: Completed 04-11-PLAN.md
+last_updated: "2026-09-24T15:25:27.875Z"
+last_activity: 2026-09-25 -- 04-11 완료 (2차 전량 재측정 · 호출 894 실패 0 · 재검수 목록 128장 · 게이트 판단은 04-12)
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 28
-  completed_plans: 26
+  completed_plans: 27
   percent: 29
 ---
 
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 04 (banner-detection) — EXECUTING
-Plan: 10 of 12 완료 (다음 04-11 — 견적 승인 체크포인트)
+Plan: 11 of 12 완료 (다음 04-12 — 용팀장 재검수 128장 → 게이트 재측정)
 Status: Ready to execute
-Last activity: 2026-09-24 -- 04-10 완료 (비전 2차 웹앱 배선 · 검수 화면 규칙 표기 · API 0회)
+Last activity: 2026-09-25 -- 04-11 완료 (2차 전량 재측정 · 호출 894 실패 0 · 재검수 목록 128장 · 게이트 판단은 04-12)
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
 Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
 
-Progress: [█████████░] 93%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -122,6 +122,7 @@ Recent decisions affecting current work:
 - [Phase 03]: 그룹 단계 429 구멍은 Phase 3 범위 밖 이월 — 2026-09-21 용팀장 "그냥 두고 기록만"
 - [Phase 03]: 사람이 하지 않은 말을 검증 문서에 적지 않는다 — Task 3 은 **포괄 승인**으로만 기록하고 항목별 진술 미수령을 미해결로 남겼다 (T-3-40)
 - [Phase 04]: 04-10: 배너 잡 조립·검수 화면 대조 모두 settings.load(force=True) — toml 변경이 재시작 없이 반영
+- [Phase 04]: 04-11: 2차 유료 상한 894 승인(2026-09-24 용팀장) → 재측정 exit 0 · 호출 894 · 실패 0 · 유료 단가 환산 $2.05. 새 게이트 계산값 true 는 **자동 동의 128장 위 숫자** — 통과 아님, 04-12 사람 재검수가 먼저 (GATE §16-7)
 
 ### Pending Todos
 
@@ -145,6 +146,8 @@ Recent decisions affecting current work:
 - OQ-8: 수집만 되고 판정 안 된 회차가 있을 때 화면이 알리지 않는다 — 보드의 '새로 수집' 버튼 때문에 재발 구조다. 01-08 이 실행 흐름을 만들 때 자리가 생길 수 있다(지금 고치지 않는다)
 - 실제 광고 API 되돌리기가 Phase 1 에서 한 번도 실행되지 않았다 — 사고 시 처음 눌러보는 경로. 소수 건 되돌렸다 즉시 재인상으로 싸게 닫을 수 있다(당일이면 쿨다운 안 걸림)
 - ~~04-10 Task 3 uat-verifier 미실행~~ — 해소: 2026-09-24 PASS
+- **04-11 uat-verifier 미실행** — SSE 재접속·검수 화면 새 규칙 표기(잡 232c3bb3). 스캔 버튼 재클릭 금지 조건으로 메인 세션이 부를 것
+- 🔴 **04-12 입력:** 재검수 128장 중 치수·스펙표 15장이 비전 `배너` — 새 오탐(내용 누락) 의심. 무내용 띠 31장이 배너로 승격(합성 규칙) (GATE §16-4·16-6)
 
 ## Deferred Items
 
@@ -156,6 +159,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-24T12:03:44.948Z
-Stopped at: Completed 04-09-PLAN.md
+Last session: 2026-09-24T15:25:27.870Z
+Stopped at: Completed 04-11-PLAN.md
 Resume file: None

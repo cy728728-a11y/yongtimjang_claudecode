@@ -202,7 +202,7 @@ Plans:
 
 **갭 클로저 Wave 3** *(blocked on 갭 클로저 Wave 2 · frontmatter `wave: 3`)*
 
-- [ ] 04-11-PLAN.md — 견적·단가 → **용팀장 유료 실행 승인** → 재측정 실탄(같은 회차·in-sample) + 재검수 목록 + 전후 미탐/오탐
+- [x] 04-11-PLAN.md — 견적·단가 → **용팀장 유료 실행 승인** → 재측정 실탄(같은 회차·in-sample) + 재검수 목록 + 전후 미탐/오탐
 
 **갭 클로저 Wave 4** *(blocked on 갭 클로저 Wave 3 · 사람 체크포인트 · frontmatter `wave: 4`)*
 
@@ -268,7 +268,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. 첫 왕복 — 보드 + 입찰가 인상 버튼 | 9/9 | Complete   | 2026-09-20 |
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
-| 4. 홍보배너 식별 | 10/12 | In Progress|  |
+| 4. 홍보배너 식별 | 11/12 | In Progress|  |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 0/TBD | Not started | - |
 | 6. 마켓 수정업로드 | 0/TBD | Not started | - |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |
