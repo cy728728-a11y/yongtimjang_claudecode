@@ -658,6 +658,11 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
         if result_path is None:
             raise ValueError("배너 스캔에는 산출물 경로가 필요하다")
 
+        # 🔴 설정을 **새로 읽는다.** 04-08 때 서버가 옛 `banner_lexicon_version` 을
+        # 메모리(`settings._cache`)에 들고 있어 재시작해야 했다(04-GATE §0). 배너 잡 1회당
+        # toml 한 번 읽기는 비용이 0 에 가깝다. 다른 kind 는 건드리지 않는다.
+        settings.load(force=True)
+
         # 임계값·리비전·워커 수는 **전부 여기서 `settings.cfg()` 로 읽어 넘긴다.**
         # 모델이나 CLI 기본값에 기대면 `workspace.toml` 을 고쳐도 동작이 안 바뀌는
         # 가짜 설정이 된다(T-1-12). 그리고 넘긴 값이 그대로 산출물의 `판정규칙` 블록에
@@ -684,6 +689,22 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
                                              settings.DEFAULTS["banner_lexicon_version"])),
             keep_runs=int(settings.cfg("banner_keep_runs",
                                        settings.DEFAULTS["banner_keep_runs"])),
+            # 비전 2차(04-09 계약). 키 파일은 **경로 문자열만** — `banner_dir()` 을 쓰지
+            # 마라(그건 데이터 루트 캐시용이다). 상대경로는 자식이 저장소 루트 기준으로 푼다.
+            vision2_enabled=bool(settings.cfg("banner_vision2_enabled",
+                                              settings.DEFAULTS["banner_vision2_enabled"])),
+            vision2_model=str(settings.cfg("banner_vision2_model",
+                                           settings.DEFAULTS["banner_vision2_model"])),
+            vision2_prompt=str(settings.cfg("banner_vision2_prompt",
+                                            settings.DEFAULTS["banner_vision2_prompt"])),
+            vision2_key_file=Path(str(settings.cfg("banner_vision2_key_file",
+                                                   settings.DEFAULTS["banner_vision2_key_file"]))),
+            vision2_timeout=float(settings.cfg("banner_vision2_timeout",
+                                               settings.DEFAULTS["banner_vision2_timeout"])),
+            vision2_max_calls=int(settings.cfg("banner_vision2_max_calls",
+                                               settings.DEFAULTS["banner_vision2_max_calls"])),
+            vision2_interval=float(settings.cfg("banner_vision2_interval",
+                                                settings.DEFAULTS["banner_vision2_interval"])),
             prefix=_수면방지_프리픽스(kind),
         ).build()
 

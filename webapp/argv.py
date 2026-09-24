@@ -248,6 +248,18 @@ class BannerArgv(BaseModel):
     skip_max_removal: float  # --skip-max-removal D-08
     lexicon_version: PlainArg  # --lexicon-version 산출물 `판정규칙` 에 찍을 표기
     keep_runs: int           # --keep-runs  남길 원본 캐시 회차 수 (회차당 약 271MB)
+    # ── 비전 2차 판정 (04-09 계약 / D-22) ── 전부 기본값 없음. 위 규율 그대로다.
+    # `--vision2-estimate` 는 CLI 전용(사람이 터미널에서 견적만 볼 때)이라 여기 없다.
+    vision2_enabled: bool      # --vision2-enabled on|off
+    vision2_model: PlainArg    # --vision2-model    요청 모델 (응답 모델은 산출물에 따로 찍힌다)
+    vision2_prompt: PlainArg   # --vision2-prompt   지시문 판. 스크립트 상수와 다르면 자식이 exit 5
+    # --vision2-key-file  🔴 **경로만** 싣는다. 이 argv 는 `jobs.argv` 컬럼에 JSON 으로
+    # 영구 저장된다(감사·재현) — 키 값이 들어가면 영구 유출이다(T-4-40).
+    # 웹앱은 이 파일을 **열지 않는다.** 여는 건 CLI 자식 한 곳뿐이다.
+    vision2_key_file: Path
+    vision2_timeout: float     # --vision2-timeout  호출 1회 타임아웃(초)
+    vision2_max_calls: int     # --vision2-max-calls 승인 상한. 0 = 유료 호출 미승인(초과 시 exit 5)
+    vision2_interval: float    # --vision2-interval 호출 사이 쉬는 초
     # `AdsArgv.prefix`·`BulsajaArgv.prefix` 와 같은 규약의 `caffeinate -i` 자리 (ENG-06).
     # **무엇에 붙일지는 잡 종류가 정한다** — `jobs._수면방지_프리픽스` 가 그 판단을 들고 있다.
     prefix: list[str] = []
@@ -276,5 +288,15 @@ class BannerArgv(BaseModel):
         av += ["--skip-max-removal", str(self.skip_max_removal)]
         av += ["--lexicon-version", self.lexicon_version]
         av += ["--keep-runs", str(self.keep_runs)]
+
+        # 비전 2차 7개도 **조건 없이** 붙인다 — 꺼짐도 `off` 로 명시한다. 빠지면 자식이
+        # 자기 폴백으로 돌면서 산출물 `판정규칙.2차판정` 에 그 폴백을 찍는다(S-4 드리프트).
+        av += ["--vision2-enabled", "on" if self.vision2_enabled else "off"]
+        av += ["--vision2-model", self.vision2_model]
+        av += ["--vision2-prompt", self.vision2_prompt]
+        av += ["--vision2-key-file", str(self.vision2_key_file)]
+        av += ["--vision2-timeout", str(self.vision2_timeout)]
+        av += ["--vision2-max-calls", str(self.vision2_max_calls)]
+        av += ["--vision2-interval", str(self.vision2_interval)]
 
         return av

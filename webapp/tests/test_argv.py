@@ -13,6 +13,7 @@
 언젠가 진짜 실행으로 자란다. 그래서 아래에서는 `"--" + "commit"` 처럼 나눠 조립한다 —
 런타임 코드(`webapp/argv.py`)에는 리터럴이 있어야 하지만 테스트 트리에는 없어야 한다.
 """
+import json
 from pathlib import Path
 
 import pytest
@@ -473,7 +474,11 @@ def _배너(**덮기):
                 run_dir="2026-09-20", cache=Path("/tmp/zz-cache"),
                 thumbs=Path("/tmp/zz-thumbs"), workers=8, vision_revision=3,
                 blank_ar=6.0, blank_short_px=32, skip_min_keep=2,
-                skip_max_removal=0.5, lexicon_version="2026-09-22", keep_runs=2)
+                skip_max_removal=0.5, lexicon_version="2026-09-22", keep_runs=2,
+                vision2_enabled=True, vision2_model="gemini-3.6-flash",
+                vision2_prompt="v3",
+                vision2_key_file=Path(".claude/skills/sellerlife-keyword/.env"),
+                vision2_timeout=60.0, vision2_max_calls=0, vision2_interval=0.3)
     기본.update(덮기)
     return A.BannerArgv(**기본)
 
@@ -528,12 +533,18 @@ def test_배너_임계값에_모델_기본값이_없다():
     """
     필수 = ("join", "out", "run_dir", "cache", "thumbs", "workers", "vision_revision",
            "blank_ar", "blank_short_px", "skip_min_keep", "skip_max_removal",
-           "lexicon_version", "keep_runs")
+           "lexicon_version", "keep_runs",
+           "vision2_enabled", "vision2_model", "vision2_prompt", "vision2_key_file",
+           "vision2_timeout", "vision2_max_calls", "vision2_interval")
     온전 = dict(join=Path("/tmp/zz-join.json"), out=Path("/tmp/zz-banner.json"),
                 run_dir="2026-09-20", cache=Path("/tmp/zz-cache"),
                 thumbs=Path("/tmp/zz-thumbs"), workers=8, vision_revision=3,
                 blank_ar=6.0, blank_short_px=32, skip_min_keep=2,
-                skip_max_removal=0.5, lexicon_version="2026-09-22", keep_runs=2)
+                skip_max_removal=0.5, lexicon_version="2026-09-22", keep_runs=2,
+                vision2_enabled=True, vision2_model="gemini-3.6-flash",
+                vision2_prompt="v3",
+                vision2_key_file=Path(".claude/skills/sellerlife-keyword/.env"),
+                vision2_timeout=60.0, vision2_max_calls=0, vision2_interval=0.3)
 
     for 뺄것 in 필수:
         모자란것 = {k: v for k, v in 온전.items() if k != 뺄것}
@@ -554,3 +565,47 @@ def test_어휘군_버전이_플래그_모양이면_거부된다():
     for 나쁜값 in ["--force", "-x", "2026 09 21", "", " "]:
         with pytest.raises(ValidationError):
             _배너(lexicon_version=나쁜값)
+
+
+def test_배너_argv_가_비전2차_7개를_조건없이_붙인다():
+    """04-09 계약 — 7개가 전부, 언제나 실린다. 꺼짐도 `off` 로 **명시**한다.
+
+    하나라도 빠지면 자식이 자기 폴백으로 돌면서 산출물 `판정규칙.2차판정` 에 그 폴백을
+    찍는다 — `workspace.toml` 과 다른 규칙이 조용히 산다(S-4).
+    """
+    av = _배너().build()
+    기대 = {"--vision2-enabled": "on", "--vision2-model": "gemini-3.6-flash",
+            "--vision2-prompt": "v3",
+            "--vision2-key-file": ".claude/skills/sellerlife-keyword/.env",
+            "--vision2-timeout": "60.0", "--vision2-max-calls": "0",
+            "--vision2-interval": "0.3"}
+    for 플래그, 값 in 기대.items():
+        assert av.count(플래그) == 1, f"{플래그} 가 빠졌거나 두 번 실렸다"
+        assert av[av.index(플래그) + 1] == 값
+    # 견적 모드는 CLI 전용이다 — 웹앱 잡이 견적만 찍고 끝나면 산출물이 없다
+    assert "--vision2-estimate" not in av
+
+    꺼짐 = _배너(vision2_enabled=False).build()
+    assert 꺼짐[꺼짐.index("--vision2-enabled") + 1] == "off"
+
+
+def test_배너_argv_에_키_값이_실리지_않는다():
+    """🔴 T-4-40 — 실제 `.env` 경로를 줘도 argv 에는 **경로 문자열만** 실린다.
+
+    argv 는 `jobs.argv` 컬럼에 JSON 으로 영구 저장된다. 모델이 파일을 열어 값을
+    끼워 넣는 순간 영구 유출이다 — 그래서 직렬화한 문자열 전체를 본다.
+    """
+    진짜경로 = A.PY_CLI.parents[2] / ".claude/skills/sellerlife-keyword/.env"  # 저장소 루트 기준
+    직렬 = json.dumps(_배너(vision2_key_file=진짜경로).build(), ensure_ascii=False)
+    assert "GEMINI_API_KEY" not in 직렬
+    assert "AIza" not in 직렬
+    assert str(진짜경로) in 직렬
+
+
+def test_비전2차_모델명이_플래그_모양이면_거부된다():
+    """`--vision2-model`·`--vision2-prompt` 도 argparse 가 옵션으로 오독하면 안 된다."""
+    for 나쁜값 in ["--force", "-x", ""]:
+        with pytest.raises(ValidationError):
+            _배너(vision2_model=나쁜값)
+        with pytest.raises(ValidationError):
+            _배너(vision2_prompt=나쁜값)

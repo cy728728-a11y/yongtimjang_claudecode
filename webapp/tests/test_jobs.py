@@ -1131,6 +1131,19 @@ def _배너잡(run_dir: Path) -> str:
                            targets_path_override=조인)
 
 
+def _toml덮기(monkeypatch, **webapp덮기):
+    """`workspace.toml [webapp]` 을 **파일 읽기 자리에서** 갈아끼운다.
+
+    실제 toml 의 다른 테이블([paths] 등)은 그대로 두고 `[webapp]` 에만 덮는다.
+    `_cache` 도 monkeypatch 에 등록해 둔다 — 테스트가 끝나면 강제 재적재로 바뀐
+    캐시가 원래대로 돌아간다(다음 테스트가 가짜 설정을 물려받지 않게).
+    """
+    진짜 = paths.read_workspace_toml()
+    가짜 = {**진짜, "webapp": {**(진짜.get("webapp") or {}), **webapp덮기}}
+    monkeypatch.setattr(settings, "_cache", settings._cache)
+    monkeypatch.setattr(paths, "read_workspace_toml", lambda: 가짜)
+
+
 def test_배너잡_kind_가_등록돼_있다():
     """`JobKind` 만 고치고 `KINDS` 를 빠뜨리면 런타임이 거부한다 — 둘 다 본다."""
     assert "banner_scan" in jobs.KINDS
@@ -1198,11 +1211,10 @@ def test_배너잡_argv_가_설정에서_온다(잡판, 안띄운다, tmp_run_di
     이고, 배너 쪽은 그 값이 그대로 산출물 `판정규칙` 에 찍히므로 한 겹 더 나쁘다.
     `caffeinate` 가 실제로 붙는지도 같이 본다 — 4분 12초짜리다(ENG-06 / T-3-37).
     """
-    원래 = settings.load()
-    monkeypatch.setattr(settings, "_cache", {**원래, "banner_workers": 3,
-                                             "banner_vision_revision": 2,
-                                             "banner_skip_max_removal": 0.75,
-                                             "banner_lexicon_version": "zz9999-01-01"})
+    # 04-10 부터 배너 분기가 `settings.load(force=True)` 로 toml 을 새로 읽는다 —
+    # 그래서 `_cache` 를 덮는 대신 **toml 자체**를 갈아끼운다(메모리 덮기는 바로 버려진다).
+    _toml덮기(monkeypatch, banner_workers=3, banner_vision_revision=2,
+              banner_skip_max_removal=0.75, banner_lexicon_version="zz9999-01-01")
     job_id = _배너잡(tmp_run_dir)
 
     av = json.loads(jobs._row(job_id)["argv"])
@@ -1232,3 +1244,42 @@ def test_배너잡은_회차밖_파일을_안_받는다(잡판, tmp_run_dir, tmp
     with pytest.raises(ValueError):
         jobs.create_job("banner_scan", run_dir=tmp_run_dir.name,
                         targets_path_override=남의것)
+
+
+def test_배너잡_비전2차_설정이_재시작_없이_반영된다(잡판, 안띄운다, tmp_run_dir, monkeypatch):
+    """🔴 04-08 사고 회귀 (04-GATE §0) — 서버가 옛 설정을 메모리에 들고 있으면 안 된다.
+
+    먼저 한 번 읽어 캐시를 **데워 둔다**(서버가 떠 있던 상태). 그 뒤 toml 만 바꾸고
+    `settings.load()` 를 **수동으로 force 하지 않은 채** 다음 잡을 만든다.
+    argv 가 새 값을 들고 있어야 한다 — 재시작 없이.
+    """
+    settings.load(force=True)            # 서버 기동 때 데워진 캐시
+    _toml덮기(monkeypatch, banner_vision2_model="zz-gemini-테스트",
+              banner_vision2_enabled=False, banner_vision2_max_calls=7,
+              banner_vision2_prompt="v9", banner_vision2_timeout=12.5,
+              banner_vision2_interval=0.9,
+              banner_vision2_key_file="zz/경로만/.env")
+
+    av = jobs._build_argv("banner_scan", "zzjob", tmp_run_dir.name, [],
+                          tmp_run_dir / "web" / "join_zz.json",
+                          Path("/tmp/zz-banner.json"), False)
+
+    assert av[av.index("--vision2-model") + 1] == "zz-gemini-테스트"
+    assert av[av.index("--vision2-enabled") + 1] == "off"
+    assert av[av.index("--vision2-max-calls") + 1] == "7"
+    assert av[av.index("--vision2-prompt") + 1] == "v9"
+    assert av[av.index("--vision2-timeout") + 1] == "12.5"
+    assert av[av.index("--vision2-interval") + 1] == "0.9"
+    assert av[av.index("--vision2-key-file") + 1] == "zz/경로만/.env"
+    # 웹앱이 넘기지 않는 CLI 전용 플래그
+    assert "--vision2-estimate" not in av
+
+
+def test_배너잡_argv_컬럼에_키_값이_없다(잡판, 안띄운다, tmp_run_dir):
+    """🔴 T-4-40 — `jobs.argv` 는 평문 영구 저장이다. 경로만 실리고 키는 0회."""
+    job_id = _배너잡(tmp_run_dir)
+    원문 = jobs._row(job_id)["argv"]
+    av = json.loads(원문)
+    assert "--vision2-key-file" in av
+    assert "GEMINI_API_KEY" not in 원문
+    assert "AIza" not in 원문   # 구글 API 키 접두어
