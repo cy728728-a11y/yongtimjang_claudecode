@@ -27,3 +27,15 @@ test("속성은 iso·cont·ko 만 남긴다", () => {
   assert.deepStrictEqual(Object.keys(g.properties).sort(), ["cont", "iso", "ko"]);
   assert.strictEqual(g.properties.cont, "europe");
 });
+
+test("나라 iso 는 지도에서 한 번씩만 나온다", () => {
+  const topo = JSON.parse(fs.readFileSync(FILE, "utf8"));
+  const geoms = topo.objects.countries.geometries;
+  const isos = geoms.map((g) => g.properties.iso).filter((iso) => iso !== "");
+  const unique = new Set(isos);
+  assert.strictEqual(isos.length, unique.size, "중복된 iso가 있다: " + isos.filter((iso, i) => isos.indexOf(iso) !== i));
+
+  const au = geoms.find((g) => g.properties.iso === "au");
+  assert.ok(au, "au(호주) geometry가 있어야 한다");
+  assert.strictEqual(au.properties.cont, "oceania");
+});
