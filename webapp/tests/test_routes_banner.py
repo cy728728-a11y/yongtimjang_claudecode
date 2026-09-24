@@ -839,3 +839,100 @@ def test_접수버튼과_잡패널이_양쪽_분기에_있다(화면, 돌린척,
         assert 'id="job-panel"' in 본문
         # 스트림 연결 속성은 활성 잡이 있을 때만, 그것도 하나만 붙는다.
         assert 본문.count("sse-connect") <= 1, "스트림을 여러 개 열었다 (T-1-24)"
+
+
+# ── 9. 판정규칙 3갈래 · 규칙불일치 · 장별 출처 (04-10) ──────────────────────
+#
+# 산출물은 기존 `_산출물()` 헬퍼를 고쳐 쓴다(새 픽스처 파일 금지). 현재 설정은
+# `workspace.toml` 을 **읽는 자리에서** 갈아끼운다 — 라우트가 `load(force=True)` 로
+# 새로 읽으므로 `_cache` 를 덮는 방식은 바로 버려진다.
+
+_켜진2차 = {"사용": True, "모델": "zz-gemini-켜짐", "응답모델": "zz-gemini-켜짐-001",
+          "지시문판": "v3", "지시문sha256": "5ff5d8cc0123456789abcdef",
+          "합성규칙": "합집합+뒤집기(연락처,공장직판)", "적용범위": "판정대상전량",
+          "판정대상장수": 2, "고유이미지": 2, "체크포인트적중": 0, "호출": 2, "성공": 2,
+          "실패": 0, "비전추가배너": 1, "뒤집기": 0, "입력토큰": 10, "출력토큰": 5}
+
+
+def _현재설정(monkeypatch, **webapp덮기):
+    """현재 설정(`workspace.toml [webapp]`)을 테스트 값으로 둔다. 다른 테이블은 진짜 그대로."""
+    진짜 = paths.read_workspace_toml()
+    가짜 = {**진짜, "webapp": {**(진짜.get("webapp") or {}), **webapp덮기}}
+    monkeypatch.setattr(settings, "_cache", settings._cache)
+    monkeypatch.setattr(paths, "read_workspace_toml", lambda: 가짜)
+
+
+def _규칙산출물(이차=None, 옛=False):
+    문서 = _산출물()
+    if not 옛:
+        문서["판정규칙"]["2차판정"] = 이차 if 이차 is not None else {"사용": False}
+    return 문서
+
+
+def _맞춘설정(monkeypatch, **덮기):
+    기본 = dict(banner_lexicon_version="2026-09-21", banner_vision2_enabled=True,
+              banner_vision2_model="zz-gemini-켜짐", banner_vision2_prompt="v3")
+    기본.update(덮기)
+    _현재설정(monkeypatch, **기본)
+
+
+def test_2차_켜진_산출물은_모델과_규칙을_보인다(화면, 돌린척, tmp_run_dir, monkeypatch):
+    _맞춘설정(monkeypatch)
+    돌린척(_규칙산출물(dict(_켜진2차)))
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    assert "2차 zz-gemini-켜짐" in 본문
+    assert "응답 zz-gemini-켜짐-001" in 본문
+    assert "지시문 v3/5ff5d8cc0123" in 본문
+    assert "판정대상전량" in 본문
+    assert "합집합+뒤집기(연락처,공장직판)" in 본문
+    assert "in-sample" in 본문
+    # 설정과 맞으면 경고가 안 뜬다 — 늘 뜨는 경고는 아무도 안 읽는다
+    assert "현재 설정과 다른 규칙" not in 본문
+
+
+def test_옛_산출물은_옛_회차로_그린다(화면, 돌린척, tmp_run_dir, monkeypatch):
+    _맞춘설정(monkeypatch)
+    돌린척(_규칙산출물(옛=True))
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    assert "2차 판정 칸이 없는 옛 회차" in 본문
+    assert "2차 판정 꺼짐" not in 본문
+    # 옛 회차는 2차 항목을 비교하지 않는다 (어휘군버전이 같으면 경고 없음)
+    assert "현재 설정과 다른 규칙" not in 본문
+
+
+def test_2차_꺼진_산출물은_꺼짐으로_그린다(화면, 돌린척, tmp_run_dir, monkeypatch):
+    _맞춘설정(monkeypatch, banner_vision2_enabled=False)
+    돌린척(_규칙산출물({"사용": False}))
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    assert "2차 판정 꺼짐" in 본문
+    assert "1차 어휘군 단독" in 본문
+    assert "옛 회차" not in 본문
+
+
+def test_산출물_모델이_현재설정과_다르면_경고한다(화면, 돌린척, tmp_run_dir, monkeypatch):
+    """🔴 T-4-42 — 04-08 의 낡은 설정 사고(04-GATE §0) 세 번째 겹."""
+    _맞춘설정(monkeypatch, banner_vision2_model="zz-gemini-새모델")
+    돌린척(_규칙산출물(dict(_켜진2차)))
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    assert "현재 설정과 다른 규칙" in 본문
+    assert "zz-gemini-켜짐" in 본문 and "zz-gemini-새모델" in 본문
+    assert "다시 돌려야 현재 규칙이 반영된다" in 본문
+
+
+def test_비전만_배너라_한_장에_눈_표식과_근거가_보인다(화면, 돌린척, tmp_run_dir, monkeypatch):
+    _맞춘설정(monkeypatch)
+    문서 = _규칙산출물(dict(_켜진2차))
+    장 = 문서["상품"][0]["장"][1]
+    장.update({"판정": banner.배너, "사유": "zz비전사유", "출처": "비전",
+              "1차": {"판정": banner.제품, "사유": None},
+              "2차": {"판정": "배너", "근거": "zz광고문구큼", "실패": None}})
+    뒤집힌 = 문서["상품"][0]["장"][0]
+    뒤집힌.update({"판정": banner.제품, "출처": "뒤집기",
+                  "2차": {"판정": None, "근거": None, "실패": "TimeoutError"}})
+    돌린척(문서)
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    assert "👁" in 본문
+    assert "zz광고문구큼" in 본문
+    assert "출처 비전" in 본문
+    assert "↩" in 본문
+    assert "2차 실패: TimeoutError" in 본문
