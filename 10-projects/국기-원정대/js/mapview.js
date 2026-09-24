@@ -8,6 +8,14 @@
   var SMALL_PX = 14; // 이보다 작게 보이는 나라는 점 추가
   var STAR_PX = 12;  // 마스터 ⭐ 크기 (화면 px, 점 크기 정도)
   var KEEP_RATIO = 0.5; // 땅 보정: 누른 나라 중심 거리 < 작은 나라 거리 × 이 값이면 누른 나라 유지
+  var CONT_LABEL_PX = 16; // 대륙 이름표 글자 크기 (화면 px)
+
+  // 세계지도에서 대륙 이름표를 붙일 자리 [경도, 위도]
+  //   유럽·아시아 이름표가 폰 화면에서 겹치지 않게 서로 떨어뜨림
+  var CONT_POINTS = {
+    europe: [2, 56], africa: [20, 6], asia: [105, 32],
+    oceania: [134, -25], namerica: [-102, 45], samerica: [-60, -12]
+  };
 
   // 대륙별 확대 범위 [[서경, 남위], [동경, 북위]]
   var VIEWS = {
@@ -65,7 +73,10 @@
       gHits.selectAll("circle.mq-hit").attr("r", px(HIT_PX));
       gDots.selectAll("circle.mq-pin").attr("r", px(PIN_PX));
       gStars.selectAll("text").style("font-size", px(STAR_PX) + "px");
-      gLabels.selectAll("text").style("font-size", px(LABEL_PX) + "px").style("stroke-width", px(3) + "px");
+      gLabels.selectAll("text").style("font-size", function () {
+        // 대륙 이름표는 나라 이름표보다 크게
+        return px(this.classList.contains("mq-label-cont") ? CONT_LABEL_PX : LABEL_PX) + "px";
+      }).style("stroke-width", px(3) + "px");
     }
 
     var zoom = root.d3.zoom()
@@ -254,6 +265,19 @@
       } catch (e) { /* 화면에 없는 svg → 측정 불가, 그대로 */ }
     }
 
+    // 대륙 이름표 (세계지도에서 정답·오답 대륙 알려주기)
+    function labelContinent(key, text, cls) {
+      var at = CONT_POINTS[key];
+      if (!at || !path) return;
+      var p = path.projection()(at);
+      if (!p || !isFinite(p[0])) return;
+      gLabels.append("text")
+        .attr("class", "mq-label mq-label-cont " + (cls || ""))
+        .attr("x", p[0]).attr("y", p[1])
+        .text(text);
+      resize();
+    }
+
     function clearLabels() { gLabels.selectAll("*").remove(); }
 
     function clearAll() {
@@ -322,6 +346,7 @@
       mark: mark,
       markContinent: markContinent,
       label: label,
+      labelContinent: labelContinent,
       clearLabels: clearLabels,
       setMastery: setMastery,
       neighborsOf: neighborsOf,

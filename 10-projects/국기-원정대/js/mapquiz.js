@@ -136,18 +136,29 @@
           step = "wait";
           var ok = k === c.continent;
           if (ok) points += L.POINTS.stageContinent;
+          // 정답 대륙을 세계지도에 칠하고 이름표 → 아이가 위치를 충분히 본 뒤 버튼으로 넘어감
+          var contName = CONT_NAMES[c.continent];
           view.markContinent(c.continent);
+          view.labelContinent(c.continent, contName, "mq-label-main");
+          if (!ok) view.labelContinent(k, "여긴 " + CONT_NAMES[k], "mq-label-wrong");
           fb.textContent = ok
-            ? "맞았어요! " + CONT_NAMES[k] + josa(CONT_NAMES[k], "이에요", "예요") + " (+" + L.POINTS.stageContinent + ")"
-            : "아쉬워요. " + nameEun + " " + CONT_NAMES[c.continent] + "에 있어요";
+            ? "맞았어요! " + contName + josa(contName, "이에요", "예요") + " (+" + L.POINTS.stageContinent + ")"
+            : "아쉬워요. " + nameEun + " " + contName + "에 있어요";
           fb.className = "feedback " + (ok ? "correct" : "wrong");
-          setTimeout(function () {
+          promptEl.innerHTML = flagImg + '<span>' + contName + josa(contName, "이", "가") + ' 세계지도 어디에 있는지 살펴보세요<small>다 봤으면 아래 버튼을 눌러요</small></span>';
+
+          var go = document.createElement("button");
+          go.className = "next-btn";
+          go.textContent = "🔍 " + contName + josa(contName, "으로", "로") + " 가서 " + c.name + " 찾기";
+          go.addEventListener("click", function () {
+            go.remove();
             view.show(c.continent);
             step = "country";
             promptEl.innerHTML = flagImg + '<span>이제 <b>' + nameEul + '</b> 찾아보세요!</span>';
             fb.textContent = "";
             fb.className = "feedback";
-          }, 1200);
+          });
+          fb.insertAdjacentElement("afterend", go);
         } else if (step === "country") {
           var hit = f.properties.iso === c.iso;
           if (hit) points += L.POINTS.stageCountry;
