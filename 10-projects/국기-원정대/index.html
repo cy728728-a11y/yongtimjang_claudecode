@@ -251,7 +251,7 @@ footer.note{text-align:center;color:var(--ink-soft);font-size:0.78rem;margin-top
 .mq-land{fill:var(--land-other);stroke:var(--card-bg);stroke-width:.6;vector-effect:non-scaling-stroke;cursor:pointer;transition:fill .2s;}
 .mq-land.mq-quiz{fill:var(--land);}
 @media (hover:hover){.mq-land:hover{fill:var(--gold-soft);}}
-.mq-land.mq-cont{fill:color-mix(in srgb, var(--gold) 55%, var(--land));}
+.mq-land.mq-cont{fill:color-mix(in srgb, var(--gold) 55%, var(--land));animation:mqpulse .9s ease-in-out 3;}
 .mq-land.mq-m1{fill:color-mix(in srgb, var(--teal) 35%, var(--land));}
 .mq-land.mq-m2{fill:color-mix(in srgb, var(--teal) 70%, var(--land));}
 .mq-land.mq-m3{fill:var(--teal);}
@@ -268,6 +268,7 @@ footer.note{text-align:center;color:var(--ink-soft);font-size:0.78rem;margin-top
 .mq-dot.mq-correct .mq-pin{fill:var(--right);}
 .mq-dot.mq-wrong .mq-pin{fill:var(--wrong);}
 @keyframes mqpulse{50%{opacity:.45;}}
+.mq-star{text-anchor:middle;dominant-baseline:central;pointer-events:none;}
 .mq-label{font-family:"Libre Franklin",-apple-system,sans-serif;font-weight:700;fill:var(--ink);paint-order:stroke;stroke:var(--card-bg);stroke-linejoin:round;text-anchor:middle;pointer-events:none;}
 .mq-label.mq-label-soft{fill:var(--ink-soft);font-weight:500;}
 .mq-label.mq-label-wrong{fill:var(--wrong);}
@@ -494,8 +495,13 @@ function renderStart(){
   });
   card.querySelectorAll(".mq-atlas-btn").forEach(function(b){
     b.addEventListener("click", function(){
-      var p = playerByKey(b.getAttribute("data-atlas"));
-      withMap(function(){ MQMapQuiz.renderAtlas(card, p, renderStart); });
+      var key = b.getAttribute("data-atlas");
+      var p = playerByKey(key);
+      withMap(function(){
+        // 불러오는 동안 그 플레이어를 뺐으면 열지 않음
+        if(state.selectedPlayers.indexOf(key) === -1) return;
+        MQMapQuiz.renderAtlas(card, p, renderStart);
+      });
     });
   });
   document.getElementById("startBtn").addEventListener("click", function(){
@@ -515,14 +521,19 @@ function renderStart(){
   });
 }
 
-/* 지도 파일·기록을 불러온 뒤 실행 (실패하면 시작 화면에 안내) */
+/* 지도 파일·기록을 불러온 뒤 실행 (실패하면 시작 화면에 안내)
+   불러오는 동안(최대 수 초) 화면이 바뀌었으면 실행하지 않음:
+   시작 화면·지도 모드·참가자 1명 이상일 때만, 그리고 가장 마지막 요청만 */
+var mapReq = 0;
 function withMap(fn){
+  var my = ++mapReq;
   var btn = document.getElementById("startBtn");
   var err = document.getElementById("mqError");
   if(btn){ btn.disabled = true; btn.textContent = "지도 불러오는 중…"; }
   // ready() 실패만 여기서 안내 (fn 안의 오류는 삼키지 않음 → 콘솔에 그대로)
   MQMapQuiz.ready(PLAYERS.map(function(p){ return p.key; })).then(function(){
     if(btn){ btn.disabled = false; btn.textContent = "지도 탐험 시작 🗺️"; }
+    if(my !== mapReq || state.screen !== "start" || state.mode !== "map" || state.selectedPlayers.length === 0) return;
     fn();
   }, function(e){
     if(btn){ btn.disabled = false; btn.textContent = "지도 탐험 시작 🗺️"; }
@@ -530,8 +541,20 @@ function withMap(fn){
   });
 }
 
-/* 게임 시작 (처음·다시하기 공통) */
+/* 게임 시작 (처음·다시하기 공통)
+   지도 모드는 시작 전에 참가자 기록을 db 에서 다시 읽음 (오래 열어 둔 탭이 옛 기록으로 시작하지 않게)
+   읽는 동안 화면이 바뀌었거나 다시 눌렀으면 이전 요청은 버림 */
 function beginGame(){
+  var my = ++mapReq;
+  if(state.mode !== "map"){ startGame(); return; }
+  var scr = state.screen;
+  MQMapQuiz.refresh(state.selectedPlayers).then(function(){
+    if(my !== mapReq || state.screen !== scr || state.mode !== "map" || state.selectedPlayers.length === 0) return;
+    startGame();
+  });
+}
+
+function startGame(){
   state.turnOrder = shuffle(state.selectedPlayers);
   state.totalQ = QUESTIONS_PER_PLAYER * state.turnOrder.length;
   if(state.mode === "map"){ state.quiz = []; }
@@ -742,6 +765,7 @@ function rankFor(score, totalQ){
 }
 
 function renderResults(){
+  state.screen = "results";
   document.getElementById("progressFill").style.width = "100%";
   document.getElementById("qCount").textContent = "완료 · " + state.totalQ + "문항";
 
@@ -791,12 +815,14 @@ function renderResults(){
   document.getElementById("menuBtn").addEventListener("click", goToStart);
   card.querySelectorAll(".mq-atlas-btn").forEach(function(b){
     b.addEventListener("click", function(){
+      mapReq++; // 다시하기 기록 읽는 중이면 취소
       MQMapQuiz.renderAtlas(card, playerByKey(b.getAttribute("data-atlas")), renderResults);
     });
   });
 }
 
 function goToStart(){
+  mapReq++; // 불러오는 중인 지도 요청 취소
   state.screen = "start";
   renderStart();
 }
@@ -804,6 +830,8 @@ function goToStart(){
 document.getElementById("backBtn").addEventListener("click", goToStart);
 
 renderStart();
+// 지도·기록 미리 불러오기 (실패는 무시: 시작 버튼을 누르면 다시 시도)
+MQMapQuiz.ready(PLAYERS.map(function(p){ return p.key; })).catch(function(){});
 })();
 </script>
 

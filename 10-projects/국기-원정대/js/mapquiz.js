@@ -41,6 +41,12 @@
     return readyP;
   }
 
+  // 게임 시작 전 참가자 기록 다시 읽기 (다른 기기에서 쌓인 기록 반영). 실패해도 그대로 진행
+  function refresh(playerKeys) {
+    if (!store) return Promise.resolve();
+    return store.load(playerKeys).catch(function () {});
+  }
+
   function makeView(svgEl) {
     return root.MQMapView.create(svgEl, topo, {
       isQuiz: function (iso) { return !!byIso[iso]; },
@@ -85,7 +91,8 @@
       if (done) return;
       done = true;
       view.onTap(null);
-      store.save(ctx.playerKey, P.applyResult(store.get(ctx.playerKey), c.iso, correct));
+      // 바뀐 나라 하나만 db 에 병합 저장 (다른 기기 기록을 덮어쓰지 않게)
+      store.save(ctx.playerKey, P.applyResult(store.get(ctx.playerKey), c.iso, correct), c.iso);
 
       fb.textContent = correct
         ? ctx.player.name + " 정답이에요! (+" + points + "pt)"
@@ -109,20 +116,22 @@
     }
 
     // 틀리게 누른 나라 표시
+    //   iso 없는 땅(분쟁 지역 등)도 나라 모양 기준으로 표시
     function showWrongTap(f) {
-      var iso = f.properties.iso;
-      wrongIso = iso;
-      view.mark(iso, "mq-wrong");
-      view.label(iso, "여긴 " + view.nameOf(f), "mq-label-wrong");
+      wrongIso = f.properties.iso || null;
+      view.mark(f, "mq-wrong");
+      view.label(f, "여긴 " + view.nameOf(f), "mq-label-wrong");
     }
 
     if (q.type === "stage") {
       promptEl.innerHTML = flagImg + '<span><b>' + nameEun + '</b> 어느 대륙에 있을까요?<small>지도에서 대륙을 눌러보세요</small></span>';
       view.show("world");
       var step = "continent";
-      view.onTap(function (f) {
+      // raw = 실제로 누른 땅 (작은 나라 점 보정 전). 대륙 단계는 보정 없이 누른 땅의 대륙으로 채점
+      //   (이탈리아 남부를 눌렀는데 튀니지 점으로 보정돼 아프리카로 채점되는 일 방지)
+      view.onTap(function (f, ev, raw) {
         if (step === "continent") {
-          var k = view.contOf(f);
+          var k = view.contOf(raw || f);
           if (!k) return;
           step = "wait";
           var ok = k === c.continent;
@@ -205,13 +214,14 @@
     view.setMastery(m);
     view.onTap(function (f) {
       view.clearLabels();
-      view.label(f.properties.iso, view.nameOf(f), "mq-label-main");
+      view.label(f, view.nameOf(f), "mq-label-main");
     });
     card.querySelector("#mqBack").addEventListener("click", onBack);
   }
 
   root.MQMapQuiz = {
     ready: ready,
+    refresh: refresh,
     renderQuestion: renderQuestion,
     renderAtlas: renderAtlas,
     storeMode: function () { return store ? store.mode : null; }
