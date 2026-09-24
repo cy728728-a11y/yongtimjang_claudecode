@@ -43,6 +43,8 @@
     var svg = root.d3.select(svgEl).attr("viewBox", "0 0 " + W + " " + H);
     svg.selectAll("*").remove();
     var layer = svg.append("g").attr("class", "mq-layer");
+    // 넓은 터치 원 (땅 아래)
+    var gHits = layer.append("g");
     var gLand = layer.append("g");
     var gDots = layer.append("g");
     var gLabels = layer.append("g");
@@ -56,7 +58,7 @@
     function px(v) { return v / (screenScale() * k); }
 
     function resize() {
-      gDots.selectAll("circle.mq-hit").attr("r", px(HIT_PX));
+      gHits.selectAll("circle.mq-hit").attr("r", px(HIT_PX));
       gDots.selectAll("circle.mq-pin").attr("r", px(PIN_PX));
       gLabels.selectAll("text").style("font-size", px(LABEL_PX) + "px").style("stroke-width", px(3) + "px");
     }
@@ -110,14 +112,19 @@
         if (!(c[0] >= 0 && c[0] <= W && c[1] >= 0 && c[1] <= H)) return false;
         return (b[1][0] - b[0][0]) * s < SMALL_PX && (b[1][1] - b[0][1]) * s < SMALL_PX;
       });
-      var dots = gDots.selectAll("g.mq-dot").data(small, function (f) { return f._i; });
-      dots.exit().remove();
-      var enter = dots.enter().append("g").attr("class", "mq-dot");
-      enter.append("circle").attr("class", "mq-hit");
-      enter.append("circle").attr("class", "mq-pin");
-      gDots.selectAll("g.mq-dot")
-        .attr("transform", function (f) { return "translate(" + path.centroid(f) + ")"; })
-        .on("click", fire);
+      // 터치 원(gHits)은 땅 아래, 보이는 점(gDots)은 땅 위에 따로 그림
+      //   점이 빽빽하면(세계지도·폰 화면) 터치 원이 이탈리아·튀르키예·케냐 같은 나라를 통째로 덮어 못 누르게 됨
+      //   → 바다를 누르면 작은 나라, 땅을 누르면 그 땅 나라가 잡히게. 점(pin)은 보이기만 하고 터치는 안 받음
+      [[gHits, "mq-hit"], [gDots, "mq-pin"]].forEach(function (pair) {
+        var dots = pair[0].selectAll("g.mq-dot").data(small, function (f) { return f._i; });
+        dots.exit().remove();
+        dots.enter().append("g").attr("class", "mq-dot")
+          .append("circle").attr("class", pair[1])
+          .attr("pointer-events", pair[1] === "mq-pin" ? "none" : null);
+        pair[0].selectAll("g.mq-dot")
+          .attr("transform", function (f) { return "translate(" + path.centroid(f) + ")"; })
+          .on("click", fire);
+      });
       resize();
     }
 
@@ -125,7 +132,8 @@
     function nodesFor(iso) {
       var match = function (f) { return f.properties.iso === iso; };
       return gLand.selectAll("path").filter(match).nodes()
-        .concat(gDots.selectAll("g.mq-dot").filter(match).nodes());
+        .concat(gDots.selectAll("g.mq-dot").filter(match).nodes())
+        .concat(gHits.selectAll("g.mq-dot").filter(match).nodes());
     }
 
     function mark(iso, cls) {
