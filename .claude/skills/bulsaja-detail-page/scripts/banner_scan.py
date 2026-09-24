@@ -57,10 +57,14 @@
         [--lexicon-version 2026-09-22] [--keep-runs 2]
 """
 import argparse
+import base64
 import concurrent.futures
+import hashlib
+import io
 import ipaddress
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -110,6 +114,14 @@ from webapp import banner, state  # noqa: E402
     "skip_max_removal": 0.5,    # settings `banner_skip_max_removal` (D-08)
     "lexicon_version": "2026-09-22",   # settings `banner_lexicon_version`
     "keep_runs": 2,             # settings `banner_keep_runs` — 원본 캐시를 남길 회차 수
+    # ── 비전 2차 판정 (D-22). `--vision-revision`(OCR)과 이름을 섞지 마라 ──
+    "vision2_enabled": True,    # settings `banner_vision2_enabled` — 기본 켜짐이 결정이다
+    "vision2_model": "gemini-3.6-flash",       # settings `banner_vision2_model`
+    "vision2_prompt": "v3",     # settings `banner_vision2_prompt` — `지침판` 과 다르면 exit 5
+    "vision2_key_file": ".claude/skills/sellerlife-keyword/.env",  # 키 값이 아니라 경로
+    "vision2_timeout": 60.0,    # settings `banner_vision2_timeout`
+    "vision2_max_calls": 0,     # settings `banner_vision2_max_calls` — **0 = 유료 호출 미승인**
+    "vision2_interval": 0.3,    # settings `banner_vision2_interval` — 호출 사이 쉬는 초
 }
 
 
@@ -825,6 +837,280 @@ def 어휘군걸림(줄들) -> list:
             if any(항목 in 본문 for 항목 in 항목들)]
 
 
+# ── 비전 2차 판정 (D-22 · 판정 대상 전량) ──────────────────────────────────
+#
+# 1차는 위 어휘군(온디바이스 OCR · 토큰 0)이고, 비전은 그 **위에 합쳐진다** — 대체가 아니다.
+# 비전 단독은 합의 구간 진짜 배너 3장을 놓쳤다(04-GATE §11-3). 어휘군의 재현율을 버리지 않는다.
+#
+# **적용 범위는 판정 대상 전량이다**(04-GATE §14). 어휘군이 `배너` 라 한 장에만 걸면 미탐 구간에
+# 닿지 않고, "경계 의심 장" 정의는 실측상 전부 과적합이거나 미탐을 못 덮었다.
+#
+# 네트워크·이미지 코드는 **이 CLI 에만** 산다(D-19). `webapp/` 은 이 블록을 부르지 않는다.
+# 유료 호출은 **견적 → 승인 상한**(`--vision2-max-calls`, 기본 0) 뒤에만 열린다.
+
+# ⚠️ **지시문은 `evidence/vision_pilot_v3.py` 의 `지침` 을 바이트 그대로 옮긴 것이다.**
+#    v2(배너 낱말 목록을 더한 판)는 같은 30장에서 26/30 → 17/30 으로 떨어졌다(04-GATE §11-1).
+#    **지시문에 낱말 목록을 더하지 마라. 고치면 새 판(`지침판`)으로 새로 재야 한다** —
+#    sha256 상수가 어긋나면 테스트가 터지고, 산출물 `판정규칙.2차판정` 이 판을 기록한다.
+지침_v3 = """너는 중국 타오바오 상세페이지 이미지를 한 장씩 보고 분류한다.
+
+판정 기준은 딱 하나다:
+  **판매 상품 자체(실물)가 사진에 찍혀 있으면 "제품".**
+  **찍혀 있지 않으면 "배너".**
+
+보충:
+- 상품이 크게 나오든 작게 나오든, 글자가 많이 얹혀 있든, 상품 실물이 보이면 "제품"이다.
+- 상품 없이 회사소개·공장직판·품질보증·배송반품 안내·경품·인증서·랭킹·연락처(위챗/QR)·
+  브랜드 슬로건·주문안내 같은 것만 있으면 "배너"다.
+- 상품의 부품·부속품·포장박스도 상품 실물로 친다 → "제품".
+- 치수도(도면)·사이즈표는 상품 실물이 아니다 → "배너".
+
+**단 하나의 예외 — 이것만 위 규칙을 이긴다:**
+  그 장의 **주인공이 상품이 아니라 판매순위·수상·행사**이고, 상품 사진은 그 옆에
+  장식으로 곁들여진 것이라면 → "배너".
+  (예: "티몰 리스트 TOP1" 랭킹판에 상품 사진이 같이 박힌 장, "VIP 선물" 증정 행사에
+   증정품 사진이 박힌 장. 상품이 보여도 이 장의 목적은 순위·행사 홍보다.)
+  상품이 그 장의 주인공이면 이 예외를 적용하지 마라.
+
+JSON 만 출력해라. 다른 말 금지:
+{"판정":"제품" 또는 "배너","상품보임":true 또는 false,"근거":"20자 이내 한국어"}"""
+지침판 = "v3"
+지침_sha256 = "5ff5d8cc3a7fc55cc9666ffaae67c340cf3bc3f2e194d53c4b0e7b626ec3ea2e"
+
+# 합성 규칙 — `evidence/flip_rule_result.json::결정` 을 그대로 옮긴다(04-GATE §15).
+# 실측: 뒤집기 후보 13장 중 진짜 배너 0 · 진짜 제품 13 → 뒤집기 채택. **in-sample 이다** —
+# out-of-sample 회차에서 미탐이 늘면 이 값을 `"합집합"` 으로 되돌린다.
+합성규칙 = "합집합+뒤집기(연락처,공장직판)"
+합성규칙_합집합 = "합집합"
+# 뒤집기(1차 배너 → 제품)는 걸린 군이 **전부** 이 안에 있을 때만. 하나라도 밖이면 배너 유지 —
+# 워터마크(`연락처` · D-21)와 제품 페이지의 공장직판 문구(오탐 1위)가 알려진 오탐 축이다.
+뒤집기허용군 = frozenset({"연락처", "공장직판"})
+
+# 견적 근거 — 04-GATE §10-5 장당 실측(v3 · gemini-3.6-flash). 원화 단가는 여기서 계산하지 않는다.
+장당_입력토큰_실측 = 1343
+장당_출력토큰_실측 = 378
+
+비전_백오프 = (0.5, 1.5, 3.0)       # 재시도 3회. 429 는 Retry-After 를 우선한다
+비전_RetryAfter상한 = 60.0
+비전_연속실패한도 = 10              # 연속 이만큼 실패하면 쿼터 소진 패턴으로 보고 회차를 멈춘다
+비전_진행로그간격 = 25
+_비전_주소틀 = ("https://generativelanguage.googleapis.com/v1beta/models/"
+             "{모델}:generateContent?key={키}")
+
+
+class 비전2차불가(RuntimeError):
+    """회차 전체의 전제가 깨졌다 — `__main__` 이 잡아 **exit 5** 로 내린다. 산출물 미작성.
+
+    키 없음 · 지시문판 불일치 · 승인 상한 초과 · 연속 실패(쿼터 소진). **장 하나의 실패는
+    이게 아니다**(그건 장의 `2차.실패` 로 남는다). **메시지에 키 값을 절대 싣지 않는다** —
+    요청 주소에 키가 들어 있으므로 예외 원문도 싣지 않고 타입명만 쓴다.
+    """
+
+
+def 비전키읽기(키파일경로) -> str:
+    """`.env` 에서 `GEMINI_API_KEY` 를 읽는다. 상대경로는 저장소 루트 기준.
+
+    없으면 `비전2차불가` — 사유엔 **경로만** 적는다. 다른 스킬의 공용 모듈을 들이지 않는다
+    (그 모듈이 끌고 오는 의존이 이 CLI 의 경계를 흐린다).
+    """
+    경로 = str(키파일경로 or "").strip()
+    if not 경로:
+        raise 비전2차불가("⛔ 비전 키 파일 경로가 비었다 (--vision2-key-file)")
+    if not os.path.isabs(경로):
+        경로 = os.path.join(REPO_ROOT, 경로)
+    try:
+        with open(경로, encoding="utf-8") as f:
+            본문 = f.read()
+    except OSError as e:
+        raise 비전2차불가(f"⛔ 비전 키 파일을 못 읽었다: {경로} ({type(e).__name__})") from None
+    m = re.search(r"^GEMINI_API_KEY=(.*)$", 본문, re.M)
+    값 = m.group(1).strip().strip('"').strip("'") if m else ""
+    if not 값:
+        raise 비전2차불가(f"⛔ GEMINI_API_KEY 가 없다: {경로}")
+    return 값
+
+
+def 비전이미지준비(원본경로, 최대=1024) -> bytes:
+    """긴 변 1024px · JPEG q85 바이트 (파일럿 v3 와 같은 전처리 — 바꾸면 실측이 무효다).
+
+    **`PIL` 은 함수 안에서 지연 import** 한다(`.venv-web` 테스트 collect 보호 · `_비전` 과 같은 이유).
+    """
+    from PIL import Image
+    with Image.open(원본경로) as 원본:
+        im = 원본.convert("RGB")
+    w, h = im.size
+    if max(w, h) > 최대:
+        r = 최대 / max(w, h)
+        im = im.resize((int(w * r), int(h * r)), Image.LANCZOS)
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=85)
+    return buf.getvalue()
+
+
+def _비전열기(요청, 타임아웃) -> bytes:
+    """**네트워크 이음매는 여기 한 곳이다.** 목 테스트가 이것만 바꿔 끼운다."""
+    with urllib.request.urlopen(요청, timeout=타임아웃) as r:
+        return r.read()
+
+
+def _retry_after초(e) -> float:
+    """HTTP 429 의 `Retry-After` → 초(상한 60). 없거나 못 읽으면 0."""
+    try:
+        값 = (e.headers or {}).get("Retry-After")
+        return min(float(값), 비전_RetryAfter상한) if 값 else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def 비전한장(이미지바이트, *, 키, 모델, 타임아웃, 백오프=None) -> tuple:
+    """한 장 → `(판정값, 근거, 사용량dict, 응답모델)`. 실패는 **마지막 예외를 그대로 올린다.**
+
+    응답 `판정` 이 `배너`/`제품` 이 아니면 `ValueError` — 모르는 값을 `제품` 으로 접지 마라
+    (D-21 로 5번째 값도 없다). 호출자는 예외 **타입명만** 기록한다(주소에 키가 있다).
+    """
+    백오프 = 비전_백오프 if 백오프 is None else 백오프
+    바디 = {
+        "systemInstruction": {"parts": [{"text": 지침_v3}]},
+        "contents": [{"parts": [
+            {"inline_data": {"mime_type": "image/jpeg",
+                             "data": base64.b64encode(이미지바이트).decode()}},
+            {"text": "이 장을 판정해라."},
+        ]}],
+        "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+    }
+    데이터 = json.dumps(바디).encode()
+    주소 = _비전_주소틀.format(모델=모델, 키=키)
+    마지막 = None
+    for 시도 in range(len(백오프) + 1):
+        쉼 = 백오프[시도] if 시도 < len(백오프) else 0.0
+        try:
+            요청 = urllib.request.Request(주소, data=데이터,
+                                        headers={"Content-Type": "application/json"})
+            j = json.loads(_비전열기(요청, 타임아웃))
+            본문 = j["candidates"][0]["content"]["parts"][0]["text"]
+            답 = json.loads(본문)
+            값 = 답.get("판정") if isinstance(답, dict) else None
+            if 값 not in (banner.배너, banner.제품):
+                raise ValueError(f"모르는 판정값: {str(값)[:20]!r}")
+            근거 = str(답.get("근거") or "")[:40]
+            사용 = j.get("usageMetadata") or {}
+            사용량 = {"입력토큰": int(사용.get("promptTokenCount") or 0),
+                   "출력토큰": int(사용.get("candidatesTokenCount") or 0)
+                   + int(사용.get("thoughtsTokenCount") or 0)}
+            return 값, 근거, 사용량, j.get("modelVersion")
+        except urllib.error.HTTPError as e:
+            마지막 = e
+            if e.code == 429:
+                쉼 = max(쉼, _retry_after초(e))
+            elif 400 <= e.code < 500:
+                break                     # 키·요청 모양 문제 — 재시도가 돈만 먹는다
+        except Exception as e:            # 연결·타임아웃·응답 모양·모르는 판정값
+            마지막 = e
+        if 시도 < len(백오프) and 쉼 > 0:
+            time.sleep(쉼)
+    raise 마지막 if 마지막 is not None else RuntimeError("비전 호출 실패")
+
+
+# ── 체크포인트 — 중단 후 재실행이 이미 판정한 장을 다시 과금하지 않는다 (T-4-39) ──
+
+def _파일이름조각(s) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", str(s))
+
+
+def 체크포인트경로(캐시루트, 회차, 모델) -> str:
+    return os.path.join(캐시루트, 회차,
+                        f"vision2_{지침판}_{_파일이름조각(모델)}.jsonl")
+
+
+def 체크포인트읽기(경로, *, 모델=None) -> dict:
+    """`{이미지sha256: 기록}`. 파일이 없으면 `{}`.
+
+    **모델·지시문sha256 이 현재와 다른 줄은 무시한다** — 다른 판의 답을 재사용하면
+    "무슨 규칙으로 판정했나" 가 거짓이 된다. 반쯤 쓰인 마지막 줄(중단)도 건너뛴다.
+    """
+    기록들 = {}
+    if not os.path.exists(경로):
+        return 기록들
+    try:
+        with open(경로, encoding="utf-8") as f:
+            for 줄 in f:
+                try:
+                    r = json.loads(줄)
+                except ValueError:
+                    continue
+                if not isinstance(r, dict) or r.get("지시문sha256") != 지침_sha256:
+                    continue
+                if 모델 is not None and r.get("모델") != 모델:
+                    continue
+                if r.get("판정") not in (banner.배너, banner.제품) or not r.get("이미지sha256"):
+                    continue
+                기록들[r["이미지sha256"]] = r
+    except OSError as e:
+        말하기(f"[경고] 체크포인트를 못 읽었다({경로}): {type(e).__name__} — 처음부터 판정한다")
+        return {}
+    return 기록들
+
+
+def 체크포인트추가(경로, 기록: dict):
+    """한 줄 append + flush + fsync. **성공만 기록한다** — 실패는 다음 실행이 다시 시도해야 한다."""
+    os.makedirs(os.path.dirname(경로) or ".", exist_ok=True)
+    with open(경로, "a", encoding="utf-8") as f:
+        f.write(json.dumps(기록, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def 이미지sha(원본경로) -> str:
+    """원본 파일 바이트의 sha256 — 물갈이 사본의 같은 이미지는 1회만 과금된다(§14 고유 903장)."""
+    h = hashlib.sha256()
+    with open(원본경로, "rb") as f:
+        for 조각 in iter(lambda: f.read(1 << 20), b""):
+            h.update(조각)
+    return h.hexdigest()
+
+
+def 이차대상모으기(상품들, 캐시루트, 회차, 체크포인트) -> tuple:
+    """2차 대상 → `(대상목록, 체크포인트적중수)`.
+
+    (플랜의 `2차대상모으기` — 파이썬 식별자는 숫자로 시작할 수 없어 `이차` 로 적는다.)
+
+    대상 = 전 상품 전 장 중 `판정` ∈ {배너, 제품, 무내용} 인 장 **전부**(D-22 · 판정대상전량).
+    미판정(다운로드·OCR 실패)은 0회다 — 못 본 장을 비전에 보내도 답이 없다.
+    원소 = `(상품순번, 장, 이미지sha256 | None)`. sha 를 못 구한 장은 `None` 으로 남겨
+    호출자가 **실패**로 처리한다(조용히 빼면 그 장이 1차 판정 그대로 흘러간다).
+    적중수는 **고유 sha** 기준이다.
+    """
+    대상 = []
+    for 상품순번, 상품 in enumerate(상품들):
+        for 장 in 상품.get("장") or []:
+            if 장.get("판정") not in (banner.배너, banner.제품, banner.무내용):
+                continue
+            try:
+                sha = 이미지sha(원본경로(캐시루트, 회차, 상품순번, 장["순번"]))
+            except Exception as e:
+                말하기(f"[경고] 원본을 못 읽어 2차 대상에서 실패로 둔다: "
+                      f"{장이름(상품순번, 장['순번'])} ({type(e).__name__})")
+                sha = None
+            대상.append((상품순번, 장, sha))
+    고유 = {sha for _, _, sha in 대상 if sha}
+    return 대상, sum(1 for sha in 고유 if sha in (체크포인트 or {}))
+
+
+def 견적(대상목록, 캐시적중수) -> dict:
+    """호출 0회 견적. **원화·달러는 계산하지 않는다** — 단가는 04-11 이 실측으로 확인한다."""
+    고유 = len({sha for _, _, sha in 대상목록 if sha})
+    과금대상 = max(고유 - int(캐시적중수), 0)
+    return {
+        "판정대상장수": len(대상목록),
+        "고유이미지": 고유,
+        "체크포인트적중": int(캐시적중수),
+        "과금대상": 과금대상,
+        "예상입력토큰": 과금대상 * 장당_입력토큰_실측,
+        "예상출력토큰": 과금대상 * 장당_출력토큰_실측,
+        "근거": "GATE §10-5 장당 실측",
+    }
+
+
 # ── 장별 판정 · 상품별 스킵 (D-06 · D-07 · D-08 · D-09 · BANNER-05) ─────────
 
 def 판정대상인가(장: dict) -> bool:
@@ -1073,6 +1359,16 @@ def 집계내기(상품들: list) -> dict:
     return 칸
 
 
+def _켜짐(값) -> bool:
+    """`on`/`off` (및 true/false·1/0·yes/no) → bool. 모르는 값은 argparse 오류다."""
+    v = str(값).strip().lower()
+    if v in ("on", "true", "1", "yes"):
+        return True
+    if v in ("off", "false", "0", "no"):
+        return False
+    raise argparse.ArgumentTypeError(f"on 또는 off 여야 한다: {값!r}")
+
+
 def 인자만들기():
     """`argparse required=True` 를 쓰지 않는다 (`bulsaja_scan.py:291-299` 규약).
 
@@ -1102,6 +1398,23 @@ def 인자만들기():
                     help="어휘군 버전 표기. 산출물 `판정규칙` 에 실린다")
     ap.add_argument("--keep-runs", type=int, default=폴백["keep_runs"],
                     help="원본 캐시를 남길 회차 수. 회차당 약 271MB")
+    # ── 비전 2차 판정 (D-22 · 판정 대상 전량). 정본은 settings `banner_vision2_*` ──
+    ap.add_argument("--vision2-enabled", type=_켜짐, default=폴백["vision2_enabled"],
+                    metavar="on|off", help="비전 2차 판정 켜기/끄기. 기본 on (D-22)")
+    ap.add_argument("--vision2-model", default=폴백["vision2_model"],
+                    help="비전 모델 이름. 산출물 `판정규칙.2차판정.모델` 에 실린다")
+    ap.add_argument("--vision2-prompt", default=폴백["vision2_prompt"],
+                    help="지시문 판. 스크립트의 지침판과 다르면 exit 5")
+    ap.add_argument("--vision2-key-file", default=폴백["vision2_key_file"],
+                    help="GEMINI_API_KEY 가 든 .env 경로 (키 값을 argv 로 넘기지 마라)")
+    ap.add_argument("--vision2-timeout", type=float, default=폴백["vision2_timeout"],
+                    help="비전 호출 1회 타임아웃(초)")
+    ap.add_argument("--vision2-max-calls", type=int, default=폴백["vision2_max_calls"],
+                    help="과금 대상 고유 이미지 상한. 넘으면 호출 0회로 exit 5. 기본 0 = 미승인")
+    ap.add_argument("--vision2-interval", type=float, default=폴백["vision2_interval"],
+                    help="비전 호출 사이에 쉬는 초")
+    ap.add_argument("--vision2-estimate", action="store_true",
+                    help="견적만 낸다 — 비전 호출 0회 · 산출물 미작성")
     return ap
 
 

@@ -64,6 +64,20 @@ DEFAULTS = {
                                    # (설정에 200개 문자열을 넣으면 회귀 픽스처와 버전이 어긋난다).
                                    # 여기 있는 것은 산출물 `판정규칙` 블록에 찍을 버전 표기뿐이다
     "banner_keep_runs": 2,         # 원본 캐시를 남길 회차 수. 회차당 약 271MB. 집행은 04-03
+    # ── 비전 2차 판정 (D-22 · 판정 대상 전량) — CLI `폴백` 과 한 글자도 달라선 안 된다 ──
+    # 기본 켜짐이 결정이다(D-22). 꺼져 있으면 게이트에서 실패한 1차(어휘군) 단독으로 조용히
+    # 돌아간다 — 그래서 켜짐/꺼짐이 산출물 `판정규칙.2차판정.사용` 에 박힌다.
+    "banner_vision2_enabled": True,
+    "banner_vision2_model": "gemini-3.6-flash",  # 요청 모델. 응답 modelVersion 은 산출물에 따로
+    "banner_vision2_prompt": "v3",  # 지시문 판. 스크립트의 지침판과 다르면 CLI 가 exit 5
+    # 키 **값**이 아니라 파일 **경로**다. 값은 gitignore 된 `.env` 에만 산다.
+    "banner_vision2_key_file": ".claude/skills/sellerlife-keyword/.env",
+    "banner_vision2_timeout": 60.0,  # 호출 1회 타임아웃(초)
+    # **0 = 유료 호출 미승인.** 견적(`--vision2-estimate`)을 보고 용팀장이 승인한 수를
+    # `workspace.toml [webapp]` 에만 적는다. 과금 대상(체크포인트 적중분 제외 고유 이미지)이
+    # 이 수를 넘으면 자르지 않고 거부한다(exit 5).
+    "banner_vision2_max_calls": 0,
+    "banner_vision2_interval": 0.3,  # 호출 사이 쉬는 초 (무료 티어 레이트리밋 여유)
     # 검수 화면 첫 화면에 **일부러** 배치할 경계 표본(RESEARCH Appendix A "경계 4장").
     # 용팀장 기준을 클릭으로 받는 자리다 — 미리 묻지 않는다.
     # ⚠️ 이 4개만 익명화되지 않은 **실제 판매자상품코드**다. `banner_labels.json` 은 `zzNN` 을
