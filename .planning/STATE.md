@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-09-24T11:46:26.326Z"
-last_activity: 2026-09-24 -- Phase 4 planning complete
+stopped_at: Completed 04-09-PLAN.md
+last_updated: "2026-09-24T11:57:29.716Z"
+last_activity: 2026-09-24
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 28
-  completed_plans: 24
+  completed_plans: 25
   percent: 29
 ---
 
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 04 (banner-detection) — EXECUTING
-Plan: 1 of 8
+Plan: 9 of 12 완료 (다음 04-10)
 Status: Ready to execute
-Last activity: 2026-09-24 -- Phase 4 planning complete
+Last activity: 2026-09-24 -- 04-09 완료 (비전 2차 엔진 · 실제 API 0회)
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
 Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
 
-Progress: [███▒▒▒▒▒▒▒] 2 of 7 phases
+Progress: [███▒▒▒▒▒▒▒] 2 of 7 phases · Phase 4 9/12 plans
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [███▒▒▒▒▒▒▒] 2 of 7 phases
 | Phase 01 P08 | 140min | 3 tasks | 12 files |
 | Phase 01 P09 | 30m | 3 tasks | 12 files |
 | Phase 03 P07 | 258min | 4 tasks | 8 files |  *(그중 128min 이 인덱스 완주 대기)*
+| Phase 04 P09 | 9min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Recent decisions affecting current work:
 - [로드맵]: 홍보배너 식별은 독립 단계(Phase 4). 상세 생성에 묶으면 100건 라벨링 게이트가 생략된다
 - [로드맵]: 마켓 쓰기(Phase 6)를 크레딧 쓰기(Phase 5)와 분리 — 실패 모드와 복구 비용이 다르다
 - [로드맵]: 기존 CLI 는 재작성하지 않고 서브프로세스로 래핑한다 (ENG-01)
+- [04-09]: D-22 합성 규칙 = 합집합+뒤집기(연락처,공장직판) — GATE §15 후보 13 · 새 미탐 0 (in-sample)
+- [04-09]: 비전 2차는 판정 대상 전량 · 고유 sha 1회 과금 · 승인 상한 기본 0 (초과 시 호출 0회 exit 5)
 - [Phase 01]: 웹앱 의존은 `.venv-web` 로 분리 — CLI `.venv` 는 손대지 않는다 (subprocess 경계)
 - [Phase 01]: `prep_summary.json` 실데이터는 계정 alias 로 한 겹 중첩 — `freshness()` 가 평평·중첩 두 모양을 모두 읽는다
 - [Phase 01]: `workspace.toml` 파싱 실패는 RuntimeError, 파일 부재는 `{}`. `data_root()` 만 삼킨다(폴백이 돈으로 안 이어짐) — `settings` 는 안 삼킨다(D-08 가드 보존, T-1-12)
@@ -151,6 +154,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-21T14:26:53.612Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-banner-detection/04-CONTEXT.md
+Last session: 2026-09-24T11:57:29.711Z
+Stopped at: Completed 04-09-PLAN.md
+Resume file: None
