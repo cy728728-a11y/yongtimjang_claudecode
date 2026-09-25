@@ -1,0 +1,144 @@
+{
+ "종료코드": 0,
+ "호출": [
+  [
+   "bulsaja_product_workdata",
+   {
+    "productId": "zzpid-00000001",
+    "mode": "summary"
+   }
+  ],
+  [
+   "bulsaja_detail_page_generate",
+   {
+    "productId": "zzpid-00000001",
+    "imageUrls": [
+     "https://zzcdn.example/a-thumb/00.jpg",
+     "https://zzcdn.example/a-thumb/01.jpg",
+     "https://zzcdn.example/a-thumb/02.jpg",
+     "https://zzcdn.example/a-thumb/03.jpg",
+     "https://zzcdn.example/a-thumb/04.jpg",
+     "https://zzcdn.example/a-opt/00.jpg",
+     "https://zzcdn.example/a-opt/01.jpg",
+     "https://zzcdn.example/a-opt/02.jpg",
+     "https://zzcdn.example/a-opt/03.jpg",
+     "https://zzcdn.example/a-opt/04.jpg"
+    ],
+    "sectionCount": 10,
+    "quality": "standard",
+    "confirm": false
+   }
+  ],
+  [
+   "bulsaja_detail_page_generate",
+   {
+    "productId": "zzpid-00000001",
+    "imageUrls": [
+     "https://zzcdn.example/a-thumb/00.jpg",
+     "https://zzcdn.example/a-thumb/01.jpg",
+     "https://zzcdn.example/a-thumb/02.jpg",
+     "https://zzcdn.example/a-thumb/03.jpg",
+     "https://zzcdn.example/a-thumb/04.jpg",
+     "https://zzcdn.example/a-opt/00.jpg",
+     "https://zzcdn.example/a-opt/01.jpg",
+     "https://zzcdn.example/a-opt/02.jpg",
+     "https://zzcdn.example/a-opt/03.jpg",
+     "https://zzcdn.example/a-opt/04.jpg"
+    ],
+    "sectionCount": 10,
+    "quality": "standard",
+    "confirm": true,
+    "confirmationToken": "tok-zzpid-00000001"
+   }
+  ],
+  [
+   "bulsaja_product_workdata",
+   {
+    "productId": "zzpid-00000002",
+    "mode": "summary"
+   }
+  ],
+  [
+   "bulsaja_product_workdata",
+   {
+    "productId": "zzpid-00000003",
+    "mode": "summary"
+   }
+  ],
+  [
+   "bulsaja_detail_page_generate",
+   {
+    "productId": "zzpid-00000003",
+    "imageUrls": [
+     "https://zzcdn.example/c-opt/00.jpg",
+     "https://zzcdn.example/c-opt/01.jpg",
+     "https://zzcdn.example/c-opt/02.jpg"
+    ],
+    "sectionCount": 3,
+    "quality": "standard",
+    "confirm": false
+   }
+  ],
+  [
+   "bulsaja_detail_page_generate",
+   {
+    "productId": "zzpid-00000003",
+    "imageUrls": [
+     "https://zzcdn.example/c-opt/00.jpg",
+     "https://zzcdn.example/c-opt/01.jpg",
+     "https://zzcdn.example/c-opt/02.jpg"
+    ],
+    "sectionCount": 3,
+    "quality": "standard",
+    "confirm": true,
+    "confirmationToken": "tok-zzpid-00000003"
+   }
+  ],
+  [
+   "bulsaja_detail_page_status",
+   {
+    "taskId": "task-0001",
+    "target": "detail"
+   }
+  ],
+  [
+   "bulsaja_detail_page_status",
+   {
+    "taskId": "task-0003",
+    "target": "detail"
+   }
+  ]
+ ],
+ "detail_status": {
+  "zzpid-00000001": {
+   "taskId": "task-0001",
+   "status": "완료",
+   "pages": 10,
+   "images": 3
+  },
+  "zzpid-00000002": {
+   "status": "완료(기작업)",
+   "pages": 10,
+   "generated_at": "2026-09-01T10:00:00"
+  },
+  "zzpid-00000003": {
+   "taskId": "task-0003",
+   "status": "완료",
+   "pages": 3,
+   "images": 3
+  }
+ },
+ "출력": [
+  "접수 대상 3건 × 최대 10장 × 5크레딧 = 예상 최대 150크레딧",
+  "[1/3] 00000001 접수 OK (task-0001, 10장)",
+  "[2/3] 00000002 기작업 스킵 (10장, 2026-09-01)",
+  "[3/3] 00000003 접수 OK (task-0003, 3장)",
+  "폴링: 미완료 2건",
+  "  완료 3 / 실패 0 / 전체 3",
+  "###DETAIL### 완료 3 (신규 2 + 기작업스킵 1) / 실패 0 / 전체 3"
+ ],
+ "open_close": [
+  1,
+  1
+ ]
+}

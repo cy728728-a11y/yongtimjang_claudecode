@@ -1,0 +1,52 @@
+{
+ "_설명": "05-01 --inputs 계약 예시 (익명화: zz 코드 · zzcdn.example). 제외 키는 웹앱 표시용이라 CLI 가 무시한다.",
+ "items": [
+  {
+   "productId": "zzpid-10000001",
+   "판매자상품코드": "zz-code-0001",
+   "imageUrls": [
+    "https://zzcdn.example/p1/00.jpg",
+    "https://zzcdn.example/p1/01.jpg",
+    "https://zzcdn.example/p1/02.jpg",
+    "https://zzcdn.example/p1/03.jpg",
+    "https://zzcdn.example/p1/04.jpg",
+    "https://zzcdn.example/p1/05.jpg",
+    "https://zzcdn.example/p1/06.jpg",
+    "https://zzcdn.example/p1/07.jpg",
+    "https://zzcdn.example/p1/08.jpg",
+    "https://zzcdn.example/p1/09.jpg"
+   ],
+   "제품이미지총수": 14,
+   "잘림": 4
+  },
+  {
+   "productId": "zzpid-10000002",
+   "판매자상품코드": "zz-code-0002",
+   "imageUrls": [
+    "https://zzcdn.example/p2/00.jpg"
+   ],
+   "제품이미지총수": 1,
+   "잘림": 0
+  },
+  {
+   "productId": "zzpid-10000003",
+   "판매자상품코드": "zz-code-0003",
+   "imageUrls": [
+    "https://zzcdn.example/p3/00.jpg",
+    "https://zzcdn.example/p3/01.jpg",
+    "https://zzcdn.example/p3/02.jpg",
+    "https://zzcdn.example/p3/03.jpg",
+    "https://zzcdn.example/p3/01.jpg",
+    "https://zzcdn.example/p3/00.jpg"
+   ],
+   "제품이미지총수": 4,
+   "잘림": 0
+  }
+ ],
+ "제외": [
+  {
+   "판매자상품코드": "zz-code-0099",
+   "사유": "배너 스킵"
+  }
+ ]
+}
