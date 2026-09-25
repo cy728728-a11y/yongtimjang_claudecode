@@ -12,6 +12,9 @@
     POST /jobs/bulsaja/scan     회차 조인 스캔 (수 분, 읽기)            [쓰기 — 토큰 필요]
     POST /jobs/bulsaja/index    마켓그룹 인덱스 구축 (수 시간, 읽기)     [쓰기 — 토큰 필요]
     POST /jobs/banner/scan      배너 판정 스캔 (4분, MCP 0회·크레딧 0)   [쓰기 — 토큰 필요]
+    POST /jobs/detail/estimate  상세 견적 (크레딧 0)                     [쓰기 — 토큰 필요]
+    POST /jobs/detail/submit    상세 **접수** — 크레딧이 나간다          [쓰기 — 토큰 필요]
+    POST /jobs/detail/poll      상세 이어서 확인 (--poll-only, 크레딧 0) [쓰기 — 토큰 필요]
     GET  /jobs/revert/round/count  회차 전체 되돌리기 예상 건수         [읽기 — 쿠키]
     GET  /jobs/{id}         작업 상태 조각 (2초 폴링용)                 [읽기 — 쿠키]
     GET  /jobs/{id}/panel   작업 패널 조각 (SSE 배선 포함)              [읽기 — 쿠키]
@@ -226,6 +229,27 @@ class DetailEstimateReq(BaseModel):
         return v
 
 
+class DetailSubmitReq(BaseModel):
+    """상세 **접수** 요청. 받는 것은 **견적 잡 id 하나뿐이다** (D-14 · L-02 · T-05-15).
+
+    대상도, 크레딧 상한도 받지 않는다 — 01-08 D-11(`BidsCommitReq`)과 같은 판단이다.
+    대상은 부모 견적의 targets 파일, 상한은 부모 estimate.json 의 `집계.예상크레딧` 에서만 온다.
+    화면이 숫자를 보내면 그 숫자를 고친 만큼 크레딧이 더 나간다 — 받을 필드 자체를 두지 않는다.
+    모르는 필드는 Pydantic 기본대로 **무시**된다(`BidsCommitReq` 관례).
+    """
+
+    estimate_job_id: JobId
+
+
+class DetailPollReq(BaseModel):
+    """상세 **이어서 확인** 요청. 받는 것은 접수(또는 그 이전 이어서 확인) 잡 id 하나뿐이다.
+
+    `--poll-only` 로만 돈다 — generate 0회 · 크레딧 0 (D-16 · L-03). 재접수 경로는 없다(D-18).
+    """
+
+    submit_job_id: JobId
+
+
 def _판정읽기(run_dir_name: str) -> dict:
     """회차의 판정 결과. **회차 이름은 화이트리스트를 통과한 것만** 경로가 된다.
 
@@ -316,6 +340,141 @@ def _상세견적ctx(상태: dict) -> dict:
                 "집계": 견적.get("집계") or {}, "계정": 견적.get("계정"),
                 "잔액": 견적.get("잔액"), "per_credit": 견적.get("per_credit")})
     return 기본
+
+
+def _상세폴더_of(상태: dict) -> Path | None:
+    """상세 접수·이어서 확인 잡의 detail 폴더. **산출물 경로의 부모다** — 지어내지 않는다.
+
+    `jobs._상세폴더` 가 부모 체인으로 푼 폴더에 `summary_<잡id>.json` 을 두므로(05-03),
+    그 부모가 곧 `detail_status.json` 이 사는 곳이다.
+    """
+    경로 = (상태 or {}).get("result_path")
+    return Path(경로).parent if 경로 else None
+
+
+def _상세체크포인트(폴더: Path | None) -> dict | None:
+    """`detail_status.json` — **결과의 정본**(D-16 · D-19). 없거나 깨졌으면 None."""
+    if 폴더 is None:
+        return None
+    try:
+        문서 = json.loads((폴더 / "detail_status.json").read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return 문서 if isinstance(문서, dict) else None
+
+
+def _완료말(s: str) -> bool:
+    # detail_batch.is_done 과 같은 낱말 — CLI 의 체크포인트 어휘를 **읽기만** 한다
+    return any(w in s for w in ("완료", "성공", "complete", "done", "success"))
+
+
+def _실패말(s: str) -> bool:
+    # detail_batch.is_failed 와 같은 낱말
+    return any(w in s for w in ("실패", "오류", "취소", "fail", "error", "cancel"))
+
+
+def _상세항목상태(v: dict | None) -> str:
+    """체크포인트 한 항목 → 화면 상태. detail_batch `_요약상태` 와 같은 규칙이다.
+
+    CLI 의 summary 를 두고 굳이 여기서 다시 읽는 이유: summary 는 **잡이 끝날 때만** 쓰인다.
+    잡이 orphaned(서버 재시작)거나 폴링 도중이면 summary 가 없거나 낡았고, 그때도 사람은
+    "무엇이 접수됐고 무엇이 남았나" 를 봐야 이어서 확인을 누를 수 있다.
+    """
+    v = v or {}
+    st = str(v.get("status") or "")
+    if st == "완료(기작업)":
+        return "기작업스킵"
+    if st in ("태그미조회", "입력부족", "장수불일치", "접수실패"):
+        return st
+    if v.get("taskId"):
+        if _완료말(st):
+            return "완료"
+        if _실패말(st):
+            return "실패"
+        return "폴링중"
+    return "미접수"
+
+
+def _상세미종결(체크: dict | None) -> int:
+    """taskId 가 있고 완료·실패·장수불일치가 아닌 건 수 — detail_batch `_미종결` 과 같은 규칙."""
+    return sum(1 for v in (체크 or {}).values()
+               if isinstance(v, dict) and _상세항목상태(v) == "폴링중")
+
+
+def _상세결과ctx(상태: dict) -> dict:
+    """상세 접수·이어서 확인 결과 표 (D-19 · D-18 · DETAIL-05/06/07).
+
+    **정본은 `detail_status.json` 이다.** 잡의 종료코드가 없어도(orphaned) 체크포인트로
+    항목 상태·미종결 수를 센다. summary(있으면)는 사유 보충용이고, 견적 예상 크레딧은 부모
+    견적의 estimate.json 에서 읽어 **실제 접수분 기준 크레딧**과 나란히 보인다.
+    숫자는 전부 여기서 만든다 — 템플릿에서 계산하지 않는다.
+    """
+    기본 = {"job": _투영(상태 or {}), "running": False, "error": None, "항목": [],
+            "집계": {}, "예상크레딧": None, "per_credit": None, "미종결": 0,
+            "이어서확인가능": False, "종료코드": (상태 or {}).get("exit_code")}
+    if (상태 or {}).get("status") in jobs.LIVE_STATUSES:
+        return {**기본, "running": True}
+
+    폴더 = _상세폴더_of(상태)
+    try:
+        대상 = json.loads(Path(상태.get("targets_path") or "").read_text(encoding="utf-8"))
+        입력 = [x for x in (대상.get("items") or []) if isinstance(x, dict)]
+    except Exception:
+        입력 = []
+    견적 = {}
+    if 폴더 is not None:
+        try:
+            견적 = json.loads((폴더 / "estimate.json").read_text(encoding="utf-8")) or {}
+        except Exception:
+            견적 = {}
+    per_credit = 견적.get("per_credit") if isinstance(견적.get("per_credit"), int) else 5
+    예상 = (견적.get("집계") or {}).get("예상크레딧") if isinstance(견적, dict) else None
+
+    체크 = _상세체크포인트(폴더)
+    if 체크 is None:
+        return {**기본, "예상크레딧": 예상, "per_credit": per_credit,
+                "error": f"체크포인트(detail_status.json)가 없다 — 접수 전에 멈췄다. "
+                         f"진행 로그를 봐라 (종료코드 {상태.get('exit_code')})"}
+
+    요약사유 = {}
+    try:
+        요약 = json.loads(Path(상태.get("result_path")).read_text(encoding="utf-8"))
+        for h in (요약.get("항목") or []):
+            if isinstance(h, dict) and h.get("productId"):
+                요약사유[h["productId"]] = str(h.get("사유") or "")
+    except Exception:
+        pass                                   # 요약이 없어도 체크포인트로 충분하다
+
+    행들 = []
+    for it in 입력:
+        pid = it.get("productId")
+        v = 체크.get(pid) if isinstance(체크.get(pid), dict) else {}
+        try:
+            장수 = int(v.get("pages") or 0)
+        except (TypeError, ValueError):
+            장수 = 0
+        tid = str(v.get("taskId") or "")
+        행들.append({"productId": pid, "판매자상품코드": it.get("판매자상품코드"),
+                     "상태": _상세항목상태(v), "장수": 장수,
+                     "크레딧": 장수 * per_credit if tid else 0,
+                     "사유": str(v.get("사유") or v.get("error") or 요약사유.get(pid) or ""),
+                     # taskId 는 끝 8자리만 — 전체 값은 화면이 쓸 일이 없다(T-05-20)
+                     "taskId": tid[-8:] or None})
+    셈: dict[str, int] = {}
+    for h in 행들:
+        셈[h["상태"]] = 셈.get(h["상태"], 0) + 1
+    집계 = {"접수": sum(1 for h in 행들 if h["taskId"]),
+            "완료": 셈.get("완료", 0),
+            "실패": 셈.get("실패", 0) + 셈.get("접수실패", 0) + 셈.get("장수불일치", 0),
+            "스킵": 셈.get("기작업스킵", 0) + 셈.get("태그미조회", 0) + 셈.get("입력부족", 0),
+            "폴링미완": 셈.get("폴링중", 0),
+            "미접수": 셈.get("미접수", 0),
+            # 실제 접수분 기준 재보고 — taskId 를 받은 건의 장수 × 단가 (견적 대비)
+            "접수크레딧": sum(h["크레딧"] for h in 행들),
+            "완료크레딧": sum(h["크레딧"] for h in 행들 if h["상태"] == "완료")}
+    미종결 = _상세미종결({h["productId"]: 체크.get(h["productId"]) for h in 행들})
+    return {**기본, "항목": 행들, "집계": 집계, "예상크레딧": 예상, "per_credit": per_credit,
+            "미종결": 미종결, "이어서확인가능": 미종결 > 0}
 
 
 def _실행표ctx(상태: dict) -> dict:
@@ -1020,6 +1179,117 @@ def post_detail_estimate(request: Request, req: DetailEstimateReq):
     return {"job_id": job_id}
 
 
+def _상세잡만들기(kind: str, **kw) -> dict:
+    """상세 접수·이어서 확인의 `create_job` 호출과 예외 번역. 순서는 `_작업만들기` 와 같다.
+
+    `AccountMismatchError` 는 `ValueError` 상속이라 반드시 먼저 잡는다(409 ≠ 400).
+    """
+    try:
+        job_id = jobs.create_job(kind, **kw)
+    except jobs.AccountMismatchError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except jobs.BusyError as e:
+        raise HTTPException(status_code=409,
+                            detail=f"이미 도는 쓰기 작업이 있다 — 끝나고 다시 눌러라 ({e})")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except KeyError:
+        raise HTTPException(status_code=500,
+                            detail="설정 `webapp.expected_bulsaja_nick` 이 비었다 — "
+                                   "workspace.toml 의 [webapp] 에 채워라")
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"job_id": job_id}
+
+
+@router.post("/jobs/detail/submit")
+def post_detail_submit(request: Request, req: DetailSubmitReq):
+    """상세 **접수** — 여기서 처음으로 크레딧이 나간다. **버튼이 곧 승인이다** (D-14 · L-02).
+
+    승인의 근거는 사람이 본 견적 표다. 그래서 대상·상한을 **그 견적에서만** 가져온다:
+      ① 부모가 **견적** 인가 · ② 도는 중이 아닌가 · ③ **정상으로 끝났는가** (`post_bids_commit` 3단)
+      ④ 부모 targets 파일이 아직 있는가 — 없으면 거부. **빈 목록으로 폴백하지 않는다**
+      ⑤ 부모 estimate.json 의 `집계.예상크레딧` 이 **양의 정수**인가 — 아니면 "접수할 게 없다"
+      ⑥ 이 견적으로 이미 접수했는가 — 했으면 거부(아래)
+      ⑦ `create_job("detail_submit", max_credits=예상크레딧)` — CLI 가 누적이 넘으면 exit 5
+
+    ⑥ 의 이유: 두 번째 접수는 체크포인트에 taskId 가 없는 건(접수실패 등)을 **다시 접수**한다.
+    그건 MVP 가 미뤄 둔 실패분 재접수(D-18)와 같다. 폴링이 덜 끝났으면 '이어서 확인'이고,
+    다시 하고 싶으면 **새 견적**이다. 단, 앞선 접수가 실패했는데 체크포인트에 taskId 가 하나도
+    없으면(계정 불일치 exit 4 등 — 아무것도 안 나갔다) 다시 누를 수 있다.
+    """
+    부모 = jobs.job_status(req.estimate_job_id)
+    if 부모 is None or 부모.get("kind") != "detail_estimate":
+        raise HTTPException(status_code=400, detail="견적 작업이 아니다 — 먼저 상세 견적부터 해라")
+    if 부모.get("status") in jobs.LIVE_STATUSES:
+        raise HTTPException(status_code=400, detail="견적이 아직 안 끝났다 — 끝나고 다시 눌러라")
+    if 부모.get("status") != "done":
+        raise HTTPException(
+            status_code=400,
+            detail=f"견적이 정상으로 안 끝났다({부모.get('status')}) — 견적부터 다시 해라")
+
+    대상파일 = 부모.get("targets_path")
+    if not 대상파일 or not Path(대상파일).is_file():
+        raise HTTPException(status_code=400, detail="견적의 대상 파일이 없다 — 견적부터 다시 해라")
+    try:
+        견적 = json.loads(Path(부모.get("result_path") or "").read_text(encoding="utf-8"))
+        예상 = (견적.get("집계") or {}).get("예상크레딧")
+    except Exception:
+        raise HTTPException(status_code=400,
+                            detail="견적 산출물(estimate.json)이 없거나 깨졌다 — 견적부터 다시 해라")
+    # bool 은 int 의 하위형이라 따로 막는다 — True 가 상한 1 이 되면 안 된다
+    if not isinstance(예상, int) or isinstance(예상, bool) or 예상 <= 0:
+        raise HTTPException(status_code=400,
+                            detail="접수할 게 없다 — 견적의 예상 크레딧이 0 이다(전부 스킵)")
+
+    폴더 = Path(부모["result_path"]).parent
+    체크 = _상세체크포인트(폴더) or {}
+    돈나감 = any(isinstance(v, dict) and v.get("taskId") for v in 체크.values())
+    for 자식 in jobs.children_of(req.estimate_job_id, "detail_submit"):
+        if 자식.get("status") != "failed" or 돈나감:
+            raise HTTPException(
+                status_code=400,
+                detail="이 견적으로 이미 접수했다 — 폴링이 남았으면 '이어서 확인', "
+                       "다시 하려면 새 견적부터")
+
+    return _상세잡만들기("detail_submit", run_dir=부모.get("run_dir"),
+                        parent_job_id=req.estimate_job_id,
+                        targets_path_override=대상파일, max_credits=예상)
+
+
+@router.post("/jobs/detail/poll")
+def post_detail_poll(request: Request, req: DetailPollReq):
+    """상세 **이어서 확인** — `--poll-only`. 접수(generate) 0회 · 크레딧 0 (D-16 · L-03).
+
+    부모는 접수(`detail_submit`) 또는 그 이전 이어서 확인(`detail_poll`)이다. 허용하는 경우:
+      · done + exit 3 — 폴링이 시간 상한에 닿았다(정상 경로)
+      · orphaned 또는 done — **체크포인트에 미종결 건이 있으면** (서버 재시작 · Pitfall 4)
+    그 밖(failed — 2 장수불일치 · 5 견적초과 · 4 계정불일치)은 400 — 사람이 판단할 영역이다.
+    **재접수 경로는 만들지 않는다** (D-17 · D-18).
+    """
+    부모 = jobs.job_status(req.submit_job_id)
+    if 부모 is None or 부모.get("kind") not in ("detail_submit", "detail_poll"):
+        raise HTTPException(status_code=400, detail="상세 접수 작업이 아니다")
+    if 부모.get("status") in jobs.LIVE_STATUSES:
+        raise HTTPException(status_code=400, detail="아직 도는 중이다 — 끝나고 다시 눌러라")
+    미종결 = _상세미종결(_상세체크포인트(_상세폴더_of(부모)))
+    허용 = ((부모.get("status") == "done" and 부모.get("exit_code") == 3)
+            or (부모.get("status") in ("done", "orphaned") and 미종결 > 0))
+    if not 허용:
+        if 부모.get("status") == "failed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"이 작업은 실패로 멈췄다(종료코드 {부모.get('exit_code')}) — "
+                       "이어서 확인으로 덮지 않는다. 로그를 봐라")
+        raise HTTPException(status_code=400, detail="이어서 확인할 게 없다 — 미종결 0건")
+
+    대상파일 = 부모.get("targets_path")
+    if not 대상파일 or not Path(대상파일).is_file():
+        raise HTTPException(status_code=400, detail="접수의 대상 파일이 없다")
+    return _상세잡만들기("detail_poll", run_dir=부모.get("run_dir"),
+                        parent_job_id=req.submit_job_id, targets_path_override=대상파일)
+
+
 # ── 여기서부터 읽기 전용 ─────────────────────────────────────────────────────
 # 아래 GET 들은 작업을 **만들지 않는다.** 상태를 읽어 화면에 옮길 뿐이다.
 # 이 파일에서 GET 핸들러를 맨 아래 모아 두는 이유는 V-SAFE-01d 스캐너가
@@ -1091,6 +1361,8 @@ def get_job_result(job_id: str, request: Request, format: str | None = None):
         "revert_only": ("_revert_table.html", _되돌리기표ctx),
         "revert_all": ("_revert_table.html", _되돌리기표ctx),
         "detail_estimate": ("_detail_estimate_table.html", _상세견적ctx),
+        "detail_submit": ("_detail_result_table.html", _상세결과ctx),
+        "detail_poll": ("_detail_result_table.html", _상세결과ctx),
     }.get(kind, ("_preview_table.html", _미리보기표ctx))
     ctx = ctx(상태)
     if format == "json" or not request.headers.get("hx-request"):

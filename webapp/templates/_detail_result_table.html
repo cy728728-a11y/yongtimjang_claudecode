@@ -1,0 +1,71 @@
+{# 상세 접수·이어서 확인 결과 표 — Plan 05-04 / DETAIL-05·06·07 · D-17 · D-18 · D-19.
+
+   **정본은 detail_status.json 이다.** 라우트(`_상세결과ctx`)가 체크포인트를 읽어 항목 단위로
+   만든 값을 그대로 옮긴다 — 여기서 크레딧을 곱하지 않는다. 잡이 orphaned 여도 체크포인트가
+   있으면 표가 나온다(브라우저를 닫았다 다시 와도 결과를 찾는다 — SC-1).
+
+   `_detail_estimate_table.html` 과 같은 뼈대다: **running → error → 집계 줄 먼저.**
+
+   그리지 않는 것 (의도):
+     · 폴링 미완 건에 다시 보내는 버튼 — 크레딧 이중 지불이다(L-03 · D-17). '이어서 확인'만 그린다
+     · 실패분 다시 보내기 — MVP 밖(D-18). CLI 수동 체크포인트로만
+     · 완료분 적용 버튼 — 불사자가 자동 반영한다(D-19)
+     · 생성 이미지 썸네일 — 린 MVP(재량)
+
+   자동 이스케이프에 기댄다 — 사유 문자열에 서버 원문이 섞여 들어온다. 이 파일에서
+   이스케이프를 끄는 필터를 쓰지 마라. #}
+
+{% if running %}
+  <p>상세 작업이 도는 중이다… 위 진행 로그를 봐라. 끝나면 이 자리에 항목별 결과가 뜬다.</p>
+
+{% elif error %}
+  <p class="stale"><strong>결과를 못 읽었다 — {{ error }}</strong><br>
+    빈 표를 결과로 읽지 않게 표를 그리지 않는다.</p>
+
+{% else %}
+  {# 집계 줄 — 규모를 먼저 읽는다. 크레딧은 **실제 접수분 기준**으로 다시 보고한다(견적 대비). #}
+  <p>
+    <strong>접수 {{ 집계.get("접수", 0) }}</strong>
+    · 완료 {{ 집계.get("완료", 0) }}
+    · 실패 {{ 집계.get("실패", 0) }}
+    · 스킵 {{ 집계.get("스킵", 0) }}
+    · <strong>폴링 미완 {{ 집계.get("폴링미완", 0) }}</strong>
+    {% if 집계.get("미접수") %}· 미접수 {{ 집계.get("미접수") }}{% endif %}
+  </p>
+  <p>
+    실제 접수분 크레딧 <strong>{{ "{:,}".format(집계.get("접수크레딧", 0)) }}</strong>
+    / 견적 예상 {% if 예상크레딧 is not none %}{{ "{:,}".format(예상크레딧) }}{% else %}?{% endif %}
+    {% if per_credit %}<small>(장당 {{ per_credit }})</small>{% endif %}
+    · 완료분 {{ "{:,}".format(집계.get("완료크레딧", 0)) }}
+    <br><small>실제 접수분 기준 재보고다 — taskId 를 받은 건의 장수 × 단가. 완료분은 불사자가 상품에 자동 반영한다.</small>
+  </p>
+
+  {% if 이어서확인가능 %}
+    <p class="stale" id="detail-poll-wrap">
+      <strong>폴링 미완 {{ 미종결 }}건 — 실패 아님.</strong>
+      불사자에서 아직 만드는 중이다. 크레딧은 이미 접수 때 나갔으니 새로 보내지 말고 이어 받아라.
+      <br>
+      <button type="button" class="detail-poll-btn" data-submit-job="{{ job.id }}">이어서 확인 — 크레딧 0</button>
+    </p>
+  {% endif %}
+
+  {% if 항목 %}
+    <table>
+      <thead><tr>
+        <th>판매자상품코드</th><th>상태</th><th>장수</th><th>크레딧</th><th>사유</th><th>작업번호(끝 8자리)</th>
+      </tr></thead>
+      <tbody>
+      {% for x in 항목 %}
+        <tr>
+          <td>{{ x.판매자상품코드 }}</td>
+          <td>{{ x.상태 }}</td>
+          <td>{{ x.장수 }}</td>
+          <td>{{ x.크레딧 }}</td>
+          <td>{{ x.사유 or "" }}</td>
+          <td><small>{{ x.taskId or "" }}</small></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endif %}

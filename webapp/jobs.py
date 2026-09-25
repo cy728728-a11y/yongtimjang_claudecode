@@ -388,9 +388,18 @@ def _alive(pid: int | None) -> bool:
     return True
 
 
-def _finish(cx: sqlite3.Connection, job_id: str, code: int) -> None:
+# 종료코드 3 이 **실패가 아닌** 잡 종류. 상세 CLI 에서 3 = 폴링 미완(시간 상한 도달)이다 (L-03 · D-17).
+# failed 로 적으면 화면이 "실패" 라고 말하고, 사람은 실패로 읽고 **다시 접수한다 — 크레딧 이중 지불.**
+# 새 상태값(예: 'incomplete')을 만들지 않고 done + exit_code 3 으로 둔다: latest_done·가드 쿼리가
+# 전부 'done' 을 보므로 손댈 곳이 없다. 구분은 exit_code 로 화면이 한다(_job_status.html).
+# ⚠️ 다른 kind 에 넣지 마라 — bulsaja_scan 의 3 은 계정 불일치다(detail_batch.py 주석 참조).
+POLL_INCOMPLETE_OK_KINDS: frozenset[str] = frozenset({"detail_submit", "detail_poll"})
+
+
+def _finish(cx: sqlite3.Connection, job_id: str, code: int, kind: str | None = None) -> None:
+    성공 = code == 0 or (code == 3 and kind in POLL_INCOMPLETE_OK_KINDS)
     cx.execute("UPDATE jobs SET status = ?, exit_code = ?, ended_at = ? WHERE id = ?",
-               ("done" if code == 0 else "failed", code, _now(), job_id))
+               ("done" if 성공 else "failed", code, _now(), job_id))
     _PROCS.pop(job_id, None)
 
 
@@ -409,12 +418,12 @@ def _reap(cx: sqlite3.Connection) -> None:
     `STARTING_TIMEOUT_SEC` 을 넘겼으면 띄우다 죽은 것이니 `failed` 로 닫아 전역 가드를
     풀어 준다. 시간 이전의 `starting` 은 건드리지 않는다.
     """
-    for r in cx.execute("SELECT id, pid FROM jobs WHERE status = 'running'").fetchall():
+    for r in cx.execute("SELECT id, pid, kind FROM jobs WHERE status = 'running'").fetchall():
         proc = _PROCS.get(r["id"])
         if proc is not None:
             code = proc.poll()
             if code is not None:
-                _finish(cx, r["id"], code)
+                _finish(cx, r["id"], code, r["kind"])      # kind 가 exit 3 의 뜻을 가른다
             continue
         if not _alive(r["pid"]):
             cx.execute("UPDATE jobs SET status = 'orphaned', ended_at = ? WHERE id = ?",
@@ -1184,6 +1193,29 @@ def recent_jobs(limit: int = 20) -> list[dict]:
         rows = cx.execute(
             "SELECT * FROM jobs ORDER BY started_at DESC, rowid DESC LIMIT ?",
             (int(limit),)).fetchall()
+    finally:
+        cx.close()
+    return [_as_dict(r) for r in rows]
+
+
+def children_of(parent_job_id: str, kind: str | None = None) -> list[dict]:
+    """이 잡을 부모로 가리키는 잡들(최신순). 없으면 빈 리스트.
+
+    상세 접수가 **한 견적에서 두 번** 뜨지 않게 라우트가 묻는 창이다 — 두 번째 접수는
+    체크포인트에 taskId 가 없는 건(접수실패 등)을 다시 접수하게 되고, 그건 MVP 가 미뤄 둔
+    실패분 재접수(D-18)와 같다. 레지스트리가 아직 없으면 **만들지 않고** 빈 리스트다(T-1-01b).
+    """
+    if not db_path().is_file():
+        return []
+    cx = _conn()
+    try:
+        조건, 인자 = "parent_job_id = ?", (parent_job_id,)
+        if kind:
+            조건, 인자 = 조건 + " AND kind = ?", (parent_job_id, kind)
+        rows = cx.execute(f"SELECT * FROM jobs WHERE {조건} ORDER BY started_at DESC, rowid DESC",
+                          인자).fetchall()
+    except sqlite3.Error:
+        return []
     finally:
         cx.close()
     return [_as_dict(r) for r in rows]

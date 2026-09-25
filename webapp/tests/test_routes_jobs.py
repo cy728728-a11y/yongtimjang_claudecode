@@ -1065,9 +1065,12 @@ def test_detail이어서_poll의_poll도_된다(화면, 엿듣기, tmp_run_dir):
 
 
 @pytest.mark.parametrize("상태,코드", [("failed", 2), ("failed", 5), ("failed", 4),
-                                      ("running", None)])
+                                      ("starting", None)])
 def test_detail이어서_실패_도는중은_400(화면, 엿듣기, tmp_run_dir, 상태, 코드):
-    """장수불일치(2)·견적초과(5)는 사람 판단 — 이어서 확인으로 덮지 않는다."""
+    """장수불일치(2)·견적초과(5)는 사람 판단 — 이어서 확인으로 덮지 않는다.
+
+    도는 중은 `starting` 으로 흉내 낸다 — pid 없는 running 행은 `_reap` 이 orphaned 로 거둔다.
+    """
     _, 접수 = _접수체인(tmp_run_dir, 상태, 코드)
     응답 = 화면.post(확인경로, json={"submit_job_id": 접수})
     assert 응답.status_code == 400
