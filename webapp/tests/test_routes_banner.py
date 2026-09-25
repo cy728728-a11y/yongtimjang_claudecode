@@ -1015,3 +1015,61 @@ def test_표식_필터는_기본_꺼짐이고_화면_전용이다(화면, 돌린
             for 금지 in (f'== "{출처}"', f"== '{출처}'", f'=== "{출처}"', f"=== '{출처}'",
                          f'!= "{출처}"', f"!= '{출처}'", f'!== "{출처}"', f"!== '{출처}'"):
                 assert 금지 not in 소스, f"{상대} 에 출처 문자열 비교 '{금지}' 가 있다 (S-1)"
+
+
+# ── Phase 5 D-03 — 다시 확인 버튼 + 낡은 확인 표시 ─────────────────────────
+
+
+def _배지(본문, 키):
+    """`확인함` 배지(span) 만 찾는다 — 미확인 버튼의 글자 '확인함' 과 섞지 않는다."""
+    return f'<span class="ct-confirmed" data-p="{키}">확인함</span>' in 본문
+
+
+def _줄(본문, 키):
+    """그 상품 줄(<article>) 하나의 HTML."""
+    m = re.search(r'<article class="ct-row[^"]*"[^>]*>.*?</article>', 본문, re.S)
+    for 블록 in re.findall(r'<article class="ct-row.*?</article>', 본문, re.S):
+        if f'data-p="{키}"' in 블록:
+            return 블록
+    return m.group(0) if m else ""
+
+
+def test_다시확인_버튼이_확인된_상품에도_있다(화면, 돌린척, tmp_run_dir):
+    문서 = _산출물_여러상품()
+    문서["생성시각"] = "2026-09-25T00:14:25+09:00"
+    돌린척(문서)
+    assert 화면.post("/banner/confirm", data={"run_dir": tmp_run_dir.name,
+                                          "타오바오상품번호": "tb-zz01"}).status_code == 200
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    assert _배지(본문, "tb-zz01"), "지금 확인했는데 배지가 없다"
+    줄 = _줄(본문, "tb-zz01")
+    assert 'hx-post="/banner/confirm"' in 줄 and "다시 확인" in 줄, \
+        "확인된 상품에 다시 확인 버튼이 없다 (D-03)"
+
+
+def test_다시확인_누르면_확인시각이_갱신된다(화면, tmp_run_dir, monkeypatch):
+    시각들 = iter(["2026-09-22T15:11:26+09:00", "2026-09-25T09:00:00+09:00"])
+    monkeypatch.setattr(banner_store, "_now", lambda: next(시각들))
+    몸통 = {"run_dir": tmp_run_dir.name, "타오바오상품번호": "tb-1"}
+    assert 화면.post("/banner/confirm", data=몸통).status_code == 200
+    assert banner_store.확인시각읽기(tmp_run_dir.name) == {"tb-1": "2026-09-22T15:11:26+09:00"}
+    assert 화면.post("/banner/confirm", data=몸통).status_code == 200
+    assert banner_store.확인시각읽기(tmp_run_dir.name) == {"tb-1": "2026-09-25T09:00:00+09:00"}
+
+
+def test_낡은확인은_확인함배지가_안뜬다(화면, 돌린척, tmp_run_dir, monkeypatch):
+    문서 = _산출물_여러상품()
+    문서["생성시각"] = "2026-09-25T00:14:25+09:00"
+    돌린척(문서)
+    # 산출물보다 앞선 확인 — 04 회차 실측과 같은 모양(최대 2026-09-23T00:55)
+    monkeypatch.setattr(banner_store, "_now", lambda: "2026-09-23T00:55:00+09:00")
+    assert 화면.post("/banner/confirm", data={"run_dir": tmp_run_dir.name,
+                                          "타오바오상품번호": "tb-zz01"}).status_code == 200
+    본문 = 화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text
+    assert not _배지(본문, "tb-zz01"), "낡은 확인에 확인함 배지가 떴다 (D-03)"
+    줄 = _줄(본문, "tb-zz01")
+    assert 'hx-post="/banner/confirm"' in 줄, "낡은 확인 상품에 확인 버튼이 없다"
+    # 오프셋이 달라도 실제 시각으로 비교한다 — UTC 로 적힌 뒤 시각은 유효
+    monkeypatch.setattr(banner_store, "_now", lambda: "2026-09-24T16:00:00+00:00")
+    화면.post("/banner/confirm", data={"run_dir": tmp_run_dir.name, "타오바오상품번호": "tb-zz01"})
+    assert _배지(화면.get(f"/banner/review?run_dir={tmp_run_dir.name}").text, "tb-zz01")
