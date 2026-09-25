@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 context gathered (--auto)
-last_updated: "2026-09-25T05:10:47.859Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-09-25T05:19:50.546Z"
 last_activity: 2026-09-25 -- Phase 5 planning complete
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 34
-  completed_plans: 28
+  completed_plans: 29
   percent: 43
 ---
 
@@ -25,17 +25,17 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 
 ## Current Position
 
-Phase: 05 (상세페이지 작업 버튼) — NOT STARTED (discuss 필요)
-Plan: —
-Status: Ready to execute
-Last activity: 2026-09-25 -- Phase 5 planning complete
+Phase: 05 (상세페이지 작업 버튼) — EXECUTING
+Plan: 2 of 6 (05-01 완료: detail_batch --inputs 주입구 · 오프라인 45테스트 · 크레딧 0)
+Status: Executing Phase 05
+Last activity: 2026-09-25 -- 05-01 complete (CLI 주입구 플래그 + 버그 2개 수정)
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
 Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
 
-Progress: [████░░░░░░] 43% (페이즈 3/7 — Phase 4 는 게이트 불통과 종료)
+Progress: [█████████░] 85%
 
 ## Performance Metrics
 
@@ -172,6 +172,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-25T04:38:44.133Z
+Last session: 2026-09-25T05:19:50.541Z
 Stopped at: Phase 5 context gathered (--auto)
-Resume file: .planning/phases/05-core-value/05-CONTEXT.md
+Resume file: None
