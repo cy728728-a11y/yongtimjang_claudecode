@@ -16,6 +16,7 @@
 import json
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -828,3 +829,345 @@ def test_detail견적_도는중이면_표를_안그린다(화면, tmp_run_dir):
     assert 응답.status_code == 200
     assert "예상 크레딧" not in 응답.text
     assert "도는 중" in 응답.text or "만드는 중" in 응답.text
+
+
+# ── Phase 5 · 05-04 — 접수 · 이어서 확인 · 결과 표 ─────────────────────────────
+# 실제 CLI 는 한 번도 안 뜬다. 접수는 진짜로 돌면 크레딧을 태운다 — `엿듣기`(합성 잡) 또는
+# `안띄운다`(가짜 spawn) 만 쓴다.
+
+접수경로 = "/jobs/detail/submit"
+확인경로 = "/jobs/detail/poll"
+
+_입력두건 = {"items": [
+    {"productId": "zzp1", "판매자상품코드": "zz01", "imageUrls": ["https://zzcdn.example/1.jpg"],
+     "제품이미지총수": 1, "잘림": 0},
+    {"productId": "zzp4", "판매자상품코드": "zz04", "imageUrls": ["https://zzcdn.example/4.jpg"],
+     "제품이미지총수": 1, "잘림": 0},
+    {"productId": "zzp5", "판매자상품코드": "zz05", "imageUrls": ["https://zzcdn.example/5.jpg"],
+     "제품이미지총수": 1, "잘림": 0}], "제외": [], "선택": 3}
+
+
+def _상세행(tmp_run_dir, kind: str, 상태: str = "done", exit_code: int | None = 0,
+           parent: str | None = None, 견적: dict | None = None,
+           체크포인트: dict | None = None, 요약: dict | None = None) -> str:
+    """detail 잡 행 하나를 박는다(자식 없음). 폴더·targets 는 부모 체인을 따른다."""
+    import sqlite3
+    import uuid
+    job_id = str(uuid.uuid4())
+    웹 = tmp_run_dir / "web"
+    웹.mkdir(parents=True, exist_ok=True)
+    if kind == "detail_estimate":
+        견적id = job_id
+        대상 = 웹 / f"targets_{job_id}.json"
+        대상.write_text(json.dumps(_입력두건, ensure_ascii=False), encoding="utf-8")
+    else:
+        부모행 = jobs._row(parent)
+        대상 = Path(부모행["targets_path"])
+        견적id = (parent if kind == "detail_submit" else 부모행["parent_job_id"])
+    폴더 = 웹 / f"detail_{견적id}"
+    폴더.mkdir(parents=True, exist_ok=True)
+    결과 = 폴더 / ("estimate.json" if kind == "detail_estimate" else f"summary_{job_id}.json")
+    if kind == "detail_estimate" and 견적 is not None:
+        결과.write_text(json.dumps(견적, ensure_ascii=False), encoding="utf-8")
+    if 요약 is not None:
+        결과.write_text(json.dumps(요약, ensure_ascii=False), encoding="utf-8")
+    if 체크포인트 is not None:
+        (폴더 / "detail_status.json").write_text(json.dumps(체크포인트, ensure_ascii=False),
+                                                 encoding="utf-8")
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("INSERT INTO jobs (id, kind, run_dir, accounts, argv, status, log_path, "
+                   "targets_path, result_path, parent_job_id, exit_code, started_at) "
+                   "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (job_id, kind, tmp_run_dir.name, "[]", "[]", 상태,
+                    str(tmp_run_dir / "x.log"), str(대상), str(결과), parent, exit_code,
+                    datetime.now().astimezone().isoformat(timespec="seconds")))
+        cx.commit()
+    finally:
+        cx.close()
+    return job_id
+
+
+_견적2건 = {**_견적문서, "집계": {"선택": 3, "스킵": 1, "접수": 2, "총장수": 20,
+                                "예상크레딧": 100, "잘린상품": 0}}
+
+
+# ── 접수 ──
+
+def test_detail접수_토큰없이_안된다(화면, 엿듣기, tmp_run_dir):
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=_견적2건)
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 견적},
+                    headers={"X-CT-Token": "wrong-token"})
+    assert 응답.status_code == 403
+    assert not 엿듣기
+
+
+def test_detail접수_GET이_아니다(화면):
+    assert 화면.get(접수경로).status_code == 405
+    assert 화면.get(확인경로).status_code == 405
+
+
+def test_detail접수_부모만_가리킨다(화면, 엿듣기, tmp_run_dir):
+    """요청은 견적 잡 id 하나 — 대상 필드가 없다. targets 는 부모 것을 그대로 쓴다(D-14·T-05-15)."""
+    from webapp.routes.jobs import DetailSubmitReq, DetailPollReq
+    assert set(DetailSubmitReq.model_fields) == {"estimate_job_id"}
+    assert set(DetailPollReq.model_fields) == {"submit_job_id"}
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=_견적2건)
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 견적})
+    assert 응답.status_code == 200, 응답.text
+    assert 엿듣기["kind"] == "detail_submit"
+    assert 엿듣기["parent_job_id"] == 견적
+    assert str(엿듣기["targets_path_override"]) == jobs._row(견적)["targets_path"]
+    assert 엿듣기["run_dir"] == tmp_run_dir.name
+    assert "only_ads" not in 엿듣기 or 엿듣기["only_ads"] is None
+    assert "detail_inputs" not in 엿듣기 or 엿듣기["detail_inputs"] is None
+
+
+def test_detail접수_max_credits_는_estimate_json_에서(화면, 엿듣기, tmp_run_dir):
+    """화면 숫자를 믿지 않는다 — 몸통에 max_credits 를 실어도 부모 estimate.json 값이 간다."""
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=_견적2건)
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 견적, "max_credits": 999999})
+    assert 응답.status_code in (200, 400, 422), 응답.text
+    if 응답.status_code == 200:
+        assert 엿듣기["max_credits"] == 100
+
+
+def test_detail접수_max_credits_정확히(화면, 엿듣기, tmp_run_dir):
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=_견적2건)
+    assert 화면.post(접수경로, json={"estimate_job_id": 견적}).status_code == 200
+    assert 엿듣기["max_credits"] == 100
+
+
+def test_detail접수_예상크레딧0이면_400(화면, 엿듣기, tmp_run_dir):
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적={**_견적문서, "집계": {
+        "선택": 2, "스킵": 2, "접수": 0, "총장수": 0, "예상크레딧": 0, "잘린상품": 0}})
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 견적})
+    assert 응답.status_code == 400
+    assert "접수할 게 없다" in 응답.json()["detail"]
+    assert not 엿듣기
+
+
+def test_detail접수_부모kind틀리면_400(화면, 엿듣기, tmp_run_dir):
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=_견적2건)
+    접수 = _상세행(tmp_run_dir, "detail_submit", parent=견적)
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 접수})
+    assert 응답.status_code == 400
+    assert not 엿듣기
+
+
+def test_detail접수_없는잡이면_400(화면, 엿듣기):
+    응답 = 화면.post(접수경로, json={"estimate_job_id": "00000000-0000-4000-8000-000000000000"})
+    assert 응답.status_code == 400
+    assert not 엿듣기
+
+
+def test_detail접수_잡id모양이_아니면_422(화면, 엿듣기):
+    assert 화면.post(접수경로, json={"estimate_job_id": "../../x"}).status_code in (400, 422)
+    assert not 엿듣기
+
+
+def test_detail접수_부모running이면_400(화면, 엿듣기, tmp_run_dir):
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 상태="starting", exit_code=None,
+                  견적=_견적2건)
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 견적})
+    assert 응답.status_code == 400
+    assert not 엿듣기
+
+
+def test_detail접수_부모failed면_400(화면, 엿듣기, tmp_run_dir):
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 상태="failed", exit_code=4, 견적=_견적2건)
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 견적})
+    assert 응답.status_code == 400
+    assert not 엿듣기
+
+
+def test_detail접수_estimate_json_없으면_400(화면, 엿듣기, tmp_run_dir):
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=None)
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 견적})
+    assert 응답.status_code == 400
+    assert not 엿듣기
+
+
+def test_detail접수_같은견적_두번은_400(화면, 엿듣기, tmp_run_dir):
+    """한 견적에서 접수는 한 번. 두 번째는 '이어서 확인' 이나 새 견적이다(L-03 · D-18)."""
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=_견적2건)
+    _상세행(tmp_run_dir, "detail_submit", parent=견적)
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 견적})
+    assert 응답.status_code == 400
+    assert "이미 접수" in 응답.json()["detail"]
+    assert not 엿듣기
+
+
+def test_detail접수_계정불일치면_409(화면, 안띄운다, 프로필, 기대닉, tmp_run_dir):
+    """진짜 `create_job` 이 돌아야 계정 가드에 닿는다."""
+    프로필("zz다른계정")
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=_견적2건)
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 견적})
+    assert 응답.status_code == 409, 응답.text
+    assert "zz다른계정" not in 응답.json()["detail"]
+
+
+def test_detail접수_진짜_create_job_argv(화면, 안띄운다, 프로필, 기대닉, tmp_run_dir,
+                                       monkeypatch):
+    """가짜 spawn 으로 argv 를 본다 — --max-credits 100 · 같은 inputs · 같은 detail 폴더."""
+    from webapp import settings as 설정
+    monkeypatch.setattr(설정, "load", lambda force=False: None)
+    프로필()
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=_견적2건)
+    응답 = 화면.post(접수경로, json={"estimate_job_id": 견적})
+    assert 응답.status_code == 200, 응답.text
+    av = json.loads(jobs._row(응답.json()["job_id"])["argv"])
+    assert av[av.index("--max-credits") + 1] == "100"
+    assert av[av.index("--inputs") + 1] == jobs._row(견적)["targets_path"]
+    assert Path(av[av.index("--run-dir") + 1]).name == f"detail_{견적}"
+    assert "--poll-only" not in av and "--retry-failed" not in av
+
+
+# ── 이어서 확인 ──
+
+_체크_미종결 = {"zzp1": {"taskId": "task-zz-000000000001", "status": "접수", "pages": 10},
+               "zzp4": {"taskId": "task-zz-000000000004", "status": "완료", "pages": 10},
+               "zzp5": {"status": "완료(기작업)", "pages": 10}}
+_체크_종결 = {"zzp1": {"taskId": "task-zz-000000000001", "status": "완료", "pages": 10},
+             "zzp4": {"taskId": "task-zz-000000000004", "status": "실패", "pages": 10,
+                      "사유": "zz서버오류"},
+             "zzp5": {"status": "완료(기작업)", "pages": 10}}
+
+
+def _접수체인(tmp_run_dir, 상태="done", exit_code=3, 체크=None) -> tuple[str, str]:
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=_견적2건)
+    접수 = _상세행(tmp_run_dir, "detail_submit", 상태=상태, exit_code=exit_code, parent=견적,
+                  체크포인트=_체크_미종결 if 체크 is None else 체크)
+    return 견적, 접수
+
+
+@pytest.mark.parametrize("상태,코드,체크", [
+    ("done", 3, None),                      # 시간 상한 — 정상 경로
+    ("orphaned", None, None),               # 서버 재시작 · 종료코드 모름 · 체크포인트엔 미종결
+    ("done", 0, None),                      # 0 인데 체크포인트엔 미종결(서버 상태가 바뀜)
+])
+def test_detail이어서_부모는_submit_또는_poll(화면, 엿듣기, tmp_run_dir, 상태, 코드, 체크):
+    _, 접수 = _접수체인(tmp_run_dir, 상태, 코드, 체크)
+    응답 = 화면.post(확인경로, json={"submit_job_id": 접수})
+    assert 응답.status_code == 200, 응답.text
+    assert 엿듣기["kind"] == "detail_poll"
+    assert 엿듣기["parent_job_id"] == 접수
+    assert str(엿듣기["targets_path_override"]) == jobs._row(접수)["targets_path"]
+    assert 엿듣기.get("max_credits") is None
+
+
+def test_detail이어서_poll의_poll도_된다(화면, 엿듣기, tmp_run_dir):
+    _, 접수 = _접수체인(tmp_run_dir)
+    이전 = _상세행(tmp_run_dir, "detail_poll", exit_code=3, parent=접수)
+    응답 = 화면.post(확인경로, json={"submit_job_id": 이전})
+    assert 응답.status_code == 200, 응답.text
+    assert 엿듣기["parent_job_id"] == 이전
+
+
+@pytest.mark.parametrize("상태,코드", [("failed", 2), ("failed", 5), ("failed", 4),
+                                      ("running", None)])
+def test_detail이어서_실패_도는중은_400(화면, 엿듣기, tmp_run_dir, 상태, 코드):
+    """장수불일치(2)·견적초과(5)는 사람 판단 — 이어서 확인으로 덮지 않는다."""
+    _, 접수 = _접수체인(tmp_run_dir, 상태, 코드)
+    응답 = 화면.post(확인경로, json={"submit_job_id": 접수})
+    assert 응답.status_code == 400
+    assert not 엿듣기
+
+
+def test_detail이어서_미종결0이면_400(화면, 엿듣기, tmp_run_dir):
+    _, 접수 = _접수체인(tmp_run_dir, "done", 0, _체크_종결)
+    응답 = 화면.post(확인경로, json={"submit_job_id": 접수})
+    assert 응답.status_code == 400
+    assert not 엿듣기
+
+
+def test_detail이어서_부모가_견적이면_400(화면, 엿듣기, tmp_run_dir):
+    견적, _ = _접수체인(tmp_run_dir)
+    assert 화면.post(확인경로, json={"submit_job_id": 견적}).status_code == 400
+    assert not 엿듣기
+
+
+def test_detail이어서_토큰없이_안된다(화면, 엿듣기, tmp_run_dir):
+    _, 접수 = _접수체인(tmp_run_dir)
+    응답 = 화면.post(확인경로, json={"submit_job_id": 접수},
+                    headers={"X-CT-Token": "wrong-token"})
+    assert 응답.status_code == 403
+    assert not 엿듣기
+
+
+def test_detail이어서_계정불일치면_409(화면, 안띄운다, 프로필, 기대닉, tmp_run_dir):
+    프로필("zz다른계정")
+    _, 접수 = _접수체인(tmp_run_dir)
+    응답 = 화면.post(확인경로, json={"submit_job_id": 접수})
+    assert 응답.status_code == 409, 응답.text
+
+
+def test_detail이어서_크레딧없음(화면, 안띄운다, 프로필, 기대닉, tmp_run_dir, monkeypatch):
+    """poll argv — --poll-only 있고 --max-credits·--retry-failed·--estimate-only 없음."""
+    from webapp import settings as 설정
+    monkeypatch.setattr(설정, "load", lambda force=False: None)
+    프로필()
+    _, 접수 = _접수체인(tmp_run_dir)
+    응답 = 화면.post(확인경로, json={"submit_job_id": 접수})
+    assert 응답.status_code == 200, 응답.text
+    av = json.loads(jobs._row(응답.json()["job_id"])["argv"])
+    assert "--poll-only" in av
+    for 금지 in ("--max-credits", "--retry-failed", "--force", "--estimate-only"):
+        assert 금지 not in av, 금지
+
+
+# ── 결과 표 ──
+
+def test_detail결과ctx_정본은_detail_status(화면, tmp_run_dir):
+    """orphaned(종료코드 없음)여도 detail_status.json 으로 항목·미종결을 센다."""
+    _, 접수 = _접수체인(tmp_run_dir, "orphaned", None)
+    j = 화면.get(f"/jobs/{접수}/result?format=json").json()
+    assert j["error"] is None
+    상태들 = {h["판매자상품코드"]: h["상태"] for h in j["항목"]}
+    assert 상태들 == {"zz01": "폴링중", "zz04": "완료", "zz05": "기작업스킵"}
+    assert j["집계"]["폴링미완"] == 1 and j["집계"]["완료"] == 1 and j["집계"]["스킵"] == 1
+    assert j["집계"]["접수"] == 2
+    assert j["이어서확인가능"] is True
+    assert j["미종결"] == 1
+    # 크레딧 — 접수분 기준 재보고 vs 견적
+    assert j["집계"]["접수크레딧"] == 100
+    assert j["예상크레딧"] == 100
+    # taskId 는 끝 8자리만 화면에
+    assert all(len(h["taskId"] or "") <= 8 for h in j["항목"])
+
+
+def test_detail결과_종결이면_이어서확인_없음(화면, tmp_run_dir):
+    _, 접수 = _접수체인(tmp_run_dir, "done", 0, _체크_종결)
+    j = 화면.get(f"/jobs/{접수}/result?format=json").json()
+    assert j["이어서확인가능"] is False
+    사유 = {h["판매자상품코드"]: h["사유"] for h in j["항목"]}
+    assert 사유["zz04"] == "zz서버오류"
+    assert j["집계"]["실패"] == 1
+
+
+def test_detail결과조각_이어서확인만_그린다(화면, tmp_run_dir):
+    _, 접수 = _접수체인(tmp_run_dir)
+    응답 = 화면.get(f"/jobs/{접수}/result", headers={"HX-Request": "true"})
+    assert 응답.status_code == 200
+    본문 = 응답.text
+    assert "이어서 확인" in 본문 and "실패 아님" in 본문
+    assert f'data-submit-job="{접수}"' in 본문
+    assert "재접수" not in 본문 and "retry" not in 본문.lower()
+    for 말 in ("zz01", "zz04", "zz05", "폴링중", "완료"):
+        assert 말 in 본문, 말
+
+
+def test_detail결과조각_도는중(화면, tmp_run_dir):
+    _, 접수 = _접수체인(tmp_run_dir, "starting", None)
+    응답 = 화면.get(f"/jobs/{접수}/result", headers={"HX-Request": "true"})
+    assert 응답.status_code == 200
+    assert "이어서 확인" not in 응답.text
+    assert "도는 중" in 응답.text
+
+
+def test_detail결과_체크포인트없으면_에러(화면, tmp_run_dir):
+    견적 = _상세행(tmp_run_dir, "detail_estimate", 견적=_견적2건)
+    접수 = _상세행(tmp_run_dir, "detail_submit", 상태="failed", exit_code=4, parent=견적)
+    j = 화면.get(f"/jobs/{접수}/result?format=json").json()
+    assert j["error"]
+    assert j["이어서확인가능"] is False

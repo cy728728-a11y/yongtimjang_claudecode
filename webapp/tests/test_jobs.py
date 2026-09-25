@@ -1434,3 +1434,62 @@ def test_detail잡_부모체인이_틀리면_거부(잡판, 계정확인, 안띄
     with pytest.raises(ValueError):
         jobs.create_job("detail_poll", run_dir=tmp_run_dir.name,
                         parent_job_id=견적, targets_path_override=대상)
+
+
+# ── Phase 5 · 05-04 — detail 잡의 exit 3 해석 (L-03 · D-17) ─────────────────
+# 3 은 "폴링 미완 — 실패 아님" 이다. failed 로 적으면 사람이 실패로 읽고 다시 접수한다(이중 지불).
+
+class _끝난프로세스:
+    """`poll()` 이 정해진 종료코드를 돌려주는 대역. 자식을 띄우지 않는다."""
+
+    def __init__(self, code):
+        self.code = code
+        self.pid = os.getpid()
+
+    def poll(self):
+        return self.code
+
+
+def _도는행(kind: str, code: int) -> str:
+    """running 행 하나 + 끝난 가짜 프로세스를 박는다. `_reap` 이 거두게 한다."""
+    import sqlite3
+    job_id = str(uuid.uuid4())
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("INSERT INTO jobs (id, kind, accounts, argv, status, log_path, pid, started_at) "
+                   "VALUES (?,?,?,?,?,?,?,?)",
+                   (job_id, kind, "[]", "[]", "running", "x.log", os.getpid(),
+                    datetime.now().astimezone().isoformat(timespec="seconds")))
+        cx.commit()
+    finally:
+        cx.close()
+    jobs._PROCS[job_id] = _끝난프로세스(code)
+    return job_id
+
+
+@pytest.mark.parametrize("kind", ["detail_submit", "detail_poll"])
+def test_detail_exit3_은_done(잡판, kind):
+    상태 = jobs.job_status(_도는행(kind, 3))
+    assert 상태["status"] == "done"
+    assert 상태["exit_code"] == 3
+
+
+@pytest.mark.parametrize("kind", ["bids_commit", "detail_estimate", "bulsaja_scan", "prep"])
+def test_detail_아닌_kind_의_exit3_은_여전히_failed(잡판, kind):
+    상태 = jobs.job_status(_도는행(kind, 3))
+    assert 상태["status"] == "failed"
+    assert 상태["exit_code"] == 3
+
+
+@pytest.mark.parametrize("code", [2, 4, 5, 1])
+def test_detail_의_2_4_5_는_failed(잡판, code):
+    상태 = jobs.job_status(_도는행("detail_submit", code))
+    assert 상태["status"] == "failed"
+    assert 상태["exit_code"] == code
+
+
+def test_detail_exit3_은_latest_done_에_잡힌다(잡판):
+    """새 상태값을 만들지 않았다는 증거 — 'done' 을 보는 기존 쿼리가 그대로 잡는다."""
+    job_id = _도는행("detail_poll", 3)
+    jobs.job_status(job_id)
+    assert jobs.latest_done("detail_poll")["id"] == job_id
