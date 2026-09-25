@@ -346,6 +346,15 @@
     </div>
   </section>
 
+  {# 상세 견적 자리 (Phase 5 / DETAIL-05). 입찰가 블록(#preview)과 id 를 공유하지 않는다 —
+     한 칸을 두 흐름이 갈아끼우면 입찰가 미리보기 위에 견적 표가 덮여 "무엇의 결과인가" 가 흐려진다.
+     미리보기와 같은 이유로 비워 둔다(새로고침으로 지난 견적을 되살리지 않는다). #}
+  <section id="detail-estimate" hidden>
+    <h2>상세 견적</h2>
+    <div id="detail-estimate-body"></div>
+    <input type="hidden" id="detail-estimate-job" value="">
+  </section>
+
   {# 실행 결과 자리 (FLOW-05 / D-10). 미리보기와 같은 방식으로 비워 둔다 —
      새로고침했을 때 지난 실행 결과가 되살아나면 "지금 그 상태" 로 읽힌다. #}
   <section id="result" hidden>
@@ -484,6 +493,19 @@
            실제로 바꾸는 버튼은 이 플랜에 없다(Plan 01-08). #}
         <button type="button" id="preview-btn" disabled>입찰가 인상 미리보기</button>
         <p><small>미리보기는 광고를 바꾸지 않는다 — 고른 소재가 얼마에서 얼마로 오를지만 계산해 본다.</small></p>
+
+        {# ── 상세페이지 견적 (Phase 5 / DETAIL-05 · D-05 · D-07 · D-11) ───────────
+           선택 UI 는 위와 **같은 것**을 쓴다(보이는 것만 / 필터 전체 — D-07). 새 선택 패턴을
+           만들지 않는다. "🔴 기본 선택" 은 고를 수 있는 행 중 🔴(중국어 원본)만 고른다 —
+           🟡 는 사람이 직접 체크해야 들어간다(D-05). 기작업·⚪ 도 직접 체크하면 보낼 수 있고,
+           그때는 CLI 가 실시간 태그로 다시 판정해 스킵한다(D-12).
+           **화질·장수 선택지는 없다**(D-11) — 일반화질 · 제품 이미지 앞 10장 고정이다.
+           견적은 크레딧 0 이다. 접수 버튼은 견적 표가 뜬 뒤에 붙는다(05-04). #}
+        <div role="group">
+          <button type="button" id="detail-red-btn" class="secondary outline">🔴 기본 선택</button>
+          <button type="button" id="detail-estimate-btn" disabled>상세 견적 — 크레딧 0</button>
+        </div>
+        <p><small>상세 견적은 크레딧을 안 쓴다 — 관문(배너 검수 확인)을 지난 상품만 세고, 기작업은 불사자 태그로 다시 확인해 뺀다.</small></p>
       {% endif %}
     </div>
 

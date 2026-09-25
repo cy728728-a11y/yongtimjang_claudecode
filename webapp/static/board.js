@@ -380,6 +380,9 @@
   var 배너확인 = document.getElementById("sel-banner-ok");
   var 배너취소 = document.getElementById("sel-banner-cancel");
   var 미리보기버튼 = document.getElementById("preview-btn");
+  // 상세 견적 (Phase 5). 입찰가 버튼과 id 를 공유하지 않는다.
+  var 상세기본버튼 = document.getElementById("detail-red-btn");
+  var 상세견적버튼 = document.getElementById("detail-estimate-btn");
   var 회차칸값 = document.getElementById("job-run-dir");
   var 작업오류 = document.getElementById("job-error");
 
@@ -451,6 +454,9 @@
     말 += " · 대상 " + 콤마(대상) + "건";
     // 🔴 개수는 이 화면의 목적이다 — Phase 5 가 크레딧을 태울 줄이 몇 개인지.
     if (빨강) { 말 += " · 🔴 " + 콤마(빨강) + "개"; }
+    // 🟡 는 기본 선택에 안 들어간다(D-05) — 사람이 직접 체크한 수를 같이 보여 준다.
+    var 노랑 = 고른것.filter(function (r) { return 상태기호[r.상세상태] === "🟡"; }).length;
+    if (노랑) { 말 += " · 🟡 " + 콤마(노랑) + "개"; }
     if (기작업제외) { 말 += " · 기작업 " + 콤마(기작업제외) + "건 제외"; }
     if (팬아웃제외) {
       말 += " · 사본·기작업 태그 미조회 " + 콤마(팬아웃제외) + "건 제외(시스템)";
@@ -461,6 +467,7 @@
     요약칸.textContent = 말;
 
     if (미리보기버튼) { 미리보기버튼.disabled = 고른것.length === 0; }
+    if (상세견적버튼) { 상세견적버튼.disabled = 고른것.length === 0; }
 
     // "필터 전체 N건 선택" 은 **더 고를 게 남았을 때만** 띄운다.
     //
@@ -615,6 +622,78 @@
       }).catch(function (e) {
         미리보기버튼.disabled = false;
         오류표시("미리보기 요청이 실패했다: " + e);
+      });
+    });
+  }
+
+  // ── 상세 견적 (Phase 5 / DETAIL-05 · D-05 · D-07 · D-14) ────────────────────
+  //
+  // **선택 UI 는 위의 것을 그대로 쓴다**(D-07). 여기서 새로 더하는 건 두 가지뿐이다:
+  //   · "🔴 기본 선택" — `고를수있는` 을 지난 행 중 🔴 만 고른다(D-05). 🟡·⚪·기작업은
+  //     직접 체크해야 들어간다. 판단은 `고를수있는` **한 곳**을 그대로 탄다
+  //   · "상세 견적" — 고른 행의 **보드 키만** 보낸다. URL·productId 는 안 보낸다 —
+  //     서버가 키로 보드 행을 다시 만들고 관문도 서버에서만 돈다(T-05-10)
+  // 화질·장수 입력은 없다(D-11).
+  var 상세자리 = document.getElementById("detail-estimate");
+  var 상세몸통 = document.getElementById("detail-estimate-body");
+  var 상세잡칸 = document.getElementById("detail-estimate-job");
+
+  if (상세기본버튼) {
+    상세기본버튼.addEventListener("click", function () {
+      배너닫기();
+      // 지금 필터를 통과한 행 중에서만 고른다 — 보이는 것 기준(D-07). 필터 밖 선택은 푼다:
+      // 남겨 두면 안 보이는 🟡 가 견적에 딸려간다.
+      var 고를것 = {};
+      고를수있는(table.getData("active")).forEach(function (r) {
+        if (상태기호[r.상세상태] === "🔴") { 고를것[r.key] = 1; }
+      });
+      table.deselectRow();
+      table.selectRow(table.getRows("active").filter(function (row) {
+        return 고를것[row.getData().key];
+      }));
+      요약갱신();
+    });
+  }
+
+  if (상세견적버튼) {
+    상세견적버튼.addEventListener("click", function () {
+      var 키들 = table.getSelectedData().map(function (r) { return r.key; });
+      if (!키들.length) { 오류표시("먼저 상품을 골라라"); return; }
+      if (작업오류) { 작업오류.hidden = true; }
+      상세견적버튼.disabled = true;
+
+      fetch("/jobs/detail/estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CT-Token": 토큰() },
+        body: JSON.stringify({ run_dir: 회차칸값 ? 회차칸값.value : "", keys: 키들 })
+      }).then(function (r) {
+        return r.text().then(function (본문) { return { ok: r.ok, code: r.status, 본문: 본문 }; });
+      }).then(function (res) {
+        상세견적버튼.disabled = false;
+        if (!res.ok) {
+          // 400 = 관문에서 전부 빠졌다(상품별 사유가 detail 에 실린다) · 모르는 상품
+          // 409 = 배너/조인 스캔이 먼저다 · 계정 불일치 · 같은 견적이 도는 중
+          var 사유 = res.본문;
+          try {
+            var d = JSON.parse(res.본문).detail;
+            사유 = typeof d === "string" ? d : JSON.stringify(d);
+          } catch (e) { /* 원문 그대로 */ }
+          오류표시("상세 견적을 못 만들었다 (" + res.code + ") — " + 사유);
+          return;
+        }
+        var job_id = JSON.parse(res.본문).job_id;
+        if (상세잡칸) { 상세잡칸.value = ""; }
+        if (상세몸통) { 상세몸통.textContent = ""; }
+        htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/panel",
+                  { target: "#job-panel", swap: "outerHTML" });
+        결과기다리기(job_id, 150, "detail-estimate", "detail-estimate-body", function (상태) {
+          // 05-04 의 접수 버튼이 이 견적 잡 id 만 가리킨다 — 대상 목록을 다시 만들지 않는다.
+          if (상세잡칸 && 상태 && 상태.status === "done") { 상세잡칸.value = job_id; }
+        });
+        if (상세자리) { 상세자리.hidden = false; }
+      }).catch(function (e) {
+        상세견적버튼.disabled = false;
+        오류표시("상세 견적 요청이 실패했다: " + e);
       });
     });
   }

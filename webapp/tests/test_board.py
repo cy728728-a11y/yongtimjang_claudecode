@@ -768,3 +768,16 @@ def test_팬아웃_미조회는_시스템칸에_뜨고_광고청소에_안_섞�
     assert "기본 선택에서 빠진다" in 시스템칸, "왜 빠졌는지를 화면이 말하지 않는다"
     # 화면이 "사본 0건" 을 단언하지 않는다
     assert "사본 0건" not in 본문
+
+
+def test_상세견적_버튼과_자리가_보드에_있다(조인보드):
+    """Phase 5 / 05-03 — 🔴 기본 선택 · 상세 견적 버튼 · 견적 자리. 화질·장수 칸은 없다(D-11)."""
+    r, _ = 조인보드(조인보드.산출물)
+    본문 = r.text
+    for 아이디 in ('id="detail-red-btn"', 'id="detail-estimate-btn"', 'id="detail-estimate"',
+                 'id="detail-estimate-body"', 'id="detail-estimate-job"'):
+        assert 아이디 in 본문, 아이디
+    # 입찰가 블록과 id 를 공유하지 않는다
+    assert 본문.count('id="preview-body"') == 1
+    for 금지 in ("quality", "화질", 'name="pages"'):
+        assert 금지 not in 본문, 금지

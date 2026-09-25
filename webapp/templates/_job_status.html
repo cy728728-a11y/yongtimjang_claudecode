@@ -19,7 +19,14 @@
   "bids_commit": "입찰가 인상",
   "revert_only": "이 작업분 되돌리기",
   "revert_all": "이 회차 전체 되돌리기",
-  "synthetic": "합성 작업"
+  "synthetic": "합성 작업",
+  "bulsaja_profile": "불사자 계정 확인",
+  "bulsaja_index": "불사자 인덱스 구축",
+  "bulsaja_scan": "불사자 조인 스캔",
+  "banner_scan": "배너 판정 스캔",
+  "detail_estimate": "상세 견적",
+  "detail_submit": "상세 접수",
+  "detail_poll": "상세 이어서 확인"
 } %}
 {% set 상태이름 = {
   "starting": "띄우는 중",
@@ -56,13 +63,25 @@
   {% if job.status == "running" %}
     <p><small>
       <strong>멈춘 게 아니다.</strong> 진행률은 안 나온다 — CLI 가 몇 번째인지 알려주지
-      않아서 있는 척하면 거짓말이 된다. 입찰가 인상은 초당 12건쯤 돈다.
+      않아서 있는 척하면 거짓말이 된다.
+      {% if job.kind in ("bids_preview", "bids_commit", "revert_only", "revert_all") %}입찰가 인상은 초당 12건쯤 돈다.
+      {% elif job.kind == "detail_estimate" %}상세 견적은 크레딧 0 이다 — 기작업 태그·잔액만 조회한다.
+      {% elif job.kind in ("detail_submit", "detail_poll") %}상세페이지 생성은 상품당 수 분씩 걸린다 — 폴링 상한을 넘기면 '이어서 확인'으로 이어 받는다.
+      {% endif %}
       브라우저를 닫아도 작업은 계속 돌고, 다시 열면 로그가 처음부터 이어서 보인다.
     </small></p>
   {% elif job.status == "failed" %}
     <p class="stale">
       <strong>실패했다 (종료코드 {{ job.exit_code }}).</strong>
-      아래 로그에서 사유를 봐라. 광고 설정이 바뀐 건 없다 — 실패한 항목은 건너뛴 것이다.
+      아래 로그에서 사유를 봐라.
+      {% if job.kind in ("detail_estimate", "detail_submit", "detail_poll") %}
+        {# detail_batch.py 종료코드 계약(05-01): 2 입력 오류 · 3 폴링 미완 · 4 계정 불일치 · 5 견적 초과 #}
+        {% if job.exit_code == 3 %}폴링 미완이다 — 실패가 아니다. '이어서 확인'으로 이어 받아라(크레딧 0).
+        {% elif job.exit_code == 4 %}붙어 있는 불사자 계정이 기대와 다르다 — 계정 확인부터 해라.
+        {% elif job.exit_code == 5 %}견적 상한을 넘기려는 건이 있어 멈췄다 — 견적을 다시 떠라.
+        {% elif job.exit_code == 2 %}입력이 틀렸다 — 견적부터 다시 떠라.
+        {% endif %}
+      {% else %}광고 설정이 바뀐 건 없다 — 실패한 항목은 건너뛴 것이다.{% endif %}
     </p>
   {% elif job.status == "orphaned" %}
     <p class="stale">
