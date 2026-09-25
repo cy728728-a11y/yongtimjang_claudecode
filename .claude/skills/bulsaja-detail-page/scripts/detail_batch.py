@@ -211,6 +211,273 @@ def submit_one(mcp, pid, pages, quality, force=False):
     return tid, sc
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# --inputs 모드 (05-01) — 웹앱이 argv 로 부르는 주입구
+#
+# ⚠️ 여기 아래 함수들은 **--inputs 를 줬을 때만** 탄다. 플래그 없는 실행은 위의
+#    submit_one / main 본문을 그대로 타고, 그 동작은 골든 테스트
+#    (webapp/tests/test_detail_cli.py::test_플래그없음_골든_불변) 가 한 글자 단위로 집행한다 (L-04).
+#
+# 종료코드: 0 전부 종결 · 2 입력 오류/장수 불일치 · 3 폴링 미완(실패 아님)
+#           · 4 계정 불일치 · 5 견적(--max-credits) 초과
+# ════════════════════════════════════════════════════════════════════════════
+
+EXIT_OK, EXIT_INPUT, EXIT_POLL, EXIT_NICK, EXIT_BUDGET = 0, 2, 3, 4, 5
+TAG_BATCH = 50          # find_by_code 배치 크기 (bulsaja_scan 실측: 50코드 0.53초)
+
+# 정본은 webapp/state.py 의 `불리언정규화` · `기작업여부` 다 (D-12).
+# CLI 는 웹앱을 import 하지 않으므로 **복제**하고, 교차 테스트
+# (test_detail_cli.py::test_기작업_규칙_일치) 가 두 벌의 일치를 집행한다.
+_FALSY = {"0", "false", "no", "n", "", "none", "null"}
+
+
+def 불리언정규화(v):
+    """'0' '1' False 1 None 을 같은 규약으로 읽는다 — 문자열 '0' 은 파이썬에서 참이다.
+    bool 분기가 int 분기보다 먼저여야 한다(bool 은 int 의 하위타입)."""
+    if v is None:
+        return False
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v != 0
+    return str(v).strip().lower() not in _FALSY
+
+
+def 기작업(태그, dc, done_tags):
+    """이미 상세가 가공된 상품인가 — 태그 ∈ done_tags OR aiImageGenerated (D-12).
+
+    **목표 장수와 무관한 절대조건이다.** 플래그 없는 경로의 `prev["pages"] >= sc` 는
+    그대로 두고(L-04), inputs 모드만 이 규칙을 쓴다 — 8장 기작업 상품이 10장 목표로
+    재접수돼 크레딧을 다시 내는 경로를 막는다.
+    """
+    t = (태그 or "").strip()
+    if t and t in {str(x).strip() for x in (done_tags or ())}:
+        return True
+    dc = dc if isinstance(dc, dict) else {}
+    return 불리언정규화(dc.get("aiImageGenerated"))
+
+
+def 장수계산(n, cap=10):
+    """D-10 — 장수 = max(2, min(n, cap)). 입력 이미지 2장 미만이면 None(입력부족)."""
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return None
+    if n < 2:
+        return None
+    return max(2, min(n, cap))
+
+
+def _표시규칙제거(obj):
+    """불사자 응답의 모델 대상 지시문(`표시규칙`)을 버린 사본 (bulsaja_scan 과 같은 규칙).
+    산출물(estimate/summary)에 남으면 나중에 LLM 에 먹일 때 프롬프트 인젝션이 된다."""
+    if isinstance(obj, dict):
+        return {k: _표시규칙제거(v) for k, v in obj.items() if k != "표시규칙"}
+    if isinstance(obj, list):
+        return [_표시규칙제거(v) for v in obj]
+    return obj
+
+
+def _지금():
+    from datetime import datetime
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _입력읽기(path):
+    """--inputs 파일 → items 리스트. 문제가 있으면 (None, 사유).
+
+    T-05-01: 깨진 파일·items 누락·리스트 아님·productId 없는 항목 = 입력 오류.
+    **products.json 이나 전량으로 폴백하지 않는다** (run_ads.py `--only-ads` 와 같은 규율).
+    `제외` 키는 웹앱 표시용이라 읽지 않는다. imageUrls 는 순서 유지 중복 제거.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception as e:
+        return None, f"--inputs 읽기 실패: {type(e).__name__}: {e}"
+    if not isinstance(raw, dict) or not isinstance(raw.get("items"), list):
+        return None, "--inputs 에 items 리스트가 없다"
+    items = []
+    for i, it in enumerate(raw["items"]):
+        if not isinstance(it, dict) or not str(it.get("productId") or "").strip():
+            return None, f"--inputs items[{i}] 에 productId 가 없다"
+        urls = []
+        for u in (it.get("imageUrls") or []):
+            if isinstance(u, str) and u.startswith("http") and u not in urls:
+                urls.append(u)
+        try:
+            총수 = int(it.get("제품이미지총수", len(urls)))
+        except (TypeError, ValueError):
+            총수 = len(urls)
+        try:
+            잘림 = int(it.get("잘림") or 0)
+        except (TypeError, ValueError):
+            잘림 = 0
+        items.append({"productId": str(it["productId"]).strip(),
+                      "판매자상품코드": str(it.get("판매자상품코드") or "").strip(),
+                      "imageUrls": urls, "제품이미지총수": 총수, "잘림": 잘림})
+    return items, None
+
+
+def _계정확인(mcp, 기대닉):
+    """`bulsaja_my_profile` 1회 → (닉, 크레딧, 통과). bulsaja_scan.계정확인 관용구 (L-06).
+    조회 자체가 실패하면 닉 None · 통과 False — 확인 못 한 계정으로 진행하지 않는다."""
+    try:
+        p = _표시규칙제거(mcp.call_tool("bulsaja_my_profile", {}) or {})
+        닉 = str(p.get("닉네임") or "")
+        크레딧 = str(p.get("크레딧") or "")
+    except Exception as e:
+        print(f"[경고] 계정 조회 실패: {str(e)[:120]}", flush=True)
+        # 기대닉을 줬는데 확인을 못 했으면 불통과. 안 줬으면(견적 참고용 조회) 진행.
+        return None, None, 기대닉 is None
+    return 닉, 크레딧, (기대닉 is None or 닉 == str(기대닉))
+
+
+def _태그조회(mcp, 코드들, done_tags):
+    """판매자상품코드 → 그룹태그. 반환 (태그맵, 실패코드집합).
+
+    CR-02 fail-closed: 조각 호출이 실패하거나 응답 모양이 아니면 그 조각 코드 전부
+    '태그미조회' — **못 물어본 것을 "태그 없음" 으로 읽지 않는다** (접수 안 함).
+    같은 코드로 사본이 여럿 오면 done_tags 에 걸리는 태그를 우선한다(스킵 쪽으로 기운다).
+    응답 해석은 ss_index_calls.항목꺼내기 한 곳 — 플래그 없는 실행의 import 그래프를
+    바꾸지 않으려고 여기서 지연 import 한다.
+    """
+    if SCRIPT_DIR not in sys.path:
+        sys.path.insert(0, SCRIPT_DIR)
+    from ss_index_calls import 항목꺼내기  # 지연 import (L-04)
+
+    완료 = {str(t).strip() for t in (done_tags or ())}
+    태그들, 실패 = {}, set()
+    코드들 = [c for c in dict.fromkeys(코드들) if c]
+    for i in range(0, len(코드들), TAG_BATCH):
+        조각 = 코드들[i:i + TAG_BATCH]
+        try:
+            r = mcp.call_tool("bulsaja_product_find_by_code", {"codes": 조각})
+            항목들 = 항목꺼내기(_표시규칙제거(r), 맥락=f" (코드 {len(조각)}건)")
+        except Exception as e:
+            print(f"[경고] 태그 조회 {len(조각)}건 실패 — 태그미조회 처리: "
+                  f"{str(e)[:120]}", flush=True)
+            실패.update(조각)
+            continue
+        for it in 항목들:
+            코드 = str((it or {}).get("판매자상품코드") or "")
+            if 코드 in 조각:
+                태그들.setdefault(코드, []).append((it or {}).get("그룹"))
+        time.sleep(0.3)
+    태그맵 = {}
+    for 코드, 목록 in 태그들.items():
+        값들 = [str(t).strip() for t in 목록 if t and str(t).strip()]
+        걸림 = [t for t in 값들 if t in 완료]
+        태그맵[코드] = (걸림 or 값들 or [None])[0]
+    return 태그맵, 실패
+
+
+def _판정(mcp, item, 태그맵, 실패코드, done_tags, cap, per_credit):
+    """한 항목 → {판정, 사유, 장수, 크레딧, imgs}. 판정 = 접수|기작업|태그미조회|입력부족.
+
+    순서: 태그 못 물어봄(fail-closed) → workdata → 기작업 절대조건(D-12) → 입력부족 → 접수.
+    개별 오류는 그 항목만 '태그미조회' + 사유로 격리하고 전체를 죽이지 않는다.
+    """
+    pid, 코드 = item["productId"], item["판매자상품코드"]
+    결과 = {"판정": "태그미조회", "사유": "", "장수": 0, "크레딧": 0, "imgs": []}
+    if not 코드:
+        결과["사유"] = "판매자상품코드 없음 — 태그를 물어볼 수 없다"
+        return 결과
+    if 코드 in 실패코드:
+        결과["사유"] = "태그 조회 실패 (fail-closed)"
+        return 결과
+    태그 = 태그맵.get(코드)
+    try:
+        data = get_workdata(mcp, pid)
+    except Exception as e:
+        결과["사유"] = f"workdata 조회 실패: {str(e)[:120]}"
+        return 결과
+    dc = data.get("uploadDetailContents") or {}
+    if 기작업(태그, dc, done_tags):
+        결과["판정"] = "기작업"
+        t = (태그 or "").strip()
+        if t and t in {str(x).strip() for x in done_tags}:
+            결과["사유"] = f"태그 {t}"
+        else:
+            결과["사유"] = (f"aiImageGenerated={dc.get('aiImageGenerated')!r} "
+                          f"({dc.get('aiImageOutputCount')}장, "
+                          f"{str(dc.get('aiImageGeneratedAt') or '')[:10]})")
+        return 결과
+    imgs = item["imageUrls"]
+    sc = 장수계산(len(imgs), cap)
+    if sc is None:
+        결과["판정"] = "입력부족"
+        결과["사유"] = f"제품 이미지 {len(imgs)}장 (2장 미만)"
+        return 결과
+    결과.update({"판정": "접수", "사유": "", "장수": sc,
+                 "크레딧": sc * per_credit, "imgs": imgs[:sc]})
+    return 결과
+
+
+def _견적(mcp, args, items, done_tags, per_credit, 계정, 잔액):
+    """D-14 · DETAIL-05 — generate 를 **한 번도** 부르지 않는 견적. estimate.json 을 쓴다."""
+    태그맵, 실패 = _태그조회(mcp, [it["판매자상품코드"] for it in items], done_tags)
+    행들 = []
+    for i, it in enumerate(items, 1):
+        r = _판정(mcp, it, 태그맵, 실패, done_tags, args.pages, per_credit)
+        행들.append({"productId": it["productId"], "판매자상품코드": it["판매자상품코드"],
+                     "판정": r["판정"], "사유": r["사유"], "장수": r["장수"],
+                     "제품이미지총수": it["제품이미지총수"], "잘림": it["잘림"],
+                     "크레딧": r["크레딧"]})
+        print(f"[{i}/{len(items)}] {it['productId'][-8:]} {r['판정']}"
+              f"{' ' + str(r['장수']) + '장' if r['장수'] else ''}"
+              f"{' — ' + r['사유'] if r['사유'] else ''}", flush=True)
+        time.sleep(args.sleep)
+    접수 = [h for h in 행들 if h["판정"] == "접수"]
+    집계 = {"선택": len(행들), "스킵": len(행들) - len(접수), "접수": len(접수),
+            "총장수": sum(h["장수"] for h in 접수),
+            "예상크레딧": sum(h["크레딧"] for h in 접수),
+            "잘린상품": sum(1 for h in 접수 if h["잘림"] > 0)}
+    save_json(args.estimate_out, {"생성시각": _지금(), "계정": 계정, "잔액": 잔액,
+                                  "per_credit": per_credit, "항목": 행들, "집계": 집계})
+    print(f"###ESTIMATE### 선택 {집계['선택']} / 접수 {집계['접수']} / "
+          f"스킵 {집계['스킵']} / 총장수 {집계['총장수']} / "
+          f"예상크레딧 {집계['예상크레딧']} / 잘린상품 {집계['잘린상품']}", flush=True)
+    return EXIT_OK
+
+
+def _입력모드(args):
+    """--inputs 진입점. 종료코드를 돌려준다 (main 이 sys.exit 한다)."""
+    done_tags = [str(t).strip() for t in (args.done_tag or []) if str(t).strip()]
+    if not done_tags:
+        print("⛔ --inputs 모드는 --done-tag 가 최소 1개 필요하다 "
+              "(비면 태그 기작업 판정이 죽어 크레딧을 다시 낸다)", flush=True)
+        return EXIT_INPUT
+    items, 사유 = _입력읽기(args.inputs)
+    if items is None:
+        print(f"⛔ {사유} — 전량 실행으로 폴백하지 않는다", flush=True)
+        return EXIT_INPUT
+    if args.estimate_only and not args.estimate_out:
+        print("⛔ --estimate-only 는 --estimate-out 이 필요하다", flush=True)
+        return EXIT_INPUT
+    if not args.estimate_only:
+        print("⛔ --inputs 접수/폴링 모드는 아직 없다", flush=True)
+        return EXIT_INPUT
+    per_credit = 5 if args.quality == "standard" else 10
+
+    mcp = BulsajaMCP()
+    mcp.open()
+    try:
+        # L-06 — 계정 확인은 workdata·generate 보다 먼저. 불일치 = exit 4
+        # (bulsaja_scan 은 3 이지만 여기서 3 은 폴링미완에 배정됐다)
+        계정, 잔액 = None, None
+        if args.expect_nick or args.estimate_only:
+            계정, 잔액, 통과 = _계정확인(mcp, args.expect_nick)
+            if not 통과:
+                print(f"⛔ 붙어 있는 불사자 계정({계정})이 기대 계정"
+                      f"({args.expect_nick})이 아니다 — 아무것도 조회·접수하지 않는다",
+                      flush=True)
+                return EXIT_NICK
+        return _견적(mcp, args, items, done_tags, per_credit, 계정, 잔액)
+    finally:
+        mcp.close()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-dir", required=True)
@@ -232,11 +499,29 @@ def main():
                     help="작업 중복 시 재시도 대기(초)")
     ap.add_argument("--dup-rounds", type=int, default=8,
                     help="작업 중복 재시도 최대 회수")
+    # ── 05-01 주입구 (웹앱이 argv 로 부른다). 안 주면 위 동작 그대로 (L-04) ──
+    ap.add_argument("--inputs",
+                    help="대상 JSON {items:[{productId,판매자상품코드,imageUrls,...}]}. "
+                         "주면 products.json·collect_images 를 쓰지 않는다 (D-08)")
+    ap.add_argument("--done-tag", action="append",
+                    help="기작업으로 칠 그룹태그 (반복 가능, inputs 모드 필수 — D-12)")
+    ap.add_argument("--expect-nick",
+                    help="기대 불사자 계정 닉네임. 다르면 exit 4 (L-06)")
+    ap.add_argument("--estimate-only", action="store_true",
+                    help="견적만: generate 0회, --estimate-out 에 저장 (D-14)")
+    ap.add_argument("--estimate-out", help="견적 JSON 경로")
+    ap.add_argument("--max-credits", type=int,
+                    help="접수 누적 크레딧 상한. 넘기려 하면 generate 전 exit 5 "
+                         "(inputs 접수 모드 필수)")
+    ap.add_argument("--summary-out", help="접수/폴링 결과 요약 JSON 경로")
     args = ap.parse_args()
 
     if not (2 <= args.pages <= 10):
         print("⛔ --pages 는 2~10 범위여야 함 (기본 10)")
         sys.exit(1)
+
+    if args.inputs:
+        sys.exit(_입력모드(args))
 
     run = Path(args.run_dir)
     status_path = run / "detail_status.json"
