@@ -688,3 +688,123 @@ def test_배너는_네트워크도_파일도_안_연다():
                  "import " + "requests", "httpx" + ".", "urlopen" + "(",
                  "sql" + "ite3", "sub" + "process"):
         assert 금지 not in 소스, f"banner.py 에 '{금지}' 가 있다 (D-19)"
+
+
+# ── Phase 5 D-02 관문 — 상세입력목록 (DETAIL-01/02) ────────────────────────
+#
+# 전역 게이트 대신 "확인시각 ≥ 산출물 생성시각 + 라벨 우선 판정" 으로 연다.
+# 기본값으로 열리는 길이 없어야 한다 — 키워드 인자 누락은 TypeError 다.
+
+_생성시각 = "2026-09-25T00:14:00+09:00"
+_확인후 = "2026-09-25T09:00:00+09:00"
+_확인전 = "2026-09-24T23:00:00+09:00"
+
+
+def _입력(상품, **덮기):
+    """정상 인자 묶음에 덮어쓰기만 해서 부른다."""
+    인자 = {"라벨": {}, "확인시각": _확인후, "생성시각": _생성시각, "잔여하한": 2}
+    인자.update(덮기)
+    return banner.상세입력목록(상품, **인자)
+
+
+def test_상세입력_낡은확인은_막는다():
+    with pytest.raises(ValueError) as e:
+        _입력(_정상상품(4), 확인시각=_확인전)
+    assert "다시 확인" in str(e.value) and "D-02" in str(e.value)
+
+
+def test_상세입력_확인없음은_막는다():
+    with pytest.raises(ValueError):
+        _입력(_정상상품(4), 확인시각=None)
+
+
+def test_상세입력_오프셋다른_시각도_바르게_비교():
+    # 문자열로는 "2026-09-24T16:00:00+00:00" < "2026-09-25T00:14:00+09:00" 이지만
+    # 실제 시각은 2026-09-25T01:00+09:00 — 생성 뒤다. 통과해야 한다.
+    나온것 = _입력(_정상상품(4), 확인시각="2026-09-24T16:00:00+00:00")
+    assert 나온것["총수"] == 4
+    # 생성 1분 전(15:13Z = 00:13+09:00)은 막힌다.
+    with pytest.raises(ValueError):
+        _입력(_정상상품(4), 확인시각="2026-09-24T15:13:00+00:00")
+
+
+def test_상세입력_스킵상품은_막는다():
+    상품 = _정상상품(4, 스킵사유="D-07 잔여 1장")
+    with pytest.raises(ValueError):
+        _입력(상품)
+    # 사람 라벨로 되살리지 않는다 (D-04)
+    with pytest.raises(ValueError):
+        _입력(상품, 라벨={0: banner.제품, 1: banner.제품, 2: banner.제품})
+
+
+def test_상세입력_라벨우선():
+    장 = [_장(0, banner.배너), _장(1), _장(2), _장(3)]
+    기본 = _입력(_상품(장=장))
+    assert 기본["urls"] == [장[1]["url"], 장[2]["url"], 장[3]["url"]]
+    # 기계 '배너' 를 사람이 '제품' 으로 → 포함, 기계 '제품' 을 '무내용' 으로 → 제외
+    나온것 = _입력(_상품(장=장), 라벨={"0": banner.제품, "2": banner.무내용})
+    assert 나온것["urls"] == [장[0]["url"], 장[1]["url"], 장[3]["url"]]
+
+
+def test_상세입력_미판정은_라벨로만_풀린다():
+    장 = [_장(0), _장(1, banner.미판정), _장(2)]
+    with pytest.raises(ValueError):
+        _입력(_상품(장=장))
+    나온것 = _입력(_상품(장=장), 라벨={1: banner.제품})
+    assert 나온것["urls"] == [장[0]["url"], 장[1]["url"], 장[2]["url"]]
+
+
+def test_상세입력_기계_제품이미지_필드는_안쓴다():
+    # 기계 필드가 비어 있어도 장 판정 + 라벨이 정본이다 (D-23 ①)
+    장 = [_장(0), _장(1)]
+    나온것 = _입력(_상품(장=장, 제품이미지=[]))
+    assert len(나온것["urls"]) == 2
+
+
+def test_상세입력_중복URL제거_순서유지():
+    장 = [_장(0), _장(1), _장(2), _장(3)]
+    장[2]["url"] = 장[0]["url"]
+    나온것 = _입력(_상품(장=장))
+    assert 나온것["urls"] == [장[0]["url"], 장[1]["url"], 장[3]["url"]]
+    assert 나온것["총수"] == 3 and 나온것["잘림"] == 0
+
+
+def test_상세입력_10장자르기():
+    상품 = _정상상품(14)
+    나온것 = _입력(상품)
+    assert 나온것["urls"] == [c["url"] for c in 상품["장"][:10]]
+    assert 나온것["총수"] == 14 and 나온것["잘림"] == 4
+
+
+def test_상세입력_하한미만():
+    장 = [_장(0), _장(1)]
+    장[1]["url"] = 장[0]["url"]
+    with pytest.raises(ValueError):
+        _입력(_상품(장=장))
+
+
+def test_상세입력_키워드누락은_TypeError():
+    상품 = _정상상품(4)
+    정상 = {"라벨": {}, "확인시각": _확인후, "생성시각": _생성시각, "잔여하한": 2}
+    for 뺄것 in 정상:
+        인자 = {k: v for k, v in 정상.items() if k != 뺄것}
+        with pytest.raises(TypeError):
+            banner.상세입력목록(상품, **인자)
+
+
+def test_확인시각읽기(tmp_path, monkeypatch):
+    from webapp import banner_store, jobs, settings
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "webapp.db"))
+    monkeypatch.setattr(settings, "JOB_LOG_DIR", str(tmp_path / "logs"))
+    # DB 없으면 {} — 파일을 만들지 않는다
+    assert banner_store.확인시각읽기("zz-run") == {}
+    assert not (tmp_path / "webapp.db").exists()
+    with pytest.raises(ValueError):
+        banner_store.확인시각읽기("  ")
+    jobs.init_db()
+    banner_store.확인기록("zz-run", "700001")
+    banner_store.확인기록("zz-other", "700002")
+    나온것 = banner_store.확인시각읽기("zz-run")
+    assert list(나온것) == ["700001"]
+    from datetime import datetime
+    datetime.fromisoformat(나온것["700001"])     # ISO 여야 한다
