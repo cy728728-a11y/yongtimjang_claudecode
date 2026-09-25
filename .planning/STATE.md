@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to discuss
+status: executing
 stopped_at: Phase 5 context gathered (--auto)
-last_updated: "2026-09-25T04:38:44.138Z"
-last_activity: "2026-09-25 -- 04-12 완료 · Phase 4 종료 (D-23 · 게이트 불통과: 미탐 0 · 오탐 116 · 누락률 13.70% > 10%)"
+last_updated: "2026-09-25T05:10:47.859Z"
+last_activity: 2026-09-25 -- Phase 5 planning complete
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 28
+  total_plans: 34
   completed_plans: 28
   percent: 43
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 
 Phase: 05 (상세페이지 작업 버튼) — NOT STARTED (discuss 필요)
 Plan: —
-Status: Ready to discuss
-Last activity: 2026-09-25 -- 04-12 완료 · Phase 4 종료 (D-23 · 게이트 불통과: 미탐 0 · 오탐 116 · 누락률 13.70% > 10%)
+Status: Ready to execute
+Last activity: 2026-09-25 -- Phase 5 planning complete
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 

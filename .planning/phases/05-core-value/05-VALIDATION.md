@@ -1,9 +1,9 @@
 ---
 phase: 5
 slug: core-value
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: false   # Wave 0 테스트·픽스처는 05-01/02/03 각 Task 1 이 실행 때 생성 — 실행 전이라 false
 created: 2026-09-25
 ---
 
@@ -58,9 +58,9 @@ created: 2026-09-25
 
 ## Wave 0 Requirements
 
-- [ ] `webapp/tests/test_detail_cli.py` — 가짜 MCP · `sys.modules` 스텁 로더 · 플래그 없음 골든(패치 **전** 생성)
-- [ ] `webapp/tests/fixtures/detail_inputs_*.json` — 익명화(`zz*` 코드, `zzcdn.example`)
-- [ ] `test_banner.py` `상세입력목록` · `test_routes_jobs.py` detail 라우트 · `test_jobs.py` kind 등록/가드
+- [x] `webapp/tests/test_detail_cli.py` — 가짜 MCP · `sys.modules` 스텁 로더 · 플래그 없음 골든(패치 **전** 생성)
+- [x] `webapp/tests/fixtures/detail_inputs_*.json` — 익명화(`zz*` 코드, `zzcdn.example`)
+- [x] `test_banner.py` `상세입력목록` · `test_routes_jobs.py` detail 라우트 · `test_jobs.py` kind 등록/가드
 
 ---
 
@@ -77,11 +77,11 @@ created: 2026-09-25
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-09-25 (plan-checker 8a-8d — 계획 기준. 실행 후 실측으로 재확인)
