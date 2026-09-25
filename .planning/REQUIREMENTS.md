@@ -106,11 +106,11 @@
 
 ### 버튼 3 — 상세페이지 작업 (DETAIL) ★ Core Value
 
-- [ ] **DETAIL-01**: AI 상세 생성 입력을 **기존 상세 이미지 − 홍보배너** 로 한다 (썸네일·옵션 이미지는 쓰지 않는다)
-- [ ] **DETAIL-02**: 생성 장수를 `min(제품이미지 수, 10)` 으로 하고 하한 2를 지킨다
+- [x] **DETAIL-01**: AI 상세 생성 입력을 **기존 상세 이미지 − 홍보배너** 로 한다 (썸네일·옵션 이미지는 쓰지 않는다)
+- [x] **DETAIL-02**: 생성 장수를 `min(제품이미지 수, 10)` 으로 하고 하한 2를 지킨다
 - [ ] **DETAIL-03**: `imageUrls` 와 `sectionCount` 를 **동시에** 보낸다 (하나만 보내면 1장짜리로 접수되어 크레딧이 날아간다)
 - [ ] **DETAIL-04**: 접수 확정 응답의 `예상장수`가 요청과 다르면 전량 접수 전에 중단한다
-- [ ] **DETAIL-05**: 접수 전 예상 크레딧을 보고하고, 기작업 스킵분을 반영해 실제 접수분 기준으로 다시 보고한다
+- [x] **DETAIL-05**: 접수 전 예상 크레딧을 보고하고, 기작업 스킵분을 반영해 실제 접수분 기준으로 다시 보고한다
 - [ ] **DETAIL-06**: 폴링 타임아웃을 실패로 취급하지 않는다 (재생성하면 크레딧 이중 지불)
 - [ ] **DETAIL-07**: 접수와 폴링이 분리되어, 폴링이 끊겨도 체크포인트로 이어서 확인한다
 
@@ -217,11 +217,11 @@
 | BANNER-03b | Phase 4 | Pending |
 | BANNER-04 | Phase 4 | Unmet — 게이트 불통과(누락률 13.70%) · D-23 으로 종료, Phase 5 discuss 에서 운용 방식 결정 |
 | BANNER-05 | Phase 4 | Complete |
-| DETAIL-01 | Phase 5 | Pending |
-| DETAIL-02 | Phase 5 | Pending |
+| DETAIL-01 | Phase 5 | Complete |
+| DETAIL-02 | Phase 5 | Complete |
 | DETAIL-03 | Phase 5 | Pending |
 | DETAIL-04 | Phase 5 | Pending |
-| DETAIL-05 | Phase 5 | Pending |
+| DETAIL-05 | Phase 5 | Complete |
 | DETAIL-06 | Phase 5 | Pending |
 | DETAIL-07 | Phase 5 | Pending |
 | MARKET-01 | Phase 6 | Pending |
