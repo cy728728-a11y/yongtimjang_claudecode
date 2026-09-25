@@ -439,3 +439,188 @@ def test_계정_불일치_exit4(monkeypatch, cli, tmp_path):
     assert 코드 == 4
     assert mcp.이름들("bulsaja_product_workdata") == []
     assert mcp.이름들("bulsaja_detail_page_generate") == []
+
+
+# ── Task 3: 접수·폴링 경로 ─────────────────────────────────────────────────
+
+def _접수(monkeypatch, cli, tmp_path, items, 추가=(), 시나리오=None, 최대=1000,
+         run=None, **시나리오kw):
+    """inputs 접수+폴링 한 번. (종료코드, mcp, summary, detail_status, 출력줄들)."""
+    run = run or (tmp_path / "run")
+    입력 = _입력파일(tmp_path, items)
+    요약 = tmp_path / "summary.json"
+    if 요약.exists():
+        요약.unlink()
+    mcp, _ = 주입(monkeypatch, cli, 시나리오 or _입력시나리오(**시나리오kw))
+    argv = ["--run-dir", str(run), "--inputs", str(입력), "--done-tag", 완료태그,
+            "--expect-nick", "용팀장", "--summary-out", str(요약)]
+    if 최대 is not None:
+        argv += ["--max-credits", str(최대)]
+    코드 = 실행(monkeypatch, cli, [*argv, *추가])
+    s = json.loads(요약.read_text(encoding="utf-8")) if 요약.exists() else None
+    상태경로 = run / "detail_status.json"
+    st = json.loads(상태경로.read_text(encoding="utf-8")) if 상태경로.exists() else {}
+    return 코드, mcp, s, st
+
+
+def _출력(capsys):
+    return capsys.readouterr().out.strip().splitlines()
+
+
+def test_동시_imageUrls_sectionCount(monkeypatch, cli, tmp_path):
+    """DETAIL-02/03 — 두 generate 호출 모두 imageUrls(입력 순서, ≤10) + sectionCount."""
+    항목 = _항목(1, 장=12)
+    코드, mcp, s, _ = _접수(monkeypatch, cli, tmp_path, [항목])
+    assert 코드 == 0
+    gens = mcp.이름들("bulsaja_detail_page_generate")
+    assert [g["confirm"] for g in gens] == [False, True]
+    for g in gens:
+        assert g["imageUrls"] == 항목["imageUrls"][:10]
+        assert g["sectionCount"] == 10
+        assert g["quality"] == "standard"
+
+
+def test_접수모드_max_credits_없으면_exit2(monkeypatch, cli, tmp_path):
+    """T-05-05 — 상한 없는 접수 경로를 만들지 않는다."""
+    코드, mcp, _, _ = _접수(monkeypatch, cli, tmp_path, [_항목(1)], 최대=None)
+    assert 코드 == 2
+    assert mcp.이름들("bulsaja_detail_page_generate") == []
+
+
+def test_불일치_exit2_taskId_보존(monkeypatch, cli, tmp_path):
+    """Pitfall 2 · DETAIL-04 — taskId 를 먼저 적고 멈춘다. 뒤 상품은 generate 0."""
+    코드, mcp, s, st = _접수(monkeypatch, cli, tmp_path, [_항목(1), _항목(2)],
+                           예상장수=lambda a: a["sectionCount"] - 1)
+    assert 코드 == 2
+    v = st["zzpid-20000001"]
+    assert v["taskId"] == "task-0001" and v["status"] == "장수불일치"
+    assert v["요청장수"] == 10 and v["서버장수"] == 9
+    assert all(g["productId"] == "zzpid-20000001"
+               for g in mcp.이름들("bulsaja_detail_page_generate"))
+    assert s["종료코드"] == 2
+
+
+@pytest.mark.parametrize("이상값", ["10장", None, 10.0, True])
+def test_불일치_비정수도_멈춘다(monkeypatch, cli, tmp_path, 이상값):
+    """A5 — 예상장수가 int 가 아니거나 없으면 조용히 통과시키지 않는다."""
+    값 = _없음 if 이상값 is None else 이상값
+    코드, _, _, st = _접수(monkeypatch, cli, tmp_path, [_항목(1)],
+                         예상장수=lambda a: 값)
+    assert 코드 == 2
+    assert st["zzpid-20000001"]["taskId"] == "task-0001"
+    assert st["zzpid-20000001"]["status"] == "장수불일치"
+
+
+def test_불일치_재실행해도_재접수_안함(monkeypatch, cli, tmp_path):
+    """T-05-02 — 장수불일치 건은 taskId 보유라 다음 실행이 다시 접수하지 않는다."""
+    _접수(monkeypatch, cli, tmp_path, [_항목(1)], 예상장수=lambda a: 3)
+    코드, mcp, _, _ = _접수(monkeypatch, cli, tmp_path, [_항목(1)])
+    assert mcp.이름들("bulsaja_detail_page_generate") == []
+    assert 코드 == 0
+
+
+def test_견적초과_exit5(monkeypatch, cli, tmp_path):
+    """D-14 — 누적이 상한을 넘기려는 건은 generate 호출 **전에** exit 5."""
+    코드, mcp, s, st = _접수(monkeypatch, cli, tmp_path, [_항목(1), _항목(2)], 최대=50)
+    assert 코드 == 5
+    gens = mcp.이름들("bulsaja_detail_page_generate")
+    assert len(gens) == 2 and {g["productId"] for g in gens} == {"zzpid-20000001"}
+    assert st["zzpid-20000001"]["taskId"] == "task-0001"
+    assert "zzpid-20000002" not in st
+    assert s["종료코드"] == 5
+
+
+def test_접수직전_기작업은_스킵(monkeypatch, cli, tmp_path):
+    """D-12 — 접수 모드도 실시간 판정. 견적 이후 생성된 상품이면 generate 0."""
+    코드, mcp, s, _ = _접수(monkeypatch, cli, tmp_path, [_항목(1)],
+                          워크데이터={"zzpid-20000001": {"uploadDetailContents":
+                                                         {"aiImageGenerated": "1"}}})
+    assert 코드 == 0
+    assert mcp.이름들("bulsaja_detail_page_generate") == []
+    assert s["항목"][0]["상태"] == "기작업스킵"
+    assert s["집계"]["스킵"] == 1 and s["집계"]["실제크레딧"] == 0
+
+
+def _영원히진행중(tid, n):
+    return {"status": "진행중"}
+
+
+def test_폴링미완_exit3(monkeypatch, cli, tmp_path, capsys):
+    """D-17 · DETAIL-06 — 시간 상한 도달은 실패가 아니라 exit 3 + 폴링미완."""
+    코드, _, s, st = _접수(monkeypatch, cli, tmp_path, [_항목(1)],
+                         추가=["--max-poll-min", "5"], 상태응답=_영원히진행중)
+    assert 코드 == 3
+    줄 = _출력(capsys)
+    assert 줄[-1].startswith("###DETAIL###") and "폴링미완 1" in 줄[-1]
+    assert s["종료코드"] == 3 and s["항목"][0]["상태"] == "폴링중"
+    assert s["집계"]["폴링미완"] == 1
+    assert st["zzpid-20000001"]["taskId"] == "task-0001"
+
+
+def test_폴링미완_조기종료_회귀(monkeypatch, cli, tmp_path):
+    """Pitfall 1 — 5접수+1스킵+1접수실패 에서 4건만 끝나도 exit 0 으로 나가지 않는다."""
+    items = [_항목(i) for i in range(1, 8)]
+    시나리오 = _입력시나리오(
+        워크데이터={"zzpid-20000006": {"uploadDetailContents": {"aiImageGenerated": True}}},
+        상태응답=lambda tid, n: ({"status": "진행중"} if tid == "task-0005"
+                               else {"status": "완료"}))
+    원래 = 시나리오["bulsaja_detail_page_generate"]
+
+    def 생성(a):
+        if a["productId"] == "zzpid-20000007":
+            raise RuntimeError("서버 오류 (가짜)")
+        return 원래(a)
+    시나리오["bulsaja_detail_page_generate"] = 생성
+    코드, _, s, _ = _접수(monkeypatch, cli, tmp_path, items, 시나리오=시나리오,
+                        추가=["--max-poll-min", "5"])
+    assert 코드 == 3
+    assert s["집계"] == {"접수": 5, "완료": 4, "실패": 1, "스킵": 1, "폴링미완": 1,
+                        "실제크레딧": 200}
+
+
+def test_폴링_오류응답은_실패아님(monkeypatch, cli, tmp_path):
+    """Pitfall 6 · D-18 — status 키 없는 오류 dict 는 poll_error 만. 다음 라운드 완료."""
+    def 상태(tid, n):
+        return {"error": "일시 오류 (가짜)"} if n == 1 else {"status": "완료"}
+    코드, _, s, st = _접수(monkeypatch, cli, tmp_path, [_항목(1)], 상태응답=상태)
+    assert 코드 == 0
+    v = st["zzpid-20000001"]
+    assert v["status"] == "완료" and "poll_error" in v
+    assert s["항목"][0]["상태"] == "완료"
+
+
+def test_이어서_poll_only(monkeypatch, cli, tmp_path):
+    """D-16 · DETAIL-07 — exit 3 뒤 같은 run-dir 로 --poll-only 가 이어서 확인한다."""
+    코드1, _, _, _ = _접수(monkeypatch, cli, tmp_path, [_항목(1)],
+                         추가=["--max-poll-min", "1"], 상태응답=_영원히진행중)
+    assert 코드1 == 3
+    코드2, mcp2, s, st = _접수(monkeypatch, cli, tmp_path, [_항목(1)], 최대=None,
+                             추가=["--poll-only"])
+    assert 코드2 == 0
+    assert mcp2.이름들("bulsaja_detail_page_generate") == []
+    assert mcp2.이름들("bulsaja_product_workdata") == []
+    assert st["zzpid-20000001"]["status"] == "완료"
+    assert s["항목"][0]["상태"] == "완료" and s["집계"]["완료"] == 1
+
+
+@pytest.mark.parametrize("경우,기대", [("정상", 0), ("불일치", 2), ("미완", 3),
+                                       ("초과", 5)])
+def test_요약_파일(monkeypatch, cli, tmp_path, 경우, 기대):
+    """정상·2·3·5 모두 summary 가 쓰이고, 실제크레딧 = 완료 건 장수 × 5."""
+    kw, 추가, 최대 = {}, ["--max-poll-min", "5"], 1000
+    if 경우 == "불일치":
+        kw["예상장수"] = lambda a: 1
+    elif 경우 == "미완":
+        kw["상태응답"] = _영원히진행중
+    elif 경우 == "초과":
+        최대 = 60
+    items = [_항목(1, 장=7), _항목(2, 장=4)]
+    코드, _, s, _ = _접수(monkeypatch, cli, tmp_path, items, 추가=추가, 최대=최대, **kw)
+    assert 코드 == 기대
+    assert s is not None and s["종료코드"] == 기대
+    assert set(s["항목"][0]) >= {"productId", "판매자상품코드", "상태", "장수",
+                                "크레딧", "사유", "taskId"}
+    완료장수 = sum(h["장수"] for h in s["항목"] if h["상태"] == "완료")
+    assert s["집계"]["실제크레딧"] == 완료장수 * 5
+    if 경우 == "정상":
+        assert s["집계"]["실제크레딧"] == (7 + 4) * 5
