@@ -56,6 +56,11 @@ BULSAJA_SCAN = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
 BANNER_SCAN = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
                / "scripts" / "banner_scan.py")
 
+# 상세페이지 배치 (Phase 5). **같은 스킬 디렉터리다** — 위 스크립트들과 같은 이유로 그 자리다.
+# 05-01 이 `--inputs` 모드를 붙였다. 웹앱은 그 모드로만 부른다(products.json 경로를 안 탄다).
+DETAIL_BATCH = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
+                / "scripts" / "detail_batch.py")
+
 # 계정 alias 의 모양. 상한(개수)은 두지 않는다 — 계정은 `~/.eroom/naver-ads.json` 에
 # 항목을 더하는 것만으로 늘어난다(지금 4개, 6개 예정). 개수를 코드에 박으면
 # 계정을 늘린 날 화면이 조용히 멈춘다 (BOARD-02 와 같은 이유).
@@ -299,4 +304,64 @@ class BannerArgv(BaseModel):
         av += ["--vision2-max-calls", str(self.vision2_max_calls)]
         av += ["--vision2-interval", str(self.vision2_interval)]
 
+        return av
+
+
+class DetailArgv(BaseModel):
+    """`detail_batch.py --inputs` 호출 한 번을 표현하는 모델 (Phase 5 / DETAIL-01·05).
+
+    `BannerArgv` 와 같은 파일에 둔다 — 조립은 한 곳이다(`test_argv.py` 트리 가드).
+
+    세 모드가 **한 모델**이다. 같은 CLI 의 세 모드(`--estimate-only` / 접수 / `--poll-only`)라
+    공통 플래그(`--run-dir` · `--inputs` · `--done-tag` · `--expect-nick` · 폴링 두 개)가
+    같고, 모델을 셋으로 쪼개면 공통 플래그 규칙이 셋으로 갈라진다.
+
+    **기본값이 없다** — 폴링 상한·간격·기작업 태그·기대 닉네임은 호출부
+    (`jobs._build_argv`)가 `settings.cfg()` 로 읽어 넘긴다(T-1-12 가짜 설정 방지).
+    화질·장수 플래그는 **아예 없다**(D-11) — CLI 기본(일반화질 · 입력 장수 그대로)만 탄다.
+    """
+
+    mode: Literal["estimate", "submit", "poll"]
+    run_dir: Path            # --run-dir   detail_<견적잡id>/ — detail_status.json 이 여기 산다
+    inputs: Path             # --inputs    웹앱이 관문을 통과시킨 대상 파일
+    done_tags: list[PlainArg]  # --done-tag (반복) D-12 기작업 태그
+    expect_nick: Nick        # --expect-nick 자식이 계정을 한 번 더 확인한다(exit 4)
+    max_poll_min: int        # --max-poll-min
+    poll_interval: int       # --poll-interval
+    estimate_out: Path | None = None   # estimate 전용
+    summary_out: Path | None = None    # submit/poll 전용
+    max_credits: int | None = None     # submit 전용 — 견적이 준 상한(exit 5)
+    # `caffeinate -i` 자리. 무엇에 붙일지는 `jobs._수면방지_프리픽스` 가 정한다.
+    prefix: list[str] = []
+
+    def build(self) -> list[str]:
+        """argv 리스트. 셸을 거치지 않으므로 따옴표·이스케이프가 필요 없다."""
+        # 태그 0개면 CLI 가 exit 2 로 거부하지만, 조립에서 먼저 막는다 — 기작업 판정 없이
+        # 접수되는 길은 크레딧 이중 지불로 이어진다(D-12 절대조건).
+        if not self.done_tags:
+            raise ValueError("기작업 태그(done_tags)가 비었다 — 기작업 판정 없이 상세 잡을 못 띄운다")
+
+        av: list[str] = [*self.prefix, str(PY_CLI), str(DETAIL_BATCH)]
+        av += ["--run-dir", str(self.run_dir)]
+        av += ["--inputs", str(self.inputs)]
+        for 태그 in self.done_tags:
+            av += ["--done-tag", 태그]
+        av += ["--expect-nick", self.expect_nick]
+        av += ["--max-poll-min", str(self.max_poll_min)]
+        av += ["--poll-interval", str(self.poll_interval)]
+
+        if self.mode == "estimate":
+            if self.estimate_out is None:
+                raise ValueError("견적 모드에는 estimate_out 이 필요하다")
+            av += ["--estimate-only", "--estimate-out", str(self.estimate_out)]
+        else:
+            if self.summary_out is None:
+                raise ValueError("접수·이어서 확인 모드에는 summary_out 이 필요하다")
+            if self.mode == "submit":
+                if self.max_credits is None:
+                    raise ValueError("접수 모드에는 max_credits 가 필요하다 — 상한 없는 접수는 없다")
+                av += ["--max-credits", str(self.max_credits)]
+            else:
+                av += ["--poll-only"]
+            av += ["--summary-out", str(self.summary_out)]
         return av

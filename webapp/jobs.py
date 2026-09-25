@@ -68,12 +68,14 @@ argv = argv_mod
 JobKind = Literal["prep", "run", "bids_preview", "bids_commit",
                   "revert_only", "revert_all", "synthetic",
                   "bulsaja_profile", "bulsaja_index", "bulsaja_scan",
-                  "banner_scan"]
+                  "banner_scan",
+                  "detail_estimate", "detail_submit", "detail_poll"]
 
 KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
                           "revert_only", "revert_all", "synthetic",
                           "bulsaja_profile", "bulsaja_index", "bulsaja_scan",
-                          "banner_scan")
+                          "banner_scan",
+                          "detail_estimate", "detail_submit", "detail_poll")
 
 # 전역 1개 가드의 대상. **왜 전역인가:**
 # ENG-04(대상별 잠금)는 Phase 2 지만 **위험은 Phase 1 에 있다.** `run_bids` 가
@@ -82,7 +84,13 @@ KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
 # **그 소재는 영영 되돌릴 수 없다.** 되돌릴 수 없는 손실이라 넓게, 그리고 지금 막는다.
 # Phase 2 가 이걸 대상별 락으로 좁힌다. 미리보기·판정은 아무것도 안 쓰므로 뺀다 —
 # 쓰기가 아닌 것까지 막는 가드는 사람이 가드를 끄게 만든다.
-WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "revert_all"})
+WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "revert_all",
+                                         "detail_submit", "detail_poll"})
+# **상세 접수(`detail_submit`)는 크레딧을 태우는 진짜 쓰기다** — 불사자에 AI 상세페이지를 접수하고
+# 결과를 상품에 반영한다. **이어서 확인(`detail_poll`)도 넣는다**: 접수는 안 하지만 폴링 완료분을
+# 반영하고 같은 `detail_status.json` 을 읽고-고치고-통째로 쓴다(연구 Open Q3). 둘이 겹치면 taskId
+# 기록이 사라져 **이미 돈 낸 결과를 못 찾거나, 못 찾아서 다시 접수(이중 지불)** 한다.
+# **견적(`detail_estimate`)은 넣지 않는다** — generate 0회 · 크레딧 0 이고 자기 estimate.json 만 쓴다.
 # **불사자 잡 3종을 여기 넣지 마라.** 셋 다 불사자에 아무것도 안 쓴다(workdata·프로필 조회는
 # 읽기 전용이다). 넣으면 3시간 32분짜리 인덱스가 도는 동안 입찰가 인상·되돌리기가 전부
 # 409 가 된다 — 위 "쓰기가 아닌 것까지 막는 가드는 사람이 가드를 끄게 만든다" 가 바로 이 경우다.
@@ -94,7 +102,11 @@ WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "
 # ENG-08 사전 점검 대상. **불사자 MCP 를 부르는 잡**이다.
 # `bulsaja_profile` 은 **일부러 뺐다** — 그 잡이 프로필을 만드는 잡이라, 가드 대상에 넣으면
 # 프로필이 없을 때 프로필을 만들 수 없다(닭·달걀). 계정 확인은 그 자체로 읽기 조회 1회다.
-BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan"})
+BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan",
+                                           "detail_estimate", "detail_submit", "detail_poll"})
+# 상세 잡 3종은 **셋 다** 불사자 MCP 를 부른다(견적도 기작업 태그·잔액을 실시간 조회한다).
+# 틀린 계정으로 견적을 내면 "기작업 스킵" 수가 남의 계정 기준이 된다 — 그래서 견적도 탄다.
+# CLI 도 `--expect-nick` 으로 한 번 더 본다(exit 4). 이중 방어다(T-05-12).
 
 # **같은 kind 가 동시에 두 개 돌면 안 되는 작업.** 전역 쓰기 락과 **다른 이유로** 존재한다.
 #
@@ -119,7 +131,11 @@ BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan"})
 #    거기에 둘이 같은 회차 캐시 디렉터리에 같은 파일명(`<상품순번>_<장순번>.bin`)으로
 #    동시에 쓰면 반쪽 파일이 서로의 입력이 된다. 사유가 다르니 같은 집합에 있다는 이유로
 #    위 레이트리밋 서술을 이 잡에 옮겨 읽지 마라.
-SINGLETON_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan", "banner_scan"})
+SINGLETON_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan", "banner_scan",
+                                             "detail_estimate"})
+# 🔵 **`detail_estimate` 는 레이트리밋 때문이다** — 위 불사자 잡들과 같은 사유(MCP 조회 합산이
+#    서버 정책을 넘는다). 쓰기 가드 밖이라 전역 락이 막아 주지 않으므로 여기서 같은 종류만 막는다.
+#    접수·이어서 확인은 이미 `WRITE_KINDS` 가 전역으로 하나만 허용하므로 여기 넣을 필요가 없다.
 
 # **살아 있는 잡의 상태 두 가지.** `starting` 은 "행은 들어갔는데 자식이 아직 안 떴다" 다.
 # 왜 둘로 쪼갰나: 예전에는 INSERT 가 바로 `running` 이었는데, 그 행의 `pid` 는 spawn 뒤에야
@@ -527,8 +543,69 @@ def _count_targets(path: Path) -> int | None:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
-    ids = raw if isinstance(raw, list) else raw.get("adIds")
+    # 상세 잡 inputs(`{"items": [...]}`)도 같은 규칙으로 센다 — 관문을 통과한 상품 수다.
+    ids = raw if isinstance(raw, list) else (raw.get("adIds") if "adIds" in raw else raw.get("items"))
     return len(ids) if isinstance(ids, list) else None
+
+
+def _write_detail_inputs(job_id: str, run_dir: str, doc: dict) -> Path:
+    """상세 견적의 대상(inputs) 파일을 **원자적으로** 떨군다 (FLOW-02 의 '그 파일').
+
+    자리는 `<회차>/web/targets_<견적잡id>.json` — `_write_targets` 와 같은 폴더·이름 규칙이다.
+    그래야 접수(`detail_submit`)가 `_override_targets` 로 **같은 파일**을 그대로 가리킬 수 있다
+    (부모 == web/ 검사). 견적과 접수 사이에 대상이 바뀌면 본 견적과 다른 게 접수된다.
+    """
+    path = _web_dir(run_dir) / f"targets_{job_id}.json"
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
+    return path
+
+
+# 상세 잡 kind → 부모로 와야 할 kind. 체인은 submit→estimate, poll→submit 이다.
+_상세부모 = {"detail_submit": "detail_estimate", "detail_poll": "detail_submit"}
+
+
+def _상세폴더(kind: str, job_id: str, parent_job_id: str | None, run_dir: str,
+            cx: sqlite3.Connection | None = None) -> Path:
+    """상세 CLI 의 `--run-dir` — `<회차>/web/detail_<견적잡id>/`.
+
+    **한 견적에서 나온 접수·이어서 확인은 전부 같은 폴더다.** `detail_status.json`(taskId 기록)이
+    거기 살기 때문이다 — 폴더가 갈리면 이어서 확인이 접수가 받은 taskId 를 못 보고, 못 보면
+    사람이 다시 접수해 크레딧을 두 번 낸다. 그래서 폴더를 **지어내지 않고** 부모 체인에서만 푼다.
+    부모가 없거나 체인이 틀리면 ValueError(→ 400).
+    """
+    if kind == "detail_estimate":
+        견적id = job_id
+    else:
+        기대 = _상세부모.get(kind)
+        if 기대 is None:
+            raise ValueError(f"상세 잡이 아니다: {kind}")
+        if not parent_job_id:
+            raise ValueError(f"{kind} 에는 부모 잡이 필요하다 — 같은 detail 폴더를 이어받아야 한다")
+
+        def _행(i: str):
+            if cx is not None:
+                return cx.execute("SELECT kind, parent_job_id, run_dir FROM jobs WHERE id = ?",
+                                  (i,)).fetchone()
+            return _row(i)
+
+        부모 = _행(parent_job_id)
+        if 부모 is None or 부모["kind"] != 기대:
+            raise ValueError(f"{kind} 의 부모는 {기대} 여야 한다")
+        if 부모["run_dir"] != run_dir:
+            raise ValueError("부모 잡과 회차가 다르다")
+        if kind == "detail_poll":
+            조부모 = 부모["parent_job_id"]
+            견적행 = _행(조부모) if 조부모 else None
+            if 견적행 is None or 견적행["kind"] != "detail_estimate":
+                raise ValueError("이어서 확인의 부모 접수가 견적에서 나오지 않았다")
+            견적id = 조부모
+        else:
+            견적id = parent_job_id
+    d = _web_dir(run_dir) / f"detail_{견적id}"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 # ── 수면 방지 프리픽스 (ENG-06 / T-3-37) ────────────────────────────────────
@@ -559,7 +636,8 @@ def _수면방지_프리픽스(kind: str) -> list[str]:
     exit code 가 그대로 넘어오는 것을 실측 확인했다(`caffeinate -i sh -c 'exit 3'` → 3).
     `ss_index_build.py` 의 종료코드 2/3/4 계약이 이 래퍼를 통과해도 살아 있다는 뜻이다.
     """
-    if kind not in ("bulsaja_index", "banner_scan"):
+    # 상세 접수·이어서 확인도 붙인다(D-15) — 접수 뒤 폴링이 수십 분이다. 견적은 수 초라 안 붙인다.
+    if kind not in ("bulsaja_index", "banner_scan", "detail_submit", "detail_poll"):
         return []
     try:
         return [CAFFEINATE, "-i"] if os.path.exists(CAFFEINATE) else []
@@ -570,7 +648,8 @@ def _수면방지_프리픽스(kind: str) -> list[str]:
 
 def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str],
                 targets_path: Path | None, result_path: Path | None,
-                commit: bool) -> list[str]:
+                commit: bool, *, detail_dir: Path | None = None,
+                max_credits: int | None = None) -> list[str]:
     """kind → `AdsArgv`. **조립은 `webapp/argv.py` 한 곳에서만** 일어난다 (T-1-10)."""
     if kind in ("prep", "run"):
         return argv_mod.AdsArgv(subcommand=kind, run_dir=run_dir,
@@ -708,6 +787,37 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
             prefix=_수면방지_프리픽스(kind),
         ).build()
 
+    if kind in ("detail_estimate", "detail_submit", "detail_poll"):
+        # 🔴 inputs 없는 상세 잡은 없다. 없으면 CLI 가 products.json 경로(전량 수집)를 탄다 —
+        # `revert_only`·`bulsaja_index` 와 같은 부류이고, 막는 자리는 여기 한 곳이다.
+        if targets_path is None:
+            raise ValueError("상세 잡에는 inputs 파일이 반드시 있어야 한다 — 빈 값은 전량이 아니다")
+        if detail_dir is None:
+            raise ValueError("상세 잡에는 detail 폴더가 필요하다")
+        if result_path is None:
+            raise ValueError("상세 잡에는 산출물 경로가 필요하다")
+        if kind == "detail_submit" and max_credits is None:
+            raise ValueError("상세 접수에는 max_credits 가 필요하다 — 상한 없는 접수는 없다(D-14)")
+
+        # 배너 잡과 같은 이유로 설정을 새로 읽는다 — 재시작 없이 toml 변경이 반영되게.
+        settings.load(force=True)
+        return argv_mod.DetailArgv(
+            mode={"detail_estimate": "estimate", "detail_submit": "submit",
+                  "detail_poll": "poll"}[kind],
+            run_dir=detail_dir,
+            inputs=targets_path,
+            done_tags=[str(t) for t in settings.cfg("done_tags", settings.DEFAULTS["done_tags"])],
+            expect_nick=settings.cfg("expected_bulsaja_nick", required=True),
+            max_poll_min=int(settings.cfg("detail_max_poll_min",
+                                          settings.DEFAULTS["detail_max_poll_min"])),
+            poll_interval=int(settings.cfg("detail_poll_interval",
+                                           settings.DEFAULTS["detail_poll_interval"])),
+            estimate_out=result_path if kind == "detail_estimate" else None,
+            summary_out=result_path if kind != "detail_estimate" else None,
+            max_credits=max_credits if kind == "detail_submit" else None,
+            prefix=_수면방지_프리픽스(kind),
+        ).build()
+
     raise ValueError(f"argv 를 조립할 수 없는 작업 종류다: {kind}")
 
 
@@ -717,7 +827,9 @@ def create_job(kind: str, *, run_dir: str | None = None,
                commit: bool = False,
                parent_job_id: str | None = None,
                targets_path_override: str | Path | None = None,
-               argv_override: list[str] | None = None) -> str:
+               argv_override: list[str] | None = None,
+               detail_inputs: dict | None = None,
+               max_credits: int | None = None) -> str:
     """작업을 만들고 자식을 띄운 뒤 `job_id` 를 즉시 돌려준다. **블로킹하지 않는다.**
 
     **이 함수는 HTTP 를 모른다** (D-17 / ENG-07). 요청 객체를 받지 않고 상태코드를
@@ -754,6 +866,13 @@ def create_job(kind: str, *, run_dir: str | None = None,
         raise ValueError("only_ads 와 targets_path_override 를 같이 줄 수 없다 — 대상 파일은 하나다")
     if kind == "synthetic" and not argv_override:
         raise ValueError("합성 잡은 argv_override 가 필요하다 (테스트 전용 경로)")
+    # 상세 견적은 inputs 문서를 **받아서 새로 쓴다**(관문 통과분). 접수·이어서 확인은 새로 쓰지
+    # 않고 견적이 쓴 그 파일을 가리킨다(targets_path_override) — 대상 파일은 하나다.
+    DETAIL_KINDS = ("detail_estimate", "detail_submit", "detail_poll")
+    if detail_inputs is not None and kind != "detail_estimate":
+        raise ValueError("detail_inputs 는 상세 견적 전용이다")
+    if kind == "detail_estimate" and detail_inputs is None:
+        raise ValueError("상세 견적에는 detail_inputs 가 반드시 있어야 한다 — 빈 값은 전량이 아니다")
 
     # ①.5 불사자 계정 가드 (ENG-08). **자식을 띄우기 전이고, 트랜잭션을 열기도 전이다.**
     #      여기가 라우트가 아니라 `create_job` 인 것이 핵심이다 — v2 의 APScheduler 가
@@ -839,7 +958,13 @@ def create_job(kind: str, *, run_dir: str | None = None,
         #    파일을 그대로 가리킨다(D-11). 실행이 화면 상태에서 목록을 다시 만들면,
         #    미리보기와 실행 사이에 필터가 바뀐 만큼 본 것과 다른 게 실행된다.
         targets_path = None
-        if only_ads is not None:
+        if kind == "detail_estimate":
+            if not run_dir:
+                raise ValueError("상세 견적에는 회차가 필요하다")
+            if only_ads is not None or targets_path_override is not None:
+                raise ValueError("상세 견적의 대상은 detail_inputs 하나다")
+            targets_path = _write_detail_inputs(job_id, run_dir, detail_inputs)
+        elif only_ads is not None:
             if not run_dir:
                 raise ValueError("대상 목록을 쓰려면 회차가 필요하다")
             targets_path = _write_targets(job_id, run_dir, list(only_ads))
@@ -847,6 +972,7 @@ def create_job(kind: str, *, run_dir: str | None = None,
             targets_path = _override_targets(run_dir, targets_path_override)
 
         result_path = None
+        detail_dir = None
         if run_dir and kind in BIDS_KINDS:
             접두 = "preview" if kind == "bids_preview" else "result"
             result_path = _web_dir(run_dir) / f"{접두}_{job_id}.json"
@@ -878,13 +1004,23 @@ def create_job(kind: str, *, run_dir: str | None = None,
                 raise ValueError("배너 스캔에는 회차가 필요하다 — 산출물과 조인 입력이 "
                                  "회차의 web/ 밑에 같이 남아야 추적이 된다")
             result_path = _web_dir(run_dir) / f"banner_{job_id}.json"
+        elif kind in DETAIL_KINDS:
+            # CLI 의 `--run-dir` 은 회차 폴더가 아니라 **견적 하나당 폴더**다(`_상세폴더`).
+            # 견적 결과는 estimate.json 하나, 접수·이어서 확인은 잡마다 summary_<id>.json.
+            if not run_dir:
+                raise ValueError(f"{kind} 에는 회차가 필요하다")
+            detail_dir = _상세폴더(kind, job_id, parent_job_id, run_dir, cx)
+            result_path = (detail_dir / "estimate.json" if kind == "detail_estimate"
+                           else detail_dir / f"summary_{job_id}.json")
 
         # ④ argv
         if argv_override:
             cmd = list(argv_override)
         else:
             cmd = _build_argv(kind, job_id, run_dir, accounts,
-                              targets_path, result_path, commit)
+                              targets_path, result_path, commit,
+                              detail_dir=detail_dir,
+                              max_credits=max_credits)
 
         cx.execute(
             "INSERT INTO jobs (id, kind, run_dir, accounts, argv, status, log_path, "

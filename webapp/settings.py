@@ -91,6 +91,15 @@ DEFAULTS = {
         "sLix0885VmdKsGxunAznE:0",   # 장식 포스터. 제품(밥그릇)이 나온다
         "sLix0885VmdKsGxunAznE:4",   # 사용 장면 배너. 제품은 안 나온다
     ],
+
+    # ── Phase 5 (상세페이지 작업) 에서 더한 키 ────────────────────────────
+    # Phase 3·4 블록과 같은 규율이다 — 모듈 상수로 올리지 않는다. 전부 아래로만 읽어라:
+    #     settings.cfg("키", settings.DEFAULTS["키"])
+    # 폴링 상한은 넉넉하게 두지 않는다(연구 Open Q4). 넘기면 CLI 가 exit 3(폴링 미완)으로
+    # 끝나고, "이어서 확인"(--poll-only)이 크레딧 0 으로 이어 받는다 — 길게 잡아 노트북을
+    # 붙잡아 두는 것보다 싸다.
+    "detail_max_poll_min": 60,     # 접수·폴링 잡 1회의 폴링 상한(분)
+    "detail_poll_interval": 45,    # 폴링 간격(초)
 }
 
 _cache = None

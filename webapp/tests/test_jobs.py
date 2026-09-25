@@ -1384,9 +1384,12 @@ def test_detail잡_기본값():
     assert settings.DEFAULTS["detail_poll_interval"] == 45
 
 
-def test_detail잡_폴더_규칙(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+def test_detail잡_폴더_규칙(잡판, 계정확인, 안띄운다, tmp_run_dir, monkeypatch):
     """estimate 가 web/detail_<id>/ 를 열고, submit·poll 은 parent 체인으로 같은 폴더를 받는다."""
-    계정확인(기대닉)
+    # `_build_argv` 가 설정을 새로 읽으므로(`load(force=True)`) 메모리 덮기가 아니라 toml 을 덮는다.
+    _toml덮기(monkeypatch, expected_bulsaja_nick="zz기대계정")
+    settings.load(force=True)
+    계정확인("zz기대계정")
     견적 = jobs.create_job("detail_estimate", run_dir=tmp_run_dir.name,
                            detail_inputs=_상세입력())
     폴더 = tmp_run_dir / "web" / f"detail_{견적}"
@@ -1416,9 +1419,11 @@ def test_detail잡_폴더_규칙(잡판, 계정확인, 기대닉, 안띄운다, 
     assert "--poll-only" in av3
 
 
-def test_detail잡_부모체인이_틀리면_거부(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+def test_detail잡_부모체인이_틀리면_거부(잡판, 계정확인, 안띄운다, tmp_run_dir, monkeypatch):
     """submit 의 부모가 견적이 아니면(없거나 다른 kind) ValueError — 폴더를 지어내지 않는다."""
-    계정확인(기대닉)
+    _toml덮기(monkeypatch, expected_bulsaja_nick="zz기대계정")
+    settings.load(force=True)
+    계정확인("zz기대계정")
     견적 = jobs.create_job("detail_estimate", run_dir=tmp_run_dir.name,
                            detail_inputs=_상세입력())
     _끝냄(견적)

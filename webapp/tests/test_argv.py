@@ -382,7 +382,9 @@ def test_불사자잡은_전역_쓰기가드에_안_들어간다():
     assert not (set(J.WRITE_KINDS) & {"bulsaja_index", "bulsaja_scan", "bulsaja_profile"})
     # 계정 확인 잡은 ENG-08 가드 대상이 **아니다** — 프로필을 만드는 잡이라 닭·달걀이 된다
     assert "bulsaja_profile" not in J.BULSAJA_KINDS
-    assert J.BULSAJA_KINDS == frozenset({"bulsaja_index", "bulsaja_scan"})
+    # Phase 5 가 상세 잡 3종을 더했다(셋 다 MCP 를 부른다). 멤버를 통째로 고정한다.
+    assert J.BULSAJA_KINDS == frozenset({"bulsaja_index", "bulsaja_scan", "detail_estimate",
+                                         "detail_submit", "detail_poll"})
 
 
 def test_인덱스잡은_그룹파일이_없으면_터진다():
