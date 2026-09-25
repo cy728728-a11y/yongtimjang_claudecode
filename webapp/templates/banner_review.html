@@ -303,6 +303,20 @@
       {% endif %}
       {% if 상품.확인됨 %}
       <span class="ct-confirmed" data-p="{{ 상품.상품키 }}">확인함</span>
+      {% if 상품.확인요청 %}
+      {# D-03 — 이미 확인한 상품도 다시 누를 수 있어야 한다. 재스캔 뒤 확인시각을 갱신하는
+         유일한 길이고, Phase 5 관문(확인시각 ≥ 산출물 생성시각)이 이 버튼으로 열린다.
+         확인기록이 INSERT OR REPLACE 라 누르면 시각만 새로 적힌다. #}
+      <button type="button" class="ct-confirm-btn" data-p="{{ 상품.상품키 }}"
+              hx-post="/banner/confirm"
+              hx-vals='{{ 상품.확인요청 | tojson }}'
+              hx-target="this" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-on::before-swap="if (event.detail.xhr.status === 200) {
+                this.closest('.ct-row').classList.add('ct-done'); }"
+              hx-on::response-error="var b = document.getElementById('label-error');
+                b.textContent = '확인을 저장하지 못했다 (' + event.detail.xhr.status + ')';
+                b.hidden = false;">다시 확인</button>
+      {% endif %}
       {% elif 상품.확인요청 %}
       {# "이 줄 다 봤다" — 장 단위가 아니라 **상품 단위**다. 확인 안 한 상품은 게이트
          분모에서 빠진다(Pitfall 8): 안 본 것을 "기계 판정에 동의" 로 세면 미탐 0% 가

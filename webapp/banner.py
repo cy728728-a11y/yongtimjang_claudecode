@@ -252,6 +252,16 @@ def 제품이미지목록(상품: dict, 게이트통과: bool = False, *,
 
 
 
+def _시각(값) -> datetime:
+    """ISO 문자열 → 비교 가능한 datetime. 오프셋 없는 값은 **로컬 시각**으로 읽는다.
+
+    산출물·확인 기록은 둘 다 오프셋을 달고 나오지만(`jobs._now` 관례), 옛 산출물에
+    오프셋이 빠져 있으면 aware/naive 비교가 TypeError 로 터진다. 문자열 비교는 금지다 —
+    오프셋이 섞이면 사전순이 실제 시각과 어긋난다.
+    """
+    t = datetime.fromisoformat(str(값))
+    return t.astimezone() if t.tzinfo is None else t
+
 def 상세입력목록(상품: dict, *, 라벨: dict, 확인시각: str | None, 생성시각: str,
             잔여하한: int, 상한: int = 10) -> dict:
     """Phase 5 상세 생성 입력 관문 — **D-02 규칙** (DETAIL-01 / DETAIL-02).
@@ -279,8 +289,8 @@ def 상세입력목록(상품: dict, *, 라벨: dict, 확인시각: str | None, 
     if 확인시각 is None:
         raise ValueError("이 상품은 확인 기록이 없다 — 검수 화면에서 '다시 확인'을 눌러라 (D-02/D-03)")
     try:
-        확인 = datetime.fromisoformat(str(확인시각))
-        생성 = datetime.fromisoformat(str(생성시각))
+        확인 = _시각(확인시각)
+        생성 = _시각(생성시각)
     except (TypeError, ValueError) as e:
         raise ValueError(f"확인시각·생성시각이 ISO 시각이 아니다: {확인시각!r} / {생성시각!r}") from e
     if 확인 < 생성:
