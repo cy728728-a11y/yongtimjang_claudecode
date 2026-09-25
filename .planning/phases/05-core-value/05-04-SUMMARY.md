@@ -122,3 +122,9 @@ metrics:
 없음 — 새 표면(POST /jobs/detail/submit · /jobs/detail/poll)은 threat_model T-05-15~20 에 있고 전부 반영: 요청은 잡 id 하나(추가 필드 무시) · 상한은 부모 estimate.json · 재접수 경로 없음 · WRITE_KINDS 가드 · BULSAJA 사전점검 409 + CLI --expect-nick · 스모크 산출물 web/ 밖 · 결과 표 taskId 끝 8자리만.
 
 ## Self-Check: PASSED
+
+## uat-verifier 결과 (2026-09-25 · 05-02/03/04 통합 1회 · 오케스트레이터 실행)
+
+- **판정: PASS** — 항목 ①~⑮ 전부 pass · P0~P2 없음 · P3 1건(배너 검수 스트립 figure 접근성 이름 — Phase 4 기존 마크업, 스캐너 오탐 가능)
+- 격리 인스턴스(DB 복사본·별도 포트)만 사용 · 사용자 서버(:8765)·실 webapp.db·실 run-dir 미접촉 · 불사자 호출 0 · 크레딧 0 · 소스 변경 0
+- 사람 몫: 심미만 — `~/.claude/uat/uat-artifacts/20260925-seller-control-tower/board-detail-result.png`, `banner-review.png`
