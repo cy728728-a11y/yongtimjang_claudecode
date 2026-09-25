@@ -353,6 +353,26 @@
     <h2>상세 견적</h2>
     <div id="detail-estimate-body"></div>
     <input type="hidden" id="detail-estimate-job" value="">
+
+    {# 상세 접수 (05-04 / DETAIL-05 · D-14 · L-02). 견적이 **정상으로 끝났고 접수 K > 0** 일 때만 열린다.
+       요청에 실리는 것은 **견적 잡 id 하나뿐**이다 — 대상도 크레딧 상한도 서버가 그 견적에서 다시 읽는다.
+       버튼 문구의 숫자는 견적 조각(#detail-estimate-meta)이 내놓은 값을 옮긴 것이다(표시용). #}
+    <div id="detail-submit-wrap" hidden>
+      <button type="button" id="detail-submit-btn" class="contrast" disabled>접수</button>
+      <p><small>누르는 즉시 크레딧이 나간다 — 위 견적표가 확인 창이다. 확인 창은 따로 없다.</small></p>
+    </div>
+  </section>
+
+  {# 최근 상세 작업 (05-04 / D-16 · SC-1). 입찰가 결과와 달리 **새로 열어도 되살린다** —
+     접수는 수십 분짜리이고, 브라우저를 닫았다 다시 와서 결과와 '이어서 확인' 버튼을 찾아야 한다.
+     이 회차의 가장 최근 상세 접수/이어서 확인 잡 하나(`detail_last`)의 결과 표를 불러온다.
+     도는 중이면 조각이 "도는 중" 을 말하고, 위 작업 패널이 SSE 로 로그를 잇는다. #}
+  <section id="detail-result" {% if not detail_last %}hidden{% endif %}>
+    <h2>최근 상세 작업</h2>
+    <div id="detail-result-body"
+         {% if detail_last %}hx-get="/jobs/{{ detail_last.id }}/result" hx-trigger="load" hx-swap="innerHTML"{% endif %}>
+      {% if detail_last %}결과를 불러오는 중…{% endif %}
+    </div>
   </section>
 
   {# 실행 결과 자리 (FLOW-05 / D-10). 미리보기와 같은 방식으로 비워 둔다 —

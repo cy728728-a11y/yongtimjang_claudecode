@@ -684,6 +684,8 @@
         var job_id = JSON.parse(res.본문).job_id;
         if (상세잡칸) { 상세잡칸.value = ""; }
         if (상세몸통) { 상세몸통.textContent = ""; }
+        // 새 견적을 뜨는 순간 지난 견적의 접수 버튼을 닫는다 — 남기면 **지난 견적**이 접수된다.
+        접수닫기();
         htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/panel",
                   { target: "#job-panel", swap: "outerHTML" });
         결과기다리기(job_id, 150, "detail-estimate", "detail-estimate-body", function (상태) {
@@ -697,6 +699,119 @@
       });
     });
   }
+
+  // ── 상세 접수 · 결과 · 이어서 확인 (05-04 / DETAIL-05·06·07 · D-14 · D-16 · D-17) ──
+  //
+  // **접수 요청에 실리는 것은 견적 잡 id 하나뿐이다** — 대상도 크레딧 상한도 안 보낸다.
+  // 서버가 그 견적의 targets 파일과 estimate.json 예상크레딧을 다시 읽는다(T-05-15).
+  // 버튼 문구의 숫자는 견적 조각(#detail-estimate-meta)의 data 속성을 옮긴 **표시용**이다.
+  //
+  // 접수 잡은 수십 분이다 — `결과기다리기` 로 끝까지 붙잡지 않는다. 작업 패널의 SSE 가
+  // `done` 을 받으면(htmx:sseMessage) 그때 결과 표를 불러온다. 브라우저를 닫았다 오면
+  // board.html 의 #detail-result 가 최근 상세 작업 결과를 hx-trigger="load" 로 되살린다.
+  var 접수칸 = document.getElementById("detail-submit-wrap");
+  var 접수버튼 = document.getElementById("detail-submit-btn");
+  var 상세결과자리 = document.getElementById("detail-result");
+  var 상세결과몸통 = document.getElementById("detail-result-body");
+
+  function 접수닫기() {
+    if (접수칸) { 접수칸.hidden = true; }
+    if (접수버튼) { 접수버튼.disabled = true; 접수버튼.dataset.job = ""; }
+  }
+
+  function 상세결과불러오기(job_id) {
+    if (!상세결과몸통) { return; }
+    if (상세결과자리) { 상세결과자리.hidden = false; }
+    htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/result",
+              { target: "#detail-result-body", swap: "innerHTML" });
+  }
+
+  function 상세작업접수(경로, 몸통, 버튼, 이름) {
+    if (작업오류) { 작업오류.hidden = true; }
+    if (버튼) { 버튼.disabled = true; }
+    fetch(경로, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CT-Token": 토큰() },
+      body: JSON.stringify(몸통)
+    }).then(function (r) {
+      return r.text().then(function (본문) { return { ok: r.ok, code: r.status, 본문: 본문 }; });
+    }).then(function (res) {
+      if (!res.ok) {
+        // 400 = 견적/접수 상태가 안 맞다(사유가 detail 에) · 409 = 계정 불일치 · 다른 쓰기 작업
+        if (버튼) { 버튼.disabled = false; }
+        var 사유 = res.본문;
+        try {
+          var d = JSON.parse(res.본문).detail;
+          사유 = typeof d === "string" ? d : JSON.stringify(d);
+        } catch (e) { /* 원문 그대로 */ }
+        오류표시(이름 + "을 못 만들었다 (" + res.code + ") — " + 사유);
+        return;
+      }
+      var job_id = JSON.parse(res.본문).job_id;
+      htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/panel",
+                { target: "#job-panel", swap: "outerHTML" });
+      if (상세결과자리) { 상세결과자리.hidden = false; }
+      if (상세결과몸통) {
+        상세결과몸통.textContent = 이름 + " 작업이 돌기 시작했다 — 위 진행 로그를 봐라. "
+          + "끝나면 여기 항목별 결과가 뜬다. 브라우저를 닫아도 작업은 계속 돈다.";
+      }
+    }).catch(function (e) {
+      if (버튼) { 버튼.disabled = false; }
+      오류표시(이름 + " 요청이 실패했다: " + e);
+    });
+  }
+
+  // 견적 조각이 갈아끼워지면 접수 버튼을 연다 — **견적 잡이 done 이고 접수 K > 0** 일 때만.
+  // `detail-estimate-job` 칸은 `결과기다리기` 가 done 을 확인했을 때만 채운다(05-03).
+  document.body.addEventListener("htmx:afterSwap", function (ev) {
+    if (!ev.target || ev.target.id !== "detail-estimate-body") { return; }
+    접수닫기();
+    var 메타 = document.getElementById("detail-estimate-meta");
+    if (!메타 || !접수칸 || !접수버튼) { return; }
+    var 견적id = 메타.dataset.job || "";
+    var 접수수 = parseInt(메타.dataset.accept || "0", 10) || 0;
+    var 크레딧 = parseInt(메타.dataset.credits || "0", 10) || 0;
+    if (!견적id || !상세잡칸 || 상세잡칸.value !== 견적id || 접수수 <= 0 || 크레딧 <= 0) { return; }
+    접수버튼.textContent = "접수 — 예상 " + 콤마(크레딧) + "크레딧 (" + 콤마(접수수) + "건)";
+    접수버튼.dataset.job = 견적id;
+    접수칸.hidden = false;
+    접수버튼.disabled = false;
+  });
+
+  if (접수버튼) {
+    접수버튼.addEventListener("click", function () {
+      var 견적id = 접수버튼.dataset.job || "";
+      if (!견적id) { 오류표시("견적부터 떠라 — 접수할 견적이 없다"); return; }
+      // 한 번 누르면 닫는다 — 서버도 같은 견적의 두 번째 접수를 400 으로 막는다.
+      상세작업접수("/jobs/detail/submit", { estimate_job_id: 견적id }, 접수버튼, "상세 접수");
+      if (접수칸) { 접수칸.hidden = true; }
+    });
+  }
+
+  // "이어서 확인" 은 결과 표 **조각 안**에 있다 — htmx 가 갈아끼우므로 위임으로 듣는다.
+  // --poll-only 로만 돈다(크레딧 0). 다시 보내는(재접수) 버튼은 어디에도 없다(D-17 · D-18).
+  document.addEventListener("click", function (ev) {
+    var 버튼 = ev.target.closest ? ev.target.closest(".detail-poll-btn") : null;
+    if (!버튼 || 버튼.disabled) { return; }
+    상세작업접수("/jobs/detail/poll", { submit_job_id: 버튼.dataset.submitJob }, 버튼,
+               "이어서 확인");
+  });
+
+  // 작업 패널의 SSE 가 `done` 을 받으면 — 그 잡이 상세 접수/이어서 확인이면 결과 표를 불러온다.
+  document.body.addEventListener("htmx:sseMessage", function (ev) {
+    if (!ev.target || ev.target.id !== "job-done") { return; }
+    var 연결 = ev.target.closest ? ev.target.closest("[sse-connect]") : null;
+    var 주소 = 연결 ? (연결.getAttribute("sse-connect") || "") : "";
+    var m = 주소.match(/^\/jobs\/([0-9a-fA-F-]{36})\/stream$/);
+    if (!m) { return; }
+    var job_id = m[1];
+    fetch("/jobs/" + encodeURIComponent(job_id), { headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j.kind === "detail_submit" || j.kind === "detail_poll") { 상세결과불러오기(job_id); }
+      })
+      .catch(function (e) { 오류표시("상세 작업 상태를 못 읽었다: " + e); });
+  });
 
   // ── 실행 (FLOW-01 / D-11) ─────────────────────────────────────────────────
   //

@@ -235,6 +235,24 @@ def _인덱스표시(rows, join_doc) -> dict:
     return 집계
 
 
+
+def _최근상세(run_dir: str) -> dict | None:
+    """이 회차의 가장 최근 상세 접수/이어서 확인 잡 하나. 없으면 None (05-04 / D-16 · SC-1).
+
+    쿼리 함수를 jobs.py 에 늘리지 않고 `recent_jobs` 를 여기서 거른다(05-04 계획). 레지스트리가
+    아직 없으면 **만들지 않고** None — `active_job()` 과 같은 규율이다(GET 은 파일을 안 만든다, T-1-01b).
+    최근 50건 안에 없으면 안 보인다 — 1인 도구의 회차당 작업 수로 충분하다.
+    """
+    if not jobs.db_path().is_file():
+        return None
+    try:
+        for j in jobs.recent_jobs(50):
+            if j.get("kind") in ("detail_submit", "detail_poll") and j.get("run_dir") == run_dir:
+                return {"id": j.get("id"), "kind": j.get("kind"), "status": j.get("status")}
+    except Exception:
+        return None                    # 이력 창이 고장나도 보드는 떠야 한다
+    return None
+
 @router.get("/")
 def home(request: Request, t: str | None = None, run_dir: str | None = None):
     """`?t=` 로 들어오면 쿠키를 심고 **깨끗한 `/`** 로 털어낸다.
@@ -290,6 +308,8 @@ def home(request: Request, t: str | None = None, run_dir: str | None = None):
         # 죽은 줄 안다 — 실제로는 자식이 세션 분리되어 잘 돌고 있는데.
         # 읽기만 한다: 레지스트리가 없으면 만들지 않고 None 이다.
         "job": jobs.active_job(),
+        # 이 회차의 가장 최근 상세 접수/이어서 확인 잡 (05-04 / D-16 · SC-1). 회차가 정해진 뒤 채운다.
+        "detail_last": None,
         # 지금 붙어 있는 불사자 계정. **회차가 하나도 없어도 뜬다** — 계정 확인은
         # 회차와 무관하고, 회차가 없는 상태에서 제일 먼저 눌러야 할 버튼이다.
         "bulsaja": _불사자표시(),
@@ -323,6 +343,7 @@ def home(request: Request, t: str | None = None, run_dir: str | None = None):
         return templates.TemplateResponse(request, "board.html", ctx)
 
     ctx["freshness"] = paths.freshness(선택)
+    ctx["detail_last"] = _최근상세(선택)
     result, err = _load_result(선택)
     ctx["load_error"] = err
     # 템플릿에 넘기는 것은 화면에 필요한 **값**뿐이다. 계정 객체를 통째로 넘기지 않는다

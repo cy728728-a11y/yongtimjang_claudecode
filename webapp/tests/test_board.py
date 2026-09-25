@@ -781,3 +781,44 @@ def test_상세견적_버튼과_자리가_보드에_있다(조인보드):
     assert 본문.count('id="preview-body"') == 1
     for 금지 in ("quality", "화질", 'name="pages"'):
         assert 금지 not in 본문, 금지
+
+
+def test_상세접수_버튼과_최근결과_자리(조인보드):
+    """05-04 — 접수 버튼(닫힌 채) · 최근 상세 작업 자리. 상세 잡이 없으면 자리가 숨겨져 있다."""
+    r, ctx = 조인보드(조인보드.산출물)
+    본문 = r.text
+    for 아이디 in ('id="detail-submit-wrap"', 'id="detail-submit-btn"',
+                 'id="detail-result"', 'id="detail-result-body"'):
+        assert 아이디 in 본문, 아이디
+    assert ctx["detail_last"] is None
+    assert "hx-trigger=\"load\"" not in 본문.split('id="detail-result"', 1)[1][:400]
+
+
+def test_보드를_새로_열면_최근_상세결과가_되살아난다(조인보드):
+    """SC-1 · D-16 — 이 회차의 가장 최근 detail_submit/poll 잡을 hx-get 으로 불러온다."""
+    from webapp import jobs
+    조인보드(조인보드.산출물)                     # 스캔 행을 먼저 박는다
+    cx = jobs._conn()
+    try:
+        for i, (kind, 때) in enumerate([("detail_submit", "2026-09-25T10:00:00+09:00"),
+                                        ("detail_poll", "2026-09-25T11:00:00+09:00"),
+                                        ("bids_commit", "2026-09-25T12:00:00+09:00")]):
+            cx.execute("INSERT INTO jobs (id, kind, run_dir, argv, status, exit_code, log_path, "
+                       "started_at, ended_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                       (f"00000000-0000-4000-8000-00000000000{i}", kind, 조인회차, "[]",
+                        "done", 3 if kind == "detail_poll" else 0, "x.log", 때, 때))
+        cx.execute("INSERT INTO jobs (id, kind, run_dir, argv, status, exit_code, log_path, "
+                   "started_at) VALUES (?,?,?,?,?,?,?,?)",
+                   ("00000000-0000-4000-8000-000000000009", "detail_poll", "2099-01-01", "[]",
+                    "done", 0, "x.log", "2026-09-25T13:00:00+09:00"))
+        cx.commit()
+    finally:
+        cx.close()
+    from fastapi.testclient import TestClient
+    from webapp import security, settings
+    from webapp.main import app
+    c = TestClient(app, base_url=f"http://127.0.0.1:{settings.PORT}")
+    c.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+    본문 = c.get("/").text
+    assert 'hx-get="/jobs/00000000-0000-4000-8000-000000000001/result"' in 본문
+    assert "00000000-0000-4000-8000-000000000009/result" not in 본문   # 다른 회차

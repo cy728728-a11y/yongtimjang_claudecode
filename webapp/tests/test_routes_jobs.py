@@ -1174,3 +1174,17 @@ def test_detail결과_체크포인트없으면_에러(화면, tmp_run_dir):
     j = 화면.get(f"/jobs/{접수}/result?format=json").json()
     assert j["error"]
     assert j["이어서확인가능"] is False
+
+
+def test_상태조각_exit3_은_실패라고_안한다(화면, tmp_run_dir):
+    _, 접수 = _접수체인(tmp_run_dir, "done", 3)
+    본문 = 화면.get(f"/jobs/{접수}", headers={"HX-Request": "true"}).text
+    assert "폴링 미완 — 실패 아님" in 본문
+    assert "실패했다" not in 본문
+
+
+@pytest.mark.parametrize("코드,말", [(2, "장수 불일치"), (4, "계정 불일치"), (5, "견적 초과")])
+def test_상태조각_detail_실패코드별_문구(화면, tmp_run_dir, 코드, 말):
+    _, 접수 = _접수체인(tmp_run_dir, "failed", 코드)
+    본문 = 화면.get(f"/jobs/{접수}", headers={"HX-Request": "true"}).text
+    assert 말 in 본문

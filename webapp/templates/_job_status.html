@@ -70,16 +70,24 @@
       {% endif %}
       브라우저를 닫아도 작업은 계속 돌고, 다시 열면 로그가 처음부터 이어서 보인다.
     </small></p>
+  {% elif job.status == "done" and job.exit_code == 3 %}
+    {# 상세 접수·이어서 확인의 exit 3 = 폴링 미완(L-03 · D-17). jobs._finish 가 done 으로 적는다 —
+       실패로 보이면 사람이 다시 접수하고, 그건 크레딧 이중 지불이다. #}
+    <p class="stale">
+      <strong>폴링 미완 — 실패 아님.</strong>
+      시간 상한에 닿아 여기서 멈췄을 뿐, 불사자에서는 계속 만들고 있다.
+      아래 결과 표의 '이어서 확인'을 눌러라(크레딧 0).
+    </p>
   {% elif job.status == "failed" %}
     <p class="stale">
       <strong>실패했다 (종료코드 {{ job.exit_code }}).</strong>
       아래 로그에서 사유를 봐라.
       {% if job.kind in ("detail_estimate", "detail_submit", "detail_poll") %}
-        {# detail_batch.py 종료코드 계약(05-01): 2 입력 오류 · 3 폴링 미완 · 4 계정 불일치 · 5 견적 초과 #}
-        {% if job.exit_code == 3 %}폴링 미완이다 — 실패가 아니다. '이어서 확인'으로 이어 받아라(크레딧 0).
-        {% elif job.exit_code == 4 %}붙어 있는 불사자 계정이 기대와 다르다 — 계정 확인부터 해라.
-        {% elif job.exit_code == 5 %}견적 상한을 넘기려는 건이 있어 멈췄다 — 견적을 다시 떠라.
-        {% elif job.exit_code == 2 %}입력이 틀렸다 — 견적부터 다시 떠라.
+        {# detail_batch.py 종료코드 계약(05-01): 2 입력 오류/장수 불일치 · 4 계정 불일치 · 5 견적 초과.
+           3(폴링 미완)은 여기 안 온다 — done 이다(위 분기). #}
+        {% if job.exit_code == 2 %}장수 불일치 또는 입력 오류 — 멈췄다(재접수하지 마라). 결과 표에서 건별 사유를 봐라.
+        {% elif job.exit_code == 4 %}계정 불일치 — 붙어 있는 불사자 계정이 기대와 다르다. 계정 확인부터 해라.
+        {% elif job.exit_code == 5 %}견적 초과 — 멈췄다. 견적 상한을 넘기려는 건이 있다. 견적을 다시 떠라.
         {% endif %}
       {% else %}광고 설정이 바뀐 건 없다 — 실패한 항목은 건너뛴 것이다.{% endif %}
     </p>

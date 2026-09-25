@@ -9,7 +9,10 @@
 
    자동 이스케이프에 기댄다 — 사유 문자열에 원문이 섞여 들어온다. 이 파일에서 이스케이프를
    끄는 필터를 쓰지 마라.
-   접수 버튼은 여기 없다(05-04). 화질·장수 선택지도 없다(D-11). #}
+   접수 버튼은 여기 없다 — board.html 의 #detail-submit-wrap 이다(05-04). 이 조각은 버튼이 읽을
+   숫자만 `#detail-estimate-meta` 의 data 속성으로 내놓는다(버튼 문구·활성화용 — **서버는 이 값을
+   받지 않는다.** 접수 상한은 서버가 estimate.json 에서 다시 읽는다, T-05-15).
+   화질·장수 선택지도 없다(D-11). #}
 
 {% if running %}
   <p>상세 견적을 만드는 중이다… 위 진행 로그를 봐라. (크레딧 0 — 기작업 태그·잔액만 조회한다)</p>
@@ -28,6 +31,10 @@
   {% endif %}
 
 {% else %}
+  <span id="detail-estimate-meta" hidden
+        data-job="{{ job.id }}"
+        data-accept="{{ 집계.get("접수", 0) }}"
+        data-credits="{{ 집계.get("예상크레딧", 0) }}"></span>
   {# 집계 줄 — 선택 N → 관문 제외 G → 기작업 스킵 M → 실제 접수 K. 규모를 먼저 읽는다. #}
   <p>
     <strong>선택 {{ 선택 if 선택 is not none else "?" }}</strong>
