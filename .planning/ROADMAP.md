@@ -230,7 +230,7 @@ Plans:
 **Wave 1**
 
 - [x] 05-01-PLAN.md — CLI 주입구: `--inputs`·`--estimate-only`·`--max-credits`·`--expect-nick`·exit 3/4/5 + 버그 2개 수정 (골든 먼저, 오프라인 테스트)
-- [ ] 05-02-PLAN.md — D-02 관문 `상세입력목록` + D-03 검수 화면 `다시 확인`
+- [x] 05-02-PLAN.md — D-02 관문 `상세입력목록` + D-03 검수 화면 `다시 확인`
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -291,7 +291,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
 | 4. 홍보배너 식별 | 12/12 | Closed — 게이트 불통과 · 용팀장 결정으로 종료 (D-23) | 2026-09-25 |
-| 5. 상세페이지 작업 버튼 ★ Core Value | 1/6 | In Progress|  |
+| 5. 상세페이지 작업 버튼 ★ Core Value | 2/6 | In Progress|  |
 | 6. 마켓 수정업로드 | 0/TBD | Not started | - |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |
 
