@@ -786,7 +786,9 @@ def _견적잡_끝남(tmp_run_dir, 견적: dict | None, 상태="done") -> str:
                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                    (job_id, "detail_estimate", tmp_run_dir.name, "[]", "[]", 상태,
                     str(tmp_run_dir / "x.log"), str(대상), str(결과),
-                    0 if 상태 == "done" else None, "2026-09-25T10:00:00+09:00"))
+                    0 if 상태 == "done" else None,
+                    # 지금 시각 — 오래된 starting 은 `_reap` 이 죽음으로 거둔다(STARTING_TIMEOUT)
+                    datetime.now().astimezone().isoformat(timespec="seconds")))
         cx.commit()
     finally:
         cx.close()

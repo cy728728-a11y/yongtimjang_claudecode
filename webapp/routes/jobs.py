@@ -62,7 +62,8 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, StringConstraints, ValidationError, field_validator
 from sse_starlette import EventSourceResponse
 
-from webapp import board, flow, jobs, join, logtail, paths, security, settings
+from webapp import (banner, banner_store, board, flow, jobs, join, logtail, paths,
+                    security, settings)
 from webapp.argv import Alias
 
 router = APIRouter()
@@ -194,6 +195,37 @@ class RevertRoundReq(BaseModel):
     confirmed_count: int
 
 
+# 보드 행 키의 모양 — `"<계정alias>|<mallProductId>"` (board.js Tabulator index · `_스캔대상키`).
+# 앞은 `Alias` 규칙(영숫자·`_`·`-`), 뒤는 스마트스토어 상품ID(숫자). 선행 하이픈은 막는다 —
+# 이 값은 argv 로 안 가지만(파일로 건너간다) 모양 밖 값은 DB·파일 근처에도 안 보낸다.
+보드키 = Annotated[str, StringConstraints(
+    pattern=r"^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}\|[0-9A-Za-z_]{1,40}$")]
+
+# 한 번에 견적할 수 있는 상품 수 상한. 거친 방어선(본문 파싱 비용)이지 업무 규칙이 아니다 —
+# 🔴 후보가 수십 건 규모다. 크레딧 상한은 견적 표가 사람에게 보여 주고 접수 때 `--max-credits` 가 진다.
+상세견적_상한 = 200
+
+
+class DetailEstimateReq(BaseModel):
+    """상세 견적 요청. **받는 것은 회차와 보드 행 키뿐이다** (T-05-10).
+
+    이미지 URL·productId·판매자상품코드를 받지 않는다 — 모델에 필드가 없는 것이 방어다.
+    서버가 키로 보드 행을 다시 만들고, 관문(`banner.상세입력목록`)도 서버에서만 돈다.
+    """
+
+    run_dir: str
+    keys: list[보드키]
+
+    @field_validator("keys")
+    @classmethod
+    def _개수(cls, v):
+        if not v:
+            raise ValueError("고른 상품이 없다")
+        if len(v) > 상세견적_상한:
+            raise ValueError(f"한 번에 {상세견적_상한}건까지다 ({len(v)}건)")
+        return v
+
+
 def _판정읽기(run_dir_name: str) -> dict:
     """회차의 판정 결과. **회차 이름은 화이트리스트를 통과한 것만** 경로가 된다.
 
@@ -250,6 +282,40 @@ def _미리보기표ctx(상태: dict) -> dict:
         "running": bool(미리보기.get("running")),
         "limit": flow.PREVIEW_ROW_LIMIT,
     }
+
+
+def _상세견적ctx(상태: dict) -> dict:
+    """견적 표 조각이 쓰는 값. **숫자는 전부 파일 값이다** — 템플릿에서 계산하지 않는다.
+
+    CLI 의 estimate.json(항목·집계·계정·잔액) + 같은 잡 targets 파일의 `선택`·`제외`
+    (웹앱 관문이 뺀 것). 도는 중이면 읽지 않는다(`_산출물` 규율).
+    """
+    기본 = {"job": _투영(상태 or {}), "running": False, "error": None,
+            "항목": [], "집계": {}, "계정": None, "잔액": None, "per_credit": None,
+            "선택": None, "관문제외": 0, "제외": []}
+    if (상태 or {}).get("status") in jobs.LIVE_STATUSES:
+        return {**기본, "running": True}
+    try:
+        대상 = json.loads(jobs.targets_path_of(상태["id"]).read_text(encoding="utf-8"))
+        제외 = [x for x in (대상.get("제외") or []) if isinstance(x, dict)]
+        기본.update({"선택": 대상.get("선택"), "제외": 제외, "관문제외": len(제외)})
+    except Exception:
+        pass                                  # 제외 목록이 없어도 견적 숫자는 보인다
+    경로 = (상태 or {}).get("result_path")
+    if not 경로:
+        return {**기본, "error": "이 작업에는 산출물이 없다"}
+    try:
+        견적 = json.loads(Path(경로).read_text(encoding="utf-8"))
+        if not isinstance(견적, dict):
+            raise ValueError("모양이 dict 가 아니다")
+    except Exception as e:
+        # 종료코드 4(계정 불일치)·2(입력 오류)면 산출물이 없다. 로그를 보라고 안내한다.
+        return {**기본, "error": f"견적 산출물이 없거나 깨졌다 — 진행 로그를 봐라 "
+                                 f"(종료코드 {상태.get('exit_code')}, {type(e).__name__})"}
+    기본.update({"항목": [x for x in (견적.get("항목") or []) if isinstance(x, dict)],
+                "집계": 견적.get("집계") or {}, "계정": 견적.get("계정"),
+                "잔액": 견적.get("잔액"), "per_credit": 견적.get("per_credit")})
+    return 기본
 
 
 def _실행표ctx(상태: dict) -> dict:
@@ -809,6 +875,151 @@ def post_banner_scan(request: Request, req: JobReq = Depends(요청_풀기)):
     return _작업만들기(request, "banner_scan", req, targets_path_override=산출물)
 
 
+# ── 상세 견적 (Phase 5 / DETAIL-01·02·05) ───────────────────────────────────
+
+def _직전산출물(kind: str, run_dir: str, 없을때: str) -> dict:
+    """`latest_done(kind)` 의 산출물 JSON. 없거나 깨졌으면 **409** — 순서가 아직 아니다.
+
+    glob 으로 `web/*.json` 을 뒤지지 않는다(`post_banner_scan` 과 같은 판단) — 파일이 있다는
+    것과 그 잡이 성공했다는 것은 다르다. 빈 dict 로 삼키지 않는다 — 대상이 0건이 된다.
+    """
+    경로 = (jobs.latest_done(kind, run_dir) or {}).get("result_path")
+    if not 경로:
+        raise HTTPException(status_code=409, detail=없을때)
+    try:
+        문서 = json.loads(Path(경로).read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=409,
+                            detail=f"{없을때} (산출물을 못 읽었다: {type(e).__name__})")
+    if not isinstance(문서, dict):
+        raise HTTPException(status_code=409, detail=f"{없을때} (산출물 모양이 다르다)")
+    return 문서
+
+
+@router.post("/jobs/detail/estimate")
+def post_detail_estimate(request: Request, req: DetailEstimateReq):
+    """**상세 견적** — 크레딧 0. 고른 상품을 관문에 태워 통과분만 견적 잡으로 넘긴다.
+
+    대상은 **서버가 다시 만든다** (D-06 · D-08 · T-05-10):
+      ① 직전 성공 배너 스캔 산출물(없으면 409) — 관문이 읽는 장 판정·생성시각
+      ② 직전 성공 조인 스캔 산출물(없으면 409) — 보드 행 재구성 + 판매자상품코드
+      ③ 회차 판정 → `board.fold_products` → `join.attach` 로 보드 행을 다시 만들고
+         요청 키로 고른다. **보드에 없는 키는 400** — 클라이언트가 대상을 지어내지 못한다
+      ④ 행마다 관문(`banner.상세입력목록`). 못 지나간 상품은 **사유와 함께 제외** 목록으로
+      ⑤ 통과 0건이면 400(상품별 사유) — 빈 inputs 로 잡을 만들지 않는다
+
+    **배너 산출물 ↔ 보드 행 매칭은 판매자상품코드다.** 배너 산출물 상품에는 productId 가
+    없고(실측: 판매자상품코드·불사자코드·타오바오상품번호만), 조인 산출물 행이 (acct,
+    mallProductId) → 판매자상품코드를 준다. 실측 회차에서 배너 상품 62건의 판매자상품코드가
+    62개로 유일하다. 작업 대상은 조인된 **사본 1개**(그 판매자상품코드의 productId)다(D-06).
+
+    기작업·⚪ 여부로 **여기서 빼지 않는다** (D-05) — 사람이 골랐으면 CLI 가 실시간 태그로
+    다시 판정해 스킵한다(D-12). 여기서 또 판정하면 기작업 판단이 두 곳이 된다.
+    """
+    if not req.run_dir:
+        raise HTTPException(status_code=400, detail="상세 견적에는 회차가 필요하다")
+    try:
+        paths.run_dir_path(req.run_dir)          # 화이트리스트 — 파일을 읽기 전에
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    배너문서 = _직전산출물("banner_scan", req.run_dir,
+                        "배너 스캔을 먼저 돌려라 — 상세 입력 이미지는 배너 판정 산출물에서 온다")
+    조인문서 = _직전산출물("bulsaja_scan", req.run_dir,
+                        "조인 스캔을 먼저 돌려라 — 보드 행을 불사자 상품에 이어야 대상이 정해진다")
+    생성시각 = 배너문서.get("생성시각")
+    if not isinstance(생성시각, str) or not 생성시각:
+        raise HTTPException(status_code=409,
+                            detail="배너 산출물에 생성시각이 없다 — 배너 스캔을 다시 돌려라")
+
+    try:
+        판정 = _판정읽기(req.run_dir)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    붙임 = join.attach(board.fold_products(판정), 판정, 조인문서,
+                      excluded=settings.cfg("index_excluded_groups",
+                                            settings.DEFAULTS["index_excluded_groups"]),
+                      done_tags=settings.cfg("done_tags", settings.DEFAULTS["done_tags"]))
+    행색인 = {f"{r.get('acct')}|{r.get('mallProductId')}": r for r in 붙임}
+    모르는것 = [k for k in req.keys if k not in 행색인]
+    if 모르는것:
+        raise HTTPException(status_code=400,
+                            detail=f"보드에 없는 상품이다 — 새로고침하고 다시 골라라: "
+                                   f"{', '.join(모르는것[:5])}")
+
+    관측색인 = {(o.get("acct"), o.get("mallProductId")): o
+                for o in (조인문서.get("행") or []) if isinstance(o, dict)}
+    배너색인 = {}
+    for 상품 in (배너문서.get("상품") or []):
+        if isinstance(상품, dict) and 상품.get("판매자상품코드"):
+            배너색인.setdefault(str(상품["판매자상품코드"]), 상품)
+    라벨 = banner_store.라벨읽기(req.run_dir)
+    확인 = banner_store.확인시각읽기(req.run_dir)
+    하한 = int(settings.cfg("banner_skip_min_keep", settings.DEFAULTS["banner_skip_min_keep"]))
+
+    items: list[dict] = []
+    제외: list[dict] = []
+    본상품: set[str] = set()
+    for 키 in dict.fromkeys(req.keys):         # 같은 키 두 번은 한 번으로(순서 유지)
+        행 = 행색인[키]
+        관측 = 관측색인.get((행.get("acct"), 행.get("mallProductId"))) or {}
+        코드 = 관측.get("판매자상품코드")
+        표기 = str(코드) if 코드 else 키
+
+        def 뺀다(사유: str):
+            제외.append({"판매자상품코드": 표기, "사유": 사유})
+
+        if not 행.get("해소"):
+            뺀다(f"불사자 상품에 안 이어졌다 — {행.get('사유') or '미해소'}")
+            continue
+        pid = 행.get("productId")
+        if not pid or not 코드:
+            뺀다("조인 결과에 productId·판매자상품코드가 없다 — 조인 스캔을 다시 돌려라")
+            continue
+        if pid in 본상품:
+            뺀다("같은 불사자 상품이 이미 대상에 있다")
+            continue
+        상품 = 배너색인.get(str(코드))
+        if 상품 is None:
+            뺀다("배너 판정 산출물에 없다 — 배너 스캔을 다시 돌려라")
+            continue
+        try:
+            상품키 = banner.상품키(상품)
+            결과 = banner.상세입력목록(상품, 라벨=라벨.get(상품키) or {},
+                                   확인시각=확인.get(상품키), 생성시각=생성시각,
+                                   잔여하한=하한)
+        except ValueError as e:
+            뺀다(str(e))
+            continue
+        본상품.add(pid)
+        items.append({"productId": pid, "판매자상품코드": str(코드),
+                      "imageUrls": 결과["urls"], "제품이미지총수": 결과["총수"],
+                      "잘림": 결과["잘림"]})
+
+    if not items:
+        사유들 = " / ".join(f"{x['판매자상품코드']}: {x['사유']}" for x in 제외[:20])
+        raise HTTPException(status_code=400,
+                            detail=f"관문을 통과한 상품이 0건이다 — 견적을 만들지 않았다. {사유들}")
+
+    문서 = {"items": items, "제외": 제외, "선택": len(req.keys)}
+    try:
+        job_id = jobs.create_job("detail_estimate", run_dir=req.run_dir, detail_inputs=문서)
+    except jobs.AccountMismatchError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except jobs.BusyError as e:
+        raise HTTPException(status_code=409,
+                            detail=f"이미 도는 작업이 있다 — 끝나고 다시 눌러라 ({e})")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except KeyError:
+        raise HTTPException(status_code=500,
+                            detail="설정 `webapp.expected_bulsaja_nick` 이 비었다 — "
+                                   "workspace.toml 의 [webapp] 에 채워라")
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"job_id": job_id}
+
+
 # ── 여기서부터 읽기 전용 ─────────────────────────────────────────────────────
 # 아래 GET 들은 작업을 **만들지 않는다.** 상태를 읽어 화면에 옮길 뿐이다.
 # 이 파일에서 GET 핸들러를 맨 아래 모아 두는 이유는 V-SAFE-01d 스캐너가
@@ -879,6 +1090,7 @@ def get_job_result(job_id: str, request: Request, format: str | None = None):
         "bids_commit": ("_result_table.html", _실행표ctx),
         "revert_only": ("_revert_table.html", _되돌리기표ctx),
         "revert_all": ("_revert_table.html", _되돌리기표ctx),
+        "detail_estimate": ("_detail_estimate_table.html", _상세견적ctx),
     }.get(kind, ("_preview_table.html", _미리보기표ctx))
     ctx = ctx(상태)
     if format == "json" or not request.headers.get("hx-request"):

@@ -1,0 +1,85 @@
+{# 상세 견적 표 (크레딧 0) — Plan 05-03 / DETAIL-05 · D-14 · D-09.
+
+   **숫자는 전부 파일 값이다.** CLI 의 estimate.json(항목·집계·계정·잔액)과 웹앱 관문이 쓴
+   targets 파일(선택·제외)을 그대로 옮긴다 — 여기서 크레딧을 곱하지 않는다. 비용 정본은
+   CLI 집계 하나다(진실이 둘이 되면 접수 상한과 화면이 어긋난다).
+
+   `_preview_table.html` 과 같은 뼈대다: **running → error → 집계 줄 먼저.** 접수가 0건이어도
+   집계 줄은 띄운다 — 빈 표만 보이면 사람은 고장으로 읽고 다시 누른다.
+
+   자동 이스케이프에 기댄다 — 사유 문자열에 원문이 섞여 들어온다. 이 파일에서 이스케이프를
+   끄는 필터를 쓰지 마라.
+   접수 버튼은 여기 없다(05-04). 화질·장수 선택지도 없다(D-11). #}
+
+{% if running %}
+  <p>상세 견적을 만드는 중이다… 위 진행 로그를 봐라. (크레딧 0 — 기작업 태그·잔액만 조회한다)</p>
+
+{% elif error %}
+  <p class="stale"><strong>견적을 못 읽었다 — {{ error }}</strong><br>
+    빈 표를 결과로 읽지 않게 표를 그리지 않는다.</p>
+  {% if 제외 %}
+    <p>관문에서 뺀 상품 {{ 관문제외 }}건:</p>
+    <table>
+      <thead><tr><th>판매자상품코드</th><th>사유</th></tr></thead>
+      <tbody>
+      {% for x in 제외 %}<tr><td>{{ x.판매자상품코드 }}</td><td>{{ x.사유 }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+{% else %}
+  {# 집계 줄 — 선택 N → 관문 제외 G → 기작업 스킵 M → 실제 접수 K. 규모를 먼저 읽는다. #}
+  <p>
+    <strong>선택 {{ 선택 if 선택 is not none else "?" }}</strong>
+    → 관문 제외 {{ 관문제외 }}
+    → 기작업 스킵 {{ 집계.get("스킵", 0) }}
+    → <strong>실제 접수 {{ 집계.get("접수", 0) }}</strong>
+  </p>
+  <p>
+    총 장수 <strong>{{ "{:,}".format(집계.get("총장수", 0)) }}장</strong>
+    · 예상 크레딧 <strong>{{ "{:,}".format(집계.get("예상크레딧", 0)) }}</strong>
+    {% if per_credit %}<small>(장당 {{ per_credit }})</small>{% endif %}
+    · 10장 초과로 잘린 상품 {{ 집계.get("잘린상품", 0) }}개
+  </p>
+  <p>
+    계정 <strong>{{ 계정 or "?" }}</strong>
+    · 잔액(참고) {% if 잔액 is not none %}{{ "{:,}".format(잔액) if 잔액 is number else 잔액 }}{% else %}조회 못 함{% endif %}
+    <br><small>잔액은 참고용이다 — 비용 정본은 CLI 집계(예상 크레딧)다.</small>
+  </p>
+
+  {% if not 집계.get("접수") %}
+    <p class="stale">접수할 상품이 0건이다 — 전부 기작업이거나 입력이 부족하다. 크레딧이 나가지 않는다.</p>
+  {% endif %}
+
+  {% if 항목 %}
+    <table>
+      <thead><tr>
+        <th>판매자상품코드</th><th>판정</th><th>장수</th><th>제품이미지총수</th>
+        <th>잘림</th><th>크레딧</th><th>사유</th>
+      </tr></thead>
+      <tbody>
+      {% for x in 항목 %}
+        <tr>
+          <td>{{ x.판매자상품코드 }}</td>
+          <td>{{ x.판정 }}</td>
+          <td>{{ x.장수 }}</td>
+          <td>{{ x.제품이미지총수 }}</td>
+          <td>{{ x.잘림 }}</td>
+          <td>{{ x.크레딧 }}</td>
+          <td>{{ x.사유 or "" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if 제외 %}
+    <p>관문에서 뺀 상품 {{ 관문제외 }}건 <small>(재스캔 뒤 확인·스킵·배너 산출물 누락 등 — 검수 화면에서 풀린다)</small></p>
+    <table>
+      <thead><tr><th>판매자상품코드</th><th>사유</th></tr></thead>
+      <tbody>
+      {% for x in 제외 %}<tr><td>{{ x.판매자상품코드 }}</td><td>{{ x.사유 }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endif %}
