@@ -613,7 +613,7 @@ def test_요약_파일(monkeypatch, cli, tmp_path, 경우, 기대):
     elif 경우 == "미완":
         kw["상태응답"] = _영원히진행중
     elif 경우 == "초과":
-        최대 = 60
+        최대 = 50          # 7장 35 는 통과, 4장 20 을 더하면 55 > 50 → exit 5
     items = [_항목(1, 장=7), _항목(2, 장=4)]
     코드, _, s, _ = _접수(monkeypatch, cli, tmp_path, items, 추가=추가, 최대=최대, **kw)
     assert 코드 == 기대

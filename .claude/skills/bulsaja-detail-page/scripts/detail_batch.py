@@ -222,6 +222,7 @@ def submit_one(mcp, pid, pages, quality, force=False):
 #           · 4 계정 불일치 · 5 견적(--max-credits) 초과
 # ════════════════════════════════════════════════════════════════════════════
 
+# main 이 `sys.exit(_입력모드(args))` 로 내보낸다 — 폴링미완이면 sys.exit(3).
 EXIT_OK, EXIT_INPUT, EXIT_POLL, EXIT_NICK, EXIT_BUDGET = 0, 2, 3, 4, 5
 TAG_BATCH = 50          # find_by_code 배치 크기 (bulsaja_scan 실측: 50코드 0.53초)
 
@@ -441,6 +442,244 @@ def _견적(mcp, args, items, done_tags, per_credit, 계정, 잔액):
     return EXIT_OK
 
 
+def _입력접수(mcp, pid, imgs, sc, quality):
+    """2단계 접수 — submit_one 194-204 와 **같은 프로토콜**(imageUrls+sectionCount 동시,
+    confirm False → 토큰 → confirm True). 반환 (taskId, 서버 예상장수 원값).
+
+    submit_one 을 고치지 않고 따로 둔 이유: 예상장수 검증을 호출부로 넘겨야
+    taskId 를 체크포인트에 **먼저** 적을 수 있다 (Pitfall 2). submit_one 은 검증 실패 시
+    taskId 없이 예외를 던지고, 그 경로는 플래그 없는 실행이 그대로 쓴다 (L-04).
+    """
+    base = {"productId": pid, "imageUrls": imgs, "sectionCount": sc,
+            "quality": quality, "confirm": False}
+    pre = mcp.call_tool("bulsaja_detail_page_generate", base) or {}
+    token = pre.get("confirmationToken")
+    if not token:
+        raise RuntimeError(f"확인토큰 없음: {str(sanitize(pre))[:150]}")
+    fin = mcp.call_tool("bulsaja_detail_page_generate",
+                        {**base, "confirm": True, "confirmationToken": token}) or {}
+    tid = extract_task_id(fin)
+    if not tid:
+        raise RuntimeError(f"작업번호 없음: {str(sanitize(fin))[:200]}")
+    return tid, fin.get("예상장수")
+
+
+def _상태키(r):
+    """폴링 응답의 status 문자열. 못 찾으면 None — extract_status 처럼 응답 JSON 을
+    상태로 삼지 않는다 (Pitfall 6: 'error' 부분문자열 하나로 영구 실패가 되던 경로)."""
+    if not isinstance(r, dict):
+        return None
+    for k in ("status", "상태", "진행상태", "state"):
+        v = r.get(k)
+        if isinstance(v, str) and v:
+            return v
+    return None
+
+
+def _미종결(items, status):
+    """taskId 가 있고 완료/실패/장수불일치가 아닌 pid — 폴링 종료 조건을 직접 센다 (Pitfall 1)."""
+    남음 = []
+    for it in items:
+        v = status.get(it["productId"]) or {}
+        st = v.get("status", "")
+        if v.get("taskId") and st != "장수불일치" and not is_done(st) and not is_failed(st):
+            남음.append(it["productId"])
+    return 남음
+
+
+def _요약상태(v):
+    """체크포인트 한 항목 → summary 상태 (화면이 읽는 이름)."""
+    v = v or {}
+    st = v.get("status", "")
+    if st == SKIP_STATUS:
+        return "기작업스킵"
+    if st in ("태그미조회", "입력부족", "장수불일치", "접수실패"):
+        return st
+    if v.get("taskId"):
+        if is_done(st):
+            return "완료"
+        if is_failed(st):
+            return "실패"
+        return "폴링중"
+    return "미접수"
+
+
+def _마무리(args, items, status, per_credit, rc):
+    """summary 저장 + 센티널 마지막 줄. 정상·2·3·5 모두 여기를 지난다."""
+    행들 = []
+    for it in items:
+        v = status.get(it["productId"]) or {}
+        상태 = _요약상태(v)
+        try:
+            장수 = int(v.get("pages") or 0)
+        except (TypeError, ValueError):
+            장수 = 0
+        행들.append({"productId": it["productId"], "판매자상품코드": it["판매자상품코드"],
+                     "상태": 상태, "장수": 장수,
+                     "크레딧": 장수 * per_credit if v.get("taskId") else 0,
+                     "사유": str(v.get("사유") or v.get("error") or ""),
+                     "taskId": v.get("taskId")})
+    셈 = {}
+    for h in 행들:
+        셈[h["상태"]] = 셈.get(h["상태"], 0) + 1
+    집계 = {"접수": sum(1 for h in 행들 if h["taskId"]),
+            "완료": 셈.get("완료", 0),
+            "실패": 셈.get("실패", 0) + 셈.get("접수실패", 0) + 셈.get("장수불일치", 0),
+            "스킵": 셈.get("기작업스킵", 0) + 셈.get("태그미조회", 0) + 셈.get("입력부족", 0),
+            "폴링미완": 셈.get("폴링중", 0),
+            "실제크레딧": sum(h["장수"] for h in 행들 if h["상태"] == "완료") * per_credit}
+    if args.summary_out:
+        save_json(args.summary_out, {"항목": 행들, "집계": 집계, "종료코드": rc})
+    print(f"###DETAIL### 완료 {집계['완료']} / 실패 {집계['실패']} / 스킵 {집계['스킵']}"
+          f" / 폴링미완 {집계['폴링미완']} / 전체 {len(items)}", flush=True)
+    return rc
+
+
+def _접수와폴링(mcp, args, items, done_tags, per_credit):
+    """inputs 접수(+폴링) 또는 --poll-only 이어서 확인. 종료코드를 돌려준다.
+
+    체크포인트는 같은 run-dir 의 detail_status.json 하나다 (D-16 · 정본은 불사자 서버,
+    이 파일은 재개용). taskId 가 있는 건은 절대 다시 접수하지 않는다 (L-03 이중 지불).
+    """
+    run = Path(args.run_dir)
+    run.mkdir(parents=True, exist_ok=True)
+    status_path = run / "detail_status.json"
+    status = load_json(status_path, {})
+
+    # 1) 접수 — --poll-only 면 건너뛴다 (generate 금지)
+    if not args.poll_only:
+        def 필요(it):
+            v = status.get(it["productId"]) or {}
+            st = v.get("status", "")
+            if st == "장수불일치":          # taskId 보유 — 재접수 = 이중 지불
+                return False
+            if args.retry_failed and (st == "접수실패" or (is_failed(st) and v.get("taskId"))):
+                return True
+            return not v.get("taskId") and not is_done(st)
+
+        todo = [it for it in items if 필요(it)]
+        print(f"접수 대상 {len(todo)}건 (상한 {args.max_credits}크레딧, "
+              f"장당 {per_credit})", flush=True)
+        태그맵, 실패코드 = ({}, set())
+        if todo:
+            태그맵, 실패코드 = _태그조회(mcp, [it["판매자상품코드"] for it in todo], done_tags)
+        누적 = [0]
+
+        def 시도(it, tag):
+            pid = it["productId"]
+            # D-12 — 접수 직전 실시간 판정 (견적 이후 생긴 기작업도 여기서 걸린다)
+            r = _판정(mcp, it, 태그맵, 실패코드, done_tags, args.pages, per_credit)
+            if r["판정"] != "접수":
+                status[pid] = {"status": SKIP_STATUS if r["판정"] == "기작업" else r["판정"],
+                               "사유": r["사유"], "pages": 0}
+                print(f"{tag} {pid[-8:]} {r['판정']} — {r['사유']}", flush=True)
+                return "skip"
+            # D-14 — 늘어나는 방향이면 generate 전에 멈춘다
+            if 누적[0] + r["크레딧"] > args.max_credits:
+                print(f"⛔ {tag} {pid[-8:]} 접수하면 누적 {누적[0] + r['크레딧']}크레딧 > "
+                      f"상한 {args.max_credits} — 여기서 멈춘다", flush=True)
+                return "budget"
+            try:
+                tid, exp = _입력접수(mcp, pid, r["imgs"], r["장수"], args.quality)
+            except Exception as e:
+                if is_duplicate_error(e):
+                    print(f"{tag} {pid[-8:]} 작업 중복 — 말미 재시도", flush=True)
+                    return "dup"
+                status[pid] = {"status": "접수실패", "error": str(e)[:200]}
+                print(f"{tag} {pid[-8:]} 접수 FAIL {str(e)[:100]}", flush=True)
+                return "fail"
+            # Pitfall 2 — taskId 를 **검증보다 먼저** 체크포인트에 남긴다
+            sc = r["장수"]
+            status[pid] = {"taskId": tid, "status": "접수", "pages": sc}
+            save_json(status_path, status)
+            누적[0] += r["크레딧"]
+            # DETAIL-04 — 예상장수가 int 가 아니거나(문자열·누락·bool) 다르면 전량 중단
+            if not (isinstance(exp, int) and not isinstance(exp, bool) and exp == sc):
+                서버 = exp if isinstance(exp, (int, float, str, bool)) or exp is None \
+                    else str(exp)[:40]
+                status[pid].update({"status": "장수불일치", "요청장수": sc, "서버장수": 서버,
+                                    "사유": f"요청 {sc}장 ≠ 서버 {서버!r}"})
+                save_json(status_path, status)
+                print(f"⛔ 장수 불일치: 요청 {sc}장인데 서버 접수는 {서버!r} (작업 {tid}). "
+                      f"전량 접수 중단 — 접수 파라미터 확인 필요.", flush=True)
+                return "mismatch"
+            print(f"{tag} {pid[-8:]} 접수 OK ({tid}, {sc}장)", flush=True)
+            return "ok"
+
+        def 중단(결과):
+            save_json(status_path, status)
+            return _마무리(args, items, status, per_credit,
+                           EXIT_BUDGET if 결과 == "budget" else EXIT_INPUT)
+
+        dup_queue = []
+        for i, it in enumerate(todo, 1):
+            결과 = 시도(it, f"[{i}/{len(todo)}]")
+            if 결과 in ("budget", "mismatch"):
+                return 중단(결과)
+            if 결과 == "dup":
+                dup_queue.append(it)
+            save_json(status_path, status)
+            time.sleep(args.sleep)
+
+        # 작업 중복 대기열 — 플래그 없는 경로와 같은 인자(--dup-wait/--dup-rounds)·같은 방식
+        for rnd in range(args.dup_rounds):
+            if not dup_queue:
+                break
+            print(f"중복 대기열 {len(dup_queue)}건 — {args.dup_wait}초 후 "
+                  f"재시도 ({rnd + 1}/{args.dup_rounds})", flush=True)
+            time.sleep(args.dup_wait)
+            remain = []
+            for it in dup_queue:
+                결과 = 시도(it, "[중복재시도]")
+                if 결과 in ("budget", "mismatch"):
+                    return 중단(결과)
+                if 결과 == "dup":
+                    remain.append(it)
+                save_json(status_path, status)
+                time.sleep(args.sleep)
+            dup_queue = remain
+        for it in dup_queue:
+            status[it["productId"]] = {"status": "접수실패",
+                                       "error": "작업 중복 지속 (기존 작업 미종료)"}
+        save_json(status_path, status)
+
+    # 2) 폴링 — 종료 조건 = 미종결 0건 (Pitfall 1). 시간 상한 도달은 exit 3 (D-17)
+    if not args.submit_only:
+        deadline = time.time() + args.max_poll_min * 60
+        while True:
+            남음 = _미종결(items, status)
+            if not 남음 or time.time() >= deadline:
+                break
+            print(f"폴링: 미완료 {len(남음)}건", flush=True)
+            for pid in 남음:
+                tid = status[pid]["taskId"]
+                try:
+                    st = mcp.call_tool("bulsaja_detail_page_status",
+                                       {"taskId": tid, "target": "detail"})
+                    s = _상태키(st)
+                    if s is None:
+                        # Pitfall 6 · D-18 — 서버가 확정한 실패만 실패. 오류 dict 는 상태 불변
+                        status[pid]["poll_error"] = json.dumps(
+                            sanitize(_표시규칙제거(st)), ensure_ascii=False)[:120]
+                    else:
+                        status[pid]["status"] = s
+                        n = len((st or {}).get("생성이미지") or [])
+                        if n:
+                            status[pid]["images"] = n
+                except Exception as e:
+                    status[pid]["poll_error"] = str(e)[:120]
+                time.sleep(0.4)
+            save_json(status_path, status)
+            남음 = _미종결(items, status)
+            print(f"  미종결 {len(남음)} / 전체 {len(items)}", flush=True)
+            if not 남음:
+                break
+            time.sleep(args.poll_interval)
+
+    rc = EXIT_POLL if _미종결(items, status) else EXIT_OK
+    return _마무리(args, items, status, per_credit, rc)
+
+
 def _입력모드(args):
     """--inputs 진입점. 종료코드를 돌려준다 (main 이 sys.exit 한다)."""
     done_tags = [str(t).strip() for t in (args.done_tag or []) if str(t).strip()]
@@ -455,9 +694,11 @@ def _입력모드(args):
     if args.estimate_only and not args.estimate_out:
         print("⛔ --estimate-only 는 --estimate-out 이 필요하다", flush=True)
         return EXIT_INPUT
-    if not args.estimate_only:
-        print("⛔ --inputs 접수/폴링 모드는 아직 없다", flush=True)
-        return EXIT_INPUT
+    # T-05-05 — 상한 없는 접수 경로를 만들지 않는다. 이어서 확인(--poll-only)은 접수가 없어 예외
+    if not args.estimate_only and not args.poll_only:
+        if args.max_credits is None or args.max_credits < 0:
+            print("⛔ --inputs 접수 모드는 --max-credits(0 이상)가 필요하다 (D-14)", flush=True)
+            return EXIT_INPUT
     per_credit = 5 if args.quality == "standard" else 10
 
     mcp = BulsajaMCP()
@@ -473,7 +714,9 @@ def _입력모드(args):
                       f"({args.expect_nick})이 아니다 — 아무것도 조회·접수하지 않는다",
                       flush=True)
                 return EXIT_NICK
-        return _견적(mcp, args, items, done_tags, per_credit, 계정, 잔액)
+        if args.estimate_only:
+            return _견적(mcp, args, items, done_tags, per_credit, 계정, 잔액)
+        return _접수와폴링(mcp, args, items, done_tags, per_credit)
     finally:
         mcp.close()
 
