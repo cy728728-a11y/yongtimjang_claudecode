@@ -609,3 +609,51 @@ def test_비전2차_모델명이_플래그_모양이면_거부된다():
             _배너(vision2_model=나쁜값)
         with pytest.raises(ValidationError):
             _배너(vision2_prompt=나쁜값)
+
+
+# ── 상세페이지 잡 (Phase 5 / 05-03) ─────────────────────────────────────────
+
+def _상세(**덮기):
+    기본 = dict(mode="estimate", run_dir=Path("/tmp/zz/web/detail_a"),
+              inputs=Path("/tmp/zz/web/targets_a.json"), done_tags=["zz가공완료"],
+              expect_nick="zz기대계정", estimate_out=Path("/tmp/zz/web/detail_a/estimate.json"),
+              summary_out=None, max_credits=None, max_poll_min=60, poll_interval=45)
+    기본.update(덮기)
+    return A.DetailArgv(**기본)
+
+
+def test_DetailArgv_셸경유_없음():
+    """리스트 argv · 전부 문자열 · 인터프리터는 CLI venv · 스크립트는 detail_batch.py."""
+    av = _상세().build()
+    assert isinstance(av, list) and all(isinstance(x, str) for x in av)
+    assert av[0] == str(A.PY_CLI)
+    assert av[1] == str(A.DETAIL_BATCH)
+    assert A.DETAIL_BATCH.name == "detail_batch.py"
+    assert "--estimate-only" in av
+    assert av[av.index("--estimate-out") + 1].endswith("estimate.json")
+    assert av[av.index("--done-tag") + 1] == "zz가공완료"
+
+
+def test_DetailArgv_모드별_플래그():
+    """submit 은 --max-credits · --summary-out, poll 은 --poll-only · --summary-out."""
+    접수 = _상세(mode="submit", estimate_out=None, max_credits=50,
+                summary_out=Path("/tmp/zz/s.json")).build()
+    assert 접수[접수.index("--max-credits") + 1] == "50"
+    assert "--estimate-only" not in 접수 and "--poll-only" not in 접수
+    확인 = _상세(mode="poll", estimate_out=None,
+                summary_out=Path("/tmp/zz/s.json")).build()
+    assert "--poll-only" in 확인 and "--max-credits" not in 확인
+
+
+def test_DetailArgv_닉_패턴():
+    """닉·태그가 `--force` 모양이면 거부 — 자식 argparse 가 옵션으로 읽는다(T-05-11)."""
+    with pytest.raises(ValidationError):
+        _상세(expect_nick="--force")
+    with pytest.raises(ValidationError):
+        _상세(done_tags=["--force"])
+
+
+def test_DetailArgv_태그가_비면_터진다():
+    """done-tag 0개는 CLI 가 exit 2 로 거부하지만, 조립 단계에서 먼저 막는다."""
+    with pytest.raises(ValueError):
+        _상세(done_tags=[]).build()

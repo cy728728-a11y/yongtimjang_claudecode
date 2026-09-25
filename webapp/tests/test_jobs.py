@@ -1283,3 +1283,149 @@ def test_배너잡_argv_컬럼에_키_값이_없다(잡판, 안띄운다, tmp_ru
     assert "--vision2-key-file" in av
     assert "GEMINI_API_KEY" not in 원문
     assert "AIza" not in 원문   # 구글 API 키 접두어
+
+
+# ── 상세페이지 잡 3종 (Phase 5 / 05-03) ─────────────────────────────────────
+#
+# 자식을 **한 번도 띄우지 않는다**(`안띄운다`). submit 은 진짜로 돌면 크레딧을 태운다.
+
+상세3종 = ("detail_estimate", "detail_submit", "detail_poll")
+
+
+def _상세입력() -> dict:
+    return {"items": [{"productId": "zzp1", "판매자상품코드": "zz01",
+                       "imageUrls": ["https://zzcdn.example/1.jpg"],
+                       "제품이미지총수": 1, "잘림": False}],
+            "제외": [], "선택": 1}
+
+
+def _끝냄(job_id: str) -> None:
+    """가짜 프로세스는 영원히 도는 중이다 — 다음 쓰기 잡을 위해 행을 done 으로 닫는다."""
+    import sqlite3
+    jobs._PROCS.pop(job_id, None)
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("UPDATE jobs SET status='done', exit_code=0 WHERE id=?", (job_id,))
+        cx.commit()
+    finally:
+        cx.close()
+
+
+def test_detail잡_kind_가_등록돼_있다():
+    """`JobKind` 만 고치고 `KINDS` 를 빠뜨리면 런타임이 거부한다 — 둘 다 본다."""
+    for k in 상세3종:
+        assert k in jobs.KINDS
+        assert k in jobs.JobKind.__args__
+
+
+def test_detail잡_가드집합():
+    """견적은 크레딧 0 이라 쓰기 가드 밖, 접수·이어서 확인은 안(같은 detail_status.json 을 쓴다)."""
+    assert "detail_submit" in jobs.WRITE_KINDS
+    assert "detail_poll" in jobs.WRITE_KINDS
+    assert "detail_estimate" not in jobs.WRITE_KINDS
+    for k in 상세3종:
+        assert k in jobs.BULSAJA_KINDS
+    assert "detail_estimate" in jobs.SINGLETON_KINDS
+
+
+def test_detail잡_수면방지(monkeypatch):
+    """접수·폴링은 수십 분짜리 — caffeinate. 견적은 수 초라 안 붙인다(D-15)."""
+    monkeypatch.setattr(jobs.os.path, "exists", lambda p: True)
+    assert jobs._수면방지_프리픽스("detail_submit") == [jobs.CAFFEINATE, "-i"]
+    assert jobs._수면방지_프리픽스("detail_poll") == [jobs.CAFFEINATE, "-i"]
+    assert jobs._수면방지_프리픽스("detail_estimate") == []
+
+
+def test_detail잡_inputs_없으면_ValueError(tmp_path):
+    """빈 값은 전량이 아니다 — inputs 없는 상세 잡은 조립조차 안 된다."""
+    for k in 상세3종:
+        with pytest.raises(ValueError) as 터진것:
+            jobs._build_argv(k, "zzjob", "2026-08-30", [], None,
+                             tmp_path / "zz.json", False,
+                             detail_dir=tmp_path, max_credits=10)
+        assert "inputs" in str(터진것.value)
+
+
+def test_detail잡_submit_max_credits_없으면_ValueError(tmp_path, 기대닉):
+    with pytest.raises(ValueError):
+        jobs._build_argv("detail_submit", "zzjob", "2026-08-30", [],
+                         tmp_path / "t.json", tmp_path / "s.json", False,
+                         detail_dir=tmp_path, max_credits=None)
+
+
+def test_detail견적잡은_inputs_dict_가_없으면_안_만들어진다(잡판, 계정확인, 기대닉, 안띄운다,
+                                                    tmp_run_dir):
+    계정확인(기대닉)
+    with pytest.raises(ValueError):
+        jobs.create_job("detail_estimate", run_dir=tmp_run_dir.name)
+
+
+def test_detail잡_argv_가_설정에서_온다(잡판, 계정확인, 안띄운다, tmp_run_dir, monkeypatch):
+    """--expect-nick · --done-tag · --max-poll-min · --poll-interval 이 workspace.toml 에서 온다."""
+    _toml덮기(monkeypatch, expected_bulsaja_nick="zz설정계정",
+              done_tags=["zz태그1", "zz태그2"], detail_max_poll_min=17,
+              detail_poll_interval=9)
+    settings.load(force=True)
+    계정확인("zz설정계정")
+    job_id = jobs.create_job("detail_estimate", run_dir=tmp_run_dir.name,
+                             detail_inputs=_상세입력())
+    av = json.loads(jobs._row(job_id)["argv"])
+    assert av[av.index("--expect-nick") + 1] == "zz설정계정"
+    태그 = [av[i + 1] for i, x in enumerate(av) if x == "--done-tag"]
+    assert 태그 == ["zz태그1", "zz태그2"]
+    assert av[av.index("--max-poll-min") + 1] == "17"
+    assert av[av.index("--poll-interval") + 1] == "9"
+    assert "--estimate-only" in av
+    assert av[0] != jobs.CAFFEINATE
+
+
+def test_detail잡_기본값():
+    assert settings.DEFAULTS["detail_max_poll_min"] == 60
+    assert settings.DEFAULTS["detail_poll_interval"] == 45
+
+
+def test_detail잡_폴더_규칙(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+    """estimate 가 web/detail_<id>/ 를 열고, submit·poll 은 parent 체인으로 같은 폴더를 받는다."""
+    계정확인(기대닉)
+    견적 = jobs.create_job("detail_estimate", run_dir=tmp_run_dir.name,
+                           detail_inputs=_상세입력())
+    폴더 = tmp_run_dir / "web" / f"detail_{견적}"
+    av = json.loads(jobs._row(견적)["argv"])
+    assert Path(av[av.index("--run-dir") + 1]) == 폴더
+    assert 폴더.is_dir()
+    대상 = Path(av[av.index("--inputs") + 1])
+    assert 대상 == tmp_run_dir / "web" / f"targets_{견적}.json"
+    assert json.loads(대상.read_text(encoding="utf-8"))["items"][0]["productId"] == "zzp1"
+    assert jobs.result_path_of(견적) == 폴더 / "estimate.json"
+    assert jobs._row(견적)["target_count"] == 1          # {"items":[…]} 모양도 센다
+    _끝냄(견적)
+
+    접수 = jobs.create_job("detail_submit", run_dir=tmp_run_dir.name,
+                           parent_job_id=견적, targets_path_override=대상,
+                           max_credits=5)
+    av2 = json.loads(jobs._row(접수)["argv"])
+    assert Path(av2[av2.index("--run-dir") + 1]) == 폴더
+    assert av2[av2.index("--max-credits") + 1] == "5"
+    assert jobs.result_path_of(접수) == 폴더 / f"summary_{접수}.json"
+    _끝냄(접수)
+
+    확인 = jobs.create_job("detail_poll", run_dir=tmp_run_dir.name,
+                           parent_job_id=접수, targets_path_override=대상)
+    av3 = json.loads(jobs._row(확인)["argv"])
+    assert Path(av3[av3.index("--run-dir") + 1]) == 폴더
+    assert "--poll-only" in av3
+
+
+def test_detail잡_부모체인이_틀리면_거부(잡판, 계정확인, 기대닉, 안띄운다, tmp_run_dir):
+    """submit 의 부모가 견적이 아니면(없거나 다른 kind) ValueError — 폴더를 지어내지 않는다."""
+    계정확인(기대닉)
+    견적 = jobs.create_job("detail_estimate", run_dir=tmp_run_dir.name,
+                           detail_inputs=_상세입력())
+    _끝냄(견적)
+    대상 = jobs.targets_path_of(견적)
+    with pytest.raises(ValueError):
+        jobs.create_job("detail_submit", run_dir=tmp_run_dir.name,
+                        targets_path_override=대상, max_credits=5)
+    with pytest.raises(ValueError):
+        jobs.create_job("detail_poll", run_dir=tmp_run_dir.name,
+                        parent_job_id=견적, targets_path_override=대상)
