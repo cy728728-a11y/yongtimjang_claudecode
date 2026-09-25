@@ -238,7 +238,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 05-04-PLAN.md — 접수·결과 슬라이스: 접수/이어서 확인 라우트 · exit 3 해석 · 결과 표 · 크레딧 0 실측(실 MCP 견적 스모크 + uat-verifier)
+- [x] 05-04-PLAN.md — 접수·결과 슬라이스: 접수/이어서 확인 라우트 · exit 3 해석 · 결과 표 · 크레딧 0 실측(실 MCP 견적 스모크 + uat-verifier)
 
 **Wave 4** *(blocked on Wave 3 — 사람)*
 
@@ -291,7 +291,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
 | 4. 홍보배너 식별 | 12/12 | Closed — 게이트 불통과 · 용팀장 결정으로 종료 (D-23) | 2026-09-25 |
-| 5. 상세페이지 작업 버튼 ★ Core Value | 3/6 | In Progress|  |
+| 5. 상세페이지 작업 버튼 ★ Core Value | 4/6 | In Progress|  |
 | 6. 마켓 수정업로드 | 0/TBD | Not started | - |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |
 
