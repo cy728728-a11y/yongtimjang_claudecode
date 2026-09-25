@@ -40,6 +40,7 @@
 여기서 공개 함수도 한글인 이유는 `state.py`·`join.py` 와 같다 — 계약의 정본이
 `04-02-PLAN.md <interfaces>` 이고 `04-VALIDATION.md` 의 테스트 이름이 그 이름을 지목한다.
 """
+from datetime import datetime
 from html.parser import HTMLParser
 
 # ── 장 판정 4종. **이모지는 화면에서 붙인다** (`state.py:49-57` 관례) ───────────
@@ -249,6 +250,95 @@ def 제품이미지목록(상품: dict, 게이트통과: bool = False, *,
         urls.append(칸["url"])
     return urls
 
+
+
+def 상세입력목록(상품: dict, *, 라벨: dict, 확인시각: str | None, 생성시각: str,
+            잔여하한: int, 상한: int = 10) -> dict:
+    """Phase 5 상세 생성 입력 관문 — **D-02 규칙** (DETAIL-01 / DETAIL-02).
+
+    `제품이미지목록` 의 전역 게이트(D-23 이후 false 고정)를 대신한다. 옛 함수는 그대로 둔다.
+    관문은 상품마다 연다:
+      · 사람이 **현재 산출물 생성 뒤에** 그 상품을 확인했고(확인시각 ≥ 생성시각)
+      · 장마다 **라벨이 있으면 라벨, 없으면 기계 판정**을 유효판정으로 삼는다(D-01)
+
+    연구 실측: 최신 산출물(2026-09-25T00:14) 이후 확인은 0건이다 — 그래서 이 관문은 지금
+    0건을 내고, 용팀장이 검수 화면에서 '다시 확인'(D-03)을 눌러야 열린다. 🔴 후보 6건 중
+    5건이 제품 이미지 10장 초과라 D-09 의 앞 10장 자르기가 실제로 발동한다.
+
+    **기본값으로 열리는 길이 없다.** `상한` 을 뺀 키워드 인자는 기본값이 없어 누락은
+    TypeError 다. 우회로는 전부 ValueError:
+      · 확인 없음 · 낡은 확인 · 스킵 상품(D-04 — 라벨로 되살리지 않는다)
+      · 유효 미판정 장이 남음 · 중복 제거 뒤 하한 미만
+
+    반환: `{"urls": 앞 상한장, "총수": 중복 제거 뒤 전체, "잘림": 총수 - len(urls)}`.
+    """
+    if not isinstance(상품, dict):
+        raise ValueError(f"상품이 dict 가 아니다: {type(상품).__name__}")
+
+    # ① 확인시각 — 문자열 비교 금지. 오프셋이 섞이면 사전순이 실제 시각과 어긋난다.
+    if 확인시각 is None:
+        raise ValueError("이 상품은 확인 기록이 없다 — 검수 화면에서 '다시 확인'을 눌러라 (D-02/D-03)")
+    try:
+        확인 = datetime.fromisoformat(str(확인시각))
+        생성 = datetime.fromisoformat(str(생성시각))
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"확인시각·생성시각이 ISO 시각이 아니다: {확인시각!r} / {생성시각!r}") from e
+    if 확인 < 생성:
+        raise ValueError(f"재스캔 뒤 다시 확인 안 함(확인 {확인시각} < 산출물 {생성시각}) — "
+                         "검수 화면에서 '다시 확인'을 눌러라 (D-02/D-03)")
+
+    # ② 스킵 — 읽기만 한다(S-1). 사람 라벨로 되살리지 않는다(D-04).
+    사유 = 스킵사유읽기(상품)
+    if 사유:
+        raise ValueError(f"스킵된 상품이다: {사유} — 라벨로 되살리지 않는다 (D-04)")
+
+    # ③ 유효판정 = 라벨 우선. 미판정이 남으면 흡수하지 않는다(BANNER-04).
+    사람 = _라벨정규화(라벨)
+    장들 = 상품.get("장")
+    if not isinstance(장들, list):
+        raise ValueError(f"산출물 상품의 '장' 이 리스트가 아니다: {type(장들).__name__}")
+    유효들 = []
+    for i, 칸 in enumerate(장들):
+        if not isinstance(칸, dict):
+            raise ValueError(f"'장' {i}번째 칸이 dict 가 아니다: {칸!r}")
+        try:
+            순번 = int(칸.get("순번"))
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"'장' {i}번째 칸의 순번이 정수가 아니다: {칸.get('순번')!r}") from e
+        유효 = 사람.get(순번, 칸.get("판정"))
+        if 유효 not in _장판정허용값:
+            raise ValueError(f"'장' 순번 {순번} 의 판정이 허용값 밖이다: {유효!r}")
+        유효들.append((순번, 유효, 칸.get("url")))
+    미판정들 = [순번 for 순번, 유효, _ in 유효들 if 유효 == 미판정]
+    if 미판정들:
+        raise ValueError(f"유효 미판정 장이 {len(미판정들)}개 있다{미판정들[:5]} — "
+                         "라벨로 판정해야 풀린다. '배너 아님'으로 흡수하지 마라 (BANNER-04)")
+
+    # ④ 제품 장만, 원래 순서. 기계의 `제품이미지` 필드는 쓰지 않는다(D-23 ①) —
+    #    그건 라벨을 모르는 기계 투영이다.
+    # ⑤ 순서 유지 URL 중복 제거.
+    urls: list[str] = []
+    본것: set = set()
+    for 순번, 유효, url in 유효들:
+        if 유효 != 제품:
+            continue
+        if not isinstance(url, str) or not url.strip():
+            raise ValueError(f"'장' 순번 {순번} 의 url 이 비었다: {url!r}")
+        if url in 본것:
+            continue
+        본것.add(url)
+        urls.append(url)
+
+    # ⑥ 하한 — D-07. 정본은 settings, 호출부가 주입한다.
+    하한 = int(잔여하한)
+    if len(urls) < 하한:
+        raise ValueError(f"제품 이미지가 {len(urls)}장이다(중복 제거 뒤) — D-07 하한({하한}장) 미만")
+
+    # ⑦ 앞 상한장 자르기 — D-09. 잘린 수를 숨기지 않는다.
+    n = int(상한)
+    if n < 1:
+        raise ValueError(f"상한이 1 미만이다: {n}")
+    return {"urls": urls[:n], "총수": len(urls), "잘림": max(0, len(urls) - n)}
 
 def _라벨정규화(라벨) -> dict:
     """`{이미지순번: 판정}` 의 순번 키를 정수로 맞춘다.

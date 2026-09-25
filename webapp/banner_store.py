@@ -139,6 +139,31 @@ def 확인읽기(run_dir: str) -> set:
     return {str(r["타오바오상품번호"]) for r in 행들}
 
 
+
+def 확인시각읽기(run_dir: str) -> dict:
+    """`{상품키: 확인시각 ISO}`. Phase 5 관문(`banner.상세입력목록`) 과 검수 화면이 쓴다 (D-02/D-03).
+
+    `확인읽기` 와 같은 규율이다 — 빈 run_dir 은 예외, DB 파일이 없거나 못 열면 `{}` 이고
+    파일을 만들지 않는다. 시각을 함께 내는 이유: 재스캔으로 산출물이 새로 나오면
+    그 전 확인은 **낡은 확인**이고, 그걸 가르려면 존재 여부가 아니라 시각이 필요하다.
+    """
+    키 = str(run_dir or "").strip()
+    if not 키:
+        raise ValueError("run_dir 이 비었다 — 회차 없이 확인 표시를 묶으면 회차가 섞인다")
+    if not db_path().is_file():
+        return {}
+    try:
+        cx = _ro_conn()
+    except sqlite3.Error:
+        return {}
+    try:
+        행들 = cx.execute(
+            "SELECT 타오바오상품번호, 확인시각 FROM banner_confirm WHERE run_dir = ?",
+            (키,)).fetchall()
+    finally:
+        cx.close()
+    return {str(r["타오바오상품번호"]): str(r["확인시각"]) for r in 행들}
+
 # ── 쓰기 ────────────────────────────────────────────────────────────────────
 
 def 라벨기록(run_dir: str, 타오바오상품번호: str, 판매자상품코드: str,
