@@ -605,3 +605,224 @@ def test_배너스캔이_도는_동안_쓰기버튼이_안_막힌다(화면, 안
 
     쓰기 = 화면.post("/jobs/prep", json={})
     assert 쓰기.status_code == 200, f"배너 스캔이 쓰기 버튼을 막았다: {쓰기.text}"
+
+
+# ── 상세 견적 라우트 (Phase 5 / 05-03) ──────────────────────────────────────
+#
+# 실제 CLI 는 한 번도 안 뜬다(`안띄운다`). 보는 것: 대상을 **서버가** 다시 계산하는가 ·
+# 관문 통과분만 inputs 에 들어가는가 · 예외 번역 · 결과 조각.
+
+견적경로 = "/jobs/detail/estimate"
+_생성시각 = "2026-09-25T00:14:25+09:00"
+
+
+def _상세판정(n: int = 3) -> dict:
+    return {"accounts": {"zz01": {"rules": {"③원인분석": [
+        {"adId": f"nad-zz{i}", "mallProductId": f"1999999999{i}",
+         "adGroup": "판매상품_15-2_zzfake"} for i in range(1, n + 1)]}}}}
+
+
+def _상세조인(n: int = 3) -> dict:
+    return {"마켓그룹": [{"groupId": "zzg1", "그룹명": "15-2_zz"}], "행": [
+        {"acct": "zz01", "mallProductId": f"1999999999{i}", "productId": f"zzp{i}",
+         "인덱스_smartstore": "s", "관측_smartstore": "s", "미조회": False,
+         "uploadDetailContents": None, "그룹태그": [], "판매자상품코드": f"zz0{i}",
+         "불사자코드": f"zzb{i}", "타오바오상품번호": f"zzt{i}", "사본": [],
+         "팬아웃미조회": False} for i in range(1, n + 1)]}
+
+
+def _배너상품(i: int, 장수: int = 3, 스킵: str | None = None) -> dict:
+    return {"판매자상품코드": f"zz0{i}", "불사자코드": f"zzb{i}", "타오바오상품번호": f"zzt{i}",
+            "스킵사유": 스킵, "장": [{"순번": k, "판정": "제품",
+                                   "url": f"https://zzcdn.example/{i}_{k}.jpg"}
+                                  for k in range(장수)]}
+
+
+@pytest.fixture
+def 상세판(tmp_run_dir, monkeypatch, 프로필, 기대닉):
+    """판정·조인·배너 산출물 + 확인시각을 깐다. 기본: zz01 통과 · zz02 낡은 확인 · zz03 스킵."""
+    from webapp import banner_store
+
+    _회차판정_갈아끼우기(tmp_run_dir, _상세판정())
+    웹 = tmp_run_dir / "web"
+    웹.mkdir(parents=True, exist_ok=True)
+    조인 = 웹 / "join_zzprev.json"
+    조인.write_text(json.dumps(_상세조인(), ensure_ascii=False), encoding="utf-8")
+    배너 = 웹 / "banner_zzprev.json"
+    배너.write_text(json.dumps({"생성시각": _생성시각, "상품": [
+        _배너상품(1, 장수=12), _배너상품(2), _배너상품(3, 스킵="잔여하한")]},
+        ensure_ascii=False), encoding="utf-8")
+    산출물 = {"bulsaja_scan": str(조인), "banner_scan": str(배너)}
+    monkeypatch.setattr(jobs, "latest_done", lambda kind, run_dir=None: (
+        {"result_path": 산출물[kind]} if kind in 산출물 else None))
+    monkeypatch.setattr(banner_store, "라벨읽기", lambda run_dir: {})
+    monkeypatch.setattr(banner_store, "확인시각읽기", lambda run_dir: {
+        "zzt1": "2026-09-25T09:00:00+09:00",       # 산출물 뒤 — 통과
+        "zzt2": "2026-09-24T09:00:00+09:00",       # 산출물 앞 — 낡은 확인
+        "zzt3": "2026-09-25T09:00:00+09:00"})      # 확인했지만 스킵 상품
+    프로필()
+    return {"run_dir": tmp_run_dir.name, "산출물": 산출물, "조인": 조인, "배너": 배너,
+            "키": [f"zz01|1999999999{i}" for i in (1, 2, 3)]}
+
+
+def test_detail견적_토큰없이_안된다(화면, 엿듣기):
+    응답 = 화면.post(견적경로, json={"run_dir": "x", "keys": ["zz01|1"]},
+                    headers={"X-CT-Token": "wrong-token"})
+    assert 응답.status_code == 403
+    assert not 엿듣기
+
+
+def test_detail견적_타사이트_origin_도_403(화면, 엿듣기):
+    응답 = 화면.post(견적경로, json={"run_dir": "x", "keys": ["zz01|1"]},
+                    headers={"Origin": "https://evil.com"})
+    assert 응답.status_code == 403
+    assert not 엿듣기
+
+
+def test_detail견적_GET이_아니다(화면):
+    assert 화면.get(견적경로).status_code == 405
+
+
+def test_detail견적_계정불일치면_409(화면, 안띄운다, 상세판):
+    """진짜 `create_job` 이 돌아야 계정 가드에 닿는다 — `엿듣기` 를 쓰지 않는다."""
+    from webapp import bulsaja_index
+    bulsaja_index.profile_path().write_text(json.dumps({
+        "닉네임": "zz다른계정",
+        "확인시각": datetime.now().astimezone().isoformat(timespec="seconds")},
+        ensure_ascii=False), encoding="utf-8")
+    응답 = 화면.post(견적경로, json={"run_dir": 상세판["run_dir"], "keys": 상세판["키"]})
+    assert 응답.status_code == 409, 응답.text
+    assert "zz다른계정" not in 응답.json()["detail"]
+
+
+def test_detail견적_관문통과분만_inputs에(화면, 안띄운다, 상세판):
+    """3개 중 낡은 확인 1 · 스킵 1 · 통과 1 → items 1건 · 제외 2건(사유) · 잘림 반영."""
+    응답 = 화면.post(견적경로, json={"run_dir": 상세판["run_dir"], "keys": 상세판["키"]})
+    assert 응답.status_code == 200, 응답.text
+    job_id = 응답.json()["job_id"]
+    상태 = jobs.job_status(job_id)
+    assert 상태["kind"] == "detail_estimate"
+    문서 = json.loads(jobs.targets_path_of(job_id).read_text(encoding="utf-8"))
+    assert 문서["선택"] == 3
+    assert [x["판매자상품코드"] for x in 문서["items"]] == ["zz01"]
+    항목 = 문서["items"][0]
+    assert 항목["productId"] == "zzp1"
+    assert len(항목["imageUrls"]) == 10 and 항목["제품이미지총수"] == 12 and 항목["잘림"] == 2
+    제외 = {x["판매자상품코드"]: x["사유"] for x in 문서["제외"]}
+    assert set(제외) == {"zz02", "zz03"}
+    assert "다시 확인" in 제외["zz02"]
+    assert "스킵" in 제외["zz03"]
+
+
+def test_detail견적_전부제외면_400(화면, 엿듣기, 상세판):
+    """통과 0건이면 잡을 만들지 않고 400 + 상품별 사유."""
+    응답 = 화면.post(견적경로, json={"run_dir": 상세판["run_dir"], "keys": 상세판["키"][1:]})
+    assert 응답.status_code == 400, 응답.text
+    사유 = 응답.json()["detail"]
+    assert "zz02" in 사유 and "zz03" in 사유
+    assert not 엿듣기
+
+
+def test_detail견적_배너산출물없으면_409(화면, 엿듣기, 상세판, monkeypatch):
+    monkeypatch.setattr(jobs, "latest_done", lambda kind, run_dir=None: (
+        {"result_path": 상세판["산출물"]["bulsaja_scan"]} if kind == "bulsaja_scan" else None))
+    응답 = 화면.post(견적경로, json={"run_dir": 상세판["run_dir"], "keys": 상세판["키"]})
+    assert 응답.status_code == 409
+    assert "배너" in 응답.json()["detail"]
+    assert not 엿듣기
+
+
+def test_detail견적_조인산출물없으면_409(화면, 엿듣기, 상세판, monkeypatch):
+    monkeypatch.setattr(jobs, "latest_done", lambda kind, run_dir=None: (
+        {"result_path": 상세판["산출물"]["banner_scan"]} if kind == "banner_scan" else None))
+    응답 = 화면.post(견적경로, json={"run_dir": 상세판["run_dir"], "keys": 상세판["키"]})
+    assert 응답.status_code == 409
+    assert "조인" in 응답.json()["detail"]
+    assert not 엿듣기
+
+
+def test_detail견적_모르는키는_400(화면, 엿듣기, 상세판):
+    """보드에 없는 키 → 400. 클라이언트가 대상을 지어내지 못한다(T-05-10)."""
+    응답 = 화면.post(견적경로, json={"run_dir": 상세판["run_dir"],
+                                   "keys": [상세판["키"][0], "zz01|18888888888"]})
+    assert 응답.status_code == 400
+    assert "18888888888" in 응답.json()["detail"]
+    assert not 엿듣기
+
+
+def test_detail견적_키모양과_개수상한(화면, 엿듣기):
+    assert 화면.post(견적경로, json={"run_dir": "x", "keys": []}).status_code in (400, 422)
+    assert 화면.post(견적경로, json={"run_dir": "x",
+                                    "keys": ["--force|1"]}).status_code in (400, 422)
+    assert 화면.post(견적경로, json={"run_dir": "x", "keys": [
+        f"zz01|{i}" for i in range(201)]}).status_code in (400, 422)
+    assert not 엿듣기
+
+
+def test_detail견적_URL은_클라이언트가_못준다():
+    from webapp.routes.jobs import DetailEstimateReq
+    assert set(DetailEstimateReq.model_fields) == {"run_dir", "keys"}
+
+
+def _견적잡_끝남(tmp_run_dir, 견적: dict | None, 상태="done") -> str:
+    """detail_estimate 잡 행 하나를 끝난 상태로 박는다(자식 없음)."""
+    import sqlite3
+    import uuid
+    job_id = str(uuid.uuid4())
+    웹 = tmp_run_dir / "web"
+    폴더 = 웹 / f"detail_{job_id}"
+    폴더.mkdir(parents=True, exist_ok=True)
+    대상 = 웹 / f"targets_{job_id}.json"
+    대상.write_text(json.dumps({"items": [], "선택": 5, "제외": [
+        {"판매자상품코드": "zz09", "사유": "재스캔 뒤 다시 확인 안 함"}]}, ensure_ascii=False),
+        encoding="utf-8")
+    결과 = 폴더 / "estimate.json"
+    if 견적 is not None:
+        결과.write_text(json.dumps(견적, ensure_ascii=False), encoding="utf-8")
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("INSERT INTO jobs (id, kind, run_dir, accounts, argv, status, log_path, "
+                   "targets_path, result_path, exit_code, started_at) "
+                   "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                   (job_id, "detail_estimate", tmp_run_dir.name, "[]", "[]", 상태,
+                    str(tmp_run_dir / "x.log"), str(대상), str(결과),
+                    0 if 상태 == "done" else None, "2026-09-25T10:00:00+09:00"))
+        cx.commit()
+    finally:
+        cx.close()
+    return job_id
+
+
+_견적문서 = {"생성시각": "2026-09-25T10:00:01+09:00", "계정": "zz기대닉", "잔액": 1234,
+            "per_credit": 5,
+            "항목": [{"productId": "zzp1", "판매자상품코드": "zz01", "판정": "접수", "사유": None,
+                     "장수": 10, "제품이미지총수": 12, "잘림": 2, "크레딧": 50},
+                    {"productId": "zzp4", "판매자상품코드": "zz04", "판정": "기작업",
+                     "사유": "zz가공완료 태그", "장수": 0, "제품이미지총수": 3, "잘림": 0,
+                     "크레딧": 0}],
+            "집계": {"선택": 2, "스킵": 1, "접수": 1, "총장수": 10, "예상크레딧": 50,
+                    "잘린상품": 1}}
+
+
+def test_detail견적_결과조각(화면, tmp_run_dir):
+    job_id = _견적잡_끝남(tmp_run_dir, _견적문서)
+    응답 = 화면.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"})
+    assert 응답.status_code == 200
+    본문 = 응답.text
+    for 말 in ("선택", "관문 제외", "기작업 스킵", "접수", "총 장수", "예상 크레딧",
+               "잘린 상품", "zz기대닉", "zz01", "zz04", "zz09", "1,234"):
+        assert 말 in 본문, 말
+    assert "50" in 본문
+    # 선택 5 = 웹앱 선택(targets 파일) · 관문 제외 1
+    assert "5" in 본문
+    # JSON 모양도 같은 값
+    j = 화면.get(f"/jobs/{job_id}/result?format=json").json()
+    assert j["집계"]["예상크레딧"] == 50 and j["선택"] == 5 and j["관문제외"] == 1
+
+
+def test_detail견적_도는중이면_표를_안그린다(화면, tmp_run_dir):
+    job_id = _견적잡_끝남(tmp_run_dir, None, 상태="starting")
+    응답 = 화면.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"})
+    assert 응답.status_code == 200
+    assert "예상 크레딧" not in 응답.text
+    assert "도는 중" in 응답.text or "만드는 중" in 응답.text
