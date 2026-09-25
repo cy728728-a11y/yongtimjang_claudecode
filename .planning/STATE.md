@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: "Phase 4 종료 — 게이트 불통과(오탐율_누락률 13.70% > 10%, 비전 v3 가 상품 정보 장을 배너로 찍음) · 용팀장 D-23 으로 종료. 다음 Phase 5 discuss"
-last_updated: "2026-09-25T04:33:11.830Z"
-last_activity: 2026-09-25 -- 04-12 완료 · Phase 4 종료 (D-23 · 게이트 불통과: 미탐 0 · 오탐 116 · 누락률 13.70% > 10%)
+status: Ready to discuss
+stopped_at: Phase 5 context gathered (--auto)
+last_updated: "2026-09-25T04:38:44.138Z"
+last_activity: "2026-09-25 -- 04-12 완료 · Phase 4 종료 (D-23 · 게이트 불통과: 미탐 0 · 오탐 116 · 누락률 13.70% > 10%)"
 progress:
   total_phases: 7
   completed_phases: 3
@@ -172,6 +172,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-25T04:33:11.825Z
-Stopped at: Phase 4 종료 (D-23 · 게이트 불통과: 누락률 13.70%) — 다음 Phase 5 discuss
-Resume file: None
+Last session: 2026-09-25T04:38:44.133Z
+Stopped at: Phase 5 context gathered (--auto)
+Resume file: .planning/phases/05-core-value/05-CONTEXT.md
