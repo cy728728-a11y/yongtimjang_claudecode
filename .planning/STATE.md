@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-11-PLAN.md
-last_updated: "2026-09-24T15:25:27.875Z"
-last_activity: 2026-09-25 -- 04-11 완료 (2차 전량 재측정 · 호출 894 실패 0 · 재검수 목록 128장 · 게이트 판단은 04-12)
+stopped_at: "Phase 4 종료 — 게이트 불통과(오탐율_누락률 13.70% > 10%, 비전 v3 가 상품 정보 장을 배너로 찍음) · 용팀장 D-23 으로 종료. 다음 Phase 5 discuss"
+last_updated: "2026-09-25T04:33:11.830Z"
+last_activity: 2026-09-25 -- 04-12 완료 · Phase 4 종료 (D-23 · 게이트 불통과: 미탐 0 · 오탐 116 · 누락률 13.70% > 10%)
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 28
-  completed_plans: 27
-  percent: 29
+  completed_plans: 28
+  percent: 43
 ---
 
 # Project State
@@ -21,19 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-19)
 
 **Core value:** 유입이나 판매가 있는데 상세페이지가 중국어 원본·단순번역인 상품을, 중복 작업 없이 한 화면에서 골라 고치고 반영하는 것
-**Current focus:** Phase 04 — banner-detection
+**Current focus:** Phase 05 — 상세페이지 작업 버튼 ★ Core Value (discuss 필요)
 
 ## Current Position
 
-Phase: 04 (banner-detection) — EXECUTING
-Plan: 11 of 12 완료 (다음 04-12 — 용팀장 재검수 128장 → 게이트 재측정)
-Status: Ready to execute
-Last activity: 2026-09-25 -- 04-11 완료 (2차 전량 재측정 · 호출 894 실패 0 · 재검수 목록 128장 · 게이트 판단은 04-12)
+Phase: 05 (상세페이지 작업 버튼) — NOT STARTED (discuss 필요)
+Plan: —
+Status: Ready to discuss
+Last activity: 2026-09-25 -- 04-12 완료 · Phase 4 종료 (D-23 · 게이트 불통과: 미탐 0 · 오탐 116 · 누락률 13.70% > 10%)
+
+Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
 Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
 
-Progress: [██████████] 96%
+Progress: [████░░░░░░] 43% (페이즈 3/7 — Phase 4 는 게이트 불통과 종료)
 
 ## Performance Metrics
 
@@ -66,6 +68,7 @@ Progress: [██████████] 96%
 | Phase 01 P09 | 30m | 3 tasks | 12 files |
 | Phase 03 P07 | 258min | 4 tasks | 8 files |  *(그중 128min 이 인덱스 완주 대기)*
 | Phase 04 P09 | 9min | 3 tasks | 8 files |
+| Phase 04 P12 | 40min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -123,8 +126,12 @@ Recent decisions affecting current work:
 - [Phase 03]: 사람이 하지 않은 말을 검증 문서에 적지 않는다 — Task 3 은 **포괄 승인**으로만 기록하고 항목별 진술 미수령을 미해결로 남겼다 (T-3-40)
 - [Phase 04]: 04-10: 배너 잡 조립·검수 화면 대조 모두 settings.load(force=True) — toml 변경이 재시작 없이 반영
 - [Phase 04]: 04-11: 2차 유료 상한 894 승인(2026-09-24 용팀장) → 재측정 exit 0 · 호출 894 · 실패 0 · 유료 단가 환산 $2.05. 새 게이트 계산값 true 는 **자동 동의 128장 위 숫자** — 통과 아님, 04-12 사람 재검수가 먼저 (GATE §16-7)
+- [04-12]: D-23 Phase 4 를 게이트 불통과 상태로 종료 (2026-09-25 용팀장 "배너 잡는건 이번까지 하고, 다음단계로 넘어가자") — 최종 미탐 0/50 · 오탐 116 · 누락률 13.70% · 게이트통과 false. 기준 불변
+- [04-12]: 회차 2026-09-20 정본 = 사람 라벨 우선 판정. 새 회차 배너 판정(사람 확인 11분 vs 비전 끄고 어휘군 단독)은 Phase 5 discuss 에서. `banner_vision2_max_calls` 0 복귀
 
 ### Pending Todos
+
+- (D-23 이월 · 04-CONTEXT Deferred) 검수 화면 `확인함` 재클릭 불가 결함 · `게이트: 열렸다` 문구(04-11 UAT P2) · out-of-sample 재측정(Q2) · 비전 지시문 v4(상품 정보 기준)
 
 - 🔴 `429-group-stage-silent-completion.md` — 그룹 목록 조회 단계의 HTTP 429 가 "완주"로 둔갑한다.
   2026-09-21 용팀장 결정으로 Phase 3 범위 밖 이월("그냥 두고 기록만").
@@ -140,14 +147,14 @@ Recent decisions affecting current work:
   만 보면 기작업 29건을 다시 태운다. 확정 실험(외부 반영 1건 실측)은 예정대로 Phase 5
 
 - **[Phase 6 게이트]** 수정업로드가 상하단 안내이미지를 어느 시점 기준으로 올리는지 모순 미해결 — 1건 육안 확인으로 깬다 (MARKET-02)
-- **[Phase 4 미검증]** 홍보배너 식별은 기성 해법이 없는 가설. 100건 라벨링 미탐 0% 를 통과해야 실작업 투입
+- **[Phase 4 → 5]** 홍보배너 게이트는 **불통과로 종료**(D-23). 새 회차는 기계 판정만으로 상품 이미지 약 14% 가 빠진다 — Phase 5 discuss 에서 사람 확인 vs 어휘군 단독을 정해야 실작업 투입
 - **[환경]** 이 맥북에 `bulsaja-yongssaem` MCP 서버 항목이 없다 — 용쌤 계정 전환 경로가 끊겨 있음 (ENG-08 착수 시 확인)
 - OQ-7: 회차마다 든 계정 수가 다른데 화면이 말하지 않는다. 실측 2026-08-29=2계정 · 2026-08-30=4계정 · 2026-09-20=1계정(판정 전). 신선도 배너(D-16)는 경과일만 보여준다 — 01-07/01-08 이 신선도만 보고 회차를 고르면 빠진 계정의 소재가 조용히 대상에서 사라진다(실제 광고비). 배너·드롭다운에 계정 수를 노출할지 01-07 에서 결정할 것
 - OQ-8: 수집만 되고 판정 안 된 회차가 있을 때 화면이 알리지 않는다 — 보드의 '새로 수집' 버튼 때문에 재발 구조다. 01-08 이 실행 흐름을 만들 때 자리가 생길 수 있다(지금 고치지 않는다)
 - 실제 광고 API 되돌리기가 Phase 1 에서 한 번도 실행되지 않았다 — 사고 시 처음 눌러보는 경로. 소수 건 되돌렸다 즉시 재인상으로 싸게 닫을 수 있다(당일이면 쿨다운 안 걸림)
 - ~~04-10 Task 3 uat-verifier 미실행~~ — 해소: 2026-09-24 PASS
-- **04-11 uat-verifier 미실행** — SSE 재접속·검수 화면 새 규칙 표기(잡 232c3bb3). 스캔 버튼 재클릭 금지 조건으로 메인 세션이 부를 것
-- 🔴 **04-12 입력:** 재검수 128장 중 치수·스펙표 15장이 비전 `배너` — 새 오탐(내용 누락) 의심. 무내용 띠 31장이 배너로 승격(합성 규칙) (GATE §16-4·16-6)
+- ~~04-11 uat-verifier 미실행~~ — 해소: 2026-09-25 PASS (P2 게이트 문구는 D-23 이월)
+- ~~04-12 입력: 치수·스펙표 15장 오탐 의심~~ — 확인됨: 사람이 비전 배너 103장을 `제품` 으로 뒤집어 누락률 13.70% (GATE §17)
 
 ### Quick Tasks Completed
 
@@ -165,6 +172,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-24T15:25:27.870Z
-Stopped at: Completed 04-11-PLAN.md
+Last session: 2026-09-25T04:33:11.825Z
+Stopped at: Phase 4 종료 (D-23 · 게이트 불통과: 누락률 13.70%) — 다음 Phase 5 discuss
 Resume file: None

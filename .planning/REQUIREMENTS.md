@@ -102,7 +102,7 @@
       **세트가 2026-09-22 재정의됐다 (04-CONTEXT.md D-12):** ~~100건 표본~~ → **현 회차 연결 전량 57상품 891장 전수.**
       모수가 57건뿐이라 100 을 문자대로 못 채우고, 채우려면 스캔 확대 2시간 7분이 복귀한다. 표본→전수는 강화다.
       **오탐 10% 이하의 분모 = 제품 이미지 전체** (D-11). 실측 1.8%. 정밀도(15.6%)도 함께 보고하되 게이트 판정은 D-11 기준
-- [ ] **BANNER-05**: 제거율 상한(50%)과 잔여 장수 하한(2장)을 두고, 애매하면 그 상품을 통째로 스킵한다 (사람 큐를 만들지 않는다)
+- [x] **BANNER-05**: 제거율 상한(50%)과 잔여 장수 하한(2장)을 두고, 애매하면 그 상품을 통째로 스킵한다 (사람 큐를 만들지 않는다)
 
 ### 버튼 3 — 상세페이지 작업 (DETAIL) ★ Core Value
 
@@ -215,8 +215,8 @@
 | BANNER-03 | Phase 4 | Superseded → BANNER-03b |
 | BANNER-02b | Phase 4 | Pending |
 | BANNER-03b | Phase 4 | Pending |
-| BANNER-04 | Phase 4 | Pending |
-| BANNER-05 | Phase 4 | Pending |
+| BANNER-04 | Phase 4 | Unmet — 게이트 불통과(누락률 13.70%) · D-23 으로 종료, Phase 5 discuss 에서 운용 방식 결정 |
+| BANNER-05 | Phase 4 | Complete |
 | DETAIL-01 | Phase 5 | Pending |
 | DETAIL-02 | Phase 5 | Pending |
 | DETAIL-03 | Phase 5 | Pending |
