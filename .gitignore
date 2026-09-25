@@ -56,3 +56,6 @@ package-lock.json
 
 # gsd code-review --fix 의 진행 중 복구 표식 (워크트리 병합되면 사라진다)
 .planning/phases/*/.review-fix-recovery-pending.json
+
+# Phase 5 크레딧 0 스모크 산출물 — 실상품 코드·이미지 URL 이 들어 있어 커밋하지 않는다 (05-04)
+.planning/phases/05-core-value/evidence/smoke/
