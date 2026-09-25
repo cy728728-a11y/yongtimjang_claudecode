@@ -224,7 +224,29 @@ Plans:
   4. 생성 장수가 `min(제품이미지 수, 10)` 하한 2로 나오고, 접수 확정 응답의 예상장수가 요청과 다르면 전량 접수 전에 멈춘다
   5. 폴링이 타임아웃돼도 실패로 보고되지 않고 recover 경로로 안내된다 (크레딧 이중 지불 없음)
 
-**Plans**: TBD
+**Plans**: 6 plans in 5 waves
+
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — CLI 주입구: `--inputs`·`--estimate-only`·`--max-credits`·`--expect-nick`·exit 3/4/5 + 버그 2개 수정 (골든 먼저, 오프라인 테스트)
+- [ ] 05-02-PLAN.md — D-02 관문 `상세입력목록` + D-03 검수 화면 `다시 확인`
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 05-03-PLAN.md — 견적 슬라이스: detail kind 3종 · `POST /jobs/detail/estimate` · 견적 표 · 보드 `상세 견적` 버튼
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 05-04-PLAN.md — 접수·결과 슬라이스: 접수/이어서 확인 라우트 · exit 3 해석 · 결과 표 · 크레딧 0 실측(실 MCP 견적 스모크 + uat-verifier)
+
+**Wave 4** *(blocked on Wave 3 — 사람)*
+
+- [ ] 05-05-PLAN.md — ★ 유료 게이트: 확인 4줄 + 후보 다시 확인 → 🔴 5건 견적 → 접수 승인 (L-01 ①)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 05-06-PLAN.md — 실탄 1회 · 브라우저 닫고 완주 · 2차 견적 접수 0 (SC-3) · D-13 실측 · (조건부) 태그 폴백 결정
 **UI hint**: yes
 
 ### Phase 6: 마켓 수정업로드
