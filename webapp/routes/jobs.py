@@ -443,6 +443,53 @@ def _상세미종결(체크: dict | None) -> int:
                if isinstance(v, dict) and _상세항목상태(v) == "폴링중")
 
 
+_마켓잡이름 = {"market_preview": "반영 미리보기", "market_commit": "반영",
+              "market_poll": "반영 이어서 확인"}
+
+
+def _마켓잡들(detail_job_id: str | None, 최대: int = 5) -> list[dict]:
+    """이 상세 작업에서 나온 최근 마켓 미리보기·반영·이어서 확인 (최신순, 최대 `최대`개).
+
+    브라우저를 닫았다 다시 열어도 상세 결과 표 아래에서 반영 결과·게이트로 돌아오는 진입점이다
+    (SC-1 · SC-2). 미리보기는 접수 잡에서도, 그 이어서 확인 잡에서도 뜰 수 있으므로 **같은 접수
+    체인 전체**(접수 + 그 밑의 이어서 확인들)의 미리보기를 모은다. 조회 실패는 빈 목록이다 —
+    이 목록 때문에 상세 결과 표 전체가 깨지면 안 된다.
+    """
+    if not detail_job_id:
+        return []
+    try:
+        # 접수 뿌리까지 거슬러 올라간다(poll → poll → submit)
+        뿌리 = jobs.job_status(detail_job_id)
+        for _ in range(50):
+            if not 뿌리 or 뿌리.get("kind") != "detail_poll" or not 뿌리.get("parent_job_id"):
+                break
+            뿌리 = jobs.job_status(뿌리["parent_job_id"])
+        if not 뿌리 or 뿌리.get("kind") not in ("detail_submit", "detail_poll"):
+            return []
+        상세들, 큐 = [뿌리["id"]], [뿌리["id"]]
+        while 큐 and len(상세들) < 200:
+            for c in jobs.children_of(큐.pop(), "detail_poll"):
+                상세들.append(c["id"])
+                큐.append(c["id"])
+        모음: list[dict] = []
+        for d in 상세들:
+            for 미리 in jobs.children_of(d, "market_preview"):
+                모음.append(미리)
+                큐 = [미리["id"]]
+                while 큐 and len(모음) < 500:
+                    for c in jobs.children_of(큐.pop()):
+                        if c.get("kind") in ("market_commit", "market_poll"):
+                            모음.append(c)
+                            큐.append(c["id"])
+        모음.sort(key=lambda j: str(j.get("started_at") or ""), reverse=True)
+        return [{"id": j["id"], "kind": j["kind"], "이름": _마켓잡이름.get(j["kind"], j["kind"]),
+                 "started_at": j.get("started_at"), "status": j.get("status"),
+                 "exit_code": j.get("exit_code")} for j in 모음[:최대]]
+    except Exception as e:
+        print(f"[마켓잡들] 조회 실패 — 빈 목록으로 둔다: {type(e).__name__}: {e}", flush=True)
+        return []
+
+
 def _상세결과ctx(상태: dict) -> dict:
     """상세 접수·이어서 확인 결과 표 (D-19 · D-18 · DETAIL-05/06/07).
 
@@ -453,9 +500,11 @@ def _상세결과ctx(상태: dict) -> dict:
     """
     기본 = {"job": _투영(상태 or {}), "running": False, "error": None, "항목": [],
             "집계": {}, "예상크레딧": None, "per_credit": None, "미종결": 0,
-            "이어서확인가능": False, "종료코드": (상태 or {}).get("exit_code")}
+            "이어서확인가능": False, "종료코드": (상태 or {}).get("exit_code"),
+            "마켓잡들": []}
     if (상태 or {}).get("status") in jobs.LIVE_STATUSES:
         return {**기본, "running": True}
+    기본["마켓잡들"] = _마켓잡들((상태 or {}).get("id"))
 
     폴더 = _상세폴더_of(상태)
     try:

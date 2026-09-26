@@ -797,6 +797,45 @@
                "이어서 확인");
   });
 
+  // ── 스마트스토어 반영 (06-03 / MARKET-01·02 · D-07 · D-08 · D-09) ───────────
+  //
+  // 버튼 셋 다 **몸통엔 잡 id 하나뿐이다** — 대상·상한·마켓을 안 보낸다(L-02 · L-07).
+  // 대상은 서버가 detail_status.json · preview.json 에서 만들고, 상한은 서버가 정한다(게이트 전 1건).
+  // 버튼들은 결과 표 **조각 안**에 있다 — htmx 가 갈아끼우므로 위임으로 듣는다.
+  document.addEventListener("click", function (ev) {
+    var 버튼 = ev.target.closest ? ev.target.closest(".market-preview-btn") : null;
+    if (!버튼 || 버튼.disabled) { return; }
+    상세작업접수("/jobs/market/preview", { detail_job_id: 버튼.dataset.detailJob }, 버튼,
+               "반영 미리보기");
+  });
+
+  document.addEventListener("click", function (ev) {
+    var 버튼 = ev.target.closest ? ev.target.closest(".market-commit-btn") : null;
+    if (!버튼 || 버튼.disabled) { return; }
+    // 누르는 즉시 스토어가 바뀐다 — 미리보기 표가 확인 창이다. 서버도 두 번째 반영을 막는다.
+    상세작업접수("/jobs/market/commit", { preview_job_id: 버튼.dataset.previewJob }, 버튼,
+               "스마트스토어 반영");
+  });
+
+  document.addEventListener("click", function (ev) {
+    var 버튼 = ev.target.closest ? ev.target.closest(".market-poll-btn") : null;
+    if (!버튼 || 버튼.disabled) { return; }
+    // --poll-only 로만 돈다(새 반영 0). 다시 반영하는 버튼은 어디에도 없다(D-08).
+    상세작업접수("/jobs/market/poll", { commit_job_id: 버튼.dataset.commitJob }, 버튼,
+               "반영 이어서 확인");
+  });
+
+  // "최근 스마트스토어 반영" 목록의 결과 보기 — 읽기(GET)만 한다. 상세 결과 표 아래 자리에 붙인다.
+  document.addEventListener("click", function (ev) {
+    var 버튼 = ev.target.closest ? ev.target.closest(".market-result-link") : null;
+    if (!버튼) { return; }
+    var 자리 = document.getElementById("market-result-body");
+    var job_id = 버튼.dataset.job || "";
+    if (!자리 || !/^[0-9a-fA-F-]{36}$/.test(job_id)) { return; }
+    htmx.ajax("GET", "/jobs/" + encodeURIComponent(job_id) + "/result",
+              { target: "#market-result-body", swap: "innerHTML" });
+  });
+
   // 작업 패널의 SSE 가 `done` 을 받으면 — 그 잡이 상세 접수/이어서 확인이면 결과 표를 불러온다.
   document.body.addEventListener("htmx:sseMessage", function (ev) {
     if (!ev.target || ev.target.id !== "job-done") { return; }
@@ -809,6 +848,11 @@
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (j.kind === "detail_submit" || j.kind === "detail_poll") { 상세결과불러오기(job_id); }
+        // 마켓 미리보기·반영·이어서 확인도 같은 자리(#detail-result-body)에 표를 띄운다 —
+        // 접수 때 그 자리를 "도는 중" 문구로 바꿔 뒀으니 끝나면 거기에 결과가 온다.
+        if (j.kind === "market_preview" || j.kind === "market_commit" || j.kind === "market_poll") {
+          상세결과불러오기(job_id);
+        }
       })
       .catch(function (e) { 오류표시("상세 작업 상태를 못 읽었다: " + e); });
   });

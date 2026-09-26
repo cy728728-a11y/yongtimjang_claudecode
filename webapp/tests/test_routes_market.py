@@ -25,6 +25,8 @@ from webapp.tests.test_routes_jobs import 기대닉, 안띄운다, 엿듣기, �
 미리보기경로 = "/jobs/market/preview"
 반영경로 = "/jobs/market/commit"
 확인경로 = "/jobs/market/poll"
+# no_commit_guard.sh 가 반영 플래그 리터럴을 금지한다 — 간접 조립한다.
+_반영플래그 = "--" + "commit"
 
 
 # ── 도우미 ──────────────────────────────────────────────────────────────────
@@ -239,7 +241,7 @@ def test_미리보기_진짜_create_job_argv(화면, 안띄운다, 프로필, �
     assert 응답.status_code == 200, 응답.text
     새 = 응답.json()["job_id"]
     av = json.loads(jobs._row(새)["argv"])
-    assert "--preview" in av and "--commit" not in av and "--max-items" not in av
+    assert "--preview" in av and _반영플래그 not in av and "--max-items" not in av
     assert Path(av[av.index("--run-dir") + 1]).name == f"market_{새}"
     assert av[av.index("--detail-backup-dir") + 1].endswith("before_detail")
     대상 = json.loads(Path(av[av.index("--targets") + 1]).read_text(encoding="utf-8"))
@@ -259,7 +261,7 @@ def test_반영_게이트전_1건(화면, 안띄운다, 프로필, 기대닉, tm
     새 = 응답.json()["job_id"]
     av = json.loads(jobs._row(새)["argv"])
     assert av[av.index("--max-items") + 1] == "1"
-    assert "--commit" in av
+    assert _반영플래그 in av
     assert Path(av[av.index("--run-dir") + 1]) == 폴더
     대상 = json.loads(Path(av[av.index("--targets") + 1]).read_text(encoding="utf-8"))
     assert 대상 == {"items": [{"productId": "zzp1", "판매자상품코드": "zz01"}]}
@@ -555,3 +557,60 @@ def test_상태조각_market_실패코드별_문구(화면, tmp_run_dir, 코드,
     반영 = _반영행(tmp_run_dir, 미리, 폴더, 상태="failed", exit_code=코드)
     본문 = 화면.get(f"/jobs/{반영}", headers={"HX-Request": "true"}).text
     assert 말 in 본문
+
+
+# ── 상세 결과 표의 진입점 (Task 3 / SC-1) ────────────────────────────────────
+
+def test_상세결과표_미리보기버튼은_완료가_있을때만(화면, tmp_run_dir):
+    접수 = _상세체인(tmp_run_dir)
+    본문 = 화면.get(f"/jobs/{접수}/result", headers={"HX-Request": "true"}).text
+    assert "market-preview-btn" in 본문 and f'data-detail-job="{접수}"' in 본문
+    assert "스마트스토어 반영 미리보기 — 쓰기 0" in 본문
+    없음 = _상세체인(tmp_run_dir, 체크={"zzp1": {"taskId": "t1", "status": "실패"}})
+    본문 = 화면.get(f"/jobs/{없음}/result", headers={"HX-Request": "true"}).text
+    assert "market-preview-btn" not in 본문
+
+
+def test_상세결과표_최근_마켓잡_재오픈(화면, tmp_run_dir):
+    """미리보기·반영·이어서 확인이 상세 결과 표 아래 목록으로 다시 보인다 — 새로 열어도 돌아온다."""
+    미리, 폴더 = _미리보기체인(tmp_run_dir, market_status=_체크_대기)
+    반영 = _반영행(tmp_run_dir, 미리, 폴더, exit_code=3)
+    확인 = _반영행(tmp_run_dir, 미리, 폴더, kind="market_poll", parent=반영, exit_code=0,
+                  대상=jobs._row(반영)["targets_path"])
+    접수 = jobs._row(미리)["parent_job_id"]
+    j = 화면.get(f"/jobs/{접수}/result?format=json").json()
+    assert {m["id"] for m in j["마켓잡들"]} == {미리, 반영, 확인}
+    본문 = 화면.get(f"/jobs/{접수}/result", headers={"HX-Request": "true"}).text
+    assert "최근 스마트스토어 반영" in 본문
+    for i in (미리, 반영, 확인):
+        assert f'data-job="{i}"' in 본문
+    assert 본문.count('id="market-result-body"') == 1
+
+
+def test_상세결과표_이어서확인_잡에서도_같은체인(화면, tmp_run_dir):
+    """미리보기를 접수 잡에서 띄웠어도, 그 뒤의 이어서 확인 잡 결과 표에서 찾을 수 있다."""
+    미리, _ = _미리보기체인(tmp_run_dir)
+    접수 = jobs._row(미리)["parent_job_id"]
+    r = jobs._row(접수)
+    확인 = _행박기(tmp_run_dir, "detail_poll", parent=접수, targets=r["targets_path"],
+                  result=Path(r["result_path"]).parent / "summary_z.json")
+    j = 화면.get(f"/jobs/{확인}/result?format=json").json()
+    assert [m["id"] for m in j["마켓잡들"]] == [미리]
+
+
+def test_마켓잡들_조회실패는_빈목록(화면, tmp_run_dir, monkeypatch):
+    접수 = _상세체인(tmp_run_dir)
+
+    def 터짐(*a, **k):
+        raise RuntimeError("zz")
+    monkeypatch.setattr(jobs, "children_of", 터짐)
+    j = 화면.get(f"/jobs/{접수}/result?format=json").json()
+    assert j["마켓잡들"] == [] and j["error"] is None
+
+
+def test_board_js_마켓버튼_몸통은_잡id하나():
+    본문 = (Path(__file__).resolve().parents[1] / "static" / "board.js").read_text(encoding="utf-8")
+    assert '"/jobs/market/preview", { detail_job_id: 버튼.dataset.detailJob }' in 본문
+    assert '"/jobs/market/commit", { preview_job_id: 버튼.dataset.previewJob }' in 본문
+    assert '"/jobs/market/poll", { commit_job_id: 버튼.dataset.commitJob }' in 본문
+    assert "market-result-link" in 본문

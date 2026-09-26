@@ -49,6 +49,15 @@
     </p>
   {% endif %}
 
+  {# 스마트스토어 반영 미리보기 (06-03 / D-01 · D-07). 완료 항목이 1개 이상일 때만 — 누르면 이 상세 잡의
+     detail_status.json 에서 **완료분만** 서버가 골라 미리보기(쓰기 0)를 띄운다. 요청엔 잡 id 하나뿐이다. #}
+  {% if 집계.get("완료", 0) %}
+    <p id="market-preview-wrap">
+      <button type="button" class="market-preview-btn" data-detail-job="{{ job.id }}">스마트스토어 반영 미리보기 — 쓰기 0</button>
+      <br><small>AI 상세가 완료된 {{ 집계.get("완료", 0) }}건만 대상이다. 미리보기는 스토어를 바꾸지 않는다.</small>
+    </p>
+  {% endif %}
+
   {% if 항목 %}
     <table>
       <thead><tr>
@@ -68,4 +77,24 @@
       </tbody>
     </table>
   {% endif %}
+{% endif %}
+
+{# 최근 스마트스토어 반영 (06-03 / SC-1). 브라우저를 닫았다 와도 여기서 미리보기·반영 결과로 돌아온다.
+   정본은 각 잡의 산출물(preview.json · market_status.json)이다 — 이 목록은 잡 id 로 가는 길일 뿐이다. #}
+{% if 마켓잡들 and not running %}
+  <h3>최근 스마트스토어 반영</h3>
+  <table>
+    <thead><tr><th>작업</th><th>시작</th><th>상태</th><th></th></tr></thead>
+    <tbody>
+    {% for m in 마켓잡들 %}
+      <tr>
+        <td>{{ m.이름 }}</td>
+        <td><small>{{ m.started_at or "" }}</small></td>
+        <td>{{ m.status }}{% if m.exit_code is not none %} ({{ m.exit_code }}){% endif %}</td>
+        <td><button type="button" class="market-result-link secondary" data-job="{{ m.id }}">결과 보기</button></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div id="market-result-body"></div>
 {% endif %}

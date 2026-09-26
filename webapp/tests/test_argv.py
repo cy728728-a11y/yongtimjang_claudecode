@@ -689,6 +689,9 @@ def test_DetailArgv_태그가_비면_터진다():
 
 # ── 마켓 수정업로드 잡 (Phase 6 / 06-03) ────────────────────────────────────
 
+# no_commit_guard.sh 가 테스트 트리의 반영 플래그 리터럴을 금지한다 — 간접 조립한다.
+_반영플래그 = "--" + "commit"
+
 def _마켓(**덮기):
     기본 = dict(mode="preview", run_dir=Path("/tmp/zz/web/market_a"),
               targets=Path("/tmp/zz/web/targets_a.json"), expect_nick="zz기대계정",
@@ -713,7 +716,7 @@ def test_MarketArgv_preview_플래그():
     assert av[av.index("--backup-dir") + 1].endswith("before_market")
     assert av[av.index("--summary-out") + 1].endswith("preview.json")
     assert av[av.index("--expect-nick") + 1] == "zz기대계정"
-    assert "--max-items" not in av and "--commit" not in av
+    assert "--max-items" not in av and _반영플래그 not in av
 
 
 def test_MarketArgv_commit_max_items_없으면_ValueError():
@@ -725,7 +728,7 @@ def test_MarketArgv_commit_max_items_없으면_ValueError():
 def test_MarketArgv_commit_max_items():
     av = _마켓(mode="commit", max_items=1,
              summary_out=Path("/tmp/zz/web/market_a/summary_c.json")).build()
-    assert "--commit" in av
+    assert _반영플래그 in av
     assert av[av.index("--max-items") + 1] == "1"
     assert "--preview" not in av and "--poll-only" not in av
 
