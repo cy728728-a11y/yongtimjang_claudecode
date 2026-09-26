@@ -275,7 +275,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 06-04-PLAN.md — 육안 게이트: `market_gate` 기록 · 게이트 패널 · 상한 결정(닫힘 1 / 정상 20 / 이상 거부) + uat-verifier
+- [x] 06-04-PLAN.md — 육안 게이트: `market_gate` 기록 · 게이트 패널 · 상한 결정(닫힘 1 / 정상 20 / 이상 거부) + uat-verifier
 
 **Wave 4** *(blocked on Wave 3 + Phase 5 05-06 완료 — 사람)*
 
@@ -314,7 +314,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
 | 4. 홍보배너 식별 | 12/12 | Closed — 게이트 불통과 · 용팀장 결정으로 종료 (D-23) | 2026-09-25 |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 4/6 | In Progress|  |
-| 6. 마켓 수정업로드 | 3/6 | In Progress|  |
+| 6. 마켓 수정업로드 | 4/6 | In Progress|  |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |
 
 ## Sequencing Notes
