@@ -318,13 +318,14 @@ def _날짜(url):
         return None
 
 
-def _상품판정(mcp, it, 원본폴더, 반영전폴더, 계정, AI판정=True):
+def _상품판정(mcp, it, 원본폴더, 반영전폴더, 계정, AI판정=True, 원본문서=None):
     """한 상품 → preview 문서 항목. 판정 = 반영가능|스킵|실패.
 
     순서: workdata summary → 미업로드 → ⓐ 원본(없으면 backup_failed, L-03)
           → AI 판정(OR 규칙, Pitfall 6 — 복원은 AI판정=False) → workdata full(상하단·그룹)
           → ⓑ 반영 직전 상태 기록(실패면 backup_failed).
     개별 오류는 그 항목만 격리하고 전체를 죽이지 않는다.
+    `원본문서` 를 주면(복원 모드) ⓐ 를 폴더에서 다시 찾지 않고 그 문서를 쓴다.
     """
     pid = it["productId"]
     a경로 = str(Path(원본폴더) / f"{pid}.json")
@@ -342,7 +343,7 @@ def _상품판정(mcp, it, 원본폴더, 반영전폴더, 계정, AI판정=True)
         결과.update({"판정": "스킵", "사유": "미업로드: 스마트스토어 채널상품번호 없음"})
         return 결과
     결과["채널상품번호"] = str(ss).strip()
-    원본, 왜 = _원본읽기(원본폴더, pid)
+    원본, 왜 = (원본문서, "") if 원본문서 else _원본읽기(원본폴더, pid)
     if 원본 is None:
         결과.update({"판정": "스킵", "사유": f"backup_failed: 원본 복원 불가(ⓐ 없음 · {왜})"})
         return 결과
@@ -703,6 +704,211 @@ def _반영(mcp, args, items, 체크, 계정):
     return _마무리(args, 체크, items, rc, 계정, "commit")
 
 
+# ── 복원(--restore-backup) · 작업창 스냅샷(--tasks-snapshot) ─────────────────
+
+def _복원원본(path):
+    """--restore-backup ⓐ 파일 → (문서|None, 사유). productId·renderContent 필수."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except Exception as e:
+        return None, f"--restore-backup 읽기 실패: {type(e).__name__}"
+    if not isinstance(doc, dict) or not str(doc.get("productId") or "").strip():
+        return None, "--restore-backup 에 productId 가 없다"
+    rc = doc.get("renderContent")
+    if not isinstance(rc, str) or not rc:
+        return None, "--restore-backup 에 renderContent 가 없다 — 되돌릴 원본이 없다"
+    doc["productId"] = str(doc["productId"]).strip()
+    return doc, ""
+
+
+def _적용1차(mcp, pid, html):
+    """detail_apply confirm:false → 토큰. 토큰 없는 성공/작업번호 = 쓰기의심 예외."""
+    pre = _표시규칙제거(mcp.call_tool(TOOL_APPLY, {"productId": pid, "html": html,
+                                                   "imageReplacements": [],
+                                                   "confirm": False}) or {})
+    토큰, 사유 = _1차해석(pre, pid)
+    return 토큰, 사유, pre
+
+
+def _복원(mcp, args, 원본, 계정):
+    """D-05 — ⓐ 원본 상세를 불사자에 되돌리고(detail_apply 2단) 스토어로 재반영(1건).
+
+    --preview: detail_apply confirm:false 만. 호출 **전에** 현재 상태를 before_restore 로 남기고,
+               호출 뒤 renderContent 가 바뀌었으면 P0 (미리보기가 쓰기였다).
+    --commit : detail_apply 2단 → 재조회로 renderContent == 원본 확인 → market_update 1건.
+               확인 실패면 마켓 반영 0 (불사자에 원본이 안 붙었는데 스토어로 밀지 않는다).
+    """
+    pid = 원본["productId"]
+    코드 = str(원본.get("판매자상품코드") or "")
+    items = [{"productId": pid, "판매자상품코드": 코드}]
+    run = Path(args.run_dir)
+    try:
+        전data = _workdata(mcp, pid, "summary")
+    except Exception as e:
+        print(f"⛔ workdata 조회 실패 — 복원하지 않는다: {str(e)[:160]}", flush=True)
+        _센티널(0, 1, 0, 0, 1)
+        return EXIT_INPUT
+    전dc = 전data.get("uploadDetailContents") or {}
+    전rc = 전dc.get("renderContent")
+
+    if args.preview:
+        try:
+            _원자쓰기(run / f"before_restore_{pid}.json",
+                      {"productId": pid, "판매자상품코드": 코드, "조회시각": _지금(),
+                       "계정": 계정, "renderContent": 전rc,
+                       "imageTranslated": 전dc.get("imageTranslated")})
+        except Exception as e:
+            print(f"⛔ 복원 전 상태를 못 남겨 미리보기도 하지 않는다: {type(e).__name__}",
+                  flush=True)
+            _센티널(0, 1, 0, 0, 1)
+            return EXIT_INPUT
+        문서 = {"productId": pid, "판매자상품코드": 코드, "토큰받음": False,
+                "응답요약": "", "전후동일": None, "생성시각": _지금()}
+        try:
+            토큰, 사유, pre = _적용1차(mcp, pid, 원본["renderContent"])
+            문서.update({"토큰받음": bool(토큰), "응답요약": _미리보기요약(pre),
+                         "사유": 사유})
+            토큰 = None
+        except 쓰기의심 as e:
+            문서["사유"] = f"쓰기의심: 토큰 없이 성공/작업번호 {e}"[:300]
+            save_json(run / "restore_preview.json", 문서)
+            print(f"⛔ 쓰기의심 — detail_apply 미리보기가 토큰 없이 성공 · 중단", flush=True)
+            _센티널(0, 1, 0, 0, 1)
+            return EXIT_INPUT
+        except Exception as e:
+            문서["사유"] = f"detail_apply 미리보기 실패: {str(e)[:150]}"
+            save_json(run / "restore_preview.json", 문서)
+            print(f"⛔ {문서['사유']}", flush=True)
+            _센티널(0, 1, 0, 0, 1)
+            return EXIT_INPUT
+        try:
+            후rc = (_workdata(mcp, pid, "summary").get("uploadDetailContents") or {}) \
+                .get("renderContent")
+        except Exception as e:
+            문서["사유"] = f"쓰기의심: 사후 재조회 불가 {str(e)[:120]}"
+            save_json(run / "restore_preview.json", 문서)
+            print(f"⛔ {문서['사유']} — 쓰기 0 을 확인할 수 없다", flush=True)
+            _센티널(0, 1, 0, 0, 1)
+            return EXIT_INPUT
+        문서["전후동일"] = 후rc == 전rc
+        save_json(run / "restore_preview.json", 문서)
+        if not 문서["전후동일"]:
+            print("⛔ 쓰기의심 — detail_apply 미리보기가 상세를 바꿨다. "
+                  f"되돌릴 근거: before_restore_{pid}.json", flush=True)
+            _센티널(0, 1, 0, 0, 1)
+            return EXIT_INPUT
+        print(f"복원 미리보기 {pid[-8:]} 토큰 {'받음' if 문서['토큰받음'] else '없음'} · "
+              f"전후 동일", flush=True)
+        _센티널(1 if 문서["토큰받음"] else 0, 0, 0 if 문서["토큰받음"] else 1, 0, 1)
+        return EXIT_OK
+
+    # --commit
+    체크, 왜 = _체크읽기(args)
+    if 체크 is None:
+        print(f"⛔ {왜} — 빈 체크포인트로 읽지 않는다", flush=True)
+        _센티널(0, 0, 0, 0, 1)
+        return EXIT_INPUT
+    추가 = {"복원원본": str(args.restore_backup),
+            "비고": "복원 뒤 AI 재생성은 --force 가 필요할 수 있다 (aiImageGenerated 가 남을 수 있음)"}
+    if not _새접수대상(체크["items"].get(pid)):
+        print(f"{pid[-8:]} 이미접수 — 복원·재접수 없이 이어서 확인만", flush=True)
+        rc = _폴링(mcp, args, 체크, [pid])
+        return _마무리(args, 체크, items, rc, 계정, "restore", 추가)
+    ss = (전data.get("uploadedSuccessUrl") or {}).get("smartstore")
+    if not ss or not str(ss).strip():
+        체크["items"][pid] = {"판매자상품코드": 코드, "status": "스킵", "taskId": None,
+                              "사유": "미업로드: 스마트스토어 채널상품번호 없음",
+                              "backup_a": str(args.restore_backup), "backup_b": None,
+                              "접수시각": None, "확정시각": None}
+        save_json(_체크경로(args), 체크)
+        return _마무리(args, 체크, items, EXIT_OK, 계정, "restore", 추가)
+    try:
+        토큰, 사유, _ = _적용1차(mcp, pid, 원본["renderContent"])
+        if not 토큰:
+            print(f"⛔ detail_apply 확인토큰 없음 — 복원하지 않는다: {사유}", flush=True)
+            return _마무리(args, 체크, items, EXIT_INPUT, 계정, "restore", 추가)
+        mcp.call_tool(TOOL_APPLY, {"productId": pid, "html": 원본["renderContent"],
+                                   "imageReplacements": [], "confirm": True,
+                                   "confirmationToken": 토큰})
+        토큰 = None
+    except 쓰기의심 as e:
+        print(f"⛔ 쓰기의심 — detail_apply 1차가 토큰 없이 성공 {e}", flush=True)
+        return _마무리(args, 체크, items, EXIT_INPUT, 계정, "restore", 추가)
+    except Exception as e:
+        print(f"⛔ detail_apply 실패 — 마켓 반영하지 않는다: {str(e)[:160]}", flush=True)
+        return _마무리(args, 체크, items, EXIT_INPUT, 계정, "restore", 추가)
+    try:
+        후dc = _workdata(mcp, pid, "summary").get("uploadDetailContents") or {}
+    except Exception as e:
+        print(f"⛔ 복원 후 재조회 실패 — 마켓 반영하지 않는다: {str(e)[:160]}", flush=True)
+        return _마무리(args, 체크, items, EXIT_INPUT, 계정, "restore", 추가)
+    추가["복원후_aiImageGenerated"] = 후dc.get("aiImageGenerated")
+    if 후dc.get("renderContent") != 원본["renderContent"]:
+        print("⛔ 복원 후 불사자 상세가 원본과 다르다 — 스토어로 밀지 않는다 (마켓 반영 0)",
+              flush=True)
+        return _마무리(args, 체크, items, EXIT_INPUT, 계정, "restore", 추가)
+    if not 체크.get("워터마크"):
+        try:
+            행들, _ = _창읽기(mcp, ["기본"])
+            체크["워터마크"] = _워터마크(행들)
+            save_json(_체크경로(args), 체크)
+        except Exception as e:
+            print(f"⛔ 작업창을 못 읽어 워터마크를 잴 수 없다 — 마켓 반영하지 않는다: {e}",
+                  flush=True)
+            return _마무리(args, 체크, items, EXIT_INPUT, 계정, "restore", 추가)
+    # 복원은 의도적으로 비AI 를 민다 — AI 판정은 끄고 미업로드·ⓑ 기록은 그대로
+    r = _상품판정(mcp, items[0], Path(args.restore_backup).parent, args.backup_dir, 계정,
+                  AI판정=False, 원본문서=원본)
+    기록 = {"판매자상품코드": 코드, "status": "스킵", "taskId": None, "사유": r["사유"],
+            "backup_a": str(args.restore_backup), "backup_b": r["backup_b"],
+            "접수시각": None, "확정시각": None}
+    if r["판정"] == "반영가능":
+        try:
+            기록.update(_접수1건(mcp, pid))
+        except 쓰기의심 as e:
+            기록.update({"status": "실패", "사유": f"쓰기의심: 토큰 없이 성공/작업번호 {e}"[:300]})
+            체크["items"][pid] = 기록
+            save_json(_체크경로(args), 체크)
+            print("⛔ 쓰기의심 — market_update 1차가 토큰 없이 성공 · 중단", flush=True)
+            return _마무리(args, 체크, items, EXIT_INPUT, 계정, "restore", 추가)
+    체크["items"][pid] = 기록
+    save_json(_체크경로(args), 체크)           # taskId 선저장
+    print(f"복원 반영 {pid[-8:]} {기록['status']} ({_꼬리(기록.get('taskId'))})", flush=True)
+    rc = _폴링(mcp, args, 체크, [pid])
+    return _마무리(args, 체크, items, rc, 계정, "restore", 추가)
+
+
+def _스냅샷(mcp, args, 계정, 모드):
+    """읽기 전용 작업창 증거 — 라이브 스모크 전후 diff 도구. **쓰기 도구 호출 코드가 없다.**"""
+    try:
+        기본 = _창목록(mcp, "기본")
+        대기 = _창목록(mcp, "PENDING")
+        진행 = _창목록(mcp, "PROCESSING")
+        wp = _표시규칙제거(mcp.call_tool("bulsaja_work_progress", {}) or {})
+    except Exception as e:
+        print(f"⛔ 스냅샷 조회 실패 — 파일을 쓰지 않는다: {str(e)[:200]}", flush=True)
+        _센티널(0, 0, 0, 0, 0)
+        return EXIT_INPUT
+    행표 = {str(x.get("taskId")): x for x in 기본 if isinstance(x, dict) and x.get("taskId")}
+    문서 = {"계정": 계정, "확인모드": 모드, "생성시각": _지금(),
+            "최대taskId": _워터마크(행표), "기본창행수": len(기본),
+            "PENDING행수": len(대기), "PROCESSING행수": len(진행),
+            "기본창": [{k: x.get(k) for k in ("taskId", "productId", "상태", "작업", "마켓")}
+                       for x in 기본 if isinstance(x, dict)],
+            "work_progress_마켓작업": (wp.get("마켓작업") if isinstance(wp, dict) else None)}
+    try:
+        _원자쓰기(args.tasks_snapshot, 문서)
+    except Exception as e:
+        print(f"⛔ 스냅샷 쓰기 실패: {e}", flush=True)
+        _센티널(0, 0, 0, 0, 0)
+        return EXIT_INPUT
+    print(f"스냅샷: 최대taskId {_꼬리(문서['최대taskId'])} · PENDING {len(대기)} · "
+          f"PROCESSING {len(진행)}", flush=True)
+    _센티널(0, 0, 0, 0, 0)
+    return EXIT_OK
+
+
 # ── 입력 · 진입점 ────────────────────────────────────────────────────────────
 
 def _대상읽기(path):
@@ -754,27 +960,40 @@ def _인자():
 def _실행(args):
     """모드 분기. 입력 검증은 BulsajaMCP() 생성 **전에** 끝낸다."""
     복원 = bool(args.restore_backup)
-    if 복원 or args.tasks_snapshot:
-        # Task 2 시점: 복원·스냅샷은 아직 거부한다
-        print("⛔ 이 모드는 아직 준비되지 않았다", flush=True)
-        return EXIT_INPUT
-    items, 사유 = _대상읽기(args.targets) if args.targets else (None, "--targets 가 필요하다")
-    if items is None:
-        print(f"⛔ {사유}", flush=True)
-        return EXIT_INPUT
-    if (args.preview or args.commit) and (not args.detail_backup_dir or not args.backup_dir):
-        print("⛔ --detail-backup-dir(ⓐ) 와 --backup-dir(ⓑ) 가 필요하다 (L-03)", flush=True)
-        return EXIT_INPUT
-    if args.commit and (args.max_items is None or args.max_items < 1):
-        print("⛔ --commit 은 --max-items(1 이상)가 필요하다 (D-06 · 상한 없는 반영 없음)",
-              flush=True)
-        return EXIT_INPUT
-    체크 = None
-    if args.commit or args.poll_only:
-        체크, 왜 = _체크읽기(args, 없으면_빈값=args.commit)
-        if 체크 is None:
-            print(f"⛔ {왜} — 빈 체크포인트로 읽지 않는다", flush=True)
+    원본, items, 체크 = None, [], None
+    if 복원:
+        if not (args.preview or args.commit):
+            print("⛔ --restore-backup 은 --preview 또는 --commit 과만 쓴다", flush=True)
             return EXIT_INPUT
+        원본, 왜 = _복원원본(args.restore_backup)
+        if 원본 is None:
+            print(f"⛔ {왜}", flush=True)
+            return EXIT_INPUT
+        if args.commit:
+            if args.max_items is None or args.max_items < 1:
+                print("⛔ 복원 --commit 은 --max-items(1 이상)가 필요하다", flush=True)
+                return EXIT_INPUT
+            if not args.backup_dir:
+                print("⛔ 복원 --commit 은 --backup-dir(ⓑ) 가 필요하다", flush=True)
+                return EXIT_INPUT
+        items = [{"productId": 원본["productId"]}]
+    elif not args.tasks_snapshot:
+        items, 사유 = _대상읽기(args.targets) if args.targets else (None, "--targets 가 필요하다")
+        if items is None:
+            print(f"⛔ {사유}", flush=True)
+            return EXIT_INPUT
+        if (args.preview or args.commit) and (not args.detail_backup_dir or not args.backup_dir):
+            print("⛔ --detail-backup-dir(ⓐ) 와 --backup-dir(ⓑ) 가 필요하다 (L-03)", flush=True)
+            return EXIT_INPUT
+        if args.commit and (args.max_items is None or args.max_items < 1):
+            print("⛔ --commit 은 --max-items(1 이상)가 필요하다 (D-06 · 상한 없는 반영 없음)",
+                  flush=True)
+            return EXIT_INPUT
+        if args.commit or args.poll_only:
+            체크, 왜 = _체크읽기(args, 없으면_빈값=args.commit)
+            if 체크 is None:
+                print(f"⛔ {왜} — 빈 체크포인트로 읽지 않는다", flush=True)
+                return EXIT_INPUT
     Path(args.run_dir).mkdir(parents=True, exist_ok=True)
     mcp = BulsajaMCP()
     mcp.open()
@@ -783,6 +1002,10 @@ def _실행(args):
         if rc is not None:
             _센티널(0, 0, 0, 0, len(items))
             return rc
+        if args.tasks_snapshot:
+            return _스냅샷(mcp, args, 계정, 모드)
+        if 복원:
+            return _복원(mcp, args, 원본, 계정)
         if args.preview:
             return _미리보기(mcp, args, items, 계정, 모드)
         if args.commit:
