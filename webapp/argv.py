@@ -61,6 +61,11 @@ BANNER_SCAN = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
 DETAIL_BATCH = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
                 / "scripts" / "detail_batch.py")
 
+# 마켓 수정업로드 (Phase 6). **같은 스킬 디렉터리다** — 위 스크립트들과 같은 이유로 그 자리다.
+# 06-02 가 만든 CLI 다. 마켓은 CLI 안에서 SMARTSTORE 로 고정돼 있어 웹앱이 넘길 값이 없다(L-07).
+MARKET_UPDATE = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
+                 / "scripts" / "market_update.py")
+
 # 계정 alias 의 모양. 상한(개수)은 두지 않는다 — 계정은 `~/.eroom/naver-ads.json` 에
 # 항목을 더하는 것만으로 늘어난다(지금 4개, 6개 예정). 개수를 코드에 박으면
 # 계정을 늘린 날 화면이 조용히 멈춘다 (BOARD-02 와 같은 이유).
@@ -370,4 +375,61 @@ class DetailArgv(BaseModel):
             else:
                 av += ["--poll-only"]
             av += ["--summary-out", str(self.summary_out)]
+        return av
+
+
+class MarketArgv(BaseModel):
+    """`market_update.py` 호출 한 번을 표현하는 모델 (Phase 6 / MARKET-01·02·03).
+
+    `DetailArgv` 와 같은 파일에 둔다 — 조립은 한 곳이다(`test_argv.py` 트리 가드).
+    세 모드(`--preview` / `--commit` / `--poll-only`)가 **한 모델**이다 — 같은 CLI 라
+    공통 플래그(`--run-dir` · `--targets` · `--expect-nick` · 요약 · 폴링 두 개)가 같다.
+
+    **기본값이 없다** — 기대 닉·폴링 간격·상한은 호출부(`jobs._build_argv`)가 `settings.cfg()`
+    로 읽어 넘긴다(T-1-12). `max_items` 만 None 기본인데, commit 에서 None 이면 **터진다**.
+
+    **마켓 필드가 없다(L-07).** CLI 가 SMARTSTORE 로 고정하고 `--market` 을 주면 exit 2 다.
+    웹앱이 마켓을 고르는 길이 생기면 화면에서 쿠팡 반영이 튀어나오는 사고가 된다.
+    """
+
+    mode: Literal["preview", "commit", "poll"]
+    run_dir: Path                      # --run-dir   market_<미리보기id>/ — market_status.json 이 여기 산다
+    targets: Path                      # --targets   웹앱이 서버 쪽에서 만든 대상 파일
+    expect_nick: Nick                  # --expect-nick 자식이 계정을 한 번 더 확인한다(exit 4)
+    detail_backup_dir: Path | None     # --detail-backup-dir ⓐ 원본 백업 폴더 (preview/commit)
+    backup_dir: Path | None            # --backup-dir ⓑ 반영 전 백업 폴더 (preview/commit)
+    summary_out: Path                  # --summary-out preview 는 미리보기 문서, 그 밖은 결과 요약
+    poll_interval: int                 # --poll-interval
+    max_poll_min: int                  # --max-poll-min
+    max_items: int | None = None       # --max-items commit 전용 — 서버가 정한 상한(D-09)
+    # `caffeinate -i` 자리. 무엇에 붙일지는 `jobs._수면방지_프리픽스` 가 정한다.
+    prefix: list[str] = []
+
+    def build(self) -> list[str]:
+        """argv 리스트. 셸을 거치지 않으므로 따옴표·이스케이프가 필요 없다."""
+        av: list[str] = [*self.prefix, str(PY_CLI), str(MARKET_UPDATE)]
+        av += ["--run-dir", str(self.run_dir)]
+        av += ["--targets", str(self.targets)]
+        av += ["--expect-nick", self.expect_nick]
+
+        if self.mode in ("preview", "commit"):
+            # ⓐ·ⓑ 백업 폴더가 없으면 CLI 가 exit 2 로 거부하지만, 조립에서 먼저 막는다 —
+            # 백업 위치를 모르는 반영은 되돌릴 길을 모르는 반영이다(MARKET-03 · D-04).
+            if self.detail_backup_dir is None or self.backup_dir is None:
+                raise ValueError("미리보기·반영에는 ⓐ·ⓑ 백업 폴더가 둘 다 필요하다 (MARKET-03)")
+            if self.mode == "preview":
+                av += ["--preview"]
+            else:
+                # 🔴 상한 없는 반영은 없다 — None 을 '전량' 으로 읽는 길을 조립에서 끊는다(D-06).
+                if self.max_items is None:
+                    raise ValueError("상한 없는 반영은 없다 — 빈 값은 전량이 아니다 (D-06)")
+                av += ["--commit", "--max-items", str(self.max_items)]
+            av += ["--detail-backup-dir", str(self.detail_backup_dir)]
+            av += ["--backup-dir", str(self.backup_dir)]
+        else:
+            # 이어서 확인은 접수를 안 한다 — 상한·백업 플래그를 안 붙인다(창 조회만).
+            av += ["--poll-only"]
+        av += ["--summary-out", str(self.summary_out)]
+        av += ["--poll-interval", str(self.poll_interval)]
+        av += ["--max-poll-min", str(self.max_poll_min)]
         return av

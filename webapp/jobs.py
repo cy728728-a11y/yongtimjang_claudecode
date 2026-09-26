@@ -69,13 +69,15 @@ JobKind = Literal["prep", "run", "bids_preview", "bids_commit",
                   "revert_only", "revert_all", "synthetic",
                   "bulsaja_profile", "bulsaja_index", "bulsaja_scan",
                   "banner_scan",
-                  "detail_estimate", "detail_submit", "detail_poll"]
+                  "detail_estimate", "detail_submit", "detail_poll",
+                  "market_preview", "market_commit", "market_poll"]
 
 KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
                           "revert_only", "revert_all", "synthetic",
                           "bulsaja_profile", "bulsaja_index", "bulsaja_scan",
                           "banner_scan",
-                          "detail_estimate", "detail_submit", "detail_poll")
+                          "detail_estimate", "detail_submit", "detail_poll",
+                          "market_preview", "market_commit", "market_poll")
 
 # 전역 1개 가드의 대상. **왜 전역인가:**
 # ENG-04(대상별 잠금)는 Phase 2 지만 **위험은 Phase 1 에 있다.** `run_bids` 가
@@ -85,7 +87,12 @@ KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
 # Phase 2 가 이걸 대상별 락으로 좁힌다. 미리보기·판정은 아무것도 안 쓰므로 뺀다 —
 # 쓰기가 아닌 것까지 막는 가드는 사람이 가드를 끄게 만든다.
 WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "revert_all",
-                                         "detail_submit", "detail_poll"})
+                                         "detail_submit", "detail_poll",
+                                         "market_commit", "market_poll"})
+# **마켓 반영(`market_commit`)은 스토어 상세를 바꾸는 진짜 쓰기다**(D-07). **이어서 확인
+# (`market_poll`)도 넣는다** — 접수는 안 하지만 같은 `market_status.json` 을 읽고-고치고-통째로
+# 쓴다. 둘이 겹치면 taskId 기록이 사라져 이미 접수된 반영을 못 찾고 다시 반영(이중 반영)한다.
+# **미리보기(`market_preview`)는 넣지 않는다** — confirm:false 만 부르고 쓰기 0 이다(06-02 두 겹 증명).
 # **상세 접수(`detail_submit`)는 크레딧을 태우는 진짜 쓰기다** — 불사자에 AI 상세페이지를 접수하고
 # 결과를 상품에 반영한다. **이어서 확인(`detail_poll`)도 넣는다**: 접수는 안 하지만 폴링 완료분을
 # 반영하고 같은 `detail_status.json` 을 읽고-고치고-통째로 쓴다(연구 Open Q3). 둘이 겹치면 taskId
@@ -103,7 +110,10 @@ WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "
 # `bulsaja_profile` 은 **일부러 뺐다** — 그 잡이 프로필을 만드는 잡이라, 가드 대상에 넣으면
 # 프로필이 없을 때 프로필을 만들 수 없다(닭·달걀). 계정 확인은 그 자체로 읽기 조회 1회다.
 BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan",
-                                           "detail_estimate", "detail_submit", "detail_poll"})
+                                           "detail_estimate", "detail_submit", "detail_poll",
+                                           "market_preview", "market_commit", "market_poll"})
+# 마켓 잡 3종도 셋 다 불사자 MCP 를 부른다(미리보기도 workdata·confirm:false 를 부른다).
+# 틀린 계정으로 미리보기를 내면 "반영가능" 판정이 남의 계정 기준이 된다(T-06-18).
 # 상세 잡 3종은 **셋 다** 불사자 MCP 를 부른다(견적도 기작업 태그·잔액을 실시간 조회한다).
 # 틀린 계정으로 견적을 내면 "기작업 스킵" 수가 남의 계정 기준이 된다 — 그래서 견적도 탄다.
 # CLI 도 `--expect-nick` 으로 한 번 더 본다(exit 4). 이중 방어다(T-05-12).
@@ -132,7 +142,8 @@ BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan",
 #    동시에 쓰면 반쪽 파일이 서로의 입력이 된다. 사유가 다르니 같은 집합에 있다는 이유로
 #    위 레이트리밋 서술을 이 잡에 옮겨 읽지 마라.
 SINGLETON_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan", "banner_scan",
-                                             "detail_estimate"})
+                                             "detail_estimate", "market_preview"})
+# 🔵 **`market_preview` 도 레이트리밋 때문이다** — `detail_estimate` 와 같은 사유. 쓰기 가드 밖이다.
 # 🔵 **`detail_estimate` 는 레이트리밋 때문이다** — 위 불사자 잡들과 같은 사유(MCP 조회 합산이
 #    서버 정책을 넘는다). 쓰기 가드 밖이라 전역 락이 막아 주지 않으므로 여기서 같은 종류만 막는다.
 #    접수·이어서 확인은 이미 `WRITE_KINDS` 가 전역으로 하나만 허용하므로 여기 넣을 필요가 없다.
@@ -393,7 +404,11 @@ def _alive(pid: int | None) -> bool:
 # 새 상태값(예: 'incomplete')을 만들지 않고 done + exit_code 3 으로 둔다: latest_done·가드 쿼리가
 # 전부 'done' 을 보므로 손댈 곳이 없다. 구분은 exit_code 로 화면이 한다(_job_status.html).
 # ⚠️ 다른 kind 에 넣지 마라 — bulsaja_scan 의 3 은 계정 불일치다(detail_batch.py 주석 참조).
-POLL_INCOMPLETE_OK_KINDS: frozenset[str] = frozenset({"detail_submit", "detail_poll"})
+POLL_INCOMPLETE_OK_KINDS: frozenset[str] = frozenset({"detail_submit", "detail_poll",
+                                                      "market_commit", "market_poll"})
+# 마켓 반영·이어서 확인도 3 = 대기 미완(upload_tasks 창에서 아직 종결 안 봄)이다(D-08). failed 로
+# 적으면 사람이 다시 반영을 누른다. `market_poll` 은 D-08 이어서 확인 전용 세 번째 kind 다
+# (RESEARCH Open Q5). 미리보기는 폴링이 없어 3 이 나오면 그건 이상이다 — 넣지 않는다.
 
 
 def _finish(cx: sqlite3.Connection, job_id: str, code: int, kind: str | None = None) -> None:
@@ -617,6 +632,77 @@ def _상세폴더(kind: str, job_id: str, parent_job_id: str | None, run_dir: st
     return d
 
 
+# 마켓 잡 kind → 부모로 와야 할 kind **집합**. 미리보기의 부모는 상세 접수 또는 그 이어서 확인
+# (둘 다 같은 detail 폴더를 가리킨다), 반영의 부모는 미리보기, 이어서 확인의 부모는 반영 또는
+# 앞선 이어서 확인이다(여러 번 이어 받을 수 있다).
+_마켓부모: dict[str, frozenset[str]] = {
+    "market_preview": frozenset({"detail_submit", "detail_poll"}),
+    "market_commit": frozenset({"market_preview"}),
+    "market_poll": frozenset({"market_commit", "market_poll"}),
+}
+MARKET_KINDS: tuple[str, ...] = ("market_preview", "market_commit", "market_poll")
+
+
+def _마켓폴더(kind: str, job_id: str, parent_job_id: str | None, run_dir: str,
+            cx: sqlite3.Connection | None = None) -> tuple[Path, Path]:
+    """(마켓 CLI `--run-dir`, ⓐ 원본 백업 폴더) — `<회차>/web/market_<미리보기id>/`.
+
+    **한 미리보기에서 나온 반영·이어서 확인은 전부 같은 폴더다.** `market_status.json`(taskId
+    기록)이 거기 살기 때문이다 — 폴더가 갈리면 이어서 확인이 반영이 받은 taskId 를 못 보고,
+    사람이 다시 반영한다. 그래서 `_상세폴더` 처럼 폴더를 **지어내지 않고** 부모 체인에서만 푼다.
+
+    ⓐ 폴더는 미리보기의 부모 상세 잡이 쓴 `detail_<견적id>/before_detail` 이다(06-01 · D-03).
+    부모가 없거나 체인이 틀리거나 회차가 다르면 ValueError(→ 400).
+    """
+    기대 = _마켓부모.get(kind)
+    if 기대 is None:
+        raise ValueError(f"마켓 잡이 아니다: {kind}")
+    if not parent_job_id:
+        raise ValueError(f"{kind} 에는 부모 잡이 필요하다 — 같은 market 폴더를 이어받아야 한다")
+
+    def _행(i: str):
+        if cx is not None:
+            return cx.execute("SELECT kind, parent_job_id, run_dir FROM jobs WHERE id = ?",
+                              (i,)).fetchone()
+        return _row(i)
+
+    부모 = _행(parent_job_id)
+    if 부모 is None or 부모["kind"] not in 기대:
+        raise ValueError(f"{kind} 의 부모는 {'/'.join(sorted(기대))} 여야 한다")
+    if 부모["run_dir"] != run_dir:
+        raise ValueError("부모 잡과 회차가 다르다")
+
+    # 체인을 거슬러 미리보기 잡을 찾는다. poll→poll→…→commit→preview. 상한을 둬서 순환(있을 수
+    # 없지만)이 서버를 붙잡지 않게 한다.
+    if kind == "market_preview":
+        미리보기id, 상세id, 상세행 = job_id, parent_job_id, 부모
+    else:
+        지금id, 지금 = parent_job_id, 부모
+        for _ in range(200):
+            if 지금 is None:
+                break
+            if 지금["kind"] == "market_preview":
+                break
+            if 지금["kind"] not in ("market_commit", "market_poll") or not 지금["parent_job_id"]:
+                raise ValueError("마켓 잡 체인이 미리보기에서 나오지 않았다")
+            지금id = 지금["parent_job_id"]
+            지금 = _행(지금id)
+        if 지금 is None or 지금["kind"] != "market_preview":
+            raise ValueError("마켓 잡 체인이 미리보기에서 나오지 않았다")
+        if 지금["run_dir"] != run_dir:
+            raise ValueError("미리보기 잡과 회차가 다르다")
+        미리보기id = 지금id
+        상세id = 지금["parent_job_id"]
+        상세행 = _행(상세id) if 상세id else None
+        if 상세행 is None or 상세행["kind"] not in _마켓부모["market_preview"]:
+            raise ValueError("미리보기의 부모가 상세 접수가 아니다")
+
+    상세폴더 = _상세폴더(상세행["kind"], 상세id, 상세행["parent_job_id"], run_dir, cx)
+    d = _web_dir(run_dir) / f"market_{미리보기id}"
+    d.mkdir(parents=True, exist_ok=True)
+    return d, 상세폴더 / "before_detail"
+
+
 # ── 수면 방지 프리픽스 (ENG-06 / T-3-37) ────────────────────────────────────
 # 인덱스 구축은 실측 3시간 32분짜리 폴링이다. 그 사이 맥북이 idle sleep 에 들어가면
 # 자식이 통째로 멈춘다. `man caffeinate` 기준 **utility 를 인자로 주면 그 프로세스
@@ -646,7 +732,9 @@ def _수면방지_프리픽스(kind: str) -> list[str]:
     `ss_index_build.py` 의 종료코드 2/3/4 계약이 이 래퍼를 통과해도 살아 있다는 뜻이다.
     """
     # 상세 접수·이어서 확인도 붙인다(D-15) — 접수 뒤 폴링이 수십 분이다. 견적은 수 초라 안 붙인다.
-    if kind not in ("bulsaja_index", "banner_scan", "detail_submit", "detail_poll"):
+    # 마켓 반영·이어서 확인도 붙인다 — upload_tasks 창 폴링이 최대 수십 분이다(D-07).
+    if kind not in ("bulsaja_index", "banner_scan", "detail_submit", "detail_poll",
+                    "market_commit", "market_poll"):
         return []
     try:
         return [CAFFEINATE, "-i"] if os.path.exists(CAFFEINATE) else []
@@ -658,7 +746,10 @@ def _수면방지_프리픽스(kind: str) -> list[str]:
 def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str],
                 targets_path: Path | None, result_path: Path | None,
                 commit: bool, *, detail_dir: Path | None = None,
-                max_credits: int | None = None) -> list[str]:
+                max_credits: int | None = None,
+                market_dir: Path | None = None,
+                detail_backup_dir: Path | None = None,
+                max_items: int | None = None) -> list[str]:
     """kind → `AdsArgv`. **조립은 `webapp/argv.py` 한 곳에서만** 일어난다 (T-1-10)."""
     if kind in ("prep", "run"):
         return argv_mod.AdsArgv(subcommand=kind, run_dir=run_dir,
@@ -831,6 +922,39 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
             prefix=_수면방지_프리픽스(kind),
         ).build()
 
+    if kind in ("market_preview", "market_commit", "market_poll"):
+        # 🔴 대상 파일 없는 마켓 잡은 없다 — 빈 값은 전량이 아니다(상세 잡과 같은 부류).
+        if targets_path is None:
+            raise ValueError("마켓 잡에는 대상 파일이 반드시 있어야 한다 — 빈 값은 전량이 아니다")
+        if market_dir is None:
+            raise ValueError("마켓 잡에는 market 폴더가 필요하다")
+        if result_path is None:
+            raise ValueError("마켓 잡에는 산출물 경로가 필요하다")
+        # 상한은 라우트가 서버 쪽에서 정해 넘긴다(`_마켓반영상한`). None 을 전량으로 읽지 않는다.
+        if kind == "market_commit" and max_items is None:
+            raise ValueError("마켓 반영에는 max_items 가 필요하다 — 상한 없는 반영은 없다(D-06)")
+        if kind != "market_poll" and detail_backup_dir is None:
+            raise ValueError("마켓 미리보기·반영에는 ⓐ 원본 백업 폴더가 필요하다(MARKET-03)")
+
+        settings.load(force=True)
+        return argv_mod.MarketArgv(
+            mode={"market_preview": "preview", "market_commit": "commit",
+                  "market_poll": "poll"}[kind],
+            run_dir=market_dir,
+            targets=targets_path,
+            expect_nick=settings.cfg("expected_bulsaja_nick", required=True),
+            # 이어서 확인은 백업을 안 쓴다 — 폴더를 넘기지 않는다(플래그 자체가 안 붙는다).
+            detail_backup_dir=detail_backup_dir if kind != "market_poll" else None,
+            backup_dir=(market_dir / "before_market") if kind != "market_poll" else None,
+            summary_out=result_path,
+            poll_interval=int(settings.cfg("market_poll_interval",
+                                           settings.DEFAULTS["market_poll_interval"])),
+            max_poll_min=int(settings.cfg("market_max_poll_min",
+                                          settings.DEFAULTS["market_max_poll_min"])),
+            max_items=max_items if kind == "market_commit" else None,
+            prefix=_수면방지_프리픽스(kind),
+        ).build()
+
     raise ValueError(f"argv 를 조립할 수 없는 작업 종류다: {kind}")
 
 
@@ -842,7 +966,8 @@ def create_job(kind: str, *, run_dir: str | None = None,
                targets_path_override: str | Path | None = None,
                argv_override: list[str] | None = None,
                detail_inputs: dict | None = None,
-               max_credits: int | None = None) -> str:
+               max_credits: int | None = None,
+               max_items: int | None = None) -> str:
     """작업을 만들고 자식을 띄운 뒤 `job_id` 를 즉시 돌려준다. **블로킹하지 않는다.**
 
     **이 함수는 HTTP 를 모른다** (D-17 / ENG-07). 요청 객체를 받지 않고 상태코드를
@@ -882,10 +1007,15 @@ def create_job(kind: str, *, run_dir: str | None = None,
     # 상세 견적은 inputs 문서를 **받아서 새로 쓴다**(관문 통과분). 접수·이어서 확인은 새로 쓰지
     # 않고 견적이 쓴 그 파일을 가리킨다(targets_path_override) — 대상 파일은 하나다.
     DETAIL_KINDS = ("detail_estimate", "detail_submit", "detail_poll")
-    if detail_inputs is not None and kind != "detail_estimate":
-        raise ValueError("detail_inputs 는 상세 견적 전용이다")
-    if kind == "detail_estimate" and detail_inputs is None:
-        raise ValueError("상세 견적에는 detail_inputs 가 반드시 있어야 한다 — 빈 값은 전량이 아니다")
+    # 대상 문서를 **새로 쓰는** kind. 마켓 미리보기·반영은 라우트가 서버 쪽 정본(detail_status.json ·
+    # preview.json)에서 만든 문서를 넘긴다(L-02). 이어서 확인만 부모의 파일을 그대로 가리킨다.
+    INPUTS_KINDS = ("detail_estimate", "market_preview", "market_commit")
+    if detail_inputs is not None and kind not in INPUTS_KINDS:
+        raise ValueError("detail_inputs 는 상세 견적·마켓 미리보기·마켓 반영 전용이다")
+    if kind in INPUTS_KINDS and detail_inputs is None:
+        raise ValueError(f"{kind} 에는 대상 문서가 반드시 있어야 한다 — 빈 값은 전량이 아니다")
+    if max_items is not None and kind != "market_commit":
+        raise ValueError("max_items 는 마켓 반영 전용이다")
 
     # ①.5 불사자 계정 가드 (ENG-08). **자식을 띄우기 전이고, 트랜잭션을 열기도 전이다.**
     #      여기가 라우트가 아니라 `create_job` 인 것이 핵심이다 — v2 의 APScheduler 가
@@ -971,11 +1101,11 @@ def create_job(kind: str, *, run_dir: str | None = None,
         #    파일을 그대로 가리킨다(D-11). 실행이 화면 상태에서 목록을 다시 만들면,
         #    미리보기와 실행 사이에 필터가 바뀐 만큼 본 것과 다른 게 실행된다.
         targets_path = None
-        if kind == "detail_estimate":
+        if kind in INPUTS_KINDS:
             if not run_dir:
-                raise ValueError("상세 견적에는 회차가 필요하다")
+                raise ValueError(f"{kind} 에는 회차가 필요하다")
             if only_ads is not None or targets_path_override is not None:
-                raise ValueError("상세 견적의 대상은 detail_inputs 하나다")
+                raise ValueError(f"{kind} 의 대상은 detail_inputs 하나다")
             targets_path = _write_detail_inputs(job_id, run_dir, detail_inputs)
         elif only_ads is not None:
             if not run_dir:
@@ -986,6 +1116,8 @@ def create_job(kind: str, *, run_dir: str | None = None,
 
         result_path = None
         detail_dir = None
+        market_dir = None
+        detail_backup_dir = None
         if run_dir and kind in BIDS_KINDS:
             접두 = "preview" if kind == "bids_preview" else "result"
             result_path = _web_dir(run_dir) / f"{접두}_{job_id}.json"
@@ -1025,6 +1157,14 @@ def create_job(kind: str, *, run_dir: str | None = None,
             detail_dir = _상세폴더(kind, job_id, parent_job_id, run_dir, cx)
             result_path = (detail_dir / "estimate.json" if kind == "detail_estimate"
                            else detail_dir / f"summary_{job_id}.json")
+        elif kind in MARKET_KINDS:
+            # CLI 의 `--run-dir` 은 미리보기 하나당 폴더다(`_마켓폴더`). 미리보기는 preview.json
+            # 하나, 반영·이어서 확인은 잡마다 summary_<id>.json.
+            if not run_dir:
+                raise ValueError(f"{kind} 에는 회차가 필요하다")
+            market_dir, detail_backup_dir = _마켓폴더(kind, job_id, parent_job_id, run_dir, cx)
+            result_path = (market_dir / "preview.json" if kind == "market_preview"
+                           else market_dir / f"summary_{job_id}.json")
 
         # ④ argv
         if argv_override:
@@ -1033,7 +1173,10 @@ def create_job(kind: str, *, run_dir: str | None = None,
             cmd = _build_argv(kind, job_id, run_dir, accounts,
                               targets_path, result_path, commit,
                               detail_dir=detail_dir,
-                              max_credits=max_credits)
+                              max_credits=max_credits,
+                              market_dir=market_dir,
+                              detail_backup_dir=detail_backup_dir,
+                              max_items=max_items)
 
         cx.execute(
             "INSERT INTO jobs (id, kind, run_dir, accounts, argv, status, log_path, "

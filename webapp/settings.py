@@ -100,6 +100,13 @@ DEFAULTS = {
     # 붙잡아 두는 것보다 싸다.
     "detail_max_poll_min": 60,     # 접수·폴링 잡 1회의 폴링 상한(분)
     "detail_poll_interval": 45,    # 폴링 간격(초)
+
+    # ── Phase 6 (마켓 수정업로드) 에서 더한 키 ────────────────────────────
+    # 같은 규율 — 읽기는 settings.cfg("키", settings.DEFAULTS["키"]) 로만. 상한 숫자를 다른
+    # 파일에 리터럴로 적지 마라(D-08 리터럴 가드).
+    "market_update_max_items": 20,  # 게이트 통과 뒤 1회 반영 상한(D-12). 게이트 전은 1건 고정
+    "market_poll_interval": 20,     # upload_tasks 창 조회 간격(초) — RESEARCH Q2 15~30초
+    "market_max_poll_min": 30,      # 반영·이어서 확인 1회의 폴링 상한(분). 넘기면 exit 3 → 이어서 확인
 }
 
 _cache = None
