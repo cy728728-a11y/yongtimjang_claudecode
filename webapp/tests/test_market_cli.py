@@ -545,3 +545,334 @@ def test_미리보기_표시규칙_저장안함(monkeypatch, cli, 환경, capsys
     mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
     assert 실행(monkeypatch, cli, 미리보기_argv(환경)) == 0
     assert "지시문" not in 환경.preview.read_text(encoding="utf-8")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Task 2 — 반영(commit) + 이어서 확인(poll-only)
+# ════════════════════════════════════════════════════════════════════════════
+
+def 체크포인트(e):
+    return json.loads((e.run / "market_status.json").read_text(encoding="utf-8"))
+
+
+def test_max_items_없으면_exit2(monkeypatch, cli, 환경, capsys):
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경, max_items=None)) == 2
+    assert mcp.열림 == 0 and mcp.호출 == []
+
+
+def test_max_items_0이면_exit2(monkeypatch, cli, 환경, capsys):
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경, max_items=0)) == 2
+    assert mcp.열림 == 0
+
+
+def test_초과_exit5(monkeypatch, cli, 환경, capsys):
+    환경.판.상품추가("zzmk-00000003", ai=True)
+    원본쓰기(환경.a, "zzmk-00000003")
+    환경.대상(["zzmk-00000001", "zzmk-00000002", "zzmk-00000003"])
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경, max_items=1)) == 5
+    assert mcp.이름들("bulsaja_market_update") == []
+    assert mcp.이름들("bulsaja_product_workdata") == []
+    끝, _ = 마지막줄(capsys)
+    assert 끝.startswith("###MARKET### ")
+
+
+def test_접수_2단_새토큰(monkeypatch, cli, 환경, capsys):
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 0
+    업 = mcp.이름들("bulsaja_market_update")
+    assert [a["confirm"] for a in 업] == [False, True, False, True]
+    assert all(len(a["productIds"]) == 1 for a in 업)
+    토큰들 = [a["confirmationToken"] for a in 업 if a["confirm"]]
+    assert len(set(토큰들)) == 2
+    assert all(a["market"] == "SMARTSTORE" for a in 업)
+
+
+def test_접수_taskId_선저장(monkeypatch, cli, 환경, capsys):
+    """confirm:true 직후 폴링 전에 체크포인트에 taskId 가 있다 — 폴링이 터져도 남는다."""
+    p = 환경.판
+    원래 = p.upload_tasks
+    본 = {"접수후": 0}
+
+    def 폴링에서_터짐(a):
+        if any(r["productId"].startswith("zzmk") for r in p.창):
+            본["접수후"] += 1
+            raise RuntimeError("폴링 중 네트워크 끊김")
+        return 원래(a)
+
+    도구 = p.도구()
+    도구["bulsaja_upload_tasks"] = 폴링에서_터짐
+    환경.대상(["zzmk-00000001"])
+    mcp, _ = 주입(monkeypatch, cli, 도구)
+    코드 = 실행(monkeypatch, cli, 반영_argv(환경))
+    assert 코드 == 3                            # 폴링 미완 — 실패 아님
+    체 = 체크포인트(환경)
+    항목 = 체["items"]["zzmk-00000001"]
+    assert 항목["taskId"] == "49416901"
+    assert 항목["status"] == "대기"
+    assert 체["워터마크"] == "49416818"
+    assert 본["접수후"] >= 1
+
+
+def test_접수_재실행_재접수0(monkeypatch, cli, 환경, capsys):
+    환경.대상(["zzmk-00000001"])
+    p = 환경.판
+    p.자동완료 = False
+    mcp, _ = 주입(monkeypatch, cli, p.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 3
+    assert len(mcp.이름들("bulsaja_market_update")) == 2
+    # 다시 --commit → 이미접수 · market_update 0회
+    mcp2, _ = 주입(monkeypatch, cli, p.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 3
+    assert mcp2.이름들("bulsaja_market_update") == []
+    assert 체크포인트(환경)["items"]["zzmk-00000001"]["taskId"] == "49416901"
+
+
+def test_접수_응답유실은_재접수하지_않는다(monkeypatch, cli, 환경, capsys):
+    """confirm:true 가 예외 → 대기(taskId 없음) · 다음 실행도 재접수 0 · 창에서 워터마크로 찾는다."""
+    p = 환경.판
+    환경.대상(["zzmk-00000001"])
+
+    def 유실(a):
+        p._새행(a["productIds"][0])            # 서버엔 접수됐지만 응답이 안 왔다
+        raise RuntimeError("read timeout")
+
+    p.업데이트_확정 = 유실
+    p.자동완료 = False
+    mcp, _ = 주입(monkeypatch, cli, p.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 3
+    항목 = 체크포인트(환경)["items"]["zzmk-00000001"]
+    assert 항목["status"] == "대기"
+    assert 항목["taskId"] == "49416901"         # 워터마크 대체 매칭으로 찾았다
+    mcp2, _ = 주입(monkeypatch, cli, p.도구())
+    실행(monkeypatch, cli, 반영_argv(환경))
+    assert mcp2.이름들("bulsaja_market_update") == []
+
+
+def test_접수_토큰없는_성공은_P0(monkeypatch, cli, 환경, capsys):
+    환경.판.업데이트_미리보기 = lambda a: {"success": True}
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 2
+    업 = mcp.이름들("bulsaja_market_update")
+    assert len(업) == 1 and 업[0]["confirm"] is False
+    _, 전체 = 마지막줄(capsys)
+    assert "쓰기의심" in 전체
+
+
+@pytest.mark.parametrize("상황", ["미업로드", "AI상세없음", "원본없음"])
+def test_접수_재조회_스킵(monkeypatch, cli, 환경, capsys, 상황):
+    p = 환경.판
+    if 상황 == "미업로드":
+        p.상품["zzmk-00000002"]["summary"]["uploadedSuccessUrl"]["smartstore"] = None
+    elif 상황 == "AI상세없음":
+        p.상품["zzmk-00000002"]["summary"]["uploadDetailContents"]["renderContent"] = 원본HTML
+    else:
+        (환경.a / "zzmk-00000002.json").unlink()
+    mcp, _ = 주입(monkeypatch, cli, p.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 0
+    assert {a["productIds"][0] for a in mcp.이름들("bulsaja_market_update")} == {"zzmk-00000001"}
+    항목 = 체크포인트(환경)["items"]["zzmk-00000002"]
+    assert 항목["status"] == "스킵"
+    기대 = {"미업로드": "미업로드", "AI상세없음": "AI상세없음", "원본없음": "backup_failed"}[상황]
+    assert 항목["사유"].startswith(기대)
+
+
+def test_폴링_taskId_매칭_성공(monkeypatch, cli, 환경, capsys):
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 0
+    체 = 체크포인트(환경)["items"]
+    assert [체[p]["status"] for p in ("zzmk-00000001", "zzmk-00000002")] == ["성공", "성공"]
+    assert all(체[p]["확정시각"] for p in 체)
+    for 인자 in mcp.이름들("bulsaja_upload_tasks"):
+        assert "taskIds" not in 인자
+
+
+def test_폴링_실패사유(monkeypatch, cli, 환경, capsys):
+    p = 환경.판
+    p.완료상태 = "실패"
+    p.실패사유 = "[스마트스토어] 판매 중지 상품"
+    환경.대상(["zzmk-00000001"])
+    mcp, _ = 주입(monkeypatch, cli, p.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 0
+    항목 = 체크포인트(환경)["items"]["zzmk-00000001"]
+    assert 항목["status"] == "실패" and "판매 중지" in 항목["사유"]
+
+
+def test_폴링_DLQ창은_실패(monkeypatch, cli, 환경, capsys):
+    p = 환경.판
+    p.자동완료 = False
+    환경.대상(["zzmk-00000001"])
+    원래 = p.upload_tasks
+
+    def dlq로(a):
+        for r in list(p.창):
+            if r["productId"] == "zzmk-00000001":
+                p.창.remove(r)
+                p.dlq.append(dict(r, 상태="재시도초과"))
+        return 원래(a)
+
+    도구 = p.도구()
+    mcp, _ = 주입(monkeypatch, cli, 도구)
+    # 접수 뒤 첫 폴링부터 DLQ 로 옮긴다
+    p.업데이트_확정 = None
+    기존확정 = p.market_update
+
+    def 확정후dlq(a):
+        r = 기존확정(a)
+        if a.get("confirm"):
+            도구["bulsaja_upload_tasks"] = dlq로
+        return r
+
+    도구["bulsaja_market_update"] = 확정후dlq
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 0
+    assert 체크포인트(환경)["items"]["zzmk-00000001"]["status"] == "실패"
+
+
+def test_폴링_워터마크_대체매칭(monkeypatch, cli, 환경, capsys):
+    """confirm:true 응답에 taskId 가 없다 → 창에서 pid · 스마트스토어 · > 워터마크 · 삭제 아님."""
+    p = 환경.판
+    환경.대상(["zzmk-00000001"])
+    p.창.insert(0, {"상태": "성공", "마켓": "스마트스토어", "작업": "삭제",
+                   "productId": "zzmk-00000001", "taskId": "49416850"})   # 옛 행·삭제 — 무시
+
+    def taskId없음(a):
+        p._새행(a["productIds"][0])
+        return {"success": True, "message": "요청 접수"}
+
+    p.업데이트_확정 = taskId없음
+    mcp, _ = 주입(monkeypatch, cli, p.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 0
+    항목 = 체크포인트(환경)["items"]["zzmk-00000001"]
+    assert 항목["taskId"] == "49416901" and 항목["status"] == "성공"
+
+
+def test_폴링_대체매칭_삭제행은_제외(monkeypatch, cli, 환경, capsys):
+    p = 환경.판
+    p.자동완료 = False
+    환경.대상(["zzmk-00000001"])
+
+    def 삭제만(a):
+        p._새행(a["productIds"][0], 작업="삭제")
+        return {"success": True}
+
+    p.업데이트_확정 = 삭제만
+    mcp, _ = 주입(monkeypatch, cli, p.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 3
+    assert 체크포인트(환경)["items"]["zzmk-00000001"]["taskId"] is None
+
+
+def test_폴링_미발견은_대기_exit3(monkeypatch, cli, 환경, capsys):
+    p = 환경.판
+    p.자동완료 = False
+    mcp, 시계 = 주입(monkeypatch, cli, p.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 3
+    체 = 체크포인트(환경)["items"]
+    assert {v["status"] for v in 체.values()} == {"대기"}
+    assert 시계.지금 - 1_000_000.0 >= 5 * 60          # deadline 까지 기다렸다
+    끝, _ = 마지막줄(capsys)
+    assert 끝 == "###MARKET### 성공 0 / 실패 0 / 스킵 0 / 대기 2 / 전체 2"
+
+
+def test_폴링_조회실패는_실패아님(monkeypatch, cli, 환경, capsys):
+    p = 환경.판
+    환경.대상(["zzmk-00000001"])
+    원래 = p.upload_tasks
+    상태 = {"접수됨": False}
+
+    def 고장(a):
+        if 상태["접수됨"]:
+            return {"_text": "MCP error -32000: upstream"}
+        return 원래(a)
+
+    기존 = p.market_update
+
+    def 표시(a):
+        r = 기존(a)
+        if a.get("confirm"):
+            상태["접수됨"] = True
+        return r
+
+    도구 = p.도구()
+    도구["bulsaja_upload_tasks"] = 고장
+    도구["bulsaja_market_update"] = 표시
+    mcp, _ = 주입(monkeypatch, cli, 도구)
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 3
+    항목 = 체크포인트(환경)["items"]["zzmk-00000001"]
+    assert 항목["status"] == "대기"
+    _, 전체 = 마지막줄(capsys)
+    assert "조회" in 전체
+
+
+def test_이어서_poll_only(monkeypatch, cli, 환경, capsys):
+    p = 환경.판
+    p.자동완료 = False
+    mcp, _ = 주입(monkeypatch, cli, p.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 3
+    p.자동완료 = True
+    mcp2, _ = 주입(monkeypatch, cli, p.도구())
+    argv = ["--run-dir", str(환경.run), "--expect-nick", "부킹", "--poll-only",
+            "--targets", str(환경.targets), "--summary-out", str(환경.summary),
+            "--poll-interval", "20", "--max-poll-min", "5"]
+    assert 실행(monkeypatch, cli, argv) == 0
+    assert mcp2.이름들("bulsaja_market_update") == []
+    assert mcp2.이름들("bulsaja_product_workdata") == []
+    assert {v["status"] for v in 체크포인트(환경)["items"].values()} == {"성공"}
+
+
+def test_이어서_poll_only_계정가드(monkeypatch, cli, 환경, capsys):
+    환경.판.닉 = "다른사람"
+    (환경.run / "market_status.json").write_text(json.dumps(
+        {"워터마크": "49416818", "items": {"zzmk-00000001": {"status": "대기", "taskId": None}}}),
+        encoding="utf-8")
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    argv = ["--run-dir", str(환경.run), "--expect-nick", "부킹", "--poll-only",
+            "--targets", str(환경.targets)]
+    assert 실행(monkeypatch, cli, argv) == 4
+    assert mcp.도구들() == ["bulsaja_my_profile"]
+
+
+def test_요약_파일_센티널(monkeypatch, cli, 환경, capsys):
+    환경.판.상품["zzmk-00000002"]["summary"]["uploadedSuccessUrl"]["smartstore"] = ""
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경, max_items=2)) == 0
+    끝, _ = 마지막줄(capsys)
+    assert 끝 == "###MARKET### 성공 1 / 실패 0 / 스킵 1 / 대기 0 / 전체 2"
+    요약 = json.loads(환경.summary.read_text(encoding="utf-8"))
+    assert 요약["모드"] == "commit" and 요약["max_items"] == 2 and 요약["계정"] == "부킹"
+    assert 요약["집계"] == {"성공": 1, "실패": 0, "스킵": 1, "대기": 0, "전체": 2}
+    assert [x["productId"] for x in 요약["items"]] == ["zzmk-00000001", "zzmk-00000002"]
+    assert "tok-" not in 환경.summary.read_text(encoding="utf-8")
+    assert "tok-" not in (환경.run / "market_status.json").read_text(encoding="utf-8")
+
+
+def test_접수_게이트후_두번째_commit(monkeypatch, cli, 환경, capsys):
+    """게이트 1건 commit(max 1) 뒤 같은 체크포인트로 나머지 commit — 이미 종결된 건 대상이 아니다."""
+    환경.대상(["zzmk-00000001"])
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경, max_items=1)) == 0
+    환경.대상(["zzmk-00000001", "zzmk-00000002"])
+    mcp2, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경, max_items=1)) == 0
+    assert {a["productIds"][0] for a in mcp2.이름들("bulsaja_market_update")} == {"zzmk-00000002"}
+    assert 체크포인트(환경)["워터마크"] == "49416818"        # 첫 commit 값 유지
+
+
+@pytest.mark.parametrize("상황", ["없음", "깨짐"])
+def test_이어서_체크포인트_없거나_깨지면_exit2(monkeypatch, cli, 환경, capsys, 상황):
+    if 상황 == "깨짐":
+        (환경.run / "market_status.json").write_text("{깨진", encoding="utf-8")
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    argv = ["--run-dir", str(환경.run), "--expect-nick", "부킹", "--poll-only",
+            "--targets", str(환경.targets)]
+    assert 실행(monkeypatch, cli, argv) == 2
+    assert mcp.열림 == 0
+
+
+def test_접수_깨진_체크포인트면_exit2(monkeypatch, cli, 환경, capsys):
+    """깨진 체크포인트를 빈 값으로 읽으면 taskId 가진 상품을 다시 접수한다 — 거부."""
+    (환경.run / "market_status.json").write_text("{깨진", encoding="utf-8")
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 반영_argv(환경)) == 2
+    assert mcp.열림 == 0
