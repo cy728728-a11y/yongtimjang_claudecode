@@ -143,14 +143,15 @@ Recent decisions affecting current work:
 
 ### Blockers/Concerns
 
-- **[06-01 → 05-06 순서 · D-03]** `detail_batch --backup-out` 이 머지됐다. 05-06 첫 접수 **전에** ① 도는 잡 0 확인 ② 사용자 서버 재시작(`webapp/run-webapp.sh`, `--reload` 없음 — 재시작 전엔 옛 DetailArgv 로 접수된다) ③ 접수 잡 argv(`GET /jobs/<submit_id>`)에 `--backup-out …/before_detail` 이 있는지 확인. 없으면 첫 5건 원본 백업 유실 → Phase 6 에서 해당 건 `backup_failed`(원본 복원 불가). 사용자 게이트 아님 — 05-06 실행자의 사전조건.
+- ~~**[06-01 → 05-06 순서 · D-03]** --backup-out 선행~~ — **해소(2026-09-26).** 접수 잡 d4b3a37f argv 에 `--backup-out …/before_detail` 확인, 4파일 생성
 - ~~**[Phase 3 선행]** `detail_batch.py` ModuleNotFoundError (STATE-01)~~ — **해소(03-01).** shim 으로 이 맥북에서 돈다
 - ~~**[Phase 3 선행]** `aiImageGenerated` 외부 반영 경로 기록 여부 미확인 (STATE-04)~~ — **해소(03-02·03-07).**
   **안 찍는다.** 음성대조 26건 + 실탄 재확인(해소 51행 중 ⚪ **0건** · `uploadDetailContents` 키가
   `{imageTranslated, renderContent}` 둘뿐). **중복방지는 태그 쪽을 봐야 한다** — `aiImageGenerated`
   만 보면 기작업 29건을 다시 태운다. 확정 실험(외부 반영 1건 실측)은 예정대로 Phase 5
+  **2026-09-26 05-06 실측:** 불사자 AI 상세 생성 경로(웹앱 접수 d4b3a37f)는 `aiImageGenerated=True` 를 **4/4 찍는다** — 2차 견적 b591a063 이 4건 전부 aiImageGenerated 근거로 스킵(접수 0 · 크레딧 0). D-13 기록됨, 태그 쓰기 폴백 불필요. 외부 반영 경로(29건)는 여전히 태그로만 잡힌다
 
-- **[05-06 선행 — Phase 6 D-03]** 05-06(첫 크레딧 실탄) 전에 **06-01(`detail_batch --backup-out`, 크레딧 0)을 먼저 실행·머지**하고, 도는 잡 0건 확인 뒤 웹앱 서버를 재시작해야 첫 5건의 AI 생성 전 원본 상세가 남는다(서버가 `--reload` 없이 돈다). 순서가 뒤집히면 그 건은 원본 복원 불가. D-03 자체(원본 백업 시점)는 `[auto]` — 용팀장 한 줄 확인 대상
+- ~~**[05-06 선행 — Phase 6 D-03]** 06-01 선행 실행~~ — 해소(위와 같음)
 - **[Phase 6 게이트]** 수정업로드가 상하단 안내이미지를 어느 시점 기준으로 올리는지 모순 미해결 — 1건 육안 확인으로 깬다 (MARKET-02)
 - **[Phase 4 → 5]** 홍보배너 게이트는 **불통과로 종료**(D-23). 새 회차는 기계 판정만으로 상품 이미지 약 14% 가 빠진다 — Phase 5 discuss 에서 사람 확인 vs 어휘군 단독을 정해야 실작업 투입
 - **[환경]** 이 맥북에 `bulsaja-yongssaem` MCP 서버 항목이 없다 — 용쌤 계정 전환 경로가 끊겨 있음 (ENG-08 착수 시 확인)
