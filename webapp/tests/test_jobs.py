@@ -1353,6 +1353,19 @@ def test_detail잡_submit_max_credits_없으면_ValueError(tmp_path, 기대닉):
                          detail_dir=tmp_path, max_credits=None)
 
 
+def test_detail잡_submit_만_backup_out(tmp_path, 기대닉):
+    """06-01 · D-03 — detail_submit 은 <detail_dir>/before_detail, estimate·poll 은 없음."""
+    for kind in 상세3종:
+        av = jobs._build_argv(kind, "zzjob", "2026-08-30", [],
+                              tmp_path / "t.json", tmp_path / "s.json", False,
+                              detail_dir=tmp_path / "detail_zz", max_credits=10)
+        if kind == "detail_submit":
+            assert av[av.index("--backup-out") + 1] == str(tmp_path / "detail_zz"
+                                                           / "before_detail")
+        else:
+            assert "--backup-out" not in av
+
+
 def test_detail견적잡은_inputs_dict_가_없으면_안_만들어진다(잡판, 계정확인, 기대닉, 안띄운다,
                                                     tmp_run_dir):
     계정확인(기대닉)

@@ -319,6 +319,7 @@ class DetailArgv(BaseModel):
     **기본값이 없다** — 폴링 상한·간격·기작업 태그·기대 닉네임은 호출부
     (`jobs._build_argv`)가 `settings.cfg()` 로 읽어 넘긴다(T-1-12 가짜 설정 방지).
     화질·장수 플래그는 **아예 없다**(D-11) — CLI 기본(일반화질 · 입력 장수 그대로)만 탄다.
+    submit 은 `--backup-out`(원본 상세 백업 폴더)이 **필수**다 — 백업 없는 접수는 없다(06-01 · D-03).
     """
 
     mode: Literal["estimate", "submit", "poll"]
@@ -331,6 +332,7 @@ class DetailArgv(BaseModel):
     estimate_out: Path | None = None   # estimate 전용
     summary_out: Path | None = None    # submit/poll 전용
     max_credits: int | None = None     # submit 전용 — 견적이 준 상한(exit 5)
+    backup_out: Path | None = None     # submit 전용 — AI 접수 직전 원본 백업 폴더(D-03 ⓐ)
     # `caffeinate -i` 자리. 무엇에 붙일지는 `jobs._수면방지_프리픽스` 가 정한다.
     prefix: list[str] = []
 
@@ -361,6 +363,10 @@ class DetailArgv(BaseModel):
                 if self.max_credits is None:
                     raise ValueError("접수 모드에는 max_credits 가 필요하다 — 상한 없는 접수는 없다")
                 av += ["--max-credits", str(self.max_credits)]
+                # AI 생성은 완료 시 불사자 상세를 덮는다 — 원본은 접수 순간에만 뜬다(MARKET-03)
+                if self.backup_out is None:
+                    raise ValueError("백업 없는 접수는 없다 — MARKET-03/L-03")
+                av += ["--backup-out", str(self.backup_out)]
             else:
                 av += ["--poll-only"]
             av += ["--summary-out", str(self.summary_out)]

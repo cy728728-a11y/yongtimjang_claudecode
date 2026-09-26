@@ -824,6 +824,10 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
             estimate_out=result_path if kind == "detail_estimate" else None,
             summary_out=result_path if kind != "detail_estimate" else None,
             max_credits=max_credits if kind == "detail_submit" else None,
+            # 06-01 · D-03 — AI 생성이 완료되면 불사자 상세가 덮인다. 원본은 접수 순간에만
+            # 뜰 수 있으므로 접수 잡은 항상 `<detail 폴더>/before_detail` 에 떨구게 한다.
+            # (05-06 첫 실탄 전에 들어가야 하고, 사용자 서버는 재시작해야 이 값을 탄다.)
+            backup_out=(detail_dir / "before_detail") if kind == "detail_submit" else None,
             prefix=_수면방지_프리픽스(kind),
         ).build()
 

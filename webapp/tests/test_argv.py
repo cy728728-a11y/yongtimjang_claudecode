@@ -639,12 +639,36 @@ def test_DetailArgv_셸경유_없음():
 def test_DetailArgv_모드별_플래그():
     """submit 은 --max-credits · --summary-out, poll 은 --poll-only · --summary-out."""
     접수 = _상세(mode="submit", estimate_out=None, max_credits=50,
-                summary_out=Path("/tmp/zz/s.json")).build()
+                summary_out=Path("/tmp/zz/s.json"),
+                backup_out=Path("/tmp/zz/web/detail_a/before_detail")).build()
     assert 접수[접수.index("--max-credits") + 1] == "50"
     assert "--estimate-only" not in 접수 and "--poll-only" not in 접수
     확인 = _상세(mode="poll", estimate_out=None,
                 summary_out=Path("/tmp/zz/s.json")).build()
     assert "--poll-only" in 확인 and "--max-credits" not in 확인
+
+
+def test_DetailArgv_submit_은_backup_out_항상():
+    """06-01 · D-03 — 접수에는 원본 백업 폴더가 붙는다 (MARKET-03)."""
+    av = _상세(mode="submit", estimate_out=None, max_credits=50,
+              summary_out=Path("/tmp/zz/s.json"),
+              backup_out=Path("/tmp/zz/web/detail_a/before_detail")).build()
+    assert av[av.index("--backup-out") + 1] == "/tmp/zz/web/detail_a/before_detail"
+
+
+def test_DetailArgv_submit_backup_out_없으면_ValueError():
+    """백업 없는 접수 경로를 만들지 않는다 (L-03 · T-06-02)."""
+    with pytest.raises(ValueError, match="백업 없는 접수는 없다"):
+        _상세(mode="submit", estimate_out=None, max_credits=50,
+              summary_out=Path("/tmp/zz/s.json")).build()
+
+
+def test_DetailArgv_estimate_poll_은_backup_out_없음():
+    """견적·이어서 확인은 generate 가 없다 — 값을 줘도 플래그를 안 붙인다."""
+    bk = Path("/tmp/zz/web/detail_a/before_detail")
+    assert "--backup-out" not in _상세(backup_out=bk).build()
+    assert "--backup-out" not in _상세(mode="poll", estimate_out=None, backup_out=bk,
+                                      summary_out=Path("/tmp/zz/s.json")).build()
 
 
 def test_DetailArgv_닉_패턴():

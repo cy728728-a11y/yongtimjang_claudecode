@@ -140,6 +140,7 @@ Recent decisions affecting current work:
 
 ### Blockers/Concerns
 
+- **[06-01 → 05-06 순서 · D-03]** `detail_batch --backup-out` 이 머지됐다. 05-06 첫 접수 **전에** ① 도는 잡 0 확인 ② 사용자 서버 재시작(`webapp/run-webapp.sh`, `--reload` 없음 — 재시작 전엔 옛 DetailArgv 로 접수된다) ③ 접수 잡 argv(`GET /jobs/<submit_id>`)에 `--backup-out …/before_detail` 이 있는지 확인. 없으면 첫 5건 원본 백업 유실 → Phase 6 에서 해당 건 `backup_failed`(원본 복원 불가). 사용자 게이트 아님 — 05-06 실행자의 사전조건.
 - ~~**[Phase 3 선행]** `detail_batch.py` ModuleNotFoundError (STATE-01)~~ — **해소(03-01).** shim 으로 이 맥북에서 돈다
 - ~~**[Phase 3 선행]** `aiImageGenerated` 외부 반영 경로 기록 여부 미확인 (STATE-04)~~ — **해소(03-02·03-07).**
   **안 찍는다.** 음성대조 26건 + 실탄 재확인(해소 51행 중 ⚪ **0건** · `uploadDetailContents` 키가
