@@ -266,7 +266,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — ⚠️ 05-06 전에 머지: `detail_batch --backup-out`(원본 ⓐ, 크레딧 0) + DetailArgv submit 항상 부착 + STATE 순서 기록(서버 재시작 필요)
+- [x] 06-01-PLAN.md — ⚠️ 05-06 전에 머지: `detail_batch --backup-out`(원본 ⓐ, 크레딧 0) + DetailArgv submit 항상 부착 + STATE 순서 기록(서버 재시작 필요)
 - [ ] 06-02-PLAN.md — 새 CLI `market_update.py`: preview(쓰기 0 이중 가드)·commit(상품당 2단·taskId 선저장·exit 5)·poll(30건 창 매칭·exit 3)·restore·tasks-snapshot — 오프라인 테스트
 
 **Wave 2** *(blocked on Wave 1 · 05-06 실탄 중엔 편집 금지)*
@@ -314,7 +314,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
 | 4. 홍보배너 식별 | 12/12 | Closed — 게이트 불통과 · 용팀장 결정으로 종료 (D-23) | 2026-09-25 |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 4/6 | In Progress|  |
-| 6. 마켓 수정업로드 | 0/TBD | Not started | - |
+| 6. 마켓 수정업로드 | 1/6 | In Progress|  |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |
 
 ## Sequencing Notes
