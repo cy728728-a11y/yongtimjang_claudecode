@@ -266,7 +266,7 @@ class 판:
                 "bulsaja_work_progress": self.work_progress}
 
 
-def ⓐ쓰기(폴더, pid, 코드="", rc=원본HTML):
+def 원본쓰기(폴더, pid, 코드="", rc=원본HTML):
     폴더.mkdir(parents=True, exist_ok=True)
     (폴더 / f"{pid}.json").write_text(json.dumps(
         {"productId": pid, "판매자상품코드": 코드, "조회시각": "2026-09-26T10:00:00+09:00",
@@ -284,8 +284,8 @@ def 환경(tmp_path):
     p = 판()
     p.상품추가("zzmk-00000001", ai=True)                 # AI 플래그 참
     p.상품추가("zzmk-00000002")                           # 플래그 없음 + rc ≠ ⓐ → OR 규칙
-    ⓐ쓰기(a폴더, "zzmk-00000001", "ZZ-CODE-0001")
-    ⓐ쓰기(a폴더, "zzmk-00000002", "ZZ-CODE-0002")
+    원본쓰기(a폴더, "zzmk-00000001", "ZZ-CODE-0001")
+    원본쓰기(a폴더, "zzmk-00000002", "ZZ-CODE-0002")
     targets = tmp_path / "targets.json"
 
     def 대상(pids):
@@ -447,7 +447,7 @@ def test_AI판정_플래그참이면_rc같아도_반영가능(monkeypatch, cli, 
 
 
 @pytest.mark.parametrize("망가뜨리기", ["부재", "깨짐", "rc없음"])
-def test_백업_ⓐ없으면_backup_failed(monkeypatch, cli, 환경, capsys, 망가뜨리기):
+def test_백업_원본없으면_backup_failed(monkeypatch, cli, 환경, capsys, 망가뜨리기):
     경로 = 환경.a / "zzmk-00000001.json"
     if 망가뜨리기 == "부재":
         경로.unlink()
@@ -464,7 +464,7 @@ def test_백업_ⓐ없으면_backup_failed(monkeypatch, cli, 환경, capsys, 망
     assert ["zzmk-00000001"] not in [a["productIds"] for a in mcp.이름들("bulsaja_market_update")]
 
 
-def test_백업_ⓑ_기록(monkeypatch, cli, 환경, capsys):
+def test_백업_반영전_기록(monkeypatch, cli, 환경, capsys):
     mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
     assert 실행(monkeypatch, cli, 미리보기_argv(환경)) == 0
     for pid in ("zzmk-00000001", "zzmk-00000002"):
@@ -480,7 +480,7 @@ def test_백업_ⓑ_기록(monkeypatch, cli, 환경, capsys):
     assert 첫["backup_b"].endswith("zzmk-00000001.json")
 
 
-def test_백업_ⓑ_쓰기실패면_backup_failed(monkeypatch, cli, 환경, capsys):
+def test_백업_반영전_쓰기실패면_backup_failed(monkeypatch, cli, 환경, capsys):
     환경.b.parent.mkdir(parents=True, exist_ok=True)
     환경.b.write_text("폴더 자리에 파일", encoding="utf-8")       # mkdir 실패 유도
     mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
@@ -518,7 +518,7 @@ def test_입력오류_exit2(monkeypatch, cli, 환경, capsys, 망가뜨리기):
     assert mcp.열림 == 0 and mcp.호출 == []
 
 
-def test_입력오류_ⓐ폴더_없으면_exit2(monkeypatch, cli, 환경, capsys):
+def test_입력오류_원본폴더_없으면_exit2(monkeypatch, cli, 환경, capsys):
     argv = 미리보기_argv(환경)
     i = argv.index("--detail-backup-dir")
     del argv[i:i + 2]
@@ -544,4 +544,4 @@ def test_센티널_마지막줄(monkeypatch, cli, 환경, capsys):
 def test_미리보기_표시규칙_저장안함(monkeypatch, cli, 환경, capsys):
     mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
     assert 실행(monkeypatch, cli, 미리보기_argv(환경)) == 0
-    assert "표시규칙" not in 환경.preview.read_text(encoding="utf-8")
+    assert "지시문" not in 환경.preview.read_text(encoding="utf-8")
