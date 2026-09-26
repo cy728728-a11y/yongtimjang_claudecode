@@ -10,7 +10,10 @@
      · 복원 버튼 — 복원은 CLI 수동(D-05). 복원에 쓸 ⓐ·ⓑ 경로를 텍스트로 보여 줄 뿐이다
      · 백업 내용 — 경로와 있음/없음만(D-04)
 
-   아래 게이트 슬롯 div 는 06-04 가 사람 판정 패널을 채우는 자리다 — 여기서는 비워 둔다.
+   게이트 슬롯(`#market-gate-slot`)은 **결과 표보다 위** — 06-04 의 첫 1건 육안 확인 패널이 고정으로
+   뜬다(D-10). 체크포인트 성공이 1건 이상일 때만 라우트가 `게이트패널` 을 준다. 판정이 '정상' 이면
+   표 아래에 원 미리보기의 반영 버튼(`market-commit-btn`)을 한 번 더 내어 같은 화면에서 나머지로
+   잇는다 — 상한·대상은 여전히 서버가 정한다.
 
    자동 이스케이프에 기댄다 — 사유에 불사자 원문이 섞여 들어온다. 이 파일에서
    이스케이프를 끄는 필터를 쓰지 마라. #}
@@ -23,7 +26,7 @@
     빈 표를 결과로 읽지 않게 표를 그리지 않는다.</p>
 
 {% else %}
-  <div id="market-gate-slot"></div>
+  <div id="market-gate-slot">{% if 게이트패널 %}{% include "_market_gate_panel.html" %}{% endif %}</div>
 
   <p>
     <strong>성공 {{ 집계.get("성공", 0) }}</strong>
@@ -64,5 +67,14 @@
       {% endfor %}
       </tbody>
     </table>
+  {% endif %}
+
+  {% set gp = 게이트패널 %}
+  {% if gp and gp.최신 and gp.최신.판정 == "정상" and gp.preview_job_id and gp.남은반영가능 > 0 %}
+    <p id="market-commit-next">
+      게이트 통과 — 이 미리보기의 남은 반영가능 {{ gp.남은반영가능 }}건 중 앞 {{ gp.상한 }}건까지 이어서 반영한다.
+      나머지는 다음 회차다.<br>
+      <button type="button" class="market-commit-btn" data-preview-job="{{ gp.preview_job_id }}">반영 실행 (최대 {{ gp.상한 }}건)</button>
+    </p>
   {% endif %}
 {% endif %}
