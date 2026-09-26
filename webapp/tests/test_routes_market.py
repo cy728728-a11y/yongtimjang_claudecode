@@ -614,3 +614,283 @@ def test_board_js_마켓버튼_몸통은_잡id하나():
     assert '"/jobs/market/commit", { preview_job_id: 버튼.dataset.previewJob }' in 본문
     assert '"/jobs/market/poll", { commit_job_id: 버튼.dataset.commitJob }' in 본문
     assert "market-result-link" in 본문
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 06-04 — 첫 1건 육안 확인 게이트 (MARKET-02 · SC-2 · D-09~D-12)
+# ════════════════════════════════════════════════════════════════════════════
+
+게이트경로 = "/market/gate"
+_체크_성공1 = {"워터마크": "100", "items": {
+    "zzp1": {"판매자상품코드": "zz01", "status": "성공", "taskId": "task-zz-00000201",
+             "사유": "", "backup_a": "/tmp/zz/before_detail/zzp1.json",
+             "backup_b": "/tmp/zz/before_market/zzp1.json"}}}
+
+
+def _게이트판정들() -> list[dict]:
+    cx = sqlite3.connect(jobs.db_path())
+    cx.row_factory = sqlite3.Row
+    try:
+        return [dict(r) for r in cx.execute("SELECT * FROM market_gate ORDER BY id")]
+    finally:
+        cx.close()
+
+
+def _게이트몸통(반영, 판정="정상", 본문=True, 상하단=True, 기타=True, **덤):
+    return {"commit_job_id": 반영, "판정": 판정, "체크_본문": 본문, "체크_상하단": 상하단,
+            "체크_기타필드": 기타, "스토어교체여부": "교체됨", "메모": "zz메모", **덤}
+
+
+def _첫반영(tmp_run_dir, 체크=None, **kw):
+    미리, 폴더 = _미리보기체인(tmp_run_dir, market_status=_체크_성공1 if 체크 is None else 체크)
+    반영 = _반영행(tmp_run_dir, 미리, 폴더, **kw)
+    return 미리, 폴더, 반영
+
+
+def test_게이트_라우트_정상(화면, 엿듣기, tmp_run_dir):
+    """기록 대상 상품은 서버가 체크포인트 성공 항목에서 정한다 — 화면 값은 받지도 않는다."""
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    응답 = 화면.post(게이트경로, json=_게이트몸통(반영))
+    assert 응답.status_code == 200, 응답.text
+    행들 = _게이트판정들()
+    assert len(행들) == 1
+    h = 행들[0]
+    assert (h["판정"], h["판매자상품코드"], h["productId"], h["commit_job_id"]) == \
+        ("정상", "zz01", "zzp1", 반영)
+    assert h["스토어교체여부"] == "교체됨" and h["메모"] == "zz메모" and h["기록시각"]
+    assert "정상" in 응답.text and 'hx-post="/market/gate"' not in 응답.text
+    assert not 엿듣기, "판정 기록이 잡을 만들었다"
+
+
+def test_게이트_화면이_상품을_보내면_422(화면, tmp_run_dir):
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    for 덤 in ({"판매자상품코드": "zz04"}, {"productId": "zzp4"}, {"max_items": 20}):
+        assert 화면.post(게이트경로, json=_게이트몸통(반영, **덤)).status_code == 422
+    assert _게이트판정들() == []
+
+
+def test_게이트_htmx_폼도_받는다(화면, tmp_run_dir):
+    """체크박스는 안 누르면 폼에서 빠진다 — 빠진 체크는 거짓이다."""
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    폼 = {"commit_job_id": 반영, "판정": "정상", "체크_본문": "true", "체크_상하단": "true",
+          "체크_기타필드": "true", "스토어교체여부": "미교체", "메모": ""}
+    응답 = 화면.post(게이트경로, data=폼)
+    assert 응답.status_code == 200, 응답.text
+    assert _게이트판정들()[0]["스토어교체여부"] == "미교체"
+    폼.pop("체크_상하단")
+    assert 화면.post(게이트경로, data=폼).status_code == 400
+    assert len(_게이트판정들()) == 1
+
+
+@pytest.mark.parametrize("빠짐", ["본문", "상하단", "기타"])
+def test_게이트_정상은_체크3필수(화면, tmp_run_dir, 빠짐):
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    응답 = 화면.post(게이트경로, json=_게이트몸통(반영, **{빠짐: False}))
+    assert 응답.status_code == 400
+    assert "체크" in 응답.json()["detail"]
+    assert _게이트판정들() == []
+
+
+def test_게이트_이상은_체크없어도_기록(화면, tmp_run_dir):
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    응답 = 화면.post(게이트경로, json=_게이트몸통(반영, "이상", False, False, False))
+    assert 응답.status_code == 200, 응답.text
+    assert _게이트판정들()[0]["판정"] == "이상"
+    assert "restore-backup" in 응답.text and "/tmp/zz/before_detail/zzp1.json" in 응답.text
+
+
+def test_게이트_성공0건은_400(화면, tmp_run_dir):
+    _, _, 반영 = _첫반영(tmp_run_dir, 체크={"워터마크": "100", "items": {
+        "zzp1": {"판매자상품코드": "zz01", "status": "대기", "taskId": "201"}}})
+    응답 = 화면.post(게이트경로, json=_게이트몸통(반영))
+    assert 응답.status_code == 400
+    assert _게이트판정들() == []
+
+
+def test_게이트_토큰없이_403(화면, tmp_run_dir):
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    응답 = 화면.post(게이트경로, json=_게이트몸통(반영), headers={"X-CT-Token": "wrong-token"})
+    assert 응답.status_code == 403
+    assert _게이트판정들() == []
+
+
+def test_게이트_GET은_405(화면):
+    assert 화면.get(게이트경로).status_code == 405
+
+
+def test_게이트_메모500자초과_422(화면, tmp_run_dir):
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    몸통 = _게이트몸통(반영)
+    몸통["메모"] = "가" * 501
+    assert 화면.post(게이트경로, json=몸통).status_code == 422
+    몸통["메모"] = "가" * 500
+    assert 화면.post(게이트경로, json=몸통).status_code == 200
+
+
+@pytest.mark.parametrize("값", [{"판정": "통과"}, {"스토어교체여부": "몰라"}])
+def test_게이트_화이트리스트밖_422(화면, tmp_run_dir, 값):
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    assert 화면.post(게이트경로, json={**_게이트몸통(반영), **값}).status_code == 422
+
+
+def test_게이트_잡종류틀리면_400(화면, tmp_run_dir):
+    미리, 폴더, _ = _첫반영(tmp_run_dir)
+    접수 = jobs._row(미리)["parent_job_id"]
+    for 잡 in (미리, 접수, str(uuid.uuid4())):
+        assert 화면.post(게이트경로, json=_게이트몸통(잡)).status_code == 400
+    assert _게이트판정들() == []
+
+
+def test_게이트_이어서확인_잡으로도_된다(화면, tmp_run_dir):
+    미리, 폴더, 반영 = _첫반영(tmp_run_dir, exit_code=3)
+    확인 = _반영행(tmp_run_dir, 미리, 폴더, kind="market_poll", parent=반영,
+                  대상=jobs._row(반영)["targets_path"])
+    assert 화면.post(게이트경로, json=_게이트몸통(확인)).status_code == 200
+    assert _게이트판정들()[0]["commit_job_id"] == 확인
+
+
+# ── 상한 결정 (D-09 · D-12) ─────────────────────────────────────────────────
+
+def test_상한_판정전은_1(화면, tmp_run_dir):
+    from webapp.routes import jobs as 라우트
+    assert 라우트._마켓반영상한() == 1
+
+
+def test_상한_정상후_N(화면, 안띄운다, 프로필, 기대닉, tmp_run_dir, monkeypatch):
+    """정상 기록 뒤 같은 미리보기의 두 번째 반영 → 진짜 argv 가 `--max-items 20` · 남은 2건."""
+    from webapp import settings as 설정
+    monkeypatch.setattr(설정, "load", lambda force=False: None)
+    프로필()
+    미리, 폴더, 반영 = _첫반영(tmp_run_dir)
+    assert 화면.post(게이트경로, json=_게이트몸통(반영)).status_code == 200
+    응답 = 화면.post(반영경로, json={"preview_job_id": 미리})
+    assert 응답.status_code == 200, 응답.text
+    av = json.loads(jobs._row(응답.json()["job_id"])["argv"])
+    assert av[av.index("--max-items") + 1] == "20"
+    assert _반영플래그 in av
+    대상 = json.loads(Path(av[av.index("--targets") + 1]).read_text(encoding="utf-8"))
+    assert [x["productId"] for x in 대상["items"]] == ["zzp2", "zzp4"]
+
+
+def test_상한_설정값을_따른다(화면, tmp_run_dir, monkeypatch):
+    from webapp import market_gate_store
+    from webapp import settings as 설정
+    from webapp.routes import jobs as 라우트
+    진짜 = 설정.cfg
+    monkeypatch.setattr(설정, "cfg", lambda d, default=None, required=False:
+                        7 if d == "market_update_max_items" else 진짜(d, default, required))
+    assert 라우트._마켓반영상한() == 1
+    market_gate_store.판정기록("정상", "zz01", "zzp1", "job-zz", "교체됨", "")
+    assert 라우트._마켓반영상한() == 7
+
+
+def test_상한_이상이면_400(화면, 엿듣기, tmp_run_dir):
+    미리, 폴더, 반영 = _첫반영(tmp_run_dir)
+    assert 화면.post(게이트경로, json=_게이트몸통(반영, "이상")).status_code == 200
+    응답 = 화면.post(반영경로, json={"preview_job_id": 미리})
+    assert 응답.status_code == 400
+    assert "게이트 이상 판정 — 멈춤" in 응답.json()["detail"]
+    assert not 엿듣기
+    # 다른 새 미리보기도 막힌다 — 판정은 미리보기 단위가 아니다(D-09 1회성)
+    새미리, _ = _미리보기체인(tmp_run_dir)
+    assert 화면.post(반영경로, json={"preview_job_id": 새미리}).status_code == 400
+    assert not 엿듣기
+
+
+# ── 미리보기 ctx (D-09 · D-11 · D-12) ───────────────────────────────────────
+
+def test_미리보기ctx_이상이면_버튼없음(화면, tmp_run_dir):
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    화면.post(게이트경로, json=_게이트몸통(반영, "이상"))
+    새미리, _ = _미리보기체인(tmp_run_dir)
+    j = 화면.get(f"/jobs/{새미리}/result?format=json").json()
+    assert j["버튼문구"] is None and j["게이트"]["판정"] == "이상"
+    본문 = 화면.get(f"/jobs/{새미리}/result", headers={"HX-Request": "true"}).text
+    assert "market-commit-btn" not in 본문
+    assert "게이트 이상 판정으로 멈춰 있다" in 본문
+
+
+def test_미리보기ctx_정상이면_최대N과_다음회차(화면, tmp_run_dir, monkeypatch):
+    from webapp import settings as 설정
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    화면.post(게이트경로, json=_게이트몸통(반영))
+    새미리, _ = _미리보기체인(tmp_run_dir)
+    j = 화면.get(f"/jobs/{새미리}/result?format=json").json()
+    assert j["버튼문구"] == "반영 실행 (최대 20건)" and j["상한"] == 20
+    진짜 = 설정.cfg
+    monkeypatch.setattr(설정, "cfg", lambda d, default=None, required=False:
+                        2 if d == "market_update_max_items" else 진짜(d, default, required))
+    j = 화면.get(f"/jobs/{새미리}/result?format=json").json()
+    표시 = {h["판매자상품코드"]: h["반영표시"] for h in j["항목"]}
+    assert 표시["zz01"] == "이번 반영" and 표시["zz02"] == "이번 반영"
+    assert 표시["zz04"] == "다음 회차"
+    assert j["버튼문구"] == "반영 실행 (최대 2건)"
+
+
+# ── 결과 표 위 게이트 패널 (D-10 · D-11) ────────────────────────────────────
+
+def test_결과_게이트패널_판정전(화면, tmp_run_dir):
+    _, 폴더, 반영 = _첫반영(tmp_run_dir)
+    j = 화면.get(f"/jobs/{반영}/result?format=json").json()
+    p = j["게이트패널"]
+    assert p["판정전"] is True
+    assert (p["판매자상품코드"], p["productId"], p["채널상품번호"]) == ("zz01", "zzp1", "991")
+    assert p["링크"] == "https://smartstore.naver.com/main/products/991"
+    본문 = 화면.get(f"/jobs/{반영}/result", headers={"HX-Request": "true"}).text
+    for 말 in ("첫 1건 육안 확인", "zz01", "991", "https://zzcdn.example/t.jpg",
+               "https://zzcdn.example/b.jpg", "2026-09-01",
+               "본문이 AI 상세로 바뀌었다", "현재 불사자 설정", "의도치 않게 바뀌지 않았다",
+               "정상 — 나머지 진행 허용", "이상 있음 — 멈춤", "noopener"):
+        assert 말 in 본문, 말
+    assert 본문.count('hx-post="/market/gate"') >= 2
+    # 패널은 결과 집계 줄보다 위다 — 결과 표 위 고정 (D-10)
+    assert 본문.index("첫 1건 육안 확인") < 본문.index("성공 1")
+
+
+def test_결과_게이트패널_채널번호없으면_링크없이_코드만(화면, tmp_run_dir):
+    항목 = [_미리보기항목("zzp1", "zz01")]
+    항목[0]["채널상품번호"] = None
+    미리, 폴더 = _미리보기체인(tmp_run_dir, 항목=항목, market_status=_체크_성공1)
+    반영 = _반영행(tmp_run_dir, 미리, 폴더)
+    p = 화면.get(f"/jobs/{반영}/result?format=json").json()["게이트패널"]
+    assert p["링크"] is None and p["판매자상품코드"] == "zz01"
+    본문 = 화면.get(f"/jobs/{반영}/result", headers={"HX-Request": "true"}).text
+    assert "smartstore.naver.com" not in 본문
+
+
+def test_결과_게이트패널_성공없으면_없음(화면, tmp_run_dir):
+    _, _, 반영 = _첫반영(tmp_run_dir, 체크=_체크_대기)
+    j = 화면.get(f"/jobs/{반영}/result?format=json").json()
+    assert j["게이트패널"] is None
+    본문 = 화면.get(f"/jobs/{반영}/result", headers={"HX-Request": "true"}).text
+    assert "/market/gate" not in 본문
+
+
+def test_결과_게이트패널_정상후_요약과_나머지버튼(화면, tmp_run_dir):
+    미리, _, 반영 = _첫반영(tmp_run_dir)
+    화면.post(게이트경로, json=_게이트몸통(반영))
+    본문 = 화면.get(f"/jobs/{반영}/result", headers={"HX-Request": "true"}).text
+    assert 'hx-post="/market/gate"' not in 본문
+    assert "정상" in 본문 and "zz메모" in 본문
+    assert "market-commit-btn" in 본문 and f'data-preview-job="{미리}"' in 본문
+    assert "반영 실행 (최대 20건)" in 본문
+
+
+def test_결과_게이트패널_이상이면_복원절차(화면, tmp_run_dir):
+    _, 폴더, 반영 = _첫반영(tmp_run_dir)
+    화면.post(게이트경로, json=_게이트몸통(반영, "이상", 메모="<b>상단 옛것</b>"))
+    본문 = 화면.get(f"/jobs/{반영}/result", headers={"HX-Request": "true"}).text
+    assert "market-commit-btn" not in 본문
+    assert "restore-backup" in 본문 and "/tmp/zz/before_detail/zzp1.json" in 본문
+    assert _반영플래그 + " --max-items 1" in 본문
+    assert str(폴더 / "before_market") in 본문
+    assert "상하단 교체 프로젝트" in 본문
+    assert "<b>상단 옛것</b>" not in 본문 and "&lt;b&gt;" in 본문
+    assert "복원 실행" not in 본문   # 웹 복원 버튼 없음(D-05)
+
+
+def test_게이트패널_템플릿에_safe_없음():
+    본문 = (Path(__file__).resolve().parents[1] / "templates"
+            / "_market_gate_panel.html").read_text(encoding="utf-8")
+    assert "| safe" not in 본문 and "|safe" not in 본문
+    assert 본문.count('hx-post="/market/gate"') >= 2
