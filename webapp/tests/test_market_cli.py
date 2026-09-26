@@ -876,3 +876,161 @@ def test_접수_깨진_체크포인트면_exit2(monkeypatch, cli, 환경, capsys
     mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
     assert 실행(monkeypatch, cli, 반영_argv(환경)) == 2
     assert mcp.열림 == 0
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Task 3 — 복원(--restore-backup) + 작업창 스냅샷(--tasks-snapshot)
+# ════════════════════════════════════════════════════════════════════════════
+
+def 복원_argv(e, 모드="--preview", max_items=1):
+    a = ["--run-dir", str(e.run), "--expect-nick", "부킹", 모드,
+         "--restore-backup", str(e.a / "zzmk-00000001.json"),
+         "--summary-out", str(e.summary), "--poll-interval", "20", "--max-poll-min", "5"]
+    if 모드 == "--commit":
+        a += ["--backup-dir", str(e.b)]
+        if max_items is not None:
+            a += ["--max-items", str(max_items)]
+    return a
+
+
+def test_복원_미리보기_confirm_true_0회(monkeypatch, cli, 환경, capsys):
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 복원_argv(환경)) == 0
+    적용 = mcp.이름들("bulsaja_detail_apply")
+    assert len(적용) == 1 and 적용[0]["confirm"] is False
+    assert "confirmationToken" not in 적용[0]
+    assert 적용[0]["html"] == 원본HTML and 적용[0]["imageReplacements"] == []
+    assert mcp.이름들("bulsaja_market_update") == []
+    전 = json.loads((환경.run / "before_restore_zzmk-00000001.json").read_text(encoding="utf-8"))
+    assert 전["renderContent"] == AI_HTML
+    assert {"productId", "판매자상품코드", "조회시각", "계정", "renderContent",
+            "imageTranslated"} <= set(전)
+    문서 = json.loads((환경.run / "restore_preview.json").read_text(encoding="utf-8"))
+    assert 문서["토큰받음"] is True and 문서["전후동일"] is True
+    assert 문서["productId"] == "zzmk-00000001"
+    assert "tok-" not in (환경.run / "restore_preview.json").read_text(encoding="utf-8")
+    끝, _ = 마지막줄(capsys)
+    assert 끝.startswith("###MARKET### 성공 1 ")
+
+
+def test_복원_미리보기_renderContent_변하면_P0(monkeypatch, cli, 환경, capsys):
+    p = 환경.판
+
+    def 몰래적용(a):
+        p.상품[a["productId"]]["summary"]["uploadDetailContents"]["renderContent"] = a["html"]
+        return {"success": False, "confirmationToken": p._토큰(a["productId"])}
+
+    p.적용_미리보기 = 몰래적용
+    mcp, _ = 주입(monkeypatch, cli, p.도구())
+    assert 실행(monkeypatch, cli, 복원_argv(환경)) == 2
+    _, 전체 = 마지막줄(capsys)
+    assert "쓰기의심" in 전체
+    assert mcp.이름들("bulsaja_market_update") == []
+
+
+def test_복원_미리보기_토큰없는_성공은_P0(monkeypatch, cli, 환경, capsys):
+    환경.판.적용_미리보기 = lambda a: {"success": True}
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 복원_argv(환경)) == 2
+    _, 전체 = 마지막줄(capsys)
+    assert "쓰기의심" in 전체
+
+
+def test_복원_미리보기_전상태_못쓰면_호출0(monkeypatch, cli, 환경, capsys):
+    (환경.run / "before_restore_zzmk-00000001.json").mkdir()      # 파일 자리에 폴더
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 복원_argv(환경)) == 2
+    assert mcp.이름들("bulsaja_detail_apply") == []
+
+
+def test_복원_실행(monkeypatch, cli, 환경, capsys):
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 복원_argv(환경, "--commit")) == 0
+    적용 = mcp.이름들("bulsaja_detail_apply")
+    assert [a["confirm"] for a in 적용] == [False, True]
+    assert 적용[1]["confirmationToken"].startswith("tok-zzmk-00000001")
+    assert 환경.판.상품["zzmk-00000001"]["summary"]["uploadDetailContents"]["renderContent"] \
+        == 원본HTML
+    업 = mcp.이름들("bulsaja_market_update")
+    assert [a["confirm"] for a in 업] == [False, True]
+    # 순서 — detail_apply 확정 → (재조회) → market_update
+    이름 = mcp.도구들()
+    assert 이름.index("bulsaja_market_update") > max(
+        i for i, n in enumerate(이름) if n == "bulsaja_detail_apply")
+    b = json.loads((환경.b / "zzmk-00000001.json").read_text(encoding="utf-8"))
+    assert b["renderContent"] == 원본HTML
+    체 = json.loads((환경.run / "market_status.json").read_text(encoding="utf-8"))
+    assert 체["items"]["zzmk-00000001"]["status"] == "성공"
+    요약 = json.loads(환경.summary.read_text(encoding="utf-8"))
+    assert 요약["모드"] == "restore"
+    assert "복원후_aiImageGenerated" in 요약 and 요약["복원후_aiImageGenerated"] is True
+    assert "--force" in 요약["비고"]
+
+
+def test_복원_실행_재조회불일치는_마켓반영0(monkeypatch, cli, 환경, capsys):
+    환경.판.적용_반영안됨 = True
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 복원_argv(환경, "--commit")) == 2
+    assert mcp.이름들("bulsaja_market_update") == []
+
+
+def test_복원_실행_미업로드면_반영0(monkeypatch, cli, 환경, capsys):
+    환경.판.상품["zzmk-00000001"]["summary"]["uploadedSuccessUrl"]["smartstore"] = ""
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    실행(monkeypatch, cli, 복원_argv(환경, "--commit"))
+    assert mcp.이름들("bulsaja_detail_apply") == []
+    assert mcp.이름들("bulsaja_market_update") == []
+
+
+def test_복원_max_items_없으면_exit2(monkeypatch, cli, 환경, capsys):
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 복원_argv(환경, "--commit", max_items=None)) == 2
+    assert mcp.열림 == 0
+
+
+@pytest.mark.parametrize("망가뜨리기", ["부재", "깨짐", "rc없음"])
+def test_복원_원본파일_이상이면_exit2(monkeypatch, cli, 환경, capsys, 망가뜨리기):
+    경로 = 환경.a / "zzmk-00000001.json"
+    if 망가뜨리기 == "부재":
+        경로.unlink()
+    elif 망가뜨리기 == "깨짐":
+        경로.write_text("{깨진", encoding="utf-8")
+    else:
+        경로.write_text(json.dumps({"productId": "zzmk-00000001"}), encoding="utf-8")
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    assert 실행(monkeypatch, cli, 복원_argv(환경)) == 2
+    assert mcp.열림 == 0
+
+
+def test_복원은_poll_only와_못쓴다(monkeypatch, cli, 환경, capsys):
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    argv = ["--run-dir", str(환경.run), "--expect-nick", "부킹", "--poll-only",
+            "--restore-backup", str(환경.a / "zzmk-00000001.json")]
+    assert 실행(monkeypatch, cli, argv) == 2
+    assert mcp.열림 == 0
+
+
+def test_스냅샷_읽기전용(monkeypatch, cli, 환경, capsys):
+    out = 환경.tmp / "snap.json"
+    mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
+    argv = ["--run-dir", str(환경.run), "--expect-nick", "부킹", "--tasks-snapshot", str(out)]
+    assert 실행(monkeypatch, cli, argv) == 0
+    assert set(mcp.도구들()) == {"bulsaja_my_profile", "bulsaja_mcp_settings",
+                                 "bulsaja_upload_tasks", "bulsaja_work_progress"}
+    s = json.loads(out.read_text(encoding="utf-8"))
+    assert s["계정"] == "부킹" and s["확인모드"] == "balanced"
+    assert s["최대taskId"] == "49416818"
+    assert s["PENDING행수"] == 0 and s["PROCESSING행수"] == 0
+    assert s["기본창행수"] == 30
+    assert "work_progress_마켓작업" in s
+    assert "지시문" not in out.read_text(encoding="utf-8")
+
+
+def test_스냅샷_조회실패는_exit2(monkeypatch, cli, 환경, capsys):
+    도구 = 환경.판.도구()
+    도구["bulsaja_upload_tasks"] = lambda a: {"_text": "MCP error"}
+    out = 환경.tmp / "snap.json"
+    mcp, _ = 주입(monkeypatch, cli, 도구)
+    argv = ["--run-dir", str(환경.run), "--expect-nick", "부킹", "--tasks-snapshot", str(out)]
+    assert 실행(monkeypatch, cli, argv) == 2
+    assert not out.exists()
