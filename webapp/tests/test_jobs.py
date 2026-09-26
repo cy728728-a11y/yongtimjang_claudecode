@@ -458,7 +458,7 @@ def test_고아_잡은_orphaned_로_남는다(잡판, synthetic_job):
 
 
 def test_스키마는_기록_테이블만_있다(잡판):
-    """허용 테이블은 `jobs`·`ss_index`·`banner_label`·`banner_confirm` 넷뿐이다.
+    """허용 테이블은 `jobs`·`ss_index`·`banner_label`·`banner_confirm`·`market_gate` 다섯뿐이다.
 
     **보드 캐시 금지는 여전히 유효하다.** Phase 1 에서는 `jobs` 하나뿐이었고, Phase 3 이
     `ss_index`(D-20 / T-3-03), Phase 4 가 라벨 2종(BANNER-02b)을 더하면서 이 가드를
@@ -473,6 +473,9 @@ def test_스키마는_기록_테이블만_있다(잡판):
       - `banner_label`/`banner_confirm`: **사람의 시간**이다. 다시 얻으려면 사람이 그 장을
         다시 다 봐야 한다. 반대로 기계 판정은 몇 분이면 다시 나오는 투영이라 산출물 JSON
         하나가 정본이고, 이 테이블에 복사하지 않는다(그래서 `사람판정` 컬럼만 있다).
+      - `market_gate` (Phase 6 / 06-04 · D-09): 첫 1건을 **사람이 스토어에서 눈으로 본 판정**이다.
+        완료 대장이 아니다(L-05) — 반영 완료의 정본은 불사자 서버 · market_status.json 이고,
+        여기는 정상/이상 한 줄씩만 누적한다.
 
     **대상별 잠금 테이블은 여전히 Phase 2(ENG-04)다.** 지금 만들면 안 쓰는 스키마가 굳는다.
     """
@@ -481,8 +484,9 @@ def test_스키마는_기록_테이블만_있다(잡판):
     이름들 = {r[0] for r in cx.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     cx.close()
     assert "jobs" in 이름들
-    assert 이름들 - {"jobs", "ss_index",
-                   "banner_label", "banner_confirm"} == set(), f"예상 밖 테이블: {이름들}"
+    # sqlite_sequence 는 market_gate 의 AUTOINCREMENT 가 SQLite 안에서 스스로 두는 내부 표다 — 우리 스키마 아님
+    assert 이름들 - {"jobs", "ss_index", "banner_label", "banner_confirm",
+                   "market_gate", "sqlite_sequence"} == set(), f"예상 밖 테이블: {이름들}"
 
 
 def test_라벨_테이블이_DDL_한곳에서_생긴다(잡판):

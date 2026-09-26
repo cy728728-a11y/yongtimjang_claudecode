@@ -58,18 +58,21 @@ v2 의 APScheduler 는 이 라우터를 거치지 않고 같은 함수를 직접
 스레드로 밀어낸다).
 """
 import json
+import shlex
+import sqlite3
 from datetime import date
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError, field_validator
+from pydantic import (BaseModel, ConfigDict, Field, StringConstraints, ValidationError,
+                      field_validator)
 from sse_starlette import EventSourceResponse
 
-from webapp import (banner, banner_store, board, flow, jobs, join, logtail, paths,
-                    security, settings)
+from webapp import (banner, banner_store, board, flow, jobs, join, logtail,
+                    market_gate_store, paths, security, settings)
 from webapp.argv import Alias
 
 router = APIRouter()
@@ -290,6 +293,26 @@ class MarketPollReq(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     commit_job_id: JobId
+
+
+class GateReq(BaseModel):
+    """첫 1건 육안 확인 게이트 판정 (MARKET-02 · D-09 · D-10 · T-06-23).
+
+    **판정 대상 상품 필드가 없다.** 판매자상품코드·productId 는 서버가 그 반영 잡의 체크포인트
+    성공 항목에서 정한다 — 화면이 코드를 보내면 "본 적 없는 상품으로 게이트를 여는" 길이 생긴다.
+    그래서 extra=forbid 로 실어 보내는 요청 자체를 422 로 거부한다.
+
+    체크박스는 안 누르면 폼에서 빠진다 → 기본값 거짓. '정상' 은 셋 다 참일 때만 기록된다(라우트).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    commit_job_id: JobId
+    판정: Literal["정상", "이상"]
+    체크_본문: bool = False
+    체크_상하단: bool = False
+    체크_기타필드: bool = False
+    스토어교체여부: Literal["교체됨", "미교체", "모름"] = "모름"
+    메모: str = Field(default="", max_length=500)
 
 
 def _판정읽기(run_dir_name: str) -> dict:
@@ -575,11 +598,30 @@ def _마켓반영상한() -> int:
 
     이 플랜(06-03) 시점엔 게이트 판정 저장소가 없으므로 **게이트 닫힘 = 1** 이다. 판정 전 반영은
     1건 — 첫 1건을 사람이 스토어에서 눈으로 본 뒤에만 나머지가 열린다(상하단 안내이미지 모순).
-    06-04 가 이 함수 **안에** 판정 읽기를 넣는다(통과면 `market_update_max_items`). 상한 결정을
-    이 한 곳에 모아 두는 이유: 라우트·미리보기 표·버튼 문구가 각자 상한을 계산하면 셋이 어긋나
-    화면은 "1건" 이라는데 서버는 20건을 보내는 일이 생긴다.
+    06-04: 게이트 판정(`market_gate`)의 **최신 줄이 '정상'** 이면 설정 `market_update_max_items`
+    (기본 20 · D-12), 아니면 1. 게이트는 1회성이다(D-09) — 한 번 정상이면 이후 미리보기들도 N 이다.
+    최신이 '이상' 이면 여기서는 1 이지만 반영 라우트가 따로 400 으로 막는다(D-11).
+    판정을 못 읽으면(DB 없음·손상) `통과()` 가 거짓 = 1 — 닫힌 쪽으로 떨어진다(T-06-24).
+
+    상한 결정을 이 한 곳에 모아 두는 이유: 라우트·미리보기 표·버튼 문구가 각자 상한을 계산하면
+    셋이 어긋나 화면은 "1건" 이라는데 서버는 20건을 보내는 일이 생긴다.
     """
-    return 1
+    if not market_gate_store.통과():
+        return 1
+    try:
+        n = int(settings.cfg("market_update_max_items",
+                             settings.DEFAULTS["market_update_max_items"]))
+    except (TypeError, ValueError):
+        n = int(settings.DEFAULTS["market_update_max_items"])
+    return max(1, n)
+
+
+def _게이트요약(판정: dict | None) -> dict | None:
+    """최신 판정 → 화면에 실을 필드만 (행을 통째로 내보내지 않는다)."""
+    if not 판정:
+        return None
+    return {k: 판정.get(k) for k in ("판정", "기록시각", "판매자상품코드", "productId",
+                                    "commit_job_id", "스토어교체여부", "메모")}
 
 
 def _마켓폴더_of(상태: dict) -> Path | None:
@@ -665,8 +707,10 @@ def _마켓미리보기ctx(상태: dict) -> dict:
     '이번 반영', 나머지는 게이트 닫힘이면 '게이트 대기', 열렸으면 '다음 회차'(D-12).
     """
     상한 = _마켓반영상한()
+    게이트 = _게이트요약(market_gate_store.최신판정())
     기본 = {"job": _투영(상태 or {}), "running": False, "error": None, "항목": [], "집계": {},
-            "계정": None, "상한": 상한, "남은반영가능": 0, "버튼문구": None, "중단": None}
+            "계정": None, "상한": 상한, "남은반영가능": 0, "버튼문구": None, "중단": None,
+            "게이트": 게이트}
     if (상태 or {}).get("status") in jobs.LIVE_STATUSES:
         return {**기본, "running": True}
     폴더 = _마켓폴더_of(상태)
@@ -706,7 +750,8 @@ def _마켓미리보기ctx(상태: dict) -> dict:
     중단 = 문서.get("중단")
     정상 = (상태 or {}).get("status") == "done" and (상태 or {}).get("exit_code") == 0 and not 중단
     버튼 = None
-    if 정상 and 남은 > 0:
+    # 최신 게이트 판정이 '이상' 이면 버튼을 그리지 않는다 — 라우트도 400 이다(D-11 · T-06-26)
+    if 정상 and 남은 > 0 and not (게이트 and 게이트.get("판정") == "이상"):
         버튼 = ("첫 1건만 반영 (육안 확인 게이트)" if 상한 == 1
                 else f"반영 실행 (최대 {상한}건)")
     return {**기본, "항목": 행들, "집계": 문서.get("집계") or {}, "계정": 문서.get("계정"),
@@ -721,7 +766,7 @@ def _마켓결과ctx(상태: dict) -> dict:
     행으로 붙인다 — 안 붙이면 사람은 "나머지는 어디 갔나" 를 모른다.
     """
     기본 = {"job": _투영(상태 or {}), "running": False, "error": None, "항목": [], "집계": {},
-            "대기수": 0, "이어서확인가능": False, "market_dir": None}
+            "대기수": 0, "이어서확인가능": False, "market_dir": None, "게이트패널": None}
     if (상태 or {}).get("status") in jobs.LIVE_STATUSES:
         return {**기본, "running": True}
     폴더 = _마켓폴더_of(상태)
@@ -783,7 +828,111 @@ def _마켓결과ctx(상태: dict) -> dict:
             "대기": 셈.get("대기", 0), "미반영": 셈.get("미반영(게이트 대기)", 0)}
     대기수 = _마켓대기수(체크)
     return {**기본, "항목": 행들, "집계": 집계, "대기수": 대기수,
-            "이어서확인가능": 대기수 > 0, "market_dir": str(폴더) if 폴더 else None}
+            "이어서확인가능": 대기수 > 0, "market_dir": str(폴더) if 폴더 else None,
+            "게이트패널": _게이트패널ctx(상태, 폴더, 체크, 미리보기)}
+
+
+# ── 첫 1건 육안 확인 게이트 (Phase 6 / 06-04 · D-09 ~ D-12) ──────────────────
+
+_MARKET_UPDATE_상대 = ".claude/skills/bulsaja-detail-page/scripts/market_update.py"
+_스토어링크 = "https://smartstore.naver.com/main/products/{}"
+
+
+def _첫성공(체크: dict | None, 미리보기: dict | None) -> tuple[str, dict] | None:
+    """체크포인트의 성공 항목 첫 건 — **미리보기 순서 기준**. 게이트가 보는 상품은 이것 하나다.
+
+    화면 값은 믿지 않는다(T-06-23). 미리보기 순서에 없으면 체크포인트 순서로 보충한다.
+    """
+    체크 = 체크 or {}
+    순서 = [it.get("productId") for it in ((미리보기 or {}).get("items") or [])
+            if isinstance(it, dict)]
+    for pid in 순서 + [p for p in 체크 if p not in 순서]:
+        v = 체크.get(pid)
+        if isinstance(v, dict) and str(v.get("status") or "") == "성공":
+            return str(pid), v
+    return None
+
+
+def _미리보기잡_of(상태: dict) -> dict | None:
+    """반영·이어서 확인 잡 → 부모 체인을 올라가 미리보기 잡. 없으면 None (최대 10단)."""
+    지금 = 상태
+    for _ in range(10):
+        부모id = (지금 or {}).get("parent_job_id")
+        if not 부모id:
+            return None
+        지금 = jobs.job_status(부모id)
+        if 지금 is None:
+            return None
+        if 지금.get("kind") == "market_preview":
+            return 지금
+    return None
+
+
+def _복원명령(폴더: Path | None, backup_a: str) -> list[str]:
+    """그 상품의 복원 절차(D-05) — **명령 텍스트만.** 웹 복원 버튼은 없다(D-05 Deferred).
+
+    미리보기(쓰기 0) → 반영 1건 순서. 닉은 설정값, 경로는 체크포인트의 ⓐ. shlex 로 감싸 붙여넣기 안전.
+    """
+    if 폴더 is None or not backup_a:
+        return []
+    try:
+        닉 = str(settings.cfg("expected_bulsaja_nick", "") or "<계정닉>")
+    except Exception:
+        닉 = "<계정닉>"
+    앞 = [".venv/bin/python3", _MARKET_UPDATE_상대, "--run-dir", str(폴더),
+         "--expect-nick", 닉, "--restore-backup", str(backup_a)]
+    return [shlex.join(앞 + ["--preview"]),
+            shlex.join(앞 + ["--commit", "--max-items", "1",
+                             "--backup-dir", str(폴더 / "before_market")])]
+
+
+def _게이트패널ctx(상태: dict, 폴더: Path | None, 체크: dict | None,
+               미리보기: dict | None) -> dict | None:
+    """결과 표 위 고정 패널(D-10). 체크포인트 성공 ≥1 일 때만 그린다 — 없으면 None.
+
+    최신 판정이 없으면 **판정 폼**(체크 3 · 정상/이상), 있으면 **판정 요약**. 요약이 '이상' 이면
+    그 판정 상품의 복원 명령 텍스트, '정상' 이면 같은 미리보기의 남은 반영 버튼 정보를 싣는다.
+    """
+    첫 = _첫성공(체크, 미리보기)
+    if 첫 is None:
+        return None
+    pid, v = 첫
+    원문 = next((it for it in ((미리보기 or {}).get("items") or [])
+                if isinstance(it, dict) and it.get("productId") == pid), {})
+    번호 = str(원문.get("채널상품번호") or "").strip()
+    최신 = _게이트요약(market_gate_store.최신판정())
+    패널 = {"판정전": 최신 is None, "commit_job_id": (상태 or {}).get("id"),
+            "판매자상품코드": v.get("판매자상품코드") or 원문.get("판매자상품코드"),
+            "productId": pid, "채널상품번호": 번호 or None,
+            # 번호가 숫자일 때만 링크를 조립한다 — 아니면 코드만(RESEARCH A6)
+            "링크": _스토어링크.format(번호) if 번호.isdigit() else None,
+            "상단이미지": 원문.get("상단이미지"), "하단이미지": 원문.get("하단이미지"),
+            "상하단날짜": 원문.get("상하단날짜"),
+            "backup_a": str(v.get("backup_a") or ""),
+            "복원명령": _복원명령(폴더, str(v.get("backup_a") or "")),
+            "최신": 최신, "preview_job_id": None, "남은반영가능": 0, "상한": 1}
+    if 최신 and 최신.get("판정") == "이상":
+        # 판정한 상품이 이 표의 상품과 다를 수 있다 — 복원 명령은 **판정 상품** 기준으로 다시 짠다
+        if 최신.get("productId") != pid:
+            판정잡 = jobs.job_status(str(최신.get("commit_job_id") or ""))
+            판정폴더 = _마켓폴더_of(판정잡) if 판정잡 else None
+            try:
+                판정체크 = _마켓체크포인트(판정폴더, 없으면={}) or {}
+            except _체크포인트깨짐:
+                판정체크 = {}
+            a = str((판정체크.get(최신.get("productId")) or {}).get("backup_a") or "")
+            패널.update({"판매자상품코드": 최신.get("판매자상품코드"),
+                         "productId": 최신.get("productId"),
+                         "backup_a": a, "복원명령": _복원명령(판정폴더, a)})
+    elif 최신 and 최신.get("판정") == "정상":
+        미리잡 = _미리보기잡_of(상태)
+        if 미리잡 is not None:
+            남은 = sum(1 for it in ((미리보기 or {}).get("items") or [])
+                     if isinstance(it, dict) and str(it.get("판정") or "") == "반영가능"
+                     and not _마켓손댐((체크 or {}).get(it.get("productId"))))
+            패널.update({"preview_job_id": 미리잡.get("id"), "남은반영가능": 남은,
+                         "상한": _마켓반영상한()})
+    return 패널
 
 
 def _실행표ctx(상태: dict) -> dict:
@@ -1667,6 +1816,12 @@ def post_market_commit(request: Request, req: MarketCommitReq):
       ④ 대상 = preview.json 반영가능 중 체크포인트가 아직 손대지 않은 것, 미리보기 순서대로
       ⑤ 앞 `_마켓반영상한()` 건만 대상 파일로 · create_job(max_items=그 상한) — CLI 도 exit 5 로 이중
     """
+    # 게이트 최신 판정이 '이상' 이면 어떤 미리보기로도 반영하지 않는다(D-11 · T-06-26).
+    # 자동 진행 없음 — 복원·재판정은 사람이 정한다.
+    최신 = market_gate_store.최신판정()
+    if 최신 and 최신.get("판정") == "이상":
+        raise HTTPException(status_code=400,
+                            detail="게이트 이상 판정 — 멈춤. 반영 결과 표의 복원 절차를 봐라")
     부모 = jobs.job_status(req.preview_job_id)
     if 부모 is None or 부모.get("kind") != "market_preview":
         raise HTTPException(status_code=400, detail="반영 미리보기 작업이 아니다 — 미리보기부터 해라")
@@ -1751,6 +1906,63 @@ def post_market_poll(request: Request, req: MarketPollReq):
         raise HTTPException(status_code=400, detail="반영의 대상 파일이 없다")
     return _마켓잡만들기("market_poll", run_dir=부모.get("run_dir"),
                         parent_job_id=req.commit_job_id, targets_path_override=대상파일)
+
+
+async def _게이트요청(request: Request) -> GateReq:
+    """폼·JSON 둘 다 → GateReq. 본문을 기다려야 해서 **의존성만** async 다 (`요청_풀기` 와 같은 자리).
+
+    라우트 본문은 `def` 로 둔다 — sqlite·파일 IO 가 이벤트 루프를 세우지 않게(T-1-28).
+    """
+    from webapp.routes.banner import _요청_풀기   # 폼·JSON 둘 다 받는 관용구(422 번역 포함)
+
+    return await _요청_풀기(request, GateReq)
+
+
+@router.post("/market/gate")
+def post_market_gate(request: Request, 요청: GateReq = Depends(_게이트요청)):
+    """첫 1건 육안 확인 판정 기록 (MARKET-02 · SC-2 · D-09 · D-10 · D-11). **잡을 만들지 않는다.**
+
+      ① 폼·JSON 둘 다 → GateReq(extra=forbid — 상품 필드를 실어 보내면 422)
+      ② `jobs.job_status` 로 먼저 조회(유령 running 수거 — RESEARCH Pitfall 8)
+         · kind ∈ {market_commit, market_poll} 아니면 400 · 도는 중이면 400
+      ③ 판정 대상 = 그 market 폴더 체크포인트의 **성공 항목 첫 건** (없으면 400) — 화면 값 안 믿음
+      ④ '정상' 은 체크 3개가 모두 참일 때만 — 하나라도 거짓이면 400(T-06-23)
+      ⑤ INSERT(누적) → 기록된 상태의 게이트 패널 조각
+    토큰·Origin 은 `security.guard` 가 이미 봤다.
+    """
+    잡 = jobs.job_status(요청.commit_job_id)
+    if 잡 is None or 잡.get("kind") not in ("market_commit", "market_poll"):
+        raise HTTPException(status_code=400, detail="마켓 반영 작업이 아니다 — 반영 결과 표에서 눌러라")
+    if 잡.get("status") in jobs.LIVE_STATUSES:
+        raise HTTPException(status_code=400, detail="반영이 아직 도는 중이다 — 끝나고 판정해라")
+    폴더 = _마켓폴더_of(잡)
+    try:
+        체크 = _마켓체크포인트(폴더, 없으면={}) or {}
+    except _체크포인트깨짐 as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    미리보기 = _마켓미리보기문서(폴더)
+    첫 = _첫성공(체크, 미리보기)
+    if 첫 is None:
+        raise HTTPException(status_code=400,
+                            detail="이 반영에 성공한 상품이 없다 — 스토어에 바뀐 게 없으니 판정할 것도 없다")
+    pid, v = 첫
+    if 요청.판정 == "정상" and not (요청.체크_본문 and 요청.체크_상하단 and 요청.체크_기타필드):
+        raise HTTPException(status_code=400,
+                            detail="정상은 확인 체크 3개를 모두 눌러야 기록된다 — "
+                                   "하나라도 아니면 '이상 있음' 이다")
+    try:
+        market_gate_store.판정기록(요청.판정, str(v.get("판매자상품코드") or ""), pid,
+                              요청.commit_job_id, 요청.스토어교체여부, 요청.메모)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except sqlite3.OperationalError:
+        raise HTTPException(status_code=500,
+                            detail="게이트 판정 테이블이 없다 — 서버를 한 번 재시작해라")
+
+    from webapp.main import templates  # 지연 import — main 이 이 모듈을 먼저 부른다
+
+    return templates.TemplateResponse(request, "_market_gate_panel.html",
+                                      {"게이트패널": _게이트패널ctx(잡, 폴더, 체크, 미리보기)})
 
 
 # ── 여기서부터 읽기 전용 ─────────────────────────────────────────────────────

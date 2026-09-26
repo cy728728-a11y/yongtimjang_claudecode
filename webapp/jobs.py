@@ -214,7 +214,24 @@ CREATE TABLE IF NOT EXISTS banner_confirm (
   확인시각        TEXT NOT NULL,
   PRIMARY KEY (run_dir, 타오바오상품번호)
 );
+
+CREATE TABLE IF NOT EXISTS market_gate (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  판정            TEXT NOT NULL CHECK(판정 IN ('정상','이상')),
+  기록시각        TEXT NOT NULL,
+  판매자상품코드  TEXT NOT NULL,
+  productId      TEXT NOT NULL,
+  commit_job_id  TEXT NOT NULL,
+  스토어교체여부  TEXT,
+  메모            TEXT
+);
 """
+# ── market_gate (Phase 6 / 06-04 · D-09) ────────────────────────────────────
+# ※ 완료 대장이 아니라 **사람 판정 기록**이다 — L-05 비충돌. 반영 완료의 정본은 여전히
+#    불사자 서버 · market_status.json 이다. 여기는 "첫 1건을 스토어에서 눈으로 보고 정상/이상"
+#    한 줄씩만 쌓는다(덮어쓰지 않는다 — 누가 언제 열었나가 남아야 한다).
+# ※ D-09 1회성 게이트: 최신 줄이 '정상' 이면 반영 상한이 market_update_max_items 로 풀리고,
+#    '이상' 이면 반영 라우트가 거부한다. 줄이 없으면 상한 1. 읽기는 market_gate_store 가 한다.
 # ※ RESEARCH §5.7 의 DDL 에서 `run_dir` 만 NOT NULL 을 뺐다. `prep` 은 회차 이름을
 #    **CLI 가 오늘 날짜로 정한다** — 웹앱이 미리 지어내면 진실이 둘이 된다.
 # ※ 보드용 캐시 테이블은 만들지 않는다. 보드는 매번 `result.json` 을 투영한다(수십 ms).
