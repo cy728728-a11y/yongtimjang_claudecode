@@ -242,7 +242,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 — 사람)*
 
-- [ ] 05-05-PLAN.md — ★ 유료 게이트: 확인 4줄 + 후보 다시 확인 → 🔴 5건 견적 → 접수 승인 (L-01 ①)
+- [x] 05-05-PLAN.md — ★ 유료 게이트: 확인 4줄 + 후보 다시 확인 → 🔴 5건 견적 → 접수 승인 (L-01 ①)
 
 **Wave 5** *(blocked on Wave 4)*
 
@@ -313,7 +313,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. 되돌릴 수 없는 쓰기 — 꺼진 소재 정리 | 0/TBD | Not started | - |
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
 | 4. 홍보배너 식별 | 12/12 | Closed — 게이트 불통과 · 용팀장 결정으로 종료 (D-23) | 2026-09-25 |
-| 5. 상세페이지 작업 버튼 ★ Core Value | 4/6 | In Progress|  |
+| 5. 상세페이지 작업 버튼 ★ Core Value | 5/6 | In Progress|  |
 | 6. 마켓 수정업로드 | 4/6 | In Progress|  |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |
 
