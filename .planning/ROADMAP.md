@@ -271,7 +271,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 · 05-06 실탄 중엔 편집 금지)*
 
-- [ ] 06-03-PLAN.md — 웹앱 슬라이스: market kind 3종 · 미리보기→첫 1건 반영→결과·이어서 확인 · 백업 경로 표시 · 보드 버튼 + uat-verifier
+- [x] 06-03-PLAN.md — 웹앱 슬라이스: market kind 3종 · 미리보기→첫 1건 반영→결과·이어서 확인 · 백업 경로 표시 · 보드 버튼 + uat-verifier
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -314,7 +314,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
 | 4. 홍보배너 식별 | 12/12 | Closed — 게이트 불통과 · 용팀장 결정으로 종료 (D-23) | 2026-09-25 |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 4/6 | In Progress|  |
-| 6. 마켓 수정업로드 | 2/6 | In Progress|  |
+| 6. 마켓 수정업로드 | 3/6 | In Progress|  |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |
 
 ## Sequencing Notes

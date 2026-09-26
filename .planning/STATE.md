@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-02-PLAN.md (market_update.py CLI · 오프라인 66테스트)
-last_updated: "2026-09-26T05:07:12.921Z"
+stopped_at: Completed 06-03-PLAN.md (웹앱 마켓 반영 흐름 · 763 테스트)
+last_updated: "2026-09-26T05:19:51.899Z"
 last_activity: 2026-09-26
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 40
-  completed_plans: 34
+  completed_plans: 35
   percent: 43
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 
 Phase: 05 (상세페이지 작업 버튼) — EXECUTING
 Plan: 6 of 6 (05-01 완료: detail_batch --inputs 주입구 · 오프라인 45테스트 · 크레딧 0)
-Status: Ready to execute
+Status: Ready to execute (06-03 완료 — 다음 06-04 게이트 판정)
 Last activity: 2026-09-26
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
@@ -35,7 +35,7 @@ Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
 Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Progress: [█████████░] 85%
 | Phase 03 P07 | 258min | 4 tasks | 8 files |  *(그중 128min 이 인덱스 완주 대기)*
 | Phase 04 P09 | 9min | 3 tasks | 8 files |
 | Phase 04 P12 | 40min | 2 tasks | 7 files |
+| Phase 06 P03 | 12min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,7 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-11: 2차 유료 상한 894 승인(2026-09-24 용팀장) → 재측정 exit 0 · 호출 894 · 실패 0 · 유료 단가 환산 $2.05. 새 게이트 계산값 true 는 **자동 동의 128장 위 숫자** — 통과 아님, 04-12 사람 재검수가 먼저 (GATE §16-7)
 - [04-12]: D-23 Phase 4 를 게이트 불통과 상태로 종료 (2026-09-25 용팀장 "배너 잡는건 이번까지 하고, 다음단계로 넘어가자") — 최종 미탐 0/50 · 오탐 116 · 누락률 13.70% · 게이트통과 false. 기준 불변
 - [04-12]: 회차 2026-09-20 정본 = 사람 라벨 우선 판정. 새 회차 배너 판정(사람 확인 11분 vs 비전 끄고 어휘군 단독)은 Phase 5 discuss 에서. `banner_vision2_max_calls` 0 복귀
+- [06-03]: 게이트 닫힘(상한 1)에서 같은 미리보기의 두 번째 반영은 서버가 거부 — 앞선 반영이 체크포인트를 안 남겼을 때만 재시도. 상한 결정은 `_마켓반영상한()` 한 곳(06-04 가 판정 읽기로 교체)
 
 ### Pending Todos
 
@@ -174,6 +176,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-26T05:07:12.916Z
-Stopped at: Completed 06-02-PLAN.md (market_update.py CLI · 오프라인 66테스트)
+Last session: 2026-09-26T05:19:51.894Z
+Stopped at: Completed 06-03-PLAN.md (웹앱 마켓 반영 흐름 · 763 테스트)
 Resume file: None
