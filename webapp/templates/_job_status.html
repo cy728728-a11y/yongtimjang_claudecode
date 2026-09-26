@@ -26,7 +26,10 @@
   "banner_scan": "배너 판정 스캔",
   "detail_estimate": "상세 견적",
   "detail_submit": "상세 접수",
-  "detail_poll": "상세 이어서 확인"
+  "detail_poll": "상세 이어서 확인",
+  "market_preview": "마켓 반영 미리보기",
+  "market_commit": "마켓 반영",
+  "market_poll": "마켓 반영 이어서 확인"
 } %}
 {% set 상태이름 = {
   "starting": "띄우는 중",
@@ -67,9 +70,18 @@
       {% if job.kind in ("bids_preview", "bids_commit", "revert_only", "revert_all") %}입찰가 인상은 초당 12건쯤 돈다.
       {% elif job.kind == "detail_estimate" %}상세 견적은 크레딧 0 이다 — 기작업 태그·잔액만 조회한다.
       {% elif job.kind in ("detail_submit", "detail_poll") %}상세페이지 생성은 상품당 수 분씩 걸린다 — 폴링 상한을 넘기면 '이어서 확인'으로 이어 받는다.
+      {% elif job.kind == "market_preview" %}반영 미리보기는 쓰기 0 이다 — 확인 토큰만 받고 멈춘다.
+      {% elif job.kind in ("market_commit", "market_poll") %}스마트스토어 반영은 불사자 작업창에서 끝날 때까지 기다린다 — 상한을 넘기면 '이어서 확인'으로 이어 받는다.
       {% endif %}
       브라우저를 닫아도 작업은 계속 돌고, 다시 열면 로그가 처음부터 이어서 보인다.
     </small></p>
+  {% elif job.status == "done" and job.exit_code == 3 and job.kind in ("market_commit", "market_poll") %}
+    {# 마켓 반영의 exit 3 = 대기 미완(D-08). jobs._finish 가 done 으로 적는다 — 다시 반영하면 이중 반영이다. #}
+    <p class="stale">
+      <strong>대기 미완 — 실패 아님.</strong>
+      시간 상한에 닿아 여기서 멈췄을 뿐, 불사자는 계속 스토어에 올리고 있다.
+      아래 결과 표의 '이어서 확인'을 눌러라(새 반영 0).
+    </p>
   {% elif job.status == "done" and job.exit_code == 3 %}
     {# 상세 접수·이어서 확인의 exit 3 = 폴링 미완(L-03 · D-17). jobs._finish 가 done 으로 적는다 —
        실패로 보이면 사람이 다시 접수하고, 그건 크레딧 이중 지불이다. #}
@@ -88,6 +100,12 @@
         {% if job.exit_code == 2 %}장수 불일치 또는 입력 오류 — 멈췄다(재접수하지 마라). 결과 표에서 건별 사유를 봐라.
         {% elif job.exit_code == 4 %}계정 불일치 — 붙어 있는 불사자 계정이 기대와 다르다. 계정 확인부터 해라.
         {% elif job.exit_code == 5 %}견적 초과 — 멈췄다. 견적 상한을 넘기려는 건이 있다. 견적을 다시 떠라.
+        {% endif %}
+      {% elif job.kind in ("market_preview", "market_commit", "market_poll") %}
+        {# market_update.py 종료코드 계약(06-02): 2 입력·확인모드 거부·P0 쓰기의심 · 4 계정 · 5 상한 초과. #}
+        {% if job.exit_code == 2 %}입력 오류·확인모드 거부·쓰기의심(P0) 중 하나로 멈췄다 — 다시 누르지 말고 로그부터 봐라.
+        {% elif job.exit_code == 4 %}계정 불일치 — 붙어 있는 불사자 계정이 기대와 다르다. 계정 확인부터 해라.
+        {% elif job.exit_code == 5 %}상한 초과 시도 — 쓰기 전에 멈췄다. 새 미리보기부터 해라.
         {% endif %}
       {% else %}광고 설정이 바뀐 건 없다 — 실패한 항목은 건너뛴 것이다.{% endif %}
     </p>

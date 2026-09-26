@@ -210,7 +210,7 @@ def test_미리보기_부모kind틀리면_400(화면, 엿듣기, tmp_run_dir):
 
 
 def test_미리보기_부모running이면_400(화면, 엿듣기, tmp_run_dir):
-    부모 = _상세체인(tmp_run_dir, 상태="running", exit_code=None)
+    부모 = _상세체인(tmp_run_dir, 상태="starting", exit_code=None)
     assert 화면.post(미리보기경로, json={"detail_job_id": 부모}).status_code == 400
     assert not 엿듣기
 
@@ -274,7 +274,7 @@ def test_반영_상한은_서버결정(화면, 엿듣기, tmp_run_dir):
     assert len(엿듣기["detail_inputs"]["items"]) == 1
 
 
-@pytest.mark.parametrize("상태,코드", [("running", None), ("failed", 2), ("done", 3),
+@pytest.mark.parametrize("상태,코드", [("starting", None), ("failed", 2), ("done", 3),
                                       ("orphaned", None)])
 def test_반영_부모검사(화면, 엿듣기, tmp_run_dir, 상태, 코드):
     미리, _ = _미리보기체인(tmp_run_dir, 상태=상태, exit_code=코드)
@@ -298,7 +298,7 @@ def test_반영_미리보기_24시간_경과는_400(화면, 엿듣기, tmp_run_d
 
 def test_반영_자식이_도는중이면_400(화면, 엿듣기, tmp_run_dir):
     미리, 폴더 = _미리보기체인(tmp_run_dir)
-    _반영행(tmp_run_dir, 미리, 폴더, 상태="running", exit_code=None)
+    _반영행(tmp_run_dir, 미리, 폴더, 상태="starting", exit_code=None)
     assert 화면.post(반영경로, json={"preview_job_id": 미리}).status_code == 400
     assert not 엿듣기
 
@@ -398,7 +398,7 @@ def test_이어서확인_poll의_poll도_된다(화면, 엿듣기, tmp_run_dir):
 
 
 @pytest.mark.parametrize("상태,코드,체크", [("failed", 2, _체크_대기), ("failed", 5, _체크_대기),
-                                          ("running", None, _체크_대기), ("done", 0, _체크_종결),
+                                          ("starting", None, _체크_대기), ("done", 0, _체크_종결),
                                           ("orphaned", None, _체크_종결)])
 def test_이어서확인_거부(화면, 엿듣기, tmp_run_dir, 상태, 코드, 체크):
     미리, 폴더 = _미리보기체인(tmp_run_dir, market_status=체크)
@@ -419,15 +419,16 @@ def test_미리보기_조각(화면, tmp_run_dir):
     """행마다 코드·판정·사유·ⓐ 경로 텍스트+있음/없음·ⓑ 경로·채널상품번호·상하단날짜.
     버튼은 '첫 1건만 반영 (육안 확인 게이트)' 하나, 2번째 이후 반영가능은 '게이트 대기'."""
     미리, 폴더 = _미리보기체인(tmp_run_dir)
-    상세폴더 = Path(json.loads(Path(jobs._row(미리)["result_path"]).read_text(
-        encoding="utf-8"))["items"][0]["backup_a"]).parent
+    첫 = json.loads(Path(jobs._row(미리)["result_path"]).read_text(encoding="utf-8"))["items"][0]
+    상세폴더 = Path(첫["backup_a"]).parent
+    반영전경로 = 첫["backup_b"]
     상세폴더.mkdir(parents=True, exist_ok=True)
     (상세폴더 / "zzp1.json").write_text("{}", encoding="utf-8")   # zzp1 만 ⓐ 실제 파일 있음
     응답 = 화면.get(f"/jobs/{미리}/result", headers={"HX-Request": "true"})
     assert 응답.status_code == 200
     본문 = 응답.text
     for 말 in ("zz01", "zz02", "zz04", "zz09", "반영가능", "스킵", "미업로드",
-               str(상세폴더 / "zzp1.json"), str(폴더 / "before_market" / "zzp1.json"),
+               str(상세폴더 / "zzp1.json"), 반영전경로,
                "991", "2026-09-01", "있음", "없음"):
         assert 말 in 본문, 말
     assert "첫 1건만 반영 (육안 확인 게이트)" in 본문
@@ -480,7 +481,8 @@ def test_결과_조각(화면, tmp_run_dir):
     assert j["이어서확인가능"] is False
     zz01 = next(h for h in j["항목"] if h["판매자상품코드"] == "zz01")
     assert zz01["taskId"] == "00000201"
-    assert zz01["backup_a"] == "/tmp/zz/a.json" and zz01["backup_b"] == "/tmp/zz/b.json"
+    assert zz01["backup_a"]["경로"] == "/tmp/zz/a.json"
+    assert zz01["backup_b"]["경로"] == "/tmp/zz/b.json"
 
     본문 = 화면.get(f"/jobs/{반영}/result", headers={"HX-Request": "true"}).text
     for 말 in ("zz01", "성공", "00000201", "/tmp/zz/a.json", "/tmp/zz/b.json",

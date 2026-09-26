@@ -15,6 +15,9 @@
     POST /jobs/detail/estimate  상세 견적 (크레딧 0)                     [쓰기 — 토큰 필요]
     POST /jobs/detail/submit    상세 **접수** — 크레딧이 나간다          [쓰기 — 토큰 필요]
     POST /jobs/detail/poll      상세 이어서 확인 (--poll-only, 크레딧 0) [쓰기 — 토큰 필요]
+    POST /jobs/market/preview   스마트스토어 반영 미리보기 (쓰기 0)       [쓰기 — 토큰 필요]
+    POST /jobs/market/commit    스마트스토어 **반영** — 스토어가 바뀐다   [쓰기 — 토큰 필요]
+    POST /jobs/market/poll      마켓 반영 이어서 확인 (--poll-only)       [쓰기 — 토큰 필요]
     GET  /jobs/revert/round/count  회차 전체 되돌리기 예상 건수         [읽기 — 쿠키]
     GET  /jobs/{id}         작업 상태 조각 (2초 폴링용)                 [읽기 — 쿠키]
     GET  /jobs/{id}/panel   작업 패널 조각 (SSE 배선 포함)              [읽기 — 쿠키]
@@ -62,7 +65,7 @@ from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, StringConstraints, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError, field_validator
 from sse_starlette import EventSourceResponse
 
 from webapp import (banner, banner_store, board, flow, jobs, join, logtail, paths,
@@ -248,6 +251,45 @@ class DetailPollReq(BaseModel):
     """
 
     submit_job_id: JobId
+
+
+# ── 마켓 수정업로드 요청 (Phase 6 / 06-03) ──────────────────────────────────
+# 셋 다 **잡 id 하나만** 받는다. 상세 쪽(`DetailSubmitReq`)은 모르는 필드를 무시하지만, 여기는
+# **거부(422)** 한다(extra=forbid) — 대상·상한·마켓을 실어 보내는 요청은 화면이 고장났거나 누가
+# 게이트를 우회하려는 것이다. 조용히 무시하면 "보낸 대로 됐다" 고 오해한다(T-06-15 · T-06-16).
+
+class MarketPreviewReq(BaseModel):
+    """스마트스토어 반영 **미리보기** 요청 — 상세 접수(또는 그 이어서 확인) 잡 id 하나.
+
+    대상 필드가 없는 이유(L-02): 대상은 그 상세 잡의 `detail_status.json` 에서 **완료** 항목만
+    서버가 뽑는다. 화면이 목록을 보내면 AI 상세가 안 붙은 상품까지 반영 후보가 된다.
+    마켓 필드가 없는 이유(L-07): CLI 가 SMARTSTORE 로 고정한다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    detail_job_id: JobId
+
+
+class MarketCommitReq(BaseModel):
+    """스마트스토어 **반영** 요청 — 미리보기 잡 id 하나. **버튼이 곧 승인이다.**
+
+    대상도 상한도 받지 않는다(D-09 · L-02). 대상은 그 미리보기의 preview.json 반영가능 항목,
+    상한은 서버의 `_마켓반영상한()` 이 정한다 — 게이트 판정 전엔 1이다. 화면이 숫자를 보내면
+    그 숫자만큼 육안 확인 없이 스토어가 바뀐다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    preview_job_id: JobId
+
+
+class MarketPollReq(BaseModel):
+    """마켓 반영 **이어서 확인** 요청 — 반영(또는 그 이전 이어서 확인) 잡 id 하나.
+
+    `--poll-only` 로만 돈다 — 새 접수 0회(D-08). 재반영 경로는 없다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    commit_job_id: JobId
 
 
 def _판정읽기(run_dir_name: str) -> dict:
@@ -475,6 +517,224 @@ def _상세결과ctx(상태: dict) -> dict:
     미종결 = _상세미종결({h["productId"]: 체크.get(h["productId"]) for h in 행들})
     return {**기본, "항목": 행들, "집계": 집계, "예상크레딧": 예상, "per_credit": per_credit,
             "미종결": 미종결, "이어서확인가능": 미종결 > 0}
+
+
+# ── 마켓 수정업로드 조각 (Phase 6 / 06-03) ──────────────────────────────────
+
+def _마켓반영상한() -> int:
+    """이번 반영 1회의 상한 — **서버가 정한다. 요청에는 이 값이 없다** (D-09 · T-06-16).
+
+    이 플랜(06-03) 시점엔 게이트 판정 저장소가 없으므로 **게이트 닫힘 = 1** 이다. 판정 전 반영은
+    1건 — 첫 1건을 사람이 스토어에서 눈으로 본 뒤에만 나머지가 열린다(상하단 안내이미지 모순).
+    06-04 가 이 함수 **안에** 판정 읽기를 넣는다(통과면 `market_update_max_items`). 상한 결정을
+    이 한 곳에 모아 두는 이유: 라우트·미리보기 표·버튼 문구가 각자 상한을 계산하면 셋이 어긋나
+    화면은 "1건" 이라는데 서버는 20건을 보내는 일이 생긴다.
+    """
+    return 1
+
+
+def _마켓폴더_of(상태: dict) -> Path | None:
+    """마켓 잡의 market 폴더 — **산출물 경로의 부모다** (preview.json · summary_<id>.json)."""
+    경로 = (상태 or {}).get("result_path")
+    return Path(경로).parent if 경로 else None
+
+
+class _체크포인트깨짐(Exception):
+    """market_status.json 이 있는데 못 읽는다 — 빈 값으로 읽으면 이중 반영이다(06-02 Deviation 2)."""
+
+
+def _마켓체크포인트(폴더: Path | None, *, 없으면=None) -> dict | None:
+    """`market_status.json` 의 `items` — **결과의 정본**(D-13 · L-05).
+
+    파일이 없으면 `없으면`(기본 None). **있는데 깨졌으면 `_체크포인트깨짐`** — 빈 dict 로 삼키면
+    taskId 를 가진 상품을 "아직 안 보냈다" 로 읽고 다시 반영한다.
+    """
+    if 폴더 is None:
+        return 없으면
+    p = 폴더 / "market_status.json"
+    if not p.is_file():
+        return 없으면
+    try:
+        문서 = json.loads(p.read_text(encoding="utf-8"))
+        items = 문서.get("items") if isinstance(문서, dict) else None
+        if not isinstance(items, dict):
+            raise ValueError("items 가 dict 가 아니다")
+    except Exception as e:
+        raise _체크포인트깨짐(f"market_status.json 이 깨졌다 ({type(e).__name__})")
+    return items
+
+
+def _마켓미리보기문서(폴더: Path | None) -> dict | None:
+    if 폴더 is None:
+        return None
+    try:
+        문서 = json.loads((폴더 / "preview.json").read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return 문서 if isinstance(문서, dict) else None
+
+
+def _마켓손댐(v: dict | None) -> bool:
+    """체크포인트 항목이 이미 반영 경로를 탔는가 — taskId 가 있거나 접수·대기·성공이면 참.
+
+    참인 항목은 다시 대상에 넣지 않는다(재반영 0 · D-08). 스킵(쓰기 전 멈춤)은 거짓 — 다음 반영에서
+    다시 시도할 수 있다(06-02: confirm:false 예외는 쓰기 전이므로 재시도 가능).
+    """
+    if not isinstance(v, dict):
+        return False
+    return bool(v.get("taskId")) or str(v.get("status") or "") in ("접수", "대기", "성공", "실패")
+
+
+def _마켓대기수(체크: dict | None) -> int:
+    """아직 종결 안 된 건 — 접수·대기. 이어서 확인이 받을 몫이다."""
+    return sum(1 for v in (체크 or {}).values()
+               if isinstance(v, dict) and str(v.get("status") or "") in ("접수", "대기"))
+
+
+def _경로표시(x) -> dict:
+    """백업 경로 → {경로 텍스트, 있음}. **내용은 읽지 않는다** — 존재만 본다(D-04 · T-06-19)."""
+    경로 = str(x or "")
+    try:
+        있음 = bool(경로) and Path(경로).is_file()
+    except OSError:
+        있음 = False
+    return {"경로": 경로, "있음": 있음}
+
+
+_마켓종료코드안내 = {
+    2: "입력 오류·확인모드 거부·쓰기의심(P0) 중 하나로 멈췄다",
+    3: "대기 미완 — 실패 아님",
+    4: "계정 불일치 — 계정 확인부터 해라",
+    5: "상한 초과 시도 — 쓰기 전에 멈췄다",
+}
+
+
+def _마켓미리보기ctx(상태: dict) -> dict:
+    """미리보기 표 조각 — preview.json 을 **그대로** 옮긴다. 판정은 CLI 몫이다.
+
+    ⓐ·ⓑ 백업은 경로 문자열 + 파일 존재만 본다(D-04). 반영가능 중 앞 `_마켓반영상한()` 건이
+    '이번 반영', 나머지는 게이트 닫힘이면 '게이트 대기', 열렸으면 '다음 회차'(D-12).
+    """
+    상한 = _마켓반영상한()
+    기본 = {"job": _투영(상태 or {}), "running": False, "error": None, "항목": [], "집계": {},
+            "계정": None, "상한": 상한, "남은반영가능": 0, "버튼문구": None, "중단": None}
+    if (상태 or {}).get("status") in jobs.LIVE_STATUSES:
+        return {**기본, "running": True}
+    폴더 = _마켓폴더_of(상태)
+    문서 = _마켓미리보기문서(폴더)
+    if 문서 is None:
+        코드 = (상태 or {}).get("exit_code")
+        return {**기본, "error": f"미리보기 산출물(preview.json)이 없거나 깨졌다 — 진행 로그를 봐라 "
+                                 f"(종료코드 {코드}: {_마켓종료코드안내.get(코드, '알 수 없음')})"}
+    try:
+        체크 = _마켓체크포인트(폴더, 없으면={}) or {}
+    except _체크포인트깨짐 as e:
+        return {**기본, "error": str(e)}
+
+    행들, 남은 = [], 0
+    for it in 문서.get("items") or []:
+        if not isinstance(it, dict):
+            continue
+        pid = it.get("productId")
+        판정 = str(it.get("판정") or "")
+        표시 = ""
+        if 판정 == "반영가능":
+            v = 체크.get(pid)
+            if _마켓손댐(v):
+                표시 = f"반영됨({v.get('status')})"
+            else:
+                남은 += 1
+                표시 = ("이번 반영" if 남은 <= 상한
+                        else ("게이트 대기" if 상한 == 1 else "다음 회차"))
+        행들.append({"productId": pid, "판매자상품코드": it.get("판매자상품코드"),
+                     "판정": 판정, "사유": str(it.get("사유") or ""),
+                     "backup_a": _경로표시(it.get("backup_a")),
+                     "backup_b": _경로표시(it.get("backup_b")),
+                     "채널상품번호": it.get("채널상품번호"),
+                     "상하단날짜": it.get("상하단날짜"),
+                     "미리보기요약": str(it.get("미리보기요약") or ""),
+                     "반영표시": 표시})
+    중단 = 문서.get("중단")
+    정상 = (상태 or {}).get("status") == "done" and (상태 or {}).get("exit_code") == 0 and not 중단
+    버튼 = None
+    if 정상 and 남은 > 0:
+        버튼 = ("첫 1건만 반영 (육안 확인 게이트)" if 상한 == 1
+                else f"반영 실행 (최대 {상한}건)")
+    return {**기본, "항목": 행들, "집계": 문서.get("집계") or {}, "계정": 문서.get("계정"),
+            "남은반영가능": 남은, "버튼문구": 버튼, "중단": 중단}
+
+
+def _마켓결과ctx(상태: dict) -> dict:
+    """반영·이어서 확인 결과 표 (D-13 · L-05 · MARKET-01).
+
+    **정본은 `market_status.json` 이다.** 잡이 orphaned 여도 체크포인트로 항목·대기 수를 센다.
+    summary 는 사유 보충만. 미리보기의 반영가능인데 체크포인트에 없는 항목은 '미반영(게이트 대기)'
+    행으로 붙인다 — 안 붙이면 사람은 "나머지는 어디 갔나" 를 모른다.
+    """
+    기본 = {"job": _투영(상태 or {}), "running": False, "error": None, "항목": [], "집계": {},
+            "대기수": 0, "이어서확인가능": False, "market_dir": None}
+    if (상태 or {}).get("status") in jobs.LIVE_STATUSES:
+        return {**기본, "running": True}
+    폴더 = _마켓폴더_of(상태)
+    try:
+        체크 = _마켓체크포인트(폴더)
+    except _체크포인트깨짐 as e:
+        return {**기본, "error": f"{e} — 빈 표를 결과로 읽지 않게 표를 그리지 않는다"}
+    if 체크 is None:
+        코드 = (상태 or {}).get("exit_code")
+        return {**기본, "error": f"체크포인트(market_status.json)가 없다 — 반영 전에 멈췄다. "
+                                 f"진행 로그를 봐라 (종료코드 {코드}: "
+                                 f"{_마켓종료코드안내.get(코드, '알 수 없음')})"}
+
+    요약사유 = {}
+    try:
+        요약 = json.loads(Path(상태.get("result_path")).read_text(encoding="utf-8"))
+        for h in (요약.get("items") or []):
+            if isinstance(h, dict) and h.get("productId"):
+                요약사유[h["productId"]] = str(h.get("사유") or "")
+    except Exception:
+        pass                                   # 요약이 없어도 체크포인트로 충분하다
+
+    미리보기 = _마켓미리보기문서(폴더) or {}
+    순서 = [it for it in (미리보기.get("items") or []) if isinstance(it, dict)]
+    본것 = set()
+    행들 = []
+
+    def _행(pid, v: dict):
+        st = str(v.get("status") or "")
+        tid = str(v.get("taskId") or "")
+        return {"productId": pid, "판매자상품코드": v.get("판매자상품코드"),
+                "상태": "대기" if st in ("접수", "대기") else (st or "?"),
+                "사유": str(v.get("사유") or 요약사유.get(pid) or ""),
+                "backup_a": _경로표시(v.get("backup_a")),
+                "backup_b": _경로표시(v.get("backup_b")),
+                # 작업번호는 끝 8자리만 — 전체 값은 화면이 쓸 일이 없다(T-06-20)
+                "taskId": tid[-8:] or None,
+                "확정시각": v.get("확정시각")}
+
+    for it in 순서:
+        pid = it.get("productId")
+        if pid in 체크 and isinstance(체크[pid], dict):
+            행들.append(_행(pid, 체크[pid]))
+            본것.add(pid)
+        elif str(it.get("판정") or "") == "반영가능":
+            행들.append({"productId": pid, "판매자상품코드": it.get("판매자상품코드"),
+                         "상태": "미반영(게이트 대기)", "사유": "",
+                         "backup_a": _경로표시(it.get("backup_a")),
+                         "backup_b": _경로표시(it.get("backup_b")),
+                         "taskId": None, "확정시각": None})
+    for pid, v in 체크.items():
+        if pid not in 본것 and isinstance(v, dict):
+            행들.append(_행(pid, v))
+
+    셈: dict[str, int] = {}
+    for h in 행들:
+        셈[h["상태"]] = 셈.get(h["상태"], 0) + 1
+    집계 = {"성공": 셈.get("성공", 0), "실패": 셈.get("실패", 0), "스킵": 셈.get("스킵", 0),
+            "대기": 셈.get("대기", 0), "미반영": 셈.get("미반영(게이트 대기)", 0)}
+    대기수 = _마켓대기수(체크)
+    return {**기본, "항목": 행들, "집계": 집계, "대기수": 대기수,
+            "이어서확인가능": 대기수 > 0, "market_dir": str(폴더) if 폴더 else None}
 
 
 def _실행표ctx(상태: dict) -> dict:
@@ -1290,6 +1550,160 @@ def post_detail_poll(request: Request, req: DetailPollReq):
                         parent_job_id=req.submit_job_id, targets_path_override=대상파일)
 
 
+# ── 마켓 수정업로드 (Phase 6 / 06-03) ───────────────────────────────────────
+
+def _마켓잡만들기(kind: str, **kw) -> dict:
+    """마켓 잡의 `create_job` 호출과 예외 번역 — `_상세잡만들기` 를 그대로 쓴다(409 가 400 보다 먼저)."""
+    return _상세잡만들기(kind, **kw)
+
+
+# 미리보기가 이만큼 낡으면 반영을 거부한다(T-06-22). 그 사이 상품·상세가 바뀌었을 수 있다 —
+# CLI 가 반영 직전 workdata 를 다시 보지만(D-02), 사람이 승인한 '본 것' 자체가 낡았다.
+_미리보기유효시간 = 24 * 3600
+
+
+def _경과초(시각: str | None) -> float | None:
+    if not 시각:
+        return None
+    try:
+        from datetime import datetime as _dt
+        return (_dt.now().astimezone() - _dt.fromisoformat(시각)).total_seconds()
+    except (TypeError, ValueError):
+        return None
+
+
+@router.post("/jobs/market/preview")
+def post_market_preview(request: Request, req: MarketPreviewReq):
+    """스마트스토어 반영 **미리보기** — 쓰기 0 (D-01 · D-07).
+
+      ① 부모가 상세 접수 또는 그 이어서 확인인가 · ② 도는 중이 아닌가
+      ③ 부모 detail_status.json 에서 **완료** 항목만 — 실패·폴링중·기작업스킵은 뺀다
+         (exit 3 done 도 허용한다 — 완료분만 뽑으므로 안전하다)
+      ④ 0건이면 400 · 판매자상품코드는 부모 대상 파일에서 보충
+    """
+    부모 = jobs.job_status(req.detail_job_id)
+    if 부모 is None or 부모.get("kind") not in ("detail_submit", "detail_poll"):
+        raise HTTPException(status_code=400, detail="상세 접수 작업이 아니다 — 상세 결과 표에서 눌러라")
+    if 부모.get("status") in jobs.LIVE_STATUSES:
+        raise HTTPException(status_code=400, detail="상세 작업이 아직 도는 중이다 — 끝나고 다시 눌러라")
+
+    체크 = _상세체크포인트(_상세폴더_of(부모)) or {}
+    try:
+        대상 = json.loads(Path(부모.get("targets_path") or "").read_text(encoding="utf-8"))
+        입력 = [x for x in (대상.get("items") or []) if isinstance(x, dict)]
+    except Exception:
+        raise HTTPException(status_code=400, detail="상세 작업의 대상 파일이 없다")
+    items = []
+    for it in 입력:
+        pid = it.get("productId")
+        v = 체크.get(pid)
+        if pid and isinstance(v, dict) and _상세항목상태(v) == "완료":
+            items.append({"productId": str(pid),
+                          "판매자상품코드": str(it.get("판매자상품코드") or "")})
+    if not items:
+        raise HTTPException(status_code=400,
+                            detail="반영할 완료 항목이 없다 — AI 상세가 완료된 상품만 반영한다")
+    return _마켓잡만들기("market_preview", run_dir=부모.get("run_dir"),
+                        parent_job_id=req.detail_job_id, detail_inputs={"items": items})
+
+
+@router.post("/jobs/market/commit")
+def post_market_commit(request: Request, req: MarketCommitReq):
+    """스마트스토어 **반영** — 여기서 스토어가 바뀐다. **버튼이 곧 승인이다** (D-07 · D-09 · L-02).
+
+      ① 부모가 미리보기인가 · 도는 중이 아닌가 · done + exit 0 인가(미리보기가 멀쩡히 끝났나)
+      ② 미리보기가 24시간 안인가 — 아니면 "새 미리보기부터"(T-06-22)
+      ③ 같은 미리보기의 반영이 도는 중이면 400 · 이미 2번이면 400(게이트 전 1 + 통과 후 1, Pitfall 5)
+         · **게이트 닫힘(상한 1)인데 앞선 반영이 무언가를 남겼으면 400** — 두 번 누르면 2건이다
+      ④ 대상 = preview.json 반영가능 중 체크포인트가 아직 손대지 않은 것, 미리보기 순서대로
+      ⑤ 앞 `_마켓반영상한()` 건만 대상 파일로 · create_job(max_items=그 상한) — CLI 도 exit 5 로 이중
+    """
+    부모 = jobs.job_status(req.preview_job_id)
+    if 부모 is None or 부모.get("kind") != "market_preview":
+        raise HTTPException(status_code=400, detail="반영 미리보기 작업이 아니다 — 미리보기부터 해라")
+    if 부모.get("status") in jobs.LIVE_STATUSES:
+        raise HTTPException(status_code=400, detail="미리보기가 아직 안 끝났다 — 끝나고 다시 눌러라")
+    if 부모.get("status") != "done" or 부모.get("exit_code") != 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"미리보기가 정상으로 안 끝났다({부모.get('status')}, 종료코드 "
+                   f"{부모.get('exit_code')}) — 새 미리보기부터")
+    경과 = _경과초(부모.get("started_at"))
+    if 경과 is None or 경과 > _미리보기유효시간:
+        raise HTTPException(status_code=400,
+                            detail="미리보기가 24시간을 넘었다 — 새 미리보기부터 해라")
+
+    상한 = _마켓반영상한()
+    폴더 = _마켓폴더_of(부모)
+    try:
+        체크 = _마켓체크포인트(폴더, 없으면={}) or {}
+    except _체크포인트깨짐 as e:
+        raise HTTPException(status_code=400, detail=f"{e} — 손으로 확인하기 전엔 반영하지 않는다")
+
+    자식들 = jobs.children_of(req.preview_job_id, "market_commit")
+    if any(c.get("status") in jobs.LIVE_STATUSES for c in 자식들):
+        raise HTTPException(status_code=400, detail="이 미리보기의 반영이 도는 중이다 — 끝나고 봐라")
+    if len(자식들) >= 2:
+        raise HTTPException(status_code=400,
+                            detail="이 미리보기로 이미 두 번 반영했다 — 남은 건은 새 미리보기부터")
+    # 게이트 닫힘에서 두 번째를 허용하면 "1건 → 육안 확인" 이 "1건 + 1건" 이 된다(D-09).
+    # 앞선 반영이 아무것도 남기지 않았으면(쓰기 전 실패 — 계정 불일치 등) 다시 누를 수 있다.
+    if 상한 == 1 and 자식들 and any(_마켓손댐(v) for v in 체크.values()):
+        raise HTTPException(status_code=400,
+                            detail="첫 1건 반영이 이미 나갔다 — 스토어에서 눈으로 확인하고 "
+                                   "게이트 판정을 기록한 뒤에 나머지가 열린다")
+
+    문서 = _마켓미리보기문서(폴더)
+    if 문서 is None:
+        raise HTTPException(status_code=400, detail="미리보기 산출물(preview.json)이 없다 — 새 미리보기부터")
+    남은 = []
+    for it in 문서.get("items") or []:
+        if not isinstance(it, dict) or str(it.get("판정") or "") != "반영가능":
+            continue
+        pid = it.get("productId")
+        if not pid or _마켓손댐(체크.get(pid)):
+            continue
+        남은.append({"productId": str(pid), "판매자상품코드": str(it.get("판매자상품코드") or "")})
+    if not 남은:
+        raise HTTPException(status_code=400, detail="반영할 게 없다 — 반영가능 항목이 다 나갔거나 0건이다")
+
+    return _마켓잡만들기("market_commit", run_dir=부모.get("run_dir"),
+                        parent_job_id=req.preview_job_id,
+                        detail_inputs={"items": 남은[:상한]}, max_items=상한)
+
+
+@router.post("/jobs/market/poll")
+def post_market_poll(request: Request, req: MarketPollReq):
+    """마켓 반영 **이어서 확인** — `--poll-only`. 새 접수 0회 (D-08).
+
+    허용: done + exit 3(대기 미완) · 또는 done/orphaned 인데 체크포인트에 대기(접수·대기) 건이 있다.
+    그 밖(failed — 2 쓰기의심·입력 · 4 계정 · 5 상한)은 400 — 사람이 판단할 영역이다. 재반영 경로는 없다.
+    """
+    부모 = jobs.job_status(req.commit_job_id)
+    if 부모 is None or 부모.get("kind") not in ("market_commit", "market_poll"):
+        raise HTTPException(status_code=400, detail="마켓 반영 작업이 아니다")
+    if 부모.get("status") in jobs.LIVE_STATUSES:
+        raise HTTPException(status_code=400, detail="아직 도는 중이다 — 끝나고 다시 눌러라")
+    try:
+        대기 = _마켓대기수(_마켓체크포인트(_마켓폴더_of(부모)))
+    except _체크포인트깨짐 as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    허용 = ((부모.get("status") == "done" and 부모.get("exit_code") == 3)
+            or (부모.get("status") in ("done", "orphaned") and 대기 > 0))
+    if not 허용:
+        if 부모.get("status") == "failed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"이 작업은 실패로 멈췄다(종료코드 {부모.get('exit_code')}) — "
+                       "이어서 확인으로 덮지 않는다. 로그를 봐라")
+        raise HTTPException(status_code=400, detail="이어서 확인할 게 없다 — 대기 0건")
+    대상파일 = 부모.get("targets_path")
+    if not 대상파일 or not Path(대상파일).is_file():
+        raise HTTPException(status_code=400, detail="반영의 대상 파일이 없다")
+    return _마켓잡만들기("market_poll", run_dir=부모.get("run_dir"),
+                        parent_job_id=req.commit_job_id, targets_path_override=대상파일)
+
+
 # ── 여기서부터 읽기 전용 ─────────────────────────────────────────────────────
 # 아래 GET 들은 작업을 **만들지 않는다.** 상태를 읽어 화면에 옮길 뿐이다.
 # 이 파일에서 GET 핸들러를 맨 아래 모아 두는 이유는 V-SAFE-01d 스캐너가
@@ -1363,6 +1777,9 @@ def get_job_result(job_id: str, request: Request, format: str | None = None):
         "detail_estimate": ("_detail_estimate_table.html", _상세견적ctx),
         "detail_submit": ("_detail_result_table.html", _상세결과ctx),
         "detail_poll": ("_detail_result_table.html", _상세결과ctx),
+        "market_preview": ("_market_preview_table.html", _마켓미리보기ctx),
+        "market_commit": ("_market_result_table.html", _마켓결과ctx),
+        "market_poll": ("_market_result_table.html", _마켓결과ctx),
     }.get(kind, ("_preview_table.html", _미리보기표ctx))
     ctx = ctx(상태)
     if format == "json" or not request.headers.get("hx-request"):

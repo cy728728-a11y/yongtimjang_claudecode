@@ -1,0 +1,68 @@
+{# 스마트스토어 반영·이어서 확인 결과 표 — Plan 06-03 / MARKET-01·03 · D-08 · D-13 · L-05.
+
+   **정본은 market_status.json 이다.** 라우트(`_마켓결과ctx`)가 체크포인트를 항목 단위로 옮긴다.
+   잡이 orphaned 여도 체크포인트가 있으면 표가 나온다(브라우저를 닫았다 다시 와도 결과를 찾는다 — SC-1).
+
+   `_detail_result_table.html` 과 같은 뼈대다: **running → error → 집계 줄 먼저.**
+
+   그리지 않는 것 (의도):
+     · 재반영 버튼 — 대기 건을 다시 보내면 이중 반영이다(D-08). '이어서 확인'만 그린다
+     · 복원 버튼 — 복원은 CLI 수동(D-05). 복원에 쓸 ⓐ·ⓑ 경로를 텍스트로 보여 줄 뿐이다
+     · 백업 내용 — 경로와 있음/없음만(D-04)
+
+   아래 게이트 슬롯 div 는 06-04 가 사람 판정 패널을 채우는 자리다 — 여기서는 비워 둔다.
+
+   자동 이스케이프에 기댄다 — 사유에 불사자 원문이 섞여 들어온다. 이 파일에서
+   이스케이프를 끄는 필터를 쓰지 마라. #}
+
+{% if running %}
+  <p>스마트스토어 반영이 도는 중이다… 위 진행 로그를 봐라. 끝나면 이 자리에 항목별 결과가 뜬다.</p>
+
+{% elif error %}
+  <p class="stale"><strong>결과를 못 읽었다 — {{ error }}</strong><br>
+    빈 표를 결과로 읽지 않게 표를 그리지 않는다.</p>
+
+{% else %}
+  <div id="market-gate-slot"></div>
+
+  <p>
+    <strong>성공 {{ 집계.get("성공", 0) }}</strong>
+    · 실패 {{ 집계.get("실패", 0) }}
+    · 스킵 {{ 집계.get("스킵", 0) }}
+    · <strong>대기 {{ 집계.get("대기", 0) }}</strong>
+    {% if 집계.get("미반영") %}· 미반영(게이트 대기) {{ 집계.get("미반영") }}{% endif %}
+    {% if market_dir %}<br><small>작업 폴더 <code>{{ market_dir }}</code></small>{% endif %}
+  </p>
+
+  {% if 이어서확인가능 %}
+    <p class="stale" id="market-poll-wrap">
+      <strong>대기 {{ 대기수 }}건 — 실패 아님.</strong>
+      불사자가 아직 스토어에 올리는 중이다. 다시 반영하지 말고 이어 받아라.
+      <br>
+      <button type="button" class="market-poll-btn" data-commit-job="{{ job.id }}">이어서 확인 — 새 반영 0</button>
+    </p>
+  {% endif %}
+
+  {% if 항목 %}
+    <table>
+      <thead><tr>
+        <th>판매자상품코드</th><th>상태</th><th>사유</th>
+        <th>ⓐ 원본 백업</th><th>ⓑ 반영 전 백업</th><th>작업번호(끝 8자리)</th>
+      </tr></thead>
+      <tbody>
+      {% for x in 항목 %}
+        <tr>
+          <td>{{ x.판매자상품코드 }}</td>
+          <td>{{ x.상태 }}</td>
+          <td>{{ x.사유 or "" }}</td>
+          <td>{% if x.backup_a.경로 %}<small><code>{{ x.backup_a.경로 }}</code></small>
+              {% if x.backup_a.있음 %}<small>(있음)</small>{% else %}<small class="stale">(없음)</small>{% endif %}{% endif %}</td>
+          <td>{% if x.backup_b.경로 %}<small><code>{{ x.backup_b.경로 }}</code></small>
+              {% if x.backup_b.있음 %}<small>(있음)</small>{% else %}<small class="stale">(없음)</small>{% endif %}{% endif %}</td>
+          <td><small>{{ x.taskId or "" }}</small></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endif %}
