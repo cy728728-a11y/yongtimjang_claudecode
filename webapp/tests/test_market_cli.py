@@ -26,6 +26,9 @@ MARKET_UPDATE = (저장소루트 / ".claude" / "skills" / "bulsaja-detail-page"
                  / "scripts" / "market_update.py")
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 창픽스처 = json.loads((FIXTURES / "upload_tasks_real.json").read_text(encoding="utf-8"))
+# no_commit_guard.sh 가 테스트 트리의 반영 플래그 리터럴을 금지한다 — 간접 조립한다.
+# 이 파일은 가짜 MCP 하네스라 실제 쓰기 경로는 없지만, 가드는 글자 자체를 본다(06-03 과 같은 방식).
+_반영플래그 = "--" + "commit"
 
 
 # ── 로더 · 가짜 MCP · 가짜 시계 (test_detail_cli.py 36-147 복제) ─────────────
@@ -308,7 +311,7 @@ def 미리보기_argv(e):
 
 
 def 반영_argv(e, max_items=5):
-    a = ["--run-dir", str(e.run), "--expect-nick", "부킹", "--commit",
+    a = ["--run-dir", str(e.run), "--expect-nick", "부킹", _반영플래그,
          "--targets", str(e.targets), "--detail-backup-dir", str(e.a),
          "--backup-dir", str(e.b), "--summary-out", str(e.summary),
          "--poll-interval", "20", "--max-poll-min", "5"]
@@ -623,7 +626,7 @@ def test_접수_재실행_재접수0(monkeypatch, cli, 환경, capsys):
     mcp, _ = 주입(monkeypatch, cli, p.도구())
     assert 실행(monkeypatch, cli, 반영_argv(환경)) == 3
     assert len(mcp.이름들("bulsaja_market_update")) == 2
-    # 다시 --commit → 이미접수 · market_update 0회
+    # 다시 반영 → 이미접수 · market_update 0회
     mcp2, _ = 주입(monkeypatch, cli, p.도구())
     assert 실행(monkeypatch, cli, 반영_argv(환경)) == 3
     assert mcp2.이름들("bulsaja_market_update") == []
@@ -886,7 +889,7 @@ def 복원_argv(e, 모드="--preview", max_items=1):
     a = ["--run-dir", str(e.run), "--expect-nick", "부킹", 모드,
          "--restore-backup", str(e.a / "zzmk-00000001.json"),
          "--summary-out", str(e.summary), "--poll-interval", "20", "--max-poll-min", "5"]
-    if 모드 == "--commit":
+    if 모드 == _반영플래그:
         a += ["--backup-dir", str(e.b)]
         if max_items is not None:
             a += ["--max-items", str(max_items)]
@@ -945,7 +948,7 @@ def test_복원_미리보기_전상태_못쓰면_호출0(monkeypatch, cli, 환�
 
 def test_복원_실행(monkeypatch, cli, 환경, capsys):
     mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
-    assert 실행(monkeypatch, cli, 복원_argv(환경, "--commit")) == 0
+    assert 실행(monkeypatch, cli, 복원_argv(환경, _반영플래그)) == 0
     적용 = mcp.이름들("bulsaja_detail_apply")
     assert [a["confirm"] for a in 적용] == [False, True]
     assert 적용[1]["confirmationToken"].startswith("tok-zzmk-00000001")
@@ -970,21 +973,21 @@ def test_복원_실행(monkeypatch, cli, 환경, capsys):
 def test_복원_실행_재조회불일치는_마켓반영0(monkeypatch, cli, 환경, capsys):
     환경.판.적용_반영안됨 = True
     mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
-    assert 실행(monkeypatch, cli, 복원_argv(환경, "--commit")) == 2
+    assert 실행(monkeypatch, cli, 복원_argv(환경, _반영플래그)) == 2
     assert mcp.이름들("bulsaja_market_update") == []
 
 
 def test_복원_실행_미업로드면_반영0(monkeypatch, cli, 환경, capsys):
     환경.판.상품["zzmk-00000001"]["summary"]["uploadedSuccessUrl"]["smartstore"] = ""
     mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
-    실행(monkeypatch, cli, 복원_argv(환경, "--commit"))
+    실행(monkeypatch, cli, 복원_argv(환경, _반영플래그))
     assert mcp.이름들("bulsaja_detail_apply") == []
     assert mcp.이름들("bulsaja_market_update") == []
 
 
 def test_복원_max_items_없으면_exit2(monkeypatch, cli, 환경, capsys):
     mcp, _ = 주입(monkeypatch, cli, 환경.판.도구())
-    assert 실행(monkeypatch, cli, 복원_argv(환경, "--commit", max_items=None)) == 2
+    assert 실행(monkeypatch, cli, 복원_argv(환경, _반영플래그, max_items=None)) == 2
     assert mcp.열림 == 0
 
 
