@@ -683,3 +683,69 @@ def test_DetailArgv_태그가_비면_터진다():
     """done-tag 0개는 CLI 가 exit 2 로 거부하지만, 조립 단계에서 먼저 막는다."""
     with pytest.raises(ValueError):
         _상세(done_tags=[]).build()
+
+
+# ── 마켓 수정업로드 잡 (Phase 6 / 06-03) ────────────────────────────────────
+
+def _마켓(**덮기):
+    기본 = dict(mode="preview", run_dir=Path("/tmp/zz/web/market_a"),
+              targets=Path("/tmp/zz/web/targets_a.json"), expect_nick="zz기대계정",
+              detail_backup_dir=Path("/tmp/zz/web/detail_d/before_detail"),
+              backup_dir=Path("/tmp/zz/web/market_a/before_market"),
+              summary_out=Path("/tmp/zz/web/market_a/preview.json"),
+              poll_interval=20, max_poll_min=30)
+    기본.update(덮기)
+    return A.MarketArgv(**기본)
+
+
+def test_MarketArgv_preview_플래그():
+    """preview — 입력·백업 폴더 둘·요약·기대닉. 상한 플래그는 없다(쓰기 0)."""
+    av = _마켓().build()
+    assert isinstance(av, list) and all(isinstance(x, str) for x in av)
+    assert av[0] == str(A.PY_CLI)
+    assert av[1] == str(A.MARKET_UPDATE)
+    assert A.MARKET_UPDATE.name == "market_update.py"
+    assert "--preview" in av
+    assert av[av.index("--targets") + 1] == "/tmp/zz/web/targets_a.json"
+    assert av[av.index("--detail-backup-dir") + 1].endswith("before_detail")
+    assert av[av.index("--backup-dir") + 1].endswith("before_market")
+    assert av[av.index("--summary-out") + 1].endswith("preview.json")
+    assert av[av.index("--expect-nick") + 1] == "zz기대계정"
+    assert "--max-items" not in av and "--commit" not in av
+
+
+def test_MarketArgv_commit_max_items_없으면_ValueError():
+    """빈 값 ≠ 전량 — 상한 없는 반영 경로를 만들지 않는다 (D-06)."""
+    with pytest.raises(ValueError, match="빈 값은 전량이 아니다"):
+        _마켓(mode="commit").build()
+
+
+def test_MarketArgv_commit_max_items():
+    av = _마켓(mode="commit", max_items=1,
+             summary_out=Path("/tmp/zz/web/market_a/summary_c.json")).build()
+    assert "--commit" in av
+    assert av[av.index("--max-items") + 1] == "1"
+    assert "--preview" not in av and "--poll-only" not in av
+
+
+def test_MarketArgv_poll_은_poll_only():
+    av = _마켓(mode="poll", detail_backup_dir=None, backup_dir=None,
+             summary_out=Path("/tmp/zz/web/market_a/summary_p.json")).build()
+    assert "--poll-only" in av
+    assert "--max-items" not in av and "--backup-dir" not in av
+
+
+def test_MarketArgv_preview_commit_은_백업폴더_필수():
+    with pytest.raises(ValueError):
+        _마켓(detail_backup_dir=None).build()
+    with pytest.raises(ValueError):
+        _마켓(mode="commit", max_items=1, backup_dir=None).build()
+
+
+def test_MarketArgv_마켓_필드도_플래그도_없다():
+    """L-07 — 마켓은 CLI 가 SMARTSTORE 로 고정한다. 모델에도 argv 에도 마켓이 없다."""
+    assert "market" not in A.MarketArgv.model_fields
+    for 모드, 덮기 in (("preview", {}), ("commit", {"max_items": 1}),
+                     ("poll", {"detail_backup_dir": None, "backup_dir": None})):
+        av = _마켓(mode=모드, **덮기).build()
+        assert "--market" not in av

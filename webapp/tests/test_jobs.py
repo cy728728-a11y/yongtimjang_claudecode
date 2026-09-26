@@ -1506,3 +1506,160 @@ def test_detail_exit3_은_latest_done_에_잡힌다(잡판):
     job_id = _도는행("detail_poll", 3)
     jobs.job_status(job_id)
     assert jobs.latest_done("detail_poll")["id"] == job_id
+
+
+# ── Phase 6 · 06-03 — 마켓 수정업로드 잡 3종 ───────────────────────────────
+# 자식을 **한 번도 띄우지 않는다**(`안띄운다`). market_commit 은 진짜로 돌면 스토어를 바꾼다.
+
+마켓3종 = ("market_preview", "market_commit", "market_poll")
+
+
+def test_market잡_kind_가_등록돼_있다():
+    for k in 마켓3종:
+        assert k in jobs.KINDS
+        assert k in jobs.JobKind.__args__
+
+
+def test_market잡_가드집합():
+    """반영·이어서 확인은 쓰기(같은 market_status.json), 미리보기는 쓰기 0 이라 밖."""
+    assert {"market_commit", "market_poll"} <= jobs.WRITE_KINDS
+    assert "market_preview" not in jobs.WRITE_KINDS
+    for k in 마켓3종:
+        assert k in jobs.BULSAJA_KINDS
+    assert "market_preview" in jobs.SINGLETON_KINDS
+    assert {"market_commit", "market_poll"} <= jobs.POLL_INCOMPLETE_OK_KINDS
+    assert "market_preview" not in jobs.POLL_INCOMPLETE_OK_KINDS
+
+
+def test_market잡_수면방지(monkeypatch):
+    monkeypatch.setattr(jobs.os.path, "exists", lambda p: True)
+    assert jobs._수면방지_프리픽스("market_commit") == [jobs.CAFFEINATE, "-i"]
+    assert jobs._수면방지_프리픽스("market_poll") == [jobs.CAFFEINATE, "-i"]
+    assert jobs._수면방지_프리픽스("market_preview") == []
+
+
+@pytest.mark.parametrize("kind", ["market_commit", "market_poll"])
+def test_market_exit3_은_done(잡판, kind):
+    상태 = jobs.job_status(_도는행(kind, 3))
+    assert 상태["status"] == "done" and 상태["exit_code"] == 3
+
+
+def test_market_preview_exit3_은_failed(잡판):
+    상태 = jobs.job_status(_도는행("market_preview", 3))
+    assert 상태["status"] == "failed"
+
+
+def test_market잡_build_argv_빈값_거부(tmp_path, 기대닉):
+    """targets 없음 · commit 상한 없음 → ValueError (빈 값은 전량이 아니다)."""
+    공통 = dict(market_dir=tmp_path / "market_a",
+              detail_backup_dir=tmp_path / "detail_d" / "before_detail")
+    with pytest.raises(ValueError):
+        jobs._build_argv("market_preview", "zzjob", "2026-08-30", [], None,
+                         tmp_path / "p.json", False, **공통)
+    with pytest.raises(ValueError):
+        jobs._build_argv("market_commit", "zzjob", "2026-08-30", [], tmp_path / "t.json",
+                         tmp_path / "s.json", False, max_items=None, **공통)
+    av = jobs._build_argv("market_commit", "zzjob", "2026-08-30", [], tmp_path / "t.json",
+                          tmp_path / "s.json", False, max_items=1, **공통)
+    assert av[av.index("--max-items") + 1] == "1"
+    assert av[av.index("--backup-dir") + 1] == str(tmp_path / "market_a" / "before_market")
+    assert av[av.index("--detail-backup-dir") + 1] == str(tmp_path / "detail_d"
+                                                          / "before_detail")
+
+
+def _상세체인(run_name: str) -> tuple[str, str, Path]:
+    """견적 → 접수 잡을 만들고 (견적id, 접수id, 대상파일) 을 돌려준다."""
+    견적 = jobs.create_job("detail_estimate", run_dir=run_name, detail_inputs=_상세입력())
+    _끝냄(견적)
+    대상 = jobs.targets_path_of(견적)
+    접수 = jobs.create_job("detail_submit", run_dir=run_name, parent_job_id=견적,
+                           targets_path_override=대상, max_credits=5)
+    _끝냄(접수)
+    return 견적, 접수, 대상
+
+
+def _마켓대상() -> dict:
+    return {"items": [{"productId": "zzp1", "판매자상품코드": "zz01"}]}
+
+
+def test_market잡_폴더_체인(잡판, 계정확인, 안띄운다, tmp_run_dir, monkeypatch):
+    """preview 가 market_<미리보기id>/ 를 열고 commit·poll 이 체인으로 같은 폴더를 받는다.
+    ⓐ 폴더는 부모 detail 잡의 detail_<견적id>/before_detail 이다."""
+    _toml덮기(monkeypatch, expected_bulsaja_nick="zz기대계정")
+    settings.load(force=True)
+    계정확인("zz기대계정")
+    견적, 접수, _ = _상세체인(tmp_run_dir.name)
+    web = tmp_run_dir / "web"
+
+    미리 = jobs.create_job("market_preview", run_dir=tmp_run_dir.name, parent_job_id=접수,
+                           detail_inputs=_마켓대상())
+    폴더 = web / f"market_{미리}"
+    av = json.loads(jobs._row(미리)["argv"])
+    assert Path(av[av.index("--run-dir") + 1]) == 폴더
+    assert av[av.index("--detail-backup-dir") + 1] == str(web / f"detail_{견적}"
+                                                          / "before_detail")
+    assert av[av.index("--backup-dir") + 1] == str(폴더 / "before_market")
+    assert jobs.result_path_of(미리) == 폴더 / "preview.json"
+    대상 = Path(av[av.index("--targets") + 1])
+    assert 대상 == web / f"targets_{미리}.json"
+    assert json.loads(대상.read_text(encoding="utf-8"))["items"][0]["productId"] == "zzp1"
+    _끝냄(미리)
+
+    반영 = jobs.create_job("market_commit", run_dir=tmp_run_dir.name, parent_job_id=미리,
+                           detail_inputs=_마켓대상(), max_items=1)
+    av2 = json.loads(jobs._row(반영)["argv"])
+    assert Path(av2[av2.index("--run-dir") + 1]) == 폴더
+    assert av2[av2.index("--max-items") + 1] == "1"
+    assert jobs.result_path_of(반영) == 폴더 / f"summary_{반영}.json"
+    _끝냄(반영)
+
+    확인 = jobs.create_job("market_poll", run_dir=tmp_run_dir.name, parent_job_id=반영,
+                           targets_path_override=jobs.targets_path_of(반영))
+    av3 = json.loads(jobs._row(확인)["argv"])
+    assert Path(av3[av3.index("--run-dir") + 1]) == 폴더
+    assert "--poll-only" in av3
+    _끝냄(확인)
+    # poll 의 부모가 poll 이어도 같은 폴더
+    확인2 = jobs.create_job("market_poll", run_dir=tmp_run_dir.name, parent_job_id=확인,
+                            targets_path_override=jobs.targets_path_of(반영))
+    av4 = json.loads(jobs._row(확인2)["argv"])
+    assert Path(av4[av4.index("--run-dir") + 1]) == 폴더
+
+
+def test_market잡_부모체인이_틀리면_거부(잡판, 계정확인, 안띄운다, tmp_run_dir, monkeypatch):
+    _toml덮기(monkeypatch, expected_bulsaja_nick="zz기대계정")
+    settings.load(force=True)
+    계정확인("zz기대계정")
+    견적, 접수, _ = _상세체인(tmp_run_dir.name)
+    # preview 부모가 견적(detail_estimate) → 거부
+    with pytest.raises(ValueError):
+        jobs.create_job("market_preview", run_dir=tmp_run_dir.name, parent_job_id=견적,
+                        detail_inputs=_마켓대상())
+    # 부모 없음 → 거부
+    with pytest.raises(ValueError):
+        jobs.create_job("market_preview", run_dir=tmp_run_dir.name, detail_inputs=_마켓대상())
+    # commit 부모가 detail_submit → 거부
+    with pytest.raises(ValueError):
+        jobs.create_job("market_commit", run_dir=tmp_run_dir.name, parent_job_id=접수,
+                        detail_inputs=_마켓대상(), max_items=1)
+    미리 = jobs.create_job("market_preview", run_dir=tmp_run_dir.name, parent_job_id=접수,
+                           detail_inputs=_마켓대상())
+    _끝냄(미리)
+    # poll 부모가 preview → 거부
+    with pytest.raises(ValueError):
+        jobs.create_job("market_poll", run_dir=tmp_run_dir.name, parent_job_id=미리,
+                        targets_path_override=jobs.targets_path_of(미리))
+    # 회차가 다르면 거부
+    다른 = tmp_run_dir.parent / "2026-08-31"
+    다른.mkdir()
+    (다른 / "result.json").write_text((tmp_run_dir / "result.json").read_text(encoding="utf-8"),
+                                      encoding="utf-8")
+    with pytest.raises(ValueError):
+        jobs.create_job("market_preview", run_dir="2026-08-31", parent_job_id=접수,
+                        detail_inputs=_마켓대상())
+
+
+def test_market잡_기본값():
+    assert settings.DEFAULTS["market_update_max_items"] == 20
+    assert settings.DEFAULTS["market_poll_interval"] == 20
+    assert settings.DEFAULTS["market_max_poll_min"] == 30
