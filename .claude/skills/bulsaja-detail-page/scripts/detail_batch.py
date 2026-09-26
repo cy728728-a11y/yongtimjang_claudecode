@@ -410,9 +410,46 @@ def _판정(mcp, item, 태그맵, 실패코드, done_tags, cap, per_credit):
         결과["판정"] = "입력부족"
         결과["사유"] = f"제품 이미지 {len(imgs)}장 (2장 미만)"
         return 결과
+    # "dc" = 이미 받은 원본 상세 — --backup-out 이 추가 호출 없이 쓴다 (06-01 · D-03 ⓐ).
+    # _견적 은 결과에서 키를 골라 담으므로 이 키가 estimate.json 에 새지 않는다.
     결과.update({"판정": "접수", "사유": "", "장수": sc,
-                 "크레딧": sc * per_credit, "imgs": imgs[:sc]})
+                 "크레딧": sc * per_credit, "imgs": imgs[:sc], "dc": dc})
     return 결과
+
+
+def _원본백업(폴더, it, dc, 계정):
+    """AI 접수 직전 원본 불사자 상세를 `<폴더>/<productId>.json` 으로 남긴다 (06-01 · D-03 ⓐ).
+
+    AI 생성은 완료 시 불사자 상세를 자동으로 덮는다 → 원본은 접수 순간에만 뜰 수 있다.
+    반환 (성공, 사유). 실패면 호출부가 generate 를 부르지 않는다 (L-03).
+
+    첫 기록이 원본 — 재시도·중복대기열 재접수가 AI 반영 뒤 값으로 덮는 사고 방지.
+    그래서 이미 있으면 성공으로 치고 건드리지 않으며, 쓰기는 O_EXCL("x") 로 연다.
+    """
+    try:
+        폴더 = Path(폴더)
+        폴더.mkdir(parents=True, exist_ok=True)
+        경로 = 폴더 / f"{it['productId']}.json"
+        if 경로.exists():
+            return True, "기존 원본 유지"
+        rc = dc.get("renderContent") if isinstance(dc, dict) else None
+        if not isinstance(rc, str) or len(rc) < 10:
+            return False, "renderContent 없음"
+        문서 = {"productId": it["productId"], "판매자상품코드": it["판매자상품코드"],
+               "조회시각": _지금(), "계정": 계정, "renderContent": rc,
+               "imageTranslated": dc.get("imageTranslated")}
+        # 직렬화를 먼저 끝내 둔다 — 파일을 연 뒤 실패해 반쪽 파일이 "원본"으로 남지 않게
+        본문 = json.dumps(문서, ensure_ascii=False, indent=1)
+        try:
+            with open(경로, "x", encoding="utf-8") as f:     # O_EXCL — 불덮음
+                f.write(본문)
+        except FileExistsError:
+            # 여기서만 "이미 있음" 으로 친다 — 폴더 자리에 파일이 있어 mkdir 이 내는
+            # FileExistsError 를 성공으로 삼키면 백업 없이 접수된다
+            return True, "기존 원본 유지"
+        return True, ""
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"[:160]
 
 
 def _견적(mcp, args, items, done_tags, per_credit, 계정, 잔액):
@@ -579,6 +616,15 @@ def _접수와폴링(mcp, args, items, done_tags, per_credit):
                 print(f"⛔ {tag} {pid[-8:]} 접수하면 누적 {누적[0] + r['크레딧']}크레딧 > "
                       f"상한 {args.max_credits} — 여기서 멈춘다", flush=True)
                 return "budget"
+            # 06-01 · L-03 — 백업 없으면 generate 없음 (D-03). 원본은 지금만 뜰 수 있다
+            if getattr(args, "backup_out", None):
+                ok, why = _원본백업(Path(args.backup_out), it, r.get("dc") or {},
+                                  getattr(args, "계정", None))
+                if not ok:
+                    status[pid] = {"status": "접수실패", "사유": f"backup_failed: {why}"}
+                    save_json(status_path, status)
+                    print(f"{tag} {pid[-8:]} 원본 백업 실패 — 접수 안 함 ({why})", flush=True)
+                    return "fail"
             try:
                 tid, exp = _입력접수(mcp, pid, r["imgs"], r["장수"], args.quality)
             except Exception as e:
@@ -714,6 +760,7 @@ def _입력모드(args):
                       f"({args.expect_nick})이 아니다 — 아무것도 조회·접수하지 않는다",
                       flush=True)
                 return EXIT_NICK
+        args.계정 = 계정      # 06-01 — 원본 백업 문서의 계정 값
         if args.estimate_only:
             return _견적(mcp, args, items, done_tags, per_credit, 계정, 잔액)
         return _접수와폴링(mcp, args, items, done_tags, per_credit)
@@ -757,6 +804,8 @@ def main():
                     help="접수 누적 크레딧 상한. 넘기려 하면 generate 전 exit 5 "
                          "(inputs 접수 모드 필수)")
     ap.add_argument("--summary-out", help="접수/폴링 결과 요약 JSON 경로")
+    ap.add_argument("--backup-out",
+                    help="AI 접수 직전 원본 상세 백업 폴더 (MARKET-03 · D-03)")
     args = ap.parse_args()
 
     if not (2 <= args.pages <= 10):

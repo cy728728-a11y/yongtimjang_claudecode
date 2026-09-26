@@ -624,3 +624,103 @@ def test_요약_파일(monkeypatch, cli, tmp_path, 경우, 기대):
     assert s["집계"]["실제크레딧"] == 완료장수 * 5
     if 경우 == "정상":
         assert s["집계"]["실제크레딧"] == (7 + 4) * 5
+
+
+# ── 06-01: --backup-out 원본 상세 백업 (MARKET-03 · D-03) ─────────────────
+
+원본HTML = "<div><img src='https://zzcdn.example/orig/01.jpg'></div>원본 상세"
+
+
+def _원본워크데이터(*번호):
+    """AI 미생성 원본 상세가 있는 workdata (aiImageGenerated 키 없음 — 05-04 실측)."""
+    return {f"zzpid-2000000{n}": {"uploadDetailContents": {
+        "renderContent": f"{원본HTML}-{n}", "imageTranslated": "0"}} for n in 번호}
+
+
+def test_백업_접수직전_파일생성(monkeypatch, cli, tmp_path):
+    """D-03 ⓐ — 접수 1건 → <dir>/<productId>.json 6키 · renderContent 원본 · 계정 닉."""
+    폴더 = tmp_path / "before_detail"
+    코드, mcp, s, st = _접수(monkeypatch, cli, tmp_path, [_항목(1)],
+                           추가=["--backup-out", str(폴더)],
+                           워크데이터=_원본워크데이터(1))
+    assert 코드 == 0
+    문서 = json.loads((폴더 / "zzpid-20000001.json").read_text(encoding="utf-8"))
+    assert set(문서) == {"productId", "판매자상품코드", "조회시각", "계정",
+                        "renderContent", "imageTranslated"}
+    assert 문서["renderContent"] == f"{원본HTML}-1"
+    assert 문서["imageTranslated"] == "0"
+    assert 문서["계정"] == "용팀장" and 문서["판매자상품코드"] == "zz-code-0001"
+    assert len(mcp.이름들("bulsaja_detail_page_generate")) == 2
+    assert st["zzpid-20000001"]["taskId"] == "task-0001"
+
+
+def test_백업_추가호출_0(monkeypatch, cli, tmp_path):
+    """백업을 켜도 workdata 호출 수가 같다 — 이미 받은 응답을 쓴다 (추가 MCP 0)."""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    _, 끔, _, _ = _접수(monkeypatch, cli, tmp_path / "a", [_항목(1), _항목(2)],
+                       run=tmp_path / "a" / "run", 워크데이터=_원본워크데이터(1, 2))
+    _, 켬, _, _ = _접수(monkeypatch, cli, tmp_path / "b", [_항목(1), _항목(2)],
+                       run=tmp_path / "b" / "run",
+                       추가=["--backup-out", str(tmp_path / "b" / "bk")],
+                       워크데이터=_원본워크데이터(1, 2))
+    assert [n for n, _ in 켬.호출] == [n for n, _ in 끔.호출]
+    assert len(list((tmp_path / "b" / "bk").glob("*.json"))) == 2
+
+
+def test_백업_기존파일_불덮음(monkeypatch, cli, tmp_path):
+    """T-06-01 — 이미 있는 백업은 첫 기록(원본)이다. 덮지 않고 접수는 진행."""
+    폴더 = tmp_path / "before_detail"
+    폴더.mkdir()
+    기존 = {"productId": "zzpid-20000001", "renderContent": "첫 기록 원본"}
+    (폴더 / "zzpid-20000001.json").write_text(json.dumps(기존, ensure_ascii=False),
+                                             encoding="utf-8")
+    코드, mcp, _, st = _접수(monkeypatch, cli, tmp_path, [_항목(1)],
+                           추가=["--backup-out", str(폴더)],
+                           워크데이터=_원본워크데이터(1))
+    assert 코드 == 0
+    assert json.loads((폴더 / "zzpid-20000001.json").read_text(encoding="utf-8")) == 기존
+    assert len(mcp.이름들("bulsaja_detail_page_generate")) == 2
+    assert st["zzpid-20000001"]["taskId"] == "task-0001"
+
+
+@pytest.mark.parametrize("원인", ["폴더자리에_파일", "renderContent_없음"])
+def test_백업_실패시_generate_0회(monkeypatch, cli, tmp_path, 원인):
+    """T-06-02 · L-03 — 백업 못 뜨면 generate 0회 · 접수실패 · backup_failed."""
+    폴더 = tmp_path / "before_detail"
+    if 원인 == "폴더자리에_파일":
+        폴더.write_text("폴더가 아니다", encoding="utf-8")
+        워크 = _원본워크데이터(1)
+    else:
+        워크 = {"zzpid-20000001": {"uploadDetailContents": {"renderContent": ""}}}
+    코드, mcp, s, st = _접수(monkeypatch, cli, tmp_path, [_항목(1)],
+                           추가=["--backup-out", str(폴더)], 워크데이터=워크)
+    assert mcp.이름들("bulsaja_detail_page_generate") == []
+    v = st["zzpid-20000001"]
+    assert v["status"] == "접수실패" and v["사유"].startswith("backup_failed")
+    assert "taskId" not in v
+    assert s["항목"][0]["상태"] == "접수실패"
+    assert s["항목"][0]["사유"].startswith("backup_failed")
+
+
+def test_백업_견적_poll_only_플래그없음은_파일0(monkeypatch, cli, tmp_path, capsys):
+    """L-04 — 견적·이어서 확인·플래그 없는 실행은 백업 파일을 만들지 않는다."""
+    폴더 = tmp_path / "bk"
+    # 견적 (--backup-out 을 줘도 견적은 generate 가 없으니 백업도 없다)
+    코드, _, 견적 = _견적(monkeypatch, cli, tmp_path, [_항목(1)],
+                        추가=["--backup-out", str(폴더)],
+                        워크데이터=_원본워크데이터(1))
+    assert 코드 == 0 and 견적["항목"][0]["판정"] == "접수"
+    assert "dc" not in 견적["항목"][0]
+    # 이어서 확인 — 접수 없이 폴링만
+    _접수(monkeypatch, cli, tmp_path, [_항목(1)], 추가=["--max-poll-min", "1"],
+         상태응답=_영원히진행중, 워크데이터=_원본워크데이터(1))
+    코드2, mcp2, _, _ = _접수(monkeypatch, cli, tmp_path, [_항목(1)], 최대=None,
+                            추가=["--poll-only", "--backup-out", str(폴더)])
+    assert 코드2 == 0 and mcp2.이름들("bulsaja_product_workdata") == []
+    assert not 폴더.exists() or list(폴더.iterdir()) == []
+    # 플래그 없음 — 골든 경로 그대로, 백업 폴더 없음
+    골든폴더 = tmp_path / "g"
+    골든폴더.mkdir()
+    _골든_돌리기(monkeypatch, cli, 골든폴더, capsys)
+    assert not 폴더.exists() or list(폴더.iterdir()) == []
