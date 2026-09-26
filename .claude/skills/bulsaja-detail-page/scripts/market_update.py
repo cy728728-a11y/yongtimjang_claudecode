@@ -512,6 +512,197 @@ def _미리보기(mcp, args, items, 계정, 모드):
     return EXIT_OK
 
 
+# ── 반영(commit) · 이어서 확인(poll-only) ────────────────────────────────────
+
+def _체크경로(args):
+    return Path(args.run_dir) / "market_status.json"
+
+
+def _체크읽기(args, 없으면_빈값=True):
+    """체크포인트 → (dict|None, 사유). **깨진 파일을 빈 체크포인트로 읽지 않는다** —
+    그러면 taskId 가진 상품을 다시 접수한다(이중 반영)."""
+    경로 = _체크경로(args)
+    if not 경로.exists():
+        if 없으면_빈값:
+            return {"워터마크": None, "items": {}}, ""
+        return None, f"체크포인트가 없다: {경로}"
+    try:
+        with open(경로, encoding="utf-8") as f:
+            체크 = json.load(f)
+        if not isinstance(체크, dict) or not isinstance(체크.get("items"), dict):
+            return None, "체크포인트 모양이 아니다"
+        체크.setdefault("워터마크", None)
+        return 체크, ""
+    except Exception as e:
+        return None, f"체크포인트 읽기 실패: {type(e).__name__}"
+
+
+def _새접수대상(v):
+    """taskId 없고 · 접수/대기/종결 아닌 항목만 새로 접수한다 (D-08 · 재접수 금지)."""
+    if not v:
+        return True
+    if v.get("taskId"):
+        return False
+    return v.get("status") not in ("접수", "대기") + 종결상태
+
+
+def _접수1건(mcp, pid):
+    """상품당 1호출 2단 접수 (RESEARCH Pattern 1). 반환 = 체크포인트에 합칠 dict.
+
+    confirm:false → **새 토큰** → confirm:true. 토큰 없는 성공/작업번호는 쓰기의심 예외.
+    confirm:true 가 예외면 `대기`(taskId 없음) — 재접수하지 않고 창에서 워터마크로 찾는다.
+    """
+    기본 = {"productIds": [pid], "market": MARKET}
+    try:
+        pre = _표시규칙제거(mcp.call_tool(TOOL_UPDATE, {**기본, "confirm": False}) or {})
+    except Exception as e:
+        msg = str(e)[:150]
+        return {"status": "스킵",
+                "사유": f"이미진행중: {msg}" if "진행" in msg else f"미리보기 호출 실패: {msg}"}
+    토큰, 사유 = _1차해석(pre, pid)           # 쓰기의심은 호출부로 올라간다
+    if not 토큰:
+        return {"status": "스킵", "사유": 사유}
+    try:
+        fin = _표시규칙제거(mcp.call_tool(
+            TOOL_UPDATE, {**기본, "confirm": True, "confirmationToken": 토큰}) or {})
+    except Exception as e:
+        return {"status": "대기", "taskId": None, "접수시각": _지금(),
+                "사유": f"접수 응답 유실 — 창 확인 필요: {str(e)[:120]}"}
+    finally:
+        토큰 = None                             # 저장하지 않는다
+    tid = _작업번호(fin, pid)
+    if tid:
+        return {"status": "접수", "taskId": tid, "접수시각": _지금(), "사유": ""}
+    return {"status": "대기", "taskId": None, "접수시각": _지금(),
+            "사유": f"응답에 taskId 없음 — 창 확인 필요: {_메시지(fin)}"}
+
+
+def _마무리(args, 체크, items, rc, 계정, 모드명, 추가=None):
+    """요약 파일 + 센티널 마지막 줄. 정상·2·3·5 모두 여기를 지난다."""
+    행들 = []
+    for it in items:
+        v = (체크 or {}).get("items", {}).get(it["productId"])
+        if v:
+            행들.append({"productId": it["productId"], **v})
+        else:
+            행들.append({"productId": it["productId"], "판매자상품코드": it["판매자상품코드"],
+                         "status": "스킵", "taskId": None, "사유": "미처리(중단·상한)"})
+    셈 = {}
+    for h in 행들:
+        셈[h.get("status")] = 셈.get(h.get("status"), 0) + 1
+    집계 = {"성공": 셈.get("성공", 0), "실패": 셈.get("실패", 0), "스킵": 셈.get("스킵", 0),
+            "대기": 셈.get("대기", 0) + 셈.get("접수", 0), "전체": len(items)}
+    if args.summary_out:
+        문서 = {"모드": 모드명, "계정": 계정, "max_items": args.max_items, "집계": 집계,
+                "items": 행들, "종료코드": rc, "생성시각": _지금()}
+        문서.update(추가 or {})
+        save_json(args.summary_out, 문서)
+    print(f"집계: 성공 {집계['성공']} · 실패 {집계['실패']} · 스킵 {집계['스킵']} · "
+          f"대기 {집계['대기']}", flush=True)
+    _센티널(집계["성공"], 집계["실패"], 집계["스킵"], 집계["대기"], 집계["전체"])
+    return rc
+
+
+def _폴링(mcp, args, 체크, pids):
+    """upload_tasks 창 매칭으로 종결 확인 (RESEARCH Q2 · Pattern 2). 종료코드를 돌려준다.
+
+    성공만 성공 · 실패/DLQ 만 실패 · 미발견은 대기. 조회 실패는 실패로 세지 않는다.
+    **작업 문자열로 거르지 않는다** — 삭제만 제외 (A3).
+    """
+    경로 = _체크경로(args)
+    항목 = 체크["items"]
+
+    def 남음():
+        return [p for p in pids if (항목.get(p) or {}).get("status") in ("접수", "대기")]
+
+    if not 남음():
+        return EXIT_OK
+    deadline = time.time() + args.max_poll_min * 60
+    while True:
+        try:
+            행들, dlq = _창읽기(mcp, ["기본", "SUCCESS", "FAILED", "DLQ"])
+        except Exception as e:
+            print(f"[경고] 작업창 조회 실패 — 실패로 세지 않는다: {str(e)[:160]}", flush=True)
+        else:
+            쓴 = {str(v.get("taskId")) for v in 항목.values() if v.get("taskId")}
+            for pid in 남음():
+                v = 항목[pid]
+                tid = v.get("taskId")
+                if not tid:
+                    # 워터마크 대체 매칭 — pid · 스마트스토어 · taskId > 워터마크 · 삭제 아님
+                    후보 = [t for t in _새행들(행들, pid, 체크.get("워터마크"))
+                            if t not in 쓴
+                            and "스마트스토어" in str(행들[t].get("마켓") or "스마트스토어")
+                            and "삭제" not in str(행들[t].get("작업") or "")]
+                    if 후보:
+                        tid = 후보[0]
+                        v["taskId"] = tid
+                        쓴.add(tid)
+                        print(f"  {pid[-8:]} 창에서 작업 찾음 ({_꼬리(tid)})", flush=True)
+                행 = 행들.get(str(tid)) if tid else None
+                if not 행:
+                    continue
+                st = str(행.get("상태") or "")
+                if st == "성공":
+                    v.update({"status": "성공", "사유": "", "확정시각": _지금()})
+                elif st == "실패" or str(tid) in dlq:
+                    v.update({"status": "실패", "확정시각": _지금(),
+                              "사유": f"{st}: {행.get('실패사유') or ''}"[:200]})
+        save_json(경로, 체크)
+        n = len(남음())
+        print(f"  폴링: 미종결 {n} / 전체 {len(pids)}", flush=True)
+        if not n or time.time() >= deadline:
+            break
+        time.sleep(args.poll_interval)
+    for pid in 남음():
+        항목[pid]["status"] = "대기"
+    save_json(경로, 체크)
+    return EXIT_POLL if 남음() else EXIT_OK
+
+
+def _반영(mcp, args, items, 체크, 계정):
+    """commit — 대상 산정 → 상한(exit 5) → 워터마크 → 상품당 판정·2단 접수·선저장 → 폴링."""
+    경로 = _체크경로(args)
+    항목 = 체크["items"]
+    대상 = [it for it in items if _새접수대상(항목.get(it["productId"]))]
+    print(f"새 접수 대상 {len(대상)}건 / 전체 {len(items)}건 (상한 {args.max_items})", flush=True)
+    if len(대상) > args.max_items:
+        print(f"⛔ 게이트/상한 초과 — 서버가 준 대상({len(대상)})이 상한({args.max_items})보다 "
+              f"많다. 아무것도 접수하지 않는다", flush=True)
+        return _마무리(args, 체크, items, EXIT_BUDGET, 계정, "commit")
+    if 대상 and not 체크.get("워터마크"):
+        try:
+            행들, _ = _창읽기(mcp, ["기본"])
+        except Exception as e:
+            print(f"⛔ 작업창을 못 읽어 워터마크를 잴 수 없다 — 접수하지 않는다: {e}", flush=True)
+            return _마무리(args, 체크, items, EXIT_INPUT, 계정, "commit")
+        체크["워터마크"] = _워터마크(행들)
+        save_json(경로, 체크)
+    for i, it in enumerate(대상, 1):
+        pid = it["productId"]
+        r = _상품판정(mcp, it, args.detail_backup_dir, args.backup_dir, 계정)
+        기록 = {"판매자상품코드": it["판매자상품코드"], "status": "스킵", "taskId": None,
+                "사유": r["사유"], "backup_a": r["backup_a"], "backup_b": r["backup_b"],
+                "접수시각": None, "확정시각": None}
+        if r["판정"] == "반영가능":
+            try:
+                기록.update(_접수1건(mcp, pid))
+            except 쓰기의심 as e:
+                기록.update({"status": "실패", "사유": f"쓰기의심: 토큰 없이 성공/작업번호 {e}"[:300]})
+                항목[pid] = 기록
+                save_json(경로, 체크)
+                print(f"⛔ 쓰기의심 — {pid[-8:]} confirm:false 가 토큰 없이 성공/작업번호 · "
+                      f"전량 중단", flush=True)
+                return _마무리(args, 체크, items, EXIT_INPUT, 계정, "commit")
+        항목[pid] = 기록
+        save_json(경로, 체크)            # taskId 를 폴링보다 **먼저** 남긴다 (Pitfall 2)
+        print(f"[{i}/{len(대상)}] {pid[-8:]} {기록['status']} ({_꼬리(기록.get('taskId'))})"
+              f"{' — ' + 기록['사유'] if 기록['사유'] else ''}", flush=True)
+        time.sleep(args.sleep)
+    rc = _폴링(mcp, args, 체크, [it["productId"] for it in items])
+    return _마무리(args, 체크, items, rc, 계정, "commit")
+
+
 # ── 입력 · 진입점 ────────────────────────────────────────────────────────────
 
 def _대상읽기(path):
@@ -563,17 +754,27 @@ def _인자():
 def _실행(args):
     """모드 분기. 입력 검증은 BulsajaMCP() 생성 **전에** 끝낸다."""
     복원 = bool(args.restore_backup)
-    if 복원 or args.commit or args.poll_only or args.tasks_snapshot:
-        # Task 1 시점: 쓰기 경로가 반쯤 열린 채 나가지 않게 거부한다
+    if 복원 or args.tasks_snapshot:
+        # Task 2 시점: 복원·스냅샷은 아직 거부한다
         print("⛔ 이 모드는 아직 준비되지 않았다", flush=True)
         return EXIT_INPUT
     items, 사유 = _대상읽기(args.targets) if args.targets else (None, "--targets 가 필요하다")
     if items is None:
         print(f"⛔ {사유}", flush=True)
         return EXIT_INPUT
-    if not args.detail_backup_dir or not args.backup_dir:
+    if (args.preview or args.commit) and (not args.detail_backup_dir or not args.backup_dir):
         print("⛔ --detail-backup-dir(ⓐ) 와 --backup-dir(ⓑ) 가 필요하다 (L-03)", flush=True)
         return EXIT_INPUT
+    if args.commit and (args.max_items is None or args.max_items < 1):
+        print("⛔ --commit 은 --max-items(1 이상)가 필요하다 (D-06 · 상한 없는 반영 없음)",
+              flush=True)
+        return EXIT_INPUT
+    체크 = None
+    if args.commit or args.poll_only:
+        체크, 왜 = _체크읽기(args, 없으면_빈값=args.commit)
+        if 체크 is None:
+            print(f"⛔ {왜} — 빈 체크포인트로 읽지 않는다", flush=True)
+            return EXIT_INPUT
     Path(args.run_dir).mkdir(parents=True, exist_ok=True)
     mcp = BulsajaMCP()
     mcp.open()
@@ -582,7 +783,12 @@ def _실행(args):
         if rc is not None:
             _센티널(0, 0, 0, 0, len(items))
             return rc
-        return _미리보기(mcp, args, items, 계정, 모드)
+        if args.preview:
+            return _미리보기(mcp, args, items, 계정, 모드)
+        if args.commit:
+            return _반영(mcp, args, items, 체크, 계정)
+        rc = _폴링(mcp, args, 체크, [it["productId"] for it in items])
+        return _마무리(args, 체크, items, rc, 계정, "poll")
     finally:
         mcp.close()
 
