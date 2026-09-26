@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 6 context gathered (--auto)
-last_updated: "2026-09-26T04:14:25.177Z"
-last_activity: 2026-09-25
+last_updated: "2026-09-26T04:51:17.073Z"
+last_activity: 2026-09-26 -- Phase 6 planning complete
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 34
+  total_plans: 40
   completed_plans: 32
   percent: 43
 ---
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 Phase: 05 (상세페이지 작업 버튼) — EXECUTING
 Plan: 5 of 6 (05-01 완료: detail_batch --inputs 주입구 · 오프라인 45테스트 · 크레딧 0)
 Status: Ready to execute
-Last activity: 2026-09-25
+Last activity: 2026-09-26 -- Phase 6 planning complete
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 
@@ -146,6 +146,7 @@ Recent decisions affecting current work:
   `{imageTranslated, renderContent}` 둘뿐). **중복방지는 태그 쪽을 봐야 한다** — `aiImageGenerated`
   만 보면 기작업 29건을 다시 태운다. 확정 실험(외부 반영 1건 실측)은 예정대로 Phase 5
 
+- **[05-06 선행 — Phase 6 D-03]** 05-06(첫 크레딧 실탄) 전에 **06-01(`detail_batch --backup-out`, 크레딧 0)을 먼저 실행·머지**하고, 도는 잡 0건 확인 뒤 웹앱 서버를 재시작해야 첫 5건의 AI 생성 전 원본 상세가 남는다(서버가 `--reload` 없이 돈다). 순서가 뒤집히면 그 건은 원본 복원 불가. D-03 자체(원본 백업 시점)는 `[auto]` — 용팀장 한 줄 확인 대상
 - **[Phase 6 게이트]** 수정업로드가 상하단 안내이미지를 어느 시점 기준으로 올리는지 모순 미해결 — 1건 육안 확인으로 깬다 (MARKET-02)
 - **[Phase 4 → 5]** 홍보배너 게이트는 **불통과로 종료**(D-23). 새 회차는 기계 판정만으로 상품 이미지 약 14% 가 빠진다 — Phase 5 discuss 에서 사람 확인 vs 어휘군 단독을 정해야 실작업 투입
 - **[환경]** 이 맥북에 `bulsaja-yongssaem` MCP 서버 항목이 없다 — 용쌤 계정 전환 경로가 끊겨 있음 (ENG-08 착수 시 확인)

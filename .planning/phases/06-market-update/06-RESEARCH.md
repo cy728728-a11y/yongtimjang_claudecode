@@ -437,11 +437,11 @@ tok = pre.get("confirmationToken")
 
 ## Open Questions
 
-1. **confirm:false 응답 원문** — 무엇을 보여 주나(변경 필드·대상 그룹·토큰 TTL). → 라이브 스모크 태스크(쓰기 0 diff 포함)가 박제, 미리보기 표 컬럼은 그 뒤 확정.
-2. **완료 상품의 AI 흔적 필드** — 05-06 실측(`aiImageGenerated`) 결과를 06 CLI 판정에 반영. 그 전엔 Pitfall 6 의 OR 규칙.
-3. **D-03 · D-09 용팀장 확인** — D-03 은 05-06 전에(순서 변경), D-09 는 첫 실제 쓰기 체크포인트 전에 한 줄씩.
-4. **상품 상하단 사본 vs 현재 그룹 설정** — 그룹의 현재 top/bottom URL 을 MCP 로 못 읽는다(`market_groups` 응답에 없음 [VERIFIED]). 게이트에서 용팀장이 불사자 화면 설정과 스토어를 같이 본다.
-5. **`market_poll` kind** — D-07 은 2종이지만 D-08 "이어서 확인" 에 접수 0 잡이 필요. 권장: 세 번째 kind `market_poll`(WRITE·BULSAJA·POLL_INCOMPLETE_OK) — `detail_poll` 과 같은 이유.
+1. **confirm:false 응답 원문** — PENDING LIVE DATA (06-05 Task 1 스모크가 박제) — 무엇을 보여 주나(변경 필드·대상 그룹·토큰 TTL). → 라이브 스모크 태스크(쓰기 0 diff 포함)가 박제, 미리보기 표 컬럼은 그 뒤 확정.
+2. **완료 상품의 AI 흔적 필드** — PENDING LIVE DATA (05-06 실측 → 06-05 에서 반영, 그 전엔 OR 규칙) — 05-06 실측(`aiImageGenerated`) 결과를 06 CLI 판정에 반영. 그 전엔 Pitfall 6 의 OR 규칙.
+3. **D-03 · D-09 용팀장 확인** — RESOLVED (D-03: 06-01 이 05-06 전 머지 + STATE Blockers 순서 기록 · D-09: 06-05 Task 2 체크포인트에서 한 줄 확인) — D-03 은 05-06 전에(순서 변경), D-09 는 첫 실제 쓰기 체크포인트 전에 한 줄씩.
+4. **상품 상하단 사본 vs 현재 그룹 설정** — RESOLVED (06-04 게이트 패널 · 06-06 육안 판정 체크포인트) — 그룹의 현재 top/bottom URL 을 MCP 로 못 읽는다(`market_groups` 응답에 없음 [VERIFIED]). 게이트에서 용팀장이 불사자 화면 설정과 스토어를 같이 본다.
+5. **`market_poll` kind** — RESOLVED (06-03 에서 세 번째 kind 로 채택) — D-07 은 2종이지만 D-08 "이어서 확인" 에 접수 0 잡이 필요. 권장: 세 번째 kind `market_poll`(WRITE·BULSAJA·POLL_INCOMPLETE_OK) — `detail_poll` 과 같은 이유.
 
 ## Environment Availability
 

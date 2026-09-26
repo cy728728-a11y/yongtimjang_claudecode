@@ -261,7 +261,29 @@ Plans:
   2. 첫 1건이 반영된 뒤 화면이 멈추고 "스토어에서 육안 확인" 확인을 받기 전에는 나머지가 나가지 않는다 (상하단 안내이미지가 되돌려지는지 여기서 판명된다)
   3. 반영 전 원본 상세 HTML 이 보관되어 있고, 사용자가 그 백업의 위치를 화면에서 확인한다
 
-**Plans**: TBD
+**Plans**: 6 plans in 5 waves
+
+Plans:
+**Wave 1**
+
+- [ ] 06-01-PLAN.md — ⚠️ 05-06 전에 머지: `detail_batch --backup-out`(원본 ⓐ, 크레딧 0) + DetailArgv submit 항상 부착 + STATE 순서 기록(서버 재시작 필요)
+- [ ] 06-02-PLAN.md — 새 CLI `market_update.py`: preview(쓰기 0 이중 가드)·commit(상품당 2단·taskId 선저장·exit 5)·poll(30건 창 매칭·exit 3)·restore·tasks-snapshot — 오프라인 테스트
+
+**Wave 2** *(blocked on Wave 1 · 05-06 실탄 중엔 편집 금지)*
+
+- [ ] 06-03-PLAN.md — 웹앱 슬라이스: market kind 3종 · 미리보기→첫 1건 반영→결과·이어서 확인 · 백업 경로 표시 · 보드 버튼 + uat-verifier
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 06-04-PLAN.md — 육안 게이트: `market_gate` 기록 · 게이트 패널 · 상한 결정(닫힘 1 / 정상 20 / 이상 거부) + uat-verifier
+
+**Wave 4** *(blocked on Wave 3 + Phase 5 05-06 완료 — 사람)*
+
+- [ ] 06-05-PLAN.md — 라이브 쓰기 0 스모크(미리보기·복원 미리보기 diff) → ★ 첫 1건 반영 승인(D-09·D-03 한 줄) → 1건 반영 · 게이트 패널
+
+**Wave 5** *(blocked on Wave 4 — 사람)*
+
+- [ ] 06-06-PLAN.md — 스토어 육안 판정 + 다음 행동 승인 → 게이트 기록 · 상하단 모순 확정 → 나머지 반영 또는 (승인 시) 복원
 **UI hint**: yes
 
 ### Phase 7: 남은 버튼 — 썸네일 교체 / 쿠팡 복사
