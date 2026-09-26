@@ -11,3 +11,5 @@
   **→ 해결됨 (06-04 실행 중, 별도 커밋 `fix(06-02)`).** `test_market_cli.py` 의 7건을 모듈 상수
   `_반영플래그 = "--" + "commit"` 간접 조립으로 바꿨다(주석 1건은 문구만 교체). 테스트 의미 불변 —
   66 passed 그대로. `bash webapp/tests/no_commit_guard.sh` → OK. 가드 제외 목록은 건드리지 않았다.
+
+- [P2 · 06-04 UAT 2026-09-26] 게이트 `정상` 클릭 직후 "반영 실행 (최대 N건)" 버튼이 같은 화면에 바로 안 나온다 — 패널 스왑 범위가 `.market-gate-panel` 뿐이라 형제 `#market-commit-next` 가 갱신 안 됨. **우회: 새로고침.** 수정: 게이트 응답에 hx-swap-oob 로 `#market-commit-next` 동봉. 06-06 전 여유 있으면 고친다

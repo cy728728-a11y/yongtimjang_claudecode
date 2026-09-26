@@ -136,3 +136,5 @@ Task 1·2 는 test(...) → feat(...) 순서로 커밋했다. Task 3 은 `tdd` �
 ## Self-Check: PASSED
 - FOUND: webapp/templates/_market_preview_table.html · webapp/templates/_market_result_table.html · webapp/tests/test_routes_market.py
 - FOUND commits: bb66b8f · 2715fe8 · 43c6cf1 · 03dda6b · 0fb0f01
+
+## uat-verifier (06-03+06-04 통합, 2026-09-26): **PASS** — 12항목(pass 11 · P2 1: 게이트 정상 직후 반영 버튼 지연 표시, 새로고침으로 우회 · deferred-items). 격리 인스턴스 · 불사자 0 · 쓰기 0. 리포트 evidence/06-04-uat.md

@@ -137,3 +137,5 @@ Task 1: `test(06-04)` b9c1a3a → `feat(06-04)` d5cb02d. Task 2 는 auto 태스�
 ## Self-Check: PASSED
 - FOUND: webapp/market_gate_store.py · webapp/templates/_market_gate_panel.html · webapp/tests/test_market_gate_store.py
 - FOUND commits: 4f6ae87 · b9c1a3a · d5cb02d · e2e927b
+
+## uat-verifier (06-03+06-04 통합, 2026-09-26): **PASS** — 12항목(pass 11 · P2 1: 게이트 정상 직후 반영 버튼 지연 표시, 새로고침으로 우회 · deferred-items). 격리 인스턴스 · 불사자 0 · 쓰기 0. 리포트 evidence/06-04-uat.md
