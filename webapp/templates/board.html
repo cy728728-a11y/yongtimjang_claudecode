@@ -301,6 +301,21 @@
     </article>
   {% endif %}
 
+  {# ── 쿠팡 복사 (Phase 7 / CP-01~04 · D-19) ─────────────────────────────
+     **회차와 무관하다** — 후보는 광고 판정이 아니라 주문시트 실적에서 나온다. 그래서
+     `if run_dir` 블록 **밖**에 둔다(회차가 없어도 이 패널은 뜬다).
+     기준 문구는 CLI 가 출력한 것을 그대로 보인다 — 웹앱이 기준값을 적지 않는다(L-04 · D-15).
+     복사(커밋) 영역은 여기 두지 않는다 — 미리보기 조각 안의 접힌 details 가 품는다(07-05).
+     버튼은 disabled 로 그린다. `static/coupang.js`(07-05)가 배선하면서 켠다 — 트랙이 붙기 전
+     죽은 버튼이 눌리지 않게. #}
+  <section id="coupang">
+    <h2>쿠팡 복사</h2>
+    <p><small>기준: 주문 3회 이상 AND 쿠팡보정마진 — 기준값은 CLI 가 출력한 문구를 그대로 보인다.</small></p>
+    <button type="button" id="coupang-preview-btn" disabled>쿠팡 후보 뽑기 — 쓰기 0</button>
+    <div id="coupang-body"></div>
+    <input type="hidden" id="coupang-preview-job" value="">
+  </section>
+
   {# 실행 중인 작업 패널 + SSE 진행 로그 (Plan 01-05 / 01-06).
      `job` 은 라우트가 넣는 **도는 작업**이다. 탭을 닫았다 다시 열었을 때 이게
      비어 있으면 패널이 안 뜨고, 스트림도 안 열려 성공기준 3 이 성립하지 않는다. #}
@@ -361,6 +376,15 @@
       <button type="button" id="detail-submit-btn" class="contrast" disabled>접수</button>
       <p><small>누르는 즉시 크레딧이 나간다 — 위 견적표가 확인 창이다. 확인 창은 따로 없다.</small></p>
     </div>
+  </section>
+
+  {# 썸네일 견적 자리 (Phase 7 / THUMB-02). #detail-estimate 와 id 를 공유하지 않는다 — 같은 이유
+     (한 칸을 두 흐름이 갈아끼우면 "무엇의 결과인가" 가 흐려진다). 새로고침으로 되살리지 않는다.
+     속은 `static/thumb.js`(07-04)가 채운다. #}
+  <section id="thumb-estimate" hidden>
+    <h2>썸네일 견적</h2>
+    <div id="thumb-estimate-body"></div>
+    <input type="hidden" id="thumb-estimate-job" value="">
   </section>
 
   {# 최근 상세 작업 (05-04 / D-16 · SC-1). 입찰가 결과와 달리 **새로 열어도 되살린다** —
@@ -526,6 +550,14 @@
           <button type="button" id="detail-estimate-btn" disabled>상세 견적 — 크레딧 0</button>
         </div>
         <p><small>상세 견적은 크레딧을 안 쓴다 — 관문(배너 검수 확인)을 지난 상품만 세고, 기작업은 불사자 태그로 다시 확인해 뺀다.</small></p>
+
+        {# ── 썸네일 견적 (Phase 7 / THUMB-02 · D-02) ───────────────────────────
+           규칙②(노출 100+ & CTR<1%) 상품을 같은 선택 UI 로 고른다. 문구는 "크레딧 0" 이지
+           "쓰기 0" 이 **아니다** — prep 이 현황판에 백필을 쓴다(RESEARCH §Runtime State).
+           disabled 로 그린다 — `static/thumb.js`(07-04)가 배선하면서 켠다. #}
+        <div role="group">
+          <button type="button" id="thumb-estimate-btn" disabled>썸네일 견적 — 크레딧 0</button>
+        </div>
       {% endif %}
     </div>
 
@@ -616,5 +648,8 @@
 <script src="/static/vendor/htmx-ext-sse-2.2.4.js"></script>
 <script src="/static/vendor/tabulator-6.5.3.min.js"></script>
 <script src="/static/board.js"></script>
+{# 트랙 JS 는 board.js **뒤**다 — board.js 가 노출한 window.관제탑 훅만 쓴다(D-19). #}
+<script src="/static/thumb.js"></script>
+<script src="/static/coupang.js"></script>
 </body>
 </html>

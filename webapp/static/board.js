@@ -1062,4 +1062,27 @@
   if (회차칸 && 회차칸.form) {
     회차칸.addEventListener("change", function () { 회차칸.form.submit(); });
   }
+
+  // ── 트랙 JS 훅 (Phase 7 / D-19) ────────────────────────────────────────────
+  // 트랙 JS(thumb.js/coupang.js)가 이 훅만 쓴다 — board.js 를 트랙 플랜이 고치지 않게(D-19).
+  // **새 동작이 없다.** 상세 견적 버튼이 쓰는 것과 같은 선택 키·회차 칸·결과 기다리기·
+  // 토큰 헤더를 그대로 넘긴다. `요청` 은 상세 견적 버튼의 fetch 모양을 한 줄로 묶은 것뿐이다 —
+  // 응답을 {ok, code, 본문} 으로 돌려주고, 판단은 부르는 쪽이 한다.
+  window.관제탑 = {
+    선택키: function () {
+      return table.getSelectedData().map(function (r) { return r.key; });
+    },
+    회차: function () { return 회차칸값 ? 회차칸값.value : ""; },
+    결과기다리기: 결과기다리기,
+    오류표시: 오류표시,
+    요청: function (url, 몸통) {
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CT-Token": 토큰() },
+        body: JSON.stringify(몸통 || {})
+      }).then(function (r) {
+        return r.text().then(function (본문) { return { ok: r.ok, code: r.status, 본문: 본문 }; });
+      });
+    }
+  };
 })();

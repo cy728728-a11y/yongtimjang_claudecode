@@ -2033,7 +2033,7 @@ def get_job_result(job_id: str, request: Request, format: str | None = None):
     # 작업 종류마다 다른 표다. 되돌리기 결과를 인상 표로 그리면 "인상 후" 칸에
     # 복원값이 들어가 **내린 것을 올린 것처럼** 보여준다.
     kind = 상태.get("kind")
-    조각, ctx = {
+    결과표 = {
         "bids_commit": ("_result_table.html", _실행표ctx),
         "revert_only": ("_revert_table.html", _되돌리기표ctx),
         "revert_all": ("_revert_table.html", _되돌리기표ctx),
@@ -2043,7 +2043,16 @@ def get_job_result(job_id: str, request: Request, format: str | None = None):
         "market_preview": ("_market_preview_table.html", _마켓미리보기ctx),
         "market_commit": ("_market_result_table.html", _마켓결과ctx),
         "market_poll": ("_market_result_table.html", _마켓결과ctx),
-    }.get(kind, ("_preview_table.html", _미리보기표ctx))
+    }
+    # Phase 7 트랙 모듈의 결과표를 병합한다(D-19). **지연 import** — 트랙 모듈이 이 모듈을
+    # import 해도 순환이 안 생기게. **기존 키가 우선이다**: 트랙 모듈이 실수로 `bids_commit` 같은
+    # 기존 kind 를 등록해도 그 표를 덮지 못한다 — 되돌리기 결과가 인상 표로 그려지는 부류의 사고를
+    # 트랙 파일 하나가 일으키지 못하게(T-07-06).
+    from webapp.routes import coupang as _쿠팡트랙, thumb as _썸네일트랙
+    for 트랙표 in (_썸네일트랙.결과표, _쿠팡트랙.결과표):
+        for 키, 값 in 트랙표.items():
+            결과표.setdefault(키, 값)
+    조각, ctx = 결과표.get(kind, ("_preview_table.html", _미리보기표ctx))
     ctx = ctx(상태)
     if format == "json" or not request.headers.get("hx-request"):
         return ctx

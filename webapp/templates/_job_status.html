@@ -29,7 +29,10 @@
   "detail_poll": "상세 이어서 확인",
   "market_preview": "마켓 반영 미리보기",
   "market_commit": "마켓 반영",
-  "market_poll": "마켓 반영 이어서 확인"
+  "market_poll": "마켓 반영 이어서 확인",
+  "thumb_estimate": "썸네일 견적",
+  "coupang_preview": "쿠팡 후보 뽑기",
+  "coupang_commit": "쿠팡 복사"
 } %}
 {% set 상태이름 = {
   "starting": "띄우는 중",
@@ -72,6 +75,9 @@
       {% elif job.kind in ("detail_submit", "detail_poll") %}상세페이지 생성은 상품당 수 분씩 걸린다 — 폴링 상한을 넘기면 '이어서 확인'으로 이어 받는다.
       {% elif job.kind == "market_preview" %}반영 미리보기는 쓰기 0 이다 — 확인 토큰만 받고 멈춘다.
       {% elif job.kind in ("market_commit", "market_poll") %}스마트스토어 반영은 불사자 작업창에서 끝날 때까지 기다린다 — 상한을 넘기면 '이어서 확인'으로 이어 받는다.
+      {% elif job.kind == "thumb_estimate" %}썸네일 견적은 크레딧 0 이다 — 기작업·현황판만 대조한다(현황판 백필은 쓴다).
+      {% elif job.kind == "coupang_preview" %}쿠팡 후보 뽑기는 쓰기 0 이다 — 주문시트 실적과 쿠팡 그룹 중복만 조회한다.
+      {% elif job.kind == "coupang_commit" %}쿠팡 복사는 되돌릴 수 없다 — 후보를 다시 조회해 늘어났으면 0건으로 멈춘다.
       {% endif %}
       브라우저를 닫아도 작업은 계속 돌고, 다시 열면 로그가 처음부터 이어서 보인다.
     </small></p>
@@ -106,6 +112,18 @@
         {% if job.exit_code == 2 %}입력 오류·확인모드 거부·쓰기의심(P0) 중 하나로 멈췄다 — 다시 누르지 말고 로그부터 봐라.
         {% elif job.exit_code == 4 %}계정 불일치 — 붙어 있는 불사자 계정이 기대와 다르다. 계정 확인부터 해라.
         {% elif job.exit_code == 5 %}상한 초과 시도 — 쓰기 전에 멈췄다. 새 미리보기부터 해라.
+        {% endif %}
+      {% elif job.kind in ("thumb_estimate", "coupang_preview", "coupang_commit") %}
+        {# thumb_web.py · coupang_web.py 러너 종료코드 계약(07-02 · 07-03): 2 입력 오류/후보 없음 ·
+           3 쿠팡 그룹 부분 읽기 실패(재시도 — 폴링미완 아님, 그래서 failed 다 · D-17) · 4 계정 ·
+           5 재조회 후보가 늘어나 복사 0건(D-12). #}
+        {% if job.exit_code == 2 %}입력 오류 또는 후보 없음 — 로그에서 사유를 봐라.
+        {% elif job.exit_code == 3 %}쿠팡 그룹 읽기 부분 실패 — 다시 돌리면 된다(D-17).
+        {% elif job.exit_code == 4 %}계정 불일치 — 붙어 있는 불사자 계정이 기대와 다르다. 계정 확인부터 해라.
+        {% elif job.exit_code == 5 %}재조회 후보가 늘어나 복사 0건 — 쓰기 전에 멈췄다. 후보 뽑기부터 다시 해라(D-12).
+        {% endif %}
+        {% if job.kind in ("thumb_estimate", "coupang_preview") %}
+          <br><small>주문시트/현황판은 gws 로 읽는다 — 403·만료면 재로그인 또는 token_cache.json 삭제.</small>
         {% endif %}
       {% else %}광고 설정이 바뀐 건 없다 — 실패한 항목은 건너뛴 것이다.{% endif %}
     </p>
