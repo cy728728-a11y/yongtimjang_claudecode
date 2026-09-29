@@ -40,8 +40,9 @@
     return 사유;
   }
 
-  // 선택 변화 이벤트는 board.js 의 Tabulator 가 갖고 있고 훅으로 안 넘어온다 —
-  // 그래서 보드 위 클릭·키 입력 뒤에 선택 수를 다시 본다. 클릭 시점에도 한 번 더 검사한다.
+  // 선택 변화는 board.js 의 Tabulator `rowSelectionChanged` 로 받는다(아래 선택구독).
+  // Tabulator 의 행 체크박스 클릭은 document 까지 버블링되지 않아 click/keyup 만으론
+  // 버튼이 안 켜졌다(07-uat P1). click/keyup 은 보조로만 남긴다. 클릭 시점에도 한 번 더 검사한다.
   function 버튼갱신() {
     if (!버튼) { return; }
     var 있음 = 훅.회차() && 훅.선택키().length > 0;
@@ -59,6 +60,14 @@
   }
 
   if (버튼) {
+    // board.js 를 안 고치고(D-19) 같은 Tabulator 인스턴스를 찾아 선택 변화에 붙는다.
+    // Tabulator.findTable 은 생성자에서 등록된 표를 돌려준다 — board.js 가 먼저 로드된다.
+    try {
+      var 표들 = (window.Tabulator && Tabulator.findTable) ? Tabulator.findTable("#board") : [];
+      if (표들 && 표들[0]) {
+        표들[0].on("rowSelectionChanged", function () { 버튼갱신(); });
+      }
+    } catch (e) { /* 못 찾으면 아래 click/keyup 보조로 버틴다 */ }
     document.addEventListener("click", function () { setTimeout(버튼갱신, 0); });
     document.addEventListener("keyup", function () { setTimeout(버튼갱신, 0); });
     버튼갱신();
