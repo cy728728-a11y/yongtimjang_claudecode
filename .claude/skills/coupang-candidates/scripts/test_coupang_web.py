@@ -273,3 +273,203 @@ def test_골든_시나리오가_갈래를_모두_탄다():
     assert "[gate] 기준: 주문 3회 이상 AND 쿠팡보정마진 15.0% 이상" in 골든["gate"]["stdout"]
     # 미리보기는 불사자를 열지 않는다
     assert 골든["apply_preview"]["calls"] == []
+
+
+# ── Task 2: D-17 gate fail-closed ───────────────────────────────────────
+
+def _후보(R):
+    return [r["대표pid"] for r in json.loads(_읽기(os.path.join(R, "candidates.json")))]
+
+
+def _탈락사유(R):
+    return {r["대표pid"]: r["사유"] for r in json.loads(_읽기(os.path.join(R, "rejected.json")))}
+
+
+def test_gate_스냅샷_실패면_후보파일을_안_쓰고_exit3(monkeypatch, cli, tmp_path, capsys):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    # 지난 회차 파일이 남아 있어도 손대지 않는다
+    for n in ("candidates.json", "rejected.json"):
+        with open(os.path.join(R, n), "w", encoding="utf-8") as f:
+            f.write("옛파일")
+    불사자 = 기본불사자()
+    불사자.스냅샷실패 = {"Gcopy_E"}
+    주입(monkeypatch, cli, 불사자)
+    code = 실행(monkeypatch, cli, ["gate", "--run-dir", R])
+    out = capsys.readouterr().out
+    assert code == 3
+    assert "부분 대조 금지" in out
+    assert _읽기(os.path.join(R, "candidates.json")) == "옛파일"
+    assert _읽기(os.path.join(R, "rejected.json")) == "옛파일"
+
+
+def test_gate_스냅샷_실패면_새_run_dir_에_후보파일이_생기지_않는다(monkeypatch, cli, tmp_path):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 기본불사자()
+    불사자.스냅샷실패 = {"Gother"}
+    주입(monkeypatch, cli, 불사자)
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) == 3
+    assert not os.path.exists(os.path.join(R, "candidates.json"))
+    assert not os.path.exists(os.path.join(R, "rejected.json"))
+
+
+def test_gate_그룹목록이_총상품수보다_적으면_실패(monkeypatch, cli, tmp_path, capsys):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 기본불사자(총상품수=5)      # 서버는 5건이라는데 2건만 받고 끝났다
+    주입(monkeypatch, cli, 불사자)
+    code = 실행(monkeypatch, cli, ["gate", "--run-dir", R])
+    assert code != 0
+    assert not os.path.exists(os.path.join(R, "candidates.json"))
+    assert "덜 읽힘" in capsys.readouterr().out
+
+
+def test_gate_빈_페이지로_조기종료해도_실패(monkeypatch, cli, tmp_path):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    그룹 = [{"productId": f"G{i:03d}", "상품명": "x"} for i in range(60)]
+    불사자 = 가짜불사자(그룹=그룹, 끊김=2,
+                    스냅샷={g["productId"]: {"타오바오상품번호": f"t{i}", "불사자코드": ""}
+                         for i, g in enumerate(그룹)})
+    주입(monkeypatch, cli, 불사자)
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) != 0
+    assert not os.path.exists(os.path.join(R, "candidates.json"))
+
+
+def test_gate_타오바오_결측이면_불사자코드로_대조(monkeypatch, cli, tmp_path, capsys):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 기본불사자()
+    불사자.그룹.append({"productId": "Gcopy_A", "상품명": "상품A 복사본"})
+    불사자.스냅샷["Gcopy_A"] = {"타오바오상품번호": "", "불사자코드": 불사자코드("A")}
+    주입(monkeypatch, cli, 불사자)
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) == 0
+    out = capsys.readouterr().out
+    assert _후보(R) == [대표pid("B")]
+    assert _탈락사유(R)[대표pid("A")] == "쿠팡그룹에이미있음"
+    assert "타오바오번호 결측 1건" in out
+    assert "[gate] 그룹읽기 총상품수 3 · 읽음 3 · 타오바오결측 1" in out
+
+
+def test_gate_skip_group_check_경로는_불변(monkeypatch, cli, tmp_path):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 기본불사자()
+    주입(monkeypatch, cli, 불사자)
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R, "--skip-group-check"]) == 0
+    assert 불사자.호출 == []
+    assert _후보(R) == [대표pid("E"), 대표pid("A"), 대표pid("B")]
+
+
+def test_gate_기준은_cfg_를_따른다(monkeypatch, cli, tmp_path, capsys):
+    """CP-03 — 기준 인자를 안 넘기면 설정값(20.0)으로 돈다. B(보정 18.7)가 떨어진다."""
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    주입(monkeypatch, cli, 기본불사자(), 설정={"coupang.min_margin": 20.0})
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) == 0
+    assert "[gate] 기준: 주문 3회 이상 AND 쿠팡보정마진 20.0% 이상" in capsys.readouterr().out
+    assert _후보(R) == [대표pid("A")]
+    assert _탈락사유(R)[대표pid("B")].startswith("마진미달")
+
+
+# ── Task 2: --expect-nick (D-14) ────────────────────────────────────────
+
+def _전단계_준비(R):
+    """resolve·ship·gate·apply(커밋)·verify 가 모두 MCP 를 여는 지점까지 가게 한다."""
+    런디렉터리_만들기(R)
+    with open(os.path.join(R, "candidates.json"), "w", encoding="utf-8") as f:
+        json.dump([{"대표pid": "U0Arep", "판매자상품코드": "SAcode", "불사자코드": "BAcode",
+                    "상품명": "상품A", "합산주문수": 5, "쿠팡보정마진": 24.7}], f)
+    with open(os.path.join(R, "copied.jsonl"), "w", encoding="utf-8") as f:
+        f.write(json.dumps({"원본pid": "U0Xrep", "신pid": "Gx"}) + "\n")
+
+
+COMMIT = "--" + "commit"
+
+
+@pytest.mark.parametrize("stage,extra", [
+    ("resolve", []), ("ship", []), ("gate", []), ("apply", [COMMIT]), ("verify", []),
+])
+def test_expect_nick_불일치면_exit4_프로필외_호출0(monkeypatch, cli, tmp_path, capsys,
+                                           stage, extra):
+    R = str(tmp_path / "run")
+    _전단계_준비(R)
+    불사자 = 주입(monkeypatch, cli, 기본불사자(닉="다른계정"))
+    code = 실행(monkeypatch, cli, [stage, "--run-dir", R, *extra, "--expect-nick", "용팀장"])
+    assert code == 4
+    assert 불사자.이름들() == ["bulsaja_my_profile"]
+    assert "[계정] 기대 용팀장 · 실제 다른계정" in capsys.readouterr().err
+
+
+def test_expect_nick_조회실패도_exit4(monkeypatch, cli, tmp_path):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 주입(monkeypatch, cli, 기본불사자(닉=None))
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R, "--expect-nick", "용팀장"]) == 4
+    assert 불사자.이름들() == ["bulsaja_my_profile"]
+
+
+def test_expect_nick_일치면_그대로_진행(monkeypatch, cli, tmp_path):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 주입(monkeypatch, cli, 기본불사자())
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R, "--expect-nick", "용팀장"]) == 0
+    assert 불사자.이름들()[0] == "bulsaja_my_profile"
+    assert _후보(R) == [대표pid("A"), 대표pid("B")]
+
+
+def test_expect_nick_무플래그면_프로필_조회_안함(monkeypatch, cli, tmp_path):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 주입(monkeypatch, cli, 기본불사자())
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) == 0
+    assert "bulsaja_my_profile" not in 불사자.이름들()
+
+
+# ── Task 2: apply --pids-file (D-12) ────────────────────────────────────
+
+def _gate_끝낸_런(monkeypatch, cli, tmp_path):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 주입(monkeypatch, cli, 기본불사자())
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) == 0
+    불사자.호출.clear()
+    return R, 불사자
+
+
+def _승인파일(R, 내용):
+    p = os.path.join(R, "approved_pids.json")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(내용 if isinstance(내용, str) else json.dumps(내용))
+    return p
+
+
+def test_apply_pids_file_승인분만_대상(monkeypatch, cli, tmp_path, capsys):
+    R, 불사자 = _gate_끝낸_런(monkeypatch, cli, tmp_path)
+    capsys.readouterr()
+    p = _승인파일(R, [대표pid("A")])
+    assert 실행(monkeypatch, cli, ["apply", "--run-dir", R, "--pids-file", p]) == 0
+    out = capsys.readouterr().out
+    assert "[apply] 대상 1건" in out
+    assert 판매코드("A") in out and 판매코드("B") not in out
+
+
+def test_apply_pids_file_후보에_없는_승인은_보고(monkeypatch, cli, tmp_path, capsys):
+    R, _ = _gate_끝낸_런(monkeypatch, cli, tmp_path)
+    capsys.readouterr()
+    p = _승인파일(R, ["Zgone"])
+    assert 실행(monkeypatch, cli, ["apply", "--run-dir", R, "--pids-file", p]) == 0
+    out = capsys.readouterr().out
+    assert "승인됐지만 재조회 후보에 없음: Zgone" in out
+    assert "[apply] 대상 0건" in out
+
+
+@pytest.mark.parametrize("내용", ["{깨짐", '{"a": 1}', '"U0Arep"', None])
+def test_apply_pids_file_깨지면_exit2_전량폴백없음(monkeypatch, cli, tmp_path, capsys, 내용):
+    R, 불사자 = _gate_끝낸_런(monkeypatch, cli, tmp_path)
+    p = os.path.join(R, "없는파일.json") if 내용 is None else _승인파일(R, 내용)
+    code = 실행(monkeypatch, cli, ["apply", "--run-dir", R, COMMIT, "--pids-file", p])
+    assert code == 2
+    assert 불사자.호출 == []
+    assert "전량 복사로 넘어가지 않는다" in capsys.readouterr().err
+
+
+def test_apply_pids_file_과_limit_순서(monkeypatch, cli, tmp_path, capsys):
+    """승인 필터가 limit 보다 먼저 — 승인 B 만 있으면 limit 1 은 B 를 집는다."""
+    R, _ = _gate_끝낸_런(monkeypatch, cli, tmp_path)
+    capsys.readouterr()
+    p = _승인파일(R, [대표pid("B")])
+    assert 실행(monkeypatch, cli, ["apply", "--run-dir", R, "--pids-file", p,
+                                "--limit", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "[apply] 대상 1건" in out and 판매코드("B") in out
