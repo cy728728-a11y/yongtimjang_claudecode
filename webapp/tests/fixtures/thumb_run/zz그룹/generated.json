@@ -1,0 +1,77 @@
+{
+  "zzp1": {
+    "상품명": "zz상품1",
+    "생성본": "https://zzcdn.example/gen_1.jpg",
+    "기존대표": "https://zzcdn.example/old_1.jpg",
+    "후보": [
+      "https://zzcdn.example/c_1_0.jpg",
+      "https://zzcdn.example/c_1_1.jpg"
+    ],
+    "기준이미지": "https://zzcdn.example/ref_1.jpg",
+    "대표옵션명": "zz옵션1",
+    "대표옵션이미지": "https://zzcdn.example/opt_1.jpg",
+    "재생성횟수": 1,
+    "재작업사유": "zz재작업사유",
+    "크레딧": 5,
+    "판정": null
+  },
+  "zzp2": {
+    "상품명": "zz상품2",
+    "생성본": "https://zzcdn.example/gen_2.jpg",
+    "기존대표": "https://zzcdn.example/old_2.jpg",
+    "후보": [
+      "https://zzcdn.example/c_2_0.jpg",
+      "https://zzcdn.example/c_2_1.jpg"
+    ],
+    "기준이미지": "https://zzcdn.example/ref_2.jpg",
+    "대표옵션명": "zz옵션2",
+    "대표옵션이미지": "https://zzcdn.example/opt_2.jpg",
+    "재생성횟수": 2,
+    "재작업사유": "zz재작업사유",
+    "크레딧": 5,
+    "판정": null
+  },
+  "zzp3": {
+    "상품명": "zz상품3",
+    "생성본": "https://zzcdn.example/gen_3.jpg",
+    "기존대표": "https://zzcdn.example/old_3.jpg",
+    "후보": [
+      "https://zzcdn.example/c_3_0.jpg",
+      "https://zzcdn.example/c_3_1.jpg"
+    ],
+    "기준이미지": "https://zzcdn.example/ref_3.jpg",
+    "대표옵션명": "zz옵션3",
+    "대표옵션이미지": "https://zzcdn.example/opt_3.jpg",
+    "재생성횟수": 2,
+    "재작업사유": "zz재작업사유",
+    "크레딧": 5,
+    "판정": null
+  },
+  "zzp4": {
+    "상품명": "zz상품4",
+    "생성본": "https://zzcdn.example/gen_4.jpg",
+    "기존대표": "https://zzcdn.example/old_4.jpg",
+    "후보": [
+      "https://zzcdn.example/c_4_0.jpg",
+      "https://zzcdn.example/c_4_1.jpg"
+    ],
+    "기준이미지": "https://zzcdn.example/ref_4.jpg",
+    "대표옵션명": "zz옵션4",
+    "대표옵션이미지": "https://zzcdn.example/opt_4.jpg",
+    "재생성횟수": 1,
+    "재작업사유": "zz재작업사유",
+    "크레딧": 5,
+    "판정": null
+  },
+  "zzp5": {
+    "상품명": "zz상품5",
+    "대표옵션명": "zz옵션5",
+    "오류": "TimeoutError: 타임아웃(300s)",
+    "taskId": "zz-task-5"
+  },
+  "zzp6": {
+    "상품명": "zz상품6",
+    "대표옵션명": "zz옵션6",
+    "오류": "생성 실패: zz"
+  }
+}
