@@ -12,4 +12,4 @@
   `_반영플래그 = "--" + "commit"` 간접 조립으로 바꿨다(주석 1건은 문구만 교체). 테스트 의미 불변 —
   66 passed 그대로. `bash webapp/tests/no_commit_guard.sh` → OK. 가드 제외 목록은 건드리지 않았다.
 
-- [P2 · 06-04 UAT 2026-09-26] 게이트 `정상` 클릭 직후 "반영 실행 (최대 N건)" 버튼이 같은 화면에 바로 안 나온다 — 패널 스왑 범위가 `.market-gate-panel` 뿐이라 형제 `#market-commit-next` 가 갱신 안 됨. **우회: 새로고침.** 수정: 게이트 응답에 hx-swap-oob 로 `#market-commit-next` 동봉. 06-06 전 여유 있으면 고친다
+- ~~[P2 · 06-04 UAT 2026-09-26] 게이트 `정상` 클릭 직후 "반영 실행 (최대 N건)" 버튼이 같은 화면에 바로 안 나온다 — 패널 스왑 범위가 `.market-gate-panel` 뿐이라 형제 `#market-commit-next` 가 갱신 안 됨. **우회: 새로고침.** 수정: 게이트 응답에 hx-swap-oob 로 `#market-commit-next` 동봉. 06-06 전 여유 있으면 고친다~~ **해결 2026-09-29 — Quick 260929-g1 (79d68d9).** 게이트 응답이 `#market-commit-next` 를 oob 로 동봉(이상이면 빈 자리). 서버 재시작 후 반영

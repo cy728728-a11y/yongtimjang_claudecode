@@ -170,6 +170,7 @@ Recent decisions affecting current work:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260925-2d8 | 배너 검수 화면 👁·↩ 표식 장만 보기 토글 (04-12 재검수용) | 2026-09-25 | 73eb8a2 | [260925-2d8-banner-review-mark-filter](./quick/260925-2d8-banner-review-mark-filter/) |
+| 260929-g1 | 게이트 정상 직후 반영 실행 버튼을 새로고침 없이 표시 (hx-swap-oob, 06 P2) | 2026-09-29 | 79d68d9 | [260929-g1-market-gate-next-button](./quick/260929-g1-market-gate-next-button/) |
 
 ## Deferred Items
 
