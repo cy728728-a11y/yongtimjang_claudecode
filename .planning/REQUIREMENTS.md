@@ -125,7 +125,7 @@
 - [ ] **CP-01**: 버튼 하나로 prep→resolve→build→ship→gate→apply 전공정을 돌린다
 - [ ] **CP-02**: `apply --commit` 만 따로 확인받는다
 - [ ] **CP-03**: 기존 게이트(주문 3회 이상 + 쿠팡보정 가중마진 20%)를 그대로 유지한다 — 유입만 있는 상품은 올리지 않는다
-- [ ] **CP-04**: 중복 복사 방지는 기존 `gate` 방식(쿠팡 그룹 실물을 매번 읽어 타오바오상품번호로 대조)을 그대로 쓴다
+- [x] **CP-04**: 중복 복사 방지는 기존 `gate` 방식(쿠팡 그룹 실물을 매번 읽어 타오바오상품번호로 대조)을 그대로 쓴다
 
 ### 버튼 6 — 썸네일 교체 (THUMB)
 
@@ -230,7 +230,7 @@
 | CP-01 | Phase 7 | Pending |
 | CP-02 | Phase 7 | Pending |
 | CP-03 | Phase 7 | Pending |
-| CP-04 | Phase 7 | Pending |
+| CP-04 | Phase 7 | Complete |
 | THUMB-01 | Phase 7 | Pending |
 | THUMB-02 | Phase 7 | Pending |
 | THUMB-03 | Phase 7 | Pending |
