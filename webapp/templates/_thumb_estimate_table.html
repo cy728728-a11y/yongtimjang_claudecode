@@ -40,7 +40,7 @@
     {% if 선택 is not none %}<br><small>보드에서 고른 상품 {{ 선택 }}건 — 웹에서 뺀 {{ 웹제외|length }}건은 아래 표.</small>{% endif %}
   </p>
 
-  {% if not 합계.get("K") %}
+  {% if not 합계.get("K") and not error %}
     <p class="stale">생성 대상 0건 — 이미 가공된 상품은 재작업 flag 가 필요하다(D-03, 미룸). 크레딧이 나가지 않는다.</p>
   {% endif %}
 

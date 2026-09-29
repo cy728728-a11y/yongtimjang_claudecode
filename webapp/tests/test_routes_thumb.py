@@ -281,6 +281,16 @@ def test_견적표_K0이면_승인버튼_disabled(화면, tmp_run_dir):
     assert "disabled" in 조각
 
 
+def test_견적표_전그룹오류면_0건안내대신_오류(화면, tmp_run_dir):
+    """실측(2026-09-29): gws 토큰 만료로 전 그룹 exit 1 → 합계 0. '이미 가공' 안내는 거짓이다."""
+    job_id = _견적잡(tmp_run_dir, 요약=lambda p: _요약(p, K=0, 예상=0, 최대=0, 대상=[],
+                                                    오류="exit 1"))
+    조각 = 화면.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
+    assert "전 그룹(1개)이 오류로 끝났다" in 조각
+    assert "재작업 flag" not in 조각
+    assert "data-thumb-approve" not in 조각
+
+
 # ── 실행 승인 ────────────────────────────────────────────────────────────────
 
 def test_승인_모르는필드는_422(화면, 엿듣기, tmp_run_dir):

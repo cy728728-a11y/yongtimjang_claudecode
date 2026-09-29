@@ -27,9 +27,9 @@
   var 몸통 = document.getElementById("thumb-estimate-body");
   var 잡칸 = document.getElementById("thumb-estimate-job");
 
-  // 견적 잡은 그룹마다 prep 을 차례로 돈다 — 수 분이 걸린다. 400ms × 1500 = 10분까지 붙잡는다.
+  // 견적 잡은 그룹마다 prep 을 차례로 돈다 — 수 분이 걸린다. 400ms 간격으로 10분까지 붙잡는다.
   // 그 뒤에도 도는 중이면 조각이 "만드는 중" 을 그대로 보여 준다(없는 결과를 0건으로 읽지 않게).
-  var 기다림한도 = 1500;
+  var 기다림한도 = (10 * 60 * 1000) / 400;   // 결과기다리기 폴링 간격이 400ms 다
 
   function 사유뽑기(res) {
     var 사유 = res.본문;
