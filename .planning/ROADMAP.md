@@ -301,12 +301,12 @@ Plans:
   3. 기존 게이트(주문 3회 이상 + 쿠팡보정 가중마진 20%)가 그대로 걸려 유입만 있는 상품은 후보에 나타나지 않는다
   4. 이미 쿠팡에 올라간 상품이 두 번 복사되지 않는다 (매번 쿠팡 그룹 실물을 읽어 타오바오상품번호로 대조)
 
-**Plans:** 7 plans (3 waves — 두 트랙 병렬)
+**Plans:** 1/7 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — [W1] 공유 파일 집중: 잡 kind 3종·가드·argv 모델·설정·경로·결과표 디스패치·보드 자리·_alive 좀비
+- [x] 07-01-PLAN.md — [W1] 공유 파일 집중: 잡 kind 3종·가드·argv 모델·설정·경로·결과표 디스패치·보드 자리·_alive 좀비
 - [ ] 07-02-PLAN.md — [W1] 썸네일 CLI 주입구(--estimate-out/--only-pending/--expect-nick/--max-credits/--summary-out) + thumb_web.py 러너 + SKILL 인계 절
 - [ ] 07-03-PLAN.md — [W1] 쿠팡 CLI 주입구(--expect-nick/--pids-file) + gate fail-closed(D-17) + coupang_web.py 러너 + min_margin 20
 
@@ -335,7 +335,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. 홍보배너 식별 | 12/12 | Closed — 게이트 불통과 · 용팀장 결정으로 종료 (D-23) | 2026-09-25 |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 6/6 | Complete   | 2026-09-29 |
 | 6. 마켓 수정업로드 | 4/6 | In Progress|  |
-| 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/7 | Planned | - |
+| 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 1/7 | In Progress|  |
 
 ## Sequencing Notes
 
