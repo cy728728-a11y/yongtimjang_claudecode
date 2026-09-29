@@ -102,6 +102,39 @@ python … run_thumbs.py mark-deleted --group-name "…" --run-dir <R>   # → �
 (실측: 25-2 후속 회차에서 5건 재등장 — 이중 삭제 직전까지 갔다). 멱등이라 여러 번 불러도
 안전하고, 출력이 곧 **종합보고에 붙일 목록**(상품id·상품명·사유)이다.
 
+## 웹 승인 인계 (관제탑, 2026-09-29)
+
+관제탑(셀러 관제탑 웹)이 **견적(①prep, 크레딧 0)까지** 돌리고 사람이 화면에서 승인하면,
+화면에 복사용 한 줄이 뜬다: **`썸네일 작업 이어서 <run-dir>`** — 이 문구로 이 스킬이 뜨면
+아래 순서로 이어받는다. 웹 견적 러너는 `scripts/thumb_web.py estimate`(그룹별 prep 을
+`--only-pending --expect-nick --estimate-out` 으로 돌려 `summary.json` 합산)다.
+
+1. **`<run-dir>/web_approval.json` 을 먼저 읽는다.** 필드: `승인시각` · `견적잡id` · `계정` ·
+   `그룹명` · `시트id` · `ids` · `예상크레딧` · `승인상한크레딧`. 파일이 없으면 **멈추고 보고**
+   (승인 없는 run-dir 은 이어받지 않는다).
+2. **계정 확인** — `bulsaja_my_profile` 닉이 `계정` 과 다르면 멈춘다(§계정 전환 규칙 그대로).
+3. **대상은 `ids` 만.** prep 은 웹이 이미 돌렸다 — 다시 돌리지 않는다. 배치·선기록은 그
+   run-dir 에 있다. `ids` 밖 상품을 생성 대상에 넣지 않는다.
+4. ② run(팬아웃) → ①.5 prescreen → ③ 생성. **생성 호출에는 매번 승인 상한을 붙인다:**
+   ```bash
+   python … run_thumbs.py apply --run-dir <run-dir> --sheet <시트id> --generate \
+     --max-credits <승인상한크레딧>
+   # 재생성(--ids …)도 **같은 값** — CLI 가 이 run-dir 누적 지출 + 이번 계획으로 막는다
+   ```
+5. ④ verdict → ⑤ 반영:
+   ```bash
+   python … run_thumbs.py apply --run-dir <run-dir> --sheet <시트id> --commit \
+     --summary-out <run-dir>/commit_summary.json
+   ```
+   `commit_summary.json` = `{완료: [pid], 보류: {pid: 사유}}` — 웹이 "완료"를 증명하는 근거다.
+
+**exit 5 = 승인 상한 초과 → 멈추고 보고한다. 상한을 스스로 올리지 않는다**(`--max-credits`
+를 빼거나 키워서 다시 부르는 것도 금지 — 웹에서 다시 승인받아야 한다). exit 4 는 종전대로
+잔액부족이다. **폴링 타임아웃·429 는 `recover` 로 회수한다 — 재생성 금지**(크레딧 이중 지불,
+L-03 · §결과 미수신 회수). 정합검사(audit)는 크레딧 0 이라 §정합검사대로 같은 회차에 돈다.
+**스토어(마켓) 반영은 이 인계 범위 밖이다**(D-08 미룸 — Phase 6 완료 후). 불사자 저장까지만 한다
+(§불사자 저장 ≠ 마켓 반영).
+
 ## run 실행 = Workflow 모드 (대량 기본, 2026-08-01)
 
 공통 규약(메인 직독 금지·동시성 opt-in·재개·멱등·폴백·4벌 동시 수정)은
