@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 06-04-PLAN.md (육안 확인 게이트 · 804 테스트)
-last_updated: "2026-09-26T07:33:15.729Z"
-last_activity: 2026-09-26
+status: verifying
+stopped_at: Completed 05-06-PLAN.md (실탄 완주 · 재오픈 PASS · D-13 실측 · 육안 확인)
+last_updated: "2026-09-29T00:45:52.757Z"
+last_activity: 2026-09-29
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 40
-  completed_plans: 37
-  percent: 43
+  completed_plans: 38
+  percent: 57
 ---
 
 # Project State
@@ -27,15 +27,15 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 
 Phase: 05 (상세페이지 작업 버튼) — EXECUTING
 Plan: 6 of 6 (05-01 완료: detail_batch --inputs 주입구 · 오프라인 45테스트 · 크레딧 0)
-Status: Ready to execute (06-04 완료 — 다음 06-05 · uat 06-03+06-04 묶음 대기 · 서버 재시작 필요)
-Last activity: 2026-09-26
+Status: Phase complete — ready for verification
+Last activity: 2026-09-29
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
 Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
 
-Progress: [█████████░] 93%
+Progress: [██████████] 95%
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Progress: [█████████░] 93%
 | Phase 04 P09 | 9min | 3 tasks | 8 files |
 | Phase 04 P12 | 40min | 2 tasks | 7 files |
 | Phase 06 P03 | 12min | 3 tasks | 13 files |
+| Phase 05 P06 | 3일(사람확인대기) | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,8 @@ Recent decisions affecting current work:
 - [04-12]: 회차 2026-09-20 정본 = 사람 라벨 우선 판정. 새 회차 배너 판정(사람 확인 11분 vs 비전 끄고 어휘군 단독)은 Phase 5 discuss 에서. `banner_vision2_max_calls` 0 복귀
 - [06-03]: 게이트 닫힘(상한 1)에서 같은 미리보기의 두 번째 반영은 서버가 거부 — 앞선 반영이 체크포인트를 안 남겼을 때만 재시도. 상한 결정은 `_마켓반영상한()` 한 곳(06-04 가 판정 읽기로 교체)
 - [06-04]: 게이트는 전역 1회성 — `market_gate` 최신 판정 한 줄이 모든 미리보기의 반영 상한을 정한다(없음·DB 손상 1 · 정상 `market_update_max_items` · 이상이면 반영 400). 판정 대상은 서버가 체크포인트 성공 첫 건에서 정한다
+- [Phase 05-06]: D-13 기록됨 — 불사자 AI 상세 생성 경로(웹앱 접수)는 aiImageGenerated 를 4/4 찍는다. 외부 반영 경로(Phase 3 STATE-04, 29건)는 여전히 태그로만 잡힌다 — 두 사실 모두 참, 경로가 다르다. 태그 쓰기 폴백(L-01 ④) 불필요
+- [Phase 05-06]: 육안 확인(용팀장, 2026-09-29): 실탄 4건 다 괜찮음 — 워터마크·위챗 잔여 없음, 10장 잘림으로 인한 내용 누락 안 보임
 
 ### Pending Todos
 
@@ -178,6 +181,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-26T05:29:33.267Z
-Stopped at: Completed 06-04-PLAN.md (육안 확인 게이트 · 804 테스트)
+Last session: 2026-09-29T00:45:52.752Z
+Stopped at: Completed 05-06-PLAN.md (실탄 완주 · 재오픈 PASS · D-13 실측 · 육안 확인)
 Resume file: None
