@@ -1,0 +1,68 @@
+{# 쿠팡 복사 결과 표 — Plan 07-05 / CP-04 · D-12 · Pitfall 5.
+
+   **정본은 러너(coupang_web.py commit)의 commit_summary 다.** 라우트(`_쿠팡결과ctx`)가 옮기기만 한다.
+   중복0 은 러너가 verified.json 에서 옮긴 값이다 — 종료코드로 추정하지 않는다. None 은 '증명 못 함'.
+
+   되돌리기·재복사 버튼은 없다 — 복사는 되돌릴 수 없고, 더 복사하려면 새 미리보기부터다.
+   자동 이스케이프에 기댄다(상품명 원문) — 이스케이프를 끄는 필터 금지(T-07-32). #}
+
+{% if running %}
+  <p>쿠팡 복사가 도는 중이다… 위 진행 로그를 봐라. (재조회 → 복사 → 중복 검증)</p>
+
+{% elif error %}
+  <p class="stale"><strong>{{ error }}</strong></p>
+  <p><small>{{ 잠금안내 }}</small></p>
+
+{% else %}
+  {% if exit5 %}
+    <p class="stale" id="coupang-grew"><strong>재조회 후보가 늘어 복사 0건</strong> — 미리보기 뒤에 후보가
+      {{ 늘어남 }}건 늘었다{% if 재조회 and 재조회.상한경계 %}(상한 경계 — 상한 밖 후보가 밀려 들어왔을 수 있다){% endif %}.
+      새 미리보기부터 다시 봐라.</p>
+  {% elif 정지단계 %}
+    <p class="stale"><strong>'{{ 정지단계 }}' 단계에서 멈췄다{% if 정지설명 %} ({{ 정지설명 }}){% endif %}</strong>
+      (종료코드 {{ job.exit_code }}) — 아래는 멈추기 전까지 파일에 남은 것이다.</p>
+  {% endif %}
+
+  {% if 재조회 %}
+    <p>재조회: 미리보기 후보 {{ 재조회.옛 }} → 지금 {{ 재조회.새 }}
+      · 복사 <strong>{{ 복사 | length }}건</strong>
+      {% if 신pid없음 %}· <span class="stale">신pid 없음 {{ 신pid없음 }}</span>{% endif %}</p>
+  {% endif %}
+
+  <p id="coupang-dup">
+    {% if 중복0 is sameas true %}<strong style="color: #2e7d32">중복 0 — 쿠팡 그룹에 같은 상품 두 번 없음(verify)</strong>
+    {% elif 중복0 is sameas false %}<strong style="color: #c62828">중복 발견 — 즉시 확인</strong> 불사자 쿠팡 그룹에서 같은 원본의 사본이 둘 이상이다.
+    {% else %}<span class="stale">중복 0 을 증명하지 못했다 — verify 가 끝나지 않았다. 쿠팡 그룹을 직접 확인해라.</span>{% endif %}
+    {% if verify %}<br><small>그룹상품수 {{ verify.그룹상품수 }} · 판매가 검산 {{ verify.판매가검산 }} · 어긋남 {{ verify.판매가어긋남 }}</small>{% endif %}
+  </p>
+
+  {% if 빠짐 %}
+    <p>승인했지만 재조회에서 빠진 것 ({{ 빠짐 | length }}건 — 복사 안 함):</p>
+    <table>
+      <thead><tr><th>판매자상품코드</th><th>지금 사유</th></tr></thead>
+      <tbody>
+      {% for x in 빠짐 %}<tr><td>{{ x.판매자상품코드 }}</td><td>{{ x.사유 }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if 복사 %}
+    <table id="coupang-copied">
+      <thead><tr><th>원본 판매자상품코드</th><th>상품명</th><th>신pid</th><th>원본 판매가</th></tr></thead>
+      <tbody>
+      {% for x in 복사 %}
+        <tr>
+          <td>{{ x.판매자상품코드 }}</td>
+          <td>{{ x.상품명 }}</td>
+          <td>{% if x.신pid %}{{ x.신pid }}{% else %}<strong class="stale">신pid 없음 — 수동 확인</strong>{% endif %}</td>
+          <td>{{ x.원본판매가 or "" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% elif not exit5 %}
+    <p>이번 잡이 복사한 행 0건.</p>
+  {% endif %}
+
+  <p id="coupang-lock-note"><small>{{ 잠금안내 }}</small></p>
+{% endif %}
