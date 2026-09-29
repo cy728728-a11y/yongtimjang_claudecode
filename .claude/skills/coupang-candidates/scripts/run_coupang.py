@@ -51,6 +51,11 @@ ORDERS_SHEET = "sheets.orders"
 FIND_BATCH = 50          # find_by_code 최대 50개/콜
 COPY_BATCH = 20          # 복사 배치 — 응답이 신 pid 를 안 줄 때 diff 매핑 오류 피해를 줄인다
 
+# `--expect-nick` (관제탑 러너용, D-14). main() 이 파싱 뒤 채운다. 빈 문자열 = 검사 안 함
+# (무플래그 = 종전 동작). MCP 를 여는 모든 단계가 CoupangMCP.open() 한 곳을 지나므로
+# 여기 하나로 resolve·ship·gate·apply·verify 를 다 덮는다(prep·build 는 MCP 를 안 연다).
+_EXPECT_NICK = ""
+
 
 # ------------------------------------------------------------------ 입출력
 
@@ -96,6 +101,66 @@ def _read_jsonl(path):
 
 class CoupangMCP(propagate.PropagateMCP):
     """상품 조회(ProductMCP) + 확인키 2단계 호출(PropagateMCP) 을 그대로 쓴다."""
+
+    def open(self):
+        """연결 직후, **다른 도구를 부르기 전에** 계정을 확인한다(`--expect-nick`, D-14).
+
+        불일치도 조회 실패도 exit 4 — 확인 못 한 계정으로 쿠팡 그룹을 대조·복사하면
+        엉뚱한 계정의 그룹에 쓴다. 되돌릴 수 없는 복사라 fail-closed 다.
+        """
+        r = super().open()
+        if _EXPECT_NICK:
+            try:
+                p = self.call_tool("bulsaja_my_profile", {}) or {}
+                got = str(p.get("닉네임") or "")
+            except Exception as e:  # noqa: BLE001
+                got = f"조회실패({type(e).__name__})"
+            if got != _EXPECT_NICK:
+                print(f"[계정] 기대 {_EXPECT_NICK} · 실제 {got} — 중단", file=sys.stderr)
+                try:
+                    self.close()
+                except Exception:
+                    pass
+                sys.exit(4)
+            print(f"  [계정] {got} 확인")
+        return r
+
+    def collect_group_strict(self, group_id, page_size=50, sleep=0.3):
+        """`collect_group` 과 같은 순회 + 서버 `총상품수` 대조 (D-17 · gate 전용).
+
+        빈 `항목` 페이지가 오면 종전 순회는 조용히 끝난다 — 덜 읽힌 목록으로 중복 대조를
+        하면 빠진 상품이 재복사된다. 첫 페이지의 `총상품수` 보다 적게 읽혔으면 예외.
+        반환 (목록, 총상품수). 총상품수가 없거나 숫자가 아니면 대조를 못 하므로 None.
+        """
+        out, seen, page, total = [], set(), 1, None
+        while True:
+            r = self.call_tool("bulsaja_market_group_products",
+                               {"groupId": group_id, "page": page,
+                                "pageSize": page_size})
+            if page == 1:
+                try:
+                    total = int(r.get("총상품수"))
+                except (TypeError, ValueError):
+                    total = None
+            items = r.get("항목") or []
+            if not items:
+                break
+            for it in items:
+                pid = it.get("productId")
+                if not pid or pid in seen:
+                    continue
+                seen.add(pid)
+                out.append({"productId": pid,
+                            "상품명": it.get("상품명", ""),
+                            "상태코드": it.get("상태코드"),
+                            "잠금": it.get("잠금")})
+            if not r.get("더있음"):
+                break
+            page += 1
+            time.sleep(sleep)
+        if total is not None and len(out) < total:
+            raise RuntimeError(f"쿠팡 그룹 목록 덜 읽힘 — 총상품수 {total} · 읽음 {len(out)}")
+        return out, total
 
     def find_by_code(self, codes):
         return self.call_tool("bulsaja_product_find_by_code", {"codes": list(codes)})
@@ -346,20 +411,42 @@ def cmd_gate(args):
     # 새 run-dir 로 돌리면 방어선이 사라진다. 복사본은 불사자코드를 **승계**하지만
     # 목록 조회에는 그 필드가 없으므로, 스냅샷의 타오바오상품번호로 대조한다.
     # (2026-09-13 시험 복사로 승계 확인: 원본·복사본 모두 74FOyS2vS6DZg9NggZ8Ty)
-    already = set()
+    already, already_codes = set(), set()
     if not args.skip_group_check:
         gid = int(cfg("coupang.group_id", required=True))
         mcp = CoupangMCP()
         mcp.open()
         try:
-            items = mcp.collect_group(gid)
-            snaps, _ = snapshot.ensure([i["productId"] for i in items], mcp=mcp, log=None)
-            already = {str((snaps.get(i["productId"]) or {}).get("타오바오상품번호") or "")
-                       for i in items}
-            already.discard("")
+            # **fail-closed (D-17).** 목록이 덜 읽히거나 스냅샷이 1건이라도 실패하면
+            # 후보 파일을 쓰지 않고 끝낸다 — 부분 대조로 후보를 내면 빠진 상품이 재복사된다.
+            try:
+                items, total = mcp.collect_group_strict(gid)
+            except RuntimeError as e:
+                print(f"[gate] {e} — 부분 대조 금지. 다시 돌려라")
+                return 3
+            snaps, errs = snapshot.ensure([i["productId"] for i in items], mcp=mcp, log=None)
         finally:
             mcp.close()
+        if errs:
+            print(f"[gate] 쿠팡 그룹 스냅샷 {len(errs)}건 실패 — 부분 대조 금지. 다시 돌려라")
+            for pid, why in list(errs.items())[:5]:
+                print(f"    {pid}: {why}")
+            return 3
+        already = {str((snaps.get(i["productId"]) or {}).get("타오바오상품번호") or "")
+                   for i in items}
+        already.discard("")
+        # 2차 키: 복사본은 불사자코드를 승계한다(RESEARCH A4). 타오바오번호가 빈 그룹
+        # 상품도 이걸로 걸린다 — 1차 키(타오바오) 동작은 그대로다.
+        already_codes = {str((snaps.get(i["productId"]) or {}).get("불사자코드") or "")
+                         for i in items}
+        already_codes.discard("")
+        missing_tb = sum(1 for i in items
+                         if not str((snaps.get(i["productId"]) or {}).get("타오바오상품번호") or ""))
         print(f"[gate] 쿠팡 그룹 기존 {len(items)}건 → 원본 {len(already)}종 (재복사 제외 대상)")
+        if missing_tb:
+            print(f"[gate] 그룹 상품 타오바오번호 결측 {missing_tb}건 — 불사자코드로 대조")
+        print(f"[gate] 그룹읽기 총상품수 {total if total is not None else '미상'} · "
+              f"읽음 {len(items)} · 타오바오결측 {missing_tb}")
 
     passed, rejected = [], []
     for key, rep in reps.items():
@@ -397,7 +484,8 @@ def cmd_gate(args):
         마켓 = rep.get("업로드된마켓") or []
         if any("쿠팡" in str(m) for m in (마켓 if isinstance(마켓, list) else [마켓])):
             ok, row["사유"] = False, "기업로드(쿠팡)"
-        elif row["타오바오상품번호"] and row["타오바오상품번호"] in already:
+        elif ((row["타오바오상품번호"] and row["타오바오상품번호"] in already)
+              or (row["불사자코드"] and row["불사자코드"] in already_codes)):
             ok, row["사유"] = False, "쿠팡그룹에이미있음"
         (passed if ok else rejected).append(row)
 
@@ -447,6 +535,26 @@ def cmd_apply(args):
     gid = int(cfg("coupang.group_id", required=True))
     done = {r["원본pid"] for r in _read_jsonl(_p(args.run_dir, "copied.jsonl"))}
     todo = [c for c in cands if c["대표pid"] not in done]
+
+    if args.pids_file:
+        # 관제탑 승인목록(D-12). **깨지면 멈춘다** — 전량 복사로 폴백하면 승인 안 한
+        # 상품까지 되돌릴 수 없게 복사된다. done 필터 뒤 · limit 앞.
+        try:
+            with open(args.pids_file, encoding="utf-8") as f:
+                approved = json.load(f)
+            if not isinstance(approved, list):
+                raise ValueError("배열이 아니다")
+            approved = [str(x) for x in approved]
+        except Exception as e:  # noqa: BLE001
+            print(f"[apply] 승인목록 파일을 못 읽었다 — 전량 복사로 넘어가지 않는다 "
+                  f"({type(e).__name__}: {e})", file=sys.stderr)
+            return 2
+        cand_pids = {c["대표pid"] for c in cands}
+        gone = [p for p in approved if p not in cand_pids]
+        if gone:
+            print(f"[apply] 승인됐지만 재조회 후보에 없음: {', '.join(gone)}")
+        keep = set(approved)
+        todo = [c for c in todo if c["대표pid"] in keep]
 
     if args.limit:
         # 시험 복사용. 후보는 이미 (합산주문수, 보정마진) 내림차순이라 상위부터 집힌다.
@@ -532,10 +640,14 @@ def cmd_verify(args):
         pids = [p["productId"] for p in items]
         print(f"[verify] 쿠팡 그룹 전건 {len(pids)}개")
 
-        snaps, _ = snapshot.ensure(pids, mcp=mcp, log=None)
+        snaps, errs = snapshot.ensure(pids, mcp=mcp, log=None)
         nos = [str((snaps.get(p) or {}).get("타오바오상품번호") or "") for p in pids]
         real = [n for n in nos if n]
         dup_ok = len(set(real)) == len(real)
+        if errs:
+            # 못 읽은 상품이 있으면 중복 0 을 **증명한 게 아니다**(D-17 과 같은 이유).
+            print(f"  ⚠️ 스냅샷 {len(errs)}건 실패 — 중복 0 을 증명 못 했다. 다시 돌려라")
+            dup_ok = False
         print(f"  V3 중복 0 증명: 타오바오번호 {len(set(real))}종 / 상품 {len(real)}건 "
               f"→ {'통과' if dup_ok else '❌ 중복 있음'}")
         dups = {}
@@ -800,6 +912,8 @@ def main():
     def common(p):
         p.add_argument("--run-dir", required=True)
         p.add_argument("--sleep", type=float, default=0.3)
+        p.add_argument("--expect-nick", default="",
+                       help="불사자 계정 닉네임 확인(관제탑 러너용). 다르면 exit 4")
         return p
 
     p = common(sub.add_parser("prep", help="S0·S1 주문시트 집계 → 실적·배송비 원장"))
@@ -832,6 +946,9 @@ def main():
                    help="배송비 과소책정 후보가 있으면 복사를 중단한다(기본은 경고만)")
     p.add_argument("--limit", type=int, default=0,
                    help="상위 N건만 복사(0=전부). 시험 복사에 쓴다")
+    p.add_argument("--pids-file", default="",
+                   help="승인 대표pid JSON 배열 — 이 안의 후보만 복사(관제탑 러너용). "
+                        "깨지면 exit 2")
     p.set_defaults(fn=cmd_apply)
 
     p = common(sub.add_parser("verify", help="S7 중복 0 증명 · 판매가 검산"))
@@ -851,6 +968,8 @@ def main():
     p.set_defaults(fn=cmd_models)
 
     args = ap.parse_args()
+    global _EXPECT_NICK
+    _EXPECT_NICK = (getattr(args, "expect_nick", "") or "").strip()
     os.makedirs(args.run_dir, exist_ok=True)
     return args.fn(args)
 

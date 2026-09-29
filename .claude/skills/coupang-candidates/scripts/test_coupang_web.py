@@ -473,3 +473,13 @@ def test_apply_pids_file_과_limit_순서(monkeypatch, cli, tmp_path, capsys):
                                 "--limit", "1"]) == 0
     out = capsys.readouterr().out
     assert "[apply] 대상 1건" in out and 판매코드("B") in out
+
+
+def test_verify_스냅샷_실패면_중복0_을_증명하지_않는다(monkeypatch, cli, tmp_path):
+    R = str(tmp_path / "run")
+    _전단계_준비(R)
+    불사자 = 기본불사자()
+    불사자.스냅샷실패 = {"Gother"}
+    주입(monkeypatch, cli, 불사자)
+    실행(monkeypatch, cli, ["verify", "--run-dir", R])
+    assert json.loads(_읽기(os.path.join(R, "verified.json")))["중복0"] is False
