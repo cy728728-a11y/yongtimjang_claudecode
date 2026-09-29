@@ -323,6 +323,15 @@ def test_정지단계가_있으면_단계명과_gws_안내(쿠팡판):
     assert 'id="coupang-commit-details"' not in html
 
 
+def test_orphaned_정지는_요약의_단계코드를_보인다(쿠팡판):
+    """실측(2026-09-29): 다른 프로세스가 먼저 거둬 orphaned(exit None) — '종료코드 None' 대신 1."""
+    from webapp.routes.coupang import _쿠팡미리보기ctx
+    요약 = _미리보기요약(0, 정지단계="prep", 단계=[{"이름": "prep", "exit": 1}])
+    pid = _미리보기잡(요약=요약, 상태="orphaned", exit_code=None)
+    ctx = _쿠팡미리보기ctx(jobs.job_status(pid))
+    assert "종료코드 1" in ctx["error"] and "None" not in ctx["error"]
+
+
 def test_도는_중이면_읽지_않는다(쿠팡판):
     from webapp.routes.coupang import _쿠팡미리보기ctx
     pid = _미리보기잡(상태="starting", 요약쓰기=False)

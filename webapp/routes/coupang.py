@@ -229,9 +229,14 @@ def _쿠팡미리보기ctx(상태: dict) -> dict:
                 "그룹읽기": 요약.get("그룹읽기") if isinstance(요약.get("그룹읽기"), dict) else None,
                 "단계": [s for s in (요약.get("단계") or []) if isinstance(s, dict)]})
     if 정지 or 상태.get("status") != "done" or 상태.get("exit_code") != 0:
+        # 잡 행의 종료코드가 없으면(orphaned — 다른 프로세스가 먼저 거둬 감) 러너가 요약에 적은
+        # 마지막 단계 코드를 보인다. "종료코드 None" 은 아무것도 말해 주지 않는다.
+        코드 = 상태.get("exit_code")
+        if 코드 is None and 기본["단계"]:
+            코드 = 기본["단계"][-1].get("exit")
         return {**기본, "정지단계": 정지 or "?", "정지설명": _단계설명.get(str(정지), ""),
                 "gws": 정지 == "prep",
-                "error": f"'{정지 or '?'}' 단계에서 멈췄다(종료코드 {상태.get('exit_code')}) — "
+                "error": f"'{정지 or '?'}' 단계에서 멈췄다(종료코드 {코드}) — "
                          f"복사 버튼을 그리지 않는다"}
     상한 = _쿠팡복사상한()
     통과원본 = [r for r in 요약.get("통과") or [] if isinstance(r, dict)]
