@@ -178,6 +178,26 @@ def _dump(path, obj):
         json.dump(obj, f, ensure_ascii=False, indent=2)
 
 
+def _dump_atomic(path, obj):
+    """임시 파일에 쓰고 `os.replace` — 웹앱이 반쯤 쓴 파일을 읽는 일이 없게(Phase 7).
+
+    웹 잡이 읽는 계약 파일(견적 estimate-out · 커밋 summary-out)에만 쓴다. 기존 산출물은
+    `_dump` 그대로다 — 무플래그 동작을 바꾸지 않는다(L-02).
+    """
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
 def _load(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
@@ -289,18 +309,102 @@ def _warn_option_order(m, pids):
           f"대표옵션 확정건이 배치에서 빠져 비전 팬아웃이 크게 줄어든다(진행은 계속한다)")
 
 
+def _check_nick(expect):
+    """`--expect-nick` — 시트를 읽기 **전에** 불사자 계정을 확인한다(L-05 · Phase 7).
+
+    detail_batch._계정확인 과 같은 관용구다. 불일치도, 조회 실패도 exit 4 —
+    확인 못 한 계정으로 견적을 내면 엉뚱한 계정의 현황판을 백필한다.
+    (prep 경로엔 잔액가드 exit 4 가 없어 뜻이 겹치지 않는다 — RESEARCH §D-14.)
+    """
+    got = None
+    try:
+        mcp = ThumbMCP()
+        mcp.open()
+        try:
+            p = mcp.call_tool("bulsaja_my_profile", {}) or {}
+        finally:
+            mcp.close()
+        got = str(p.get("닉네임") or "")
+    except Exception as e:  # noqa: BLE001
+        got = f"조회실패({type(e).__name__})"
+    if got != expect:
+        print(f"[계정] 기대 {expect} · 실제 {got} — 중단", file=sys.stderr)
+        sys.exit(4)
+    print(f"  [계정] {got} 확인")
+
+
+def _estimate_doc(args):
+    """`--estimate-out` 빈 틀 — interfaces 스키마 그대로(07-02). 숫자는 prep 이 채운다."""
+    return {"그룹명": getattr(args, "group_name", "") or "", "시트id": "",
+            "선택": [], "대상": [], "이미가공": {}, "정합검사": [], "삭제대상": {},
+            "조회실패": {}, "현황판제외": {}, "예상크레딧": 0, "최대크레딧": 0,
+            "오류": None}
+
+
 def cmd_prep(args):
+    """prep 진입점. `--estimate-out` 이 있으면 **어느 경로로 끝나든** 견적 파일을 쓴다.
+
+    (Pitfall 3) 0건 조기 반환·조회실패 중단·예외까지 파일이 남아야 웹이 "고장"과
+    "0건"을 가른다. 크레딧 숫자는 여기서만 곱한다 — 웹앱은 합산만 한다(L-02).
+    플래그가 없으면 종전 본체를 그대로 부른다.
+    """
+    est_path = getattr(args, "estimate_out", None)
+    if not est_path:
+        return _cmd_prep(args, None)
+    est = _estimate_doc(args)
+    try:
+        return _cmd_prep(args, est)
+    except SystemExit as e:
+        if e.code not in (None, 0):
+            est["오류"] = f"exit {e.code}"
+        raise
+    except Exception as e:  # noqa: BLE001
+        est["오류"] = f"{type(e).__name__}: {e}"[:200]
+        raise
+    finally:
+        est["예상크레딧"] = R.credit_estimate(len(est["대상"]))
+        # 최대 = 재생성 상한까지 전부 다시 태웠을 때. 곱셈은 CLI 에서만 한다(L-02).
+        est["최대크레딧"] = R.credit_estimate(len(est["대상"])) * R.MAX_REGEN
+        try:
+            _dump_atomic(est_path, est)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 견적 파일 쓰기 실패: {str(e)[:120]}", file=sys.stderr)
+
+
+def _cmd_prep(args, est):
     run_dir = os.path.abspath(args.run_dir)
     os.makedirs(run_dir, exist_ok=True)
+    expect = (getattr(args, "expect_nick", "") or "").strip()
+    if expect:
+        _check_nick(expect)
     sheet = _resolve_sheet(args)
     print(f"  시트: {sheet}")
+    if est is not None:
+        est["시트id"] = sheet
 
     m = matrix.read(sheet)
     if args.ids:
         pids = [i for i in args.ids if i.strip()]
+        if est is not None:
+            est["선택"] = list(pids)
+        if getattr(args, "only_pending", False):
+            # D-03 — 웹이 넘긴 --ids 라도 현황판이 이미 완료·보류로 판단한 건은 생성
+            # 대상이 아니다. 빈칸·재작업(matrix.pending 규칙)만 남기고 빠진 건은
+            # 현재 현황판 값과 함께 보고한다(조용히 사라지지 않게).
+            pend = set(matrix.pending(m, TASK))
+            dropped = {pid: ((m.get(pid) or {}).get(TASK) or "(현황판 없음)")
+                       for pid in pids if pid not in pend}
+            pids = [pid for pid in pids if pid in pend]
+            if dropped:
+                print(f"  --only-pending: 현황판 pending 아님 {len(dropped)}건 제외 "
+                      f"→ {len(pids)}건")
+            if est is not None:
+                est["현황판제외"] = dropped
     else:
         pids = matrix.pending(m, TASK)
         print(f"[1/4] 현황판 '{TASK}' 대상(미착수+재작업) {len(pids)}건")
+        if est is not None:
+            est["선택"] = list(pids)
     if args.limit:
         pids = pids[:args.limit]
         print(f"  --limit {args.limit} 적용 → {len(pids)}건")
@@ -316,6 +420,8 @@ def cmd_prep(args):
     recs, errors = snapshot.ensure(pids, sleep=args.sleep)
     if errors:
         print(f"  조회 실패 {len(errors)}건: {list(errors)[:3]}")
+    if est is not None:
+        est["조회실패"] = {pid: str(v)[:200] for pid, v in (errors or {}).items()}
 
     # 기작업 필터 — 3갈래(2026-08-05 수정지시서 §6A). "가공됨"은 "손을 댔다"이지
     # "맞게 됐다"가 아니다(실측 백필 419건 표본 30 중 불일치 19건 = 68%).
@@ -341,6 +447,9 @@ def cmd_prep(args):
             already[pid] = "완료(기존 가공 확인)"
         else:
             targets.append(pid)
+    if est is not None:
+        est["이미가공"] = dict(already)
+        est["정합검사"] = list(audit_needed)
     if already:
         n = matrix.mark_many(sheet, TASK, already, matrix=m)
         print(f"[3/4] 기작업 백필 {n}건(대표가 이미 cdn.bulsaja.com · 대표옵션 이미지 없음)")
@@ -434,6 +543,11 @@ def cmd_prep(args):
             "대표옵션이미지": (mo or {}).get("이미지", ""),
             "대표옵션이미지경로": mo_path,
         })
+
+    if est is not None:
+        # 대상 = 실제로 생성할 상품(원본 404 삭제대상 제외) — 견적 크레딧의 근거.
+        est["대상"] = [p["productId"] for p in products]
+        est["삭제대상"] = dict(dead)
 
     # 원본 404 삭제 대상 — 파일·현황판에 기재하고 이룸님께 보고한다. 현황판 값이
     # 보류라 pending 에서 자동으로 빠진다(재작업 루프 차단). 실제 삭제는 이룸님 몫.
@@ -1324,6 +1438,42 @@ def _guard_credits(items):
         sys.exit(4)
 
 
+def _spent_credits(generated):
+    """이 run-dir 에서 **이미 나간** 크레딧 — generated.json 만 본다(잔액 역산 금지).
+
+    · 재생성횟수 = 생성 성공(접수+회수 포함) 횟수 → ×5
+    · 생성본 없이 taskId 만 남은 건 = 접수는 됐고 결과를 못 받았다 → 이미 과금 → ×5
+      (recover 가 회수하면 taskId 를 지우고 재생성횟수를 올리므로 이중 계산되지 않는다)
+    """
+    spent = 0
+    for rec in (generated or {}).values():
+        rec = rec or {}
+        spent += R.credit_estimate(int(rec.get("재생성횟수") or 0))
+        if rec.get("taskId") and "생성본" not in rec:
+            spent += R.CREDITS_PER_IMAGE
+    return spent
+
+
+def _guard_approval(run_dir, items, args, cap):
+    """`--max-credits N` — 웹 승인 상한을 **누적으로** 지킨다(D-07 · T-07-07).
+
+    이번 계획만 보면 재생성 호출을 반복할 때마다 통과한다. 그래서 이 run-dir 에서 이미
+    나간 크레딧 + 이번 계획이 승인액을 넘으면 생성 0건으로 exit 5.
+    exit 4 는 잔액부족(_guard_credits)이라 쓰지 않는다. 상한은 스스로 올리지 않는다.
+    """
+    gen_path = os.path.join(run_dir, "generated.json")
+    prev = _load(gen_path) if os.path.exists(gen_path) else {}
+    # `_generate` 와 같은 계획 — 재개면 이미 태운 건이 빠지고, --ids 면 지목분만.
+    todo, _skipped = R.generate_plan(items, prev, getattr(args, "ids", None))
+    spent = _spent_credits(prev)
+    now = R.credit_estimate(len(todo))
+    print(f"  승인 상한: 누적 {spent:,} + 이번 {now:,} / 승인 {cap:,}")
+    if spent + now > cap:
+        print(f"\n승인 상한 초과 — 누적 {spent:,} + 이번 {now:,} > 승인 {cap:,}. 생성 0건.",
+              file=sys.stderr)
+        sys.exit(5)
+
+
 def cmd_apply(args):
     run_dir = os.path.abspath(args.run_dir)
     sheet = _resolve_sheet(args)
@@ -1407,6 +1557,9 @@ def cmd_apply(args):
                   "pending 재계산 → 재팬아웃으로 채우거나, 의도된 것이면 --allow-missing.",
                   file=sys.stderr)
             sys.exit(3)
+        cap = getattr(args, "max_credits", None)
+        if cap is not None:
+            _guard_approval(run_dir, items, args, cap)
         _guard_credits(items)
         _generate(sheet, run_dir, items, args)
         return
@@ -1736,6 +1889,19 @@ def _commit(sheet, run_dir, args):
                 if row[0] == pid:
                     sheet_rows[i] = row[:6] + (R.MATRIX_ROUNDTRIP_CLOSED,)
                     break
+
+    summary_out = getattr(args, "summary_out", None)
+    if summary_out:
+        # 웹이 읽는 커밋 결과(Phase 7). ###COMMIT### 줄은 그대로 둔다 — 로그 계약 불변.
+        # 생성 실패건은 held 에 안 들어가지만(현황판도 안 건드린다) 웹엔 보류로 보인다.
+        fin = set(finalized)
+        gen_fail = {pid: "보류(생성실패)" for pid, g in generated.items()
+                    if "생성본" not in (g or {}) and pid not in fin}
+        try:
+            _dump_atomic(summary_out, {"완료": list(done), "보류": {**gen_fail, **held},
+                                       "기존대표유지": list(kept)})
+        except Exception as e:  # noqa: BLE001
+            print(f"  [경고] 커밋 요약 쓰기 실패: {str(e)[:120]}", file=sys.stderr)
 
     print(f"\n###COMMIT### 반영 {len(done)}건 / 보류·실패 {len(held)}건"
           + (f" / 기존대표 유지로 종결 {len(kept)}건" if kept else "")
@@ -2390,6 +2556,14 @@ def main():
     p.add_argument("--sleep", type=float, default=0.3)
     p.add_argument("--max-px", type=int, default=MAX_PX,
                    help=f"이미지를 긴 변 N px 로 축소(0=원본 유지). 기본 {MAX_PX}")
+    # ── 웹 관제탑 주입구(Phase 7) — 안 주면 종전 동작 그대로 ──
+    p.add_argument("--estimate-out", default=None,
+                   help="견적 JSON(대상·이미가공·정합검사·삭제대상·조회실패·예상/최대크레딧)을 "
+                        "이 경로에 쓴다. 0건·조회실패로 끝나도 쓴다")
+    p.add_argument("--only-pending", action="store_true",
+                   help="--ids 를 현황판 pending(빈칸·재작업)과 교집합 — 완료·보류는 제외")
+    p.add_argument("--expect-nick", default="",
+                   help="불사자 계정 닉 — 다르거나 확인 못 하면 시트를 읽기 전에 exit 4")
     p.set_defaults(func=cmd_prep)
 
     q = sub.add_parser("pending", help="results 없는 배치를 Workflow args JSON 으로 출력")
@@ -2446,6 +2620,12 @@ def main():
     a.add_argument("--no-sheet", action="store_true")
     a.add_argument("--no-matrix", action="store_true")
     a.add_argument("--sleep", type=float, default=0.5)
+    # ── 웹 관제탑 주입구(Phase 7) — 안 주면 종전 동작 그대로 ──
+    a.add_argument("--max-credits", type=int, default=None,
+                   help="웹 승인 상한 — 이 run-dir 누적 지출 + 이번 계획이 넘으면 exit 5"
+                        "(재생성 호출에도 매번 같은 값을 준다)")
+    a.add_argument("--summary-out", default=None,
+                   help="--commit 결과 {완료, 보류} JSON 을 이 경로에 쓴다")
     a.set_defaults(func=cmd_apply)
 
     v = sub.add_parser("verdict",
