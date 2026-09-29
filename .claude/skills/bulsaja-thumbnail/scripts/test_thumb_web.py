@@ -570,5 +570,169 @@ class ArgparseFlagsTest(unittest.TestCase):
         self.assertEqual(a.summary_out, "/tmp/x/s.json")
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# 러너 thumb_web.py estimate — 가짜 자식(subprocess.call 몽키패치)
+# ─────────────────────────────────────────────────────────────────────────
+
+class RunnerTest(unittest.TestCase):
+
+    def setUp(self):
+        import thumb_web
+        self.tw = thumb_web
+        self.root = tempfile.mkdtemp()
+        self.run_dir = os.path.join(self.root, "web-job")
+        self.inputs = os.path.join(self.root, "inputs.json")
+        self.summary = os.path.join(self.run_dir, "summary.json")
+        self.argvs = []
+        self.codes = {}      # 그룹명 → 자식 종료코드
+        self.no_file = set()  # estimate.json 을 안 쓰는 그룹
+        self._orig_call = thumb_web.subprocess.call
+        thumb_web.subprocess.call = self._fake_call
+
+    def tearDown(self):
+        self.tw.subprocess.call = self._orig_call
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _fake_call(self, av, cwd=None):
+        self.argvs.append(list(av))
+        name = next(a.split("=", 1)[1] for a in av if a.startswith("--group-name="))
+        est_path = av[av.index("--estimate-out") + 1]
+        i = av.index("--ids")
+        pids = []
+        for a in av[i + 1:]:
+            if a.startswith("--"):
+                break
+            pids.append(a)
+        code = self.codes.get(name, 0)
+        if name not in self.no_file:
+            k = len(pids) - 1
+            os.makedirs(os.path.dirname(est_path), exist_ok=True)
+            with open(est_path, "w", encoding="utf-8") as f:
+                json.dump({"그룹명": name, "시트id": f"S-{name}", "선택": pids,
+                           "대상": pids[:k], "이미가공": {pids[-1]: "완료(기존 가공 확인)"},
+                           "정합검사": [], "삭제대상": {}, "조회실패": {},
+                           "현황판제외": {}, "예상크레딧": k * 5, "최대크레딧": k * 10,
+                           "오류": None if code == 0 else f"exit {code}"},
+                          f, ensure_ascii=False)
+        return code
+
+    def _inputs(self, groups, codes=None):
+        with open(self.inputs, "w", encoding="utf-8") as f:
+            json.dump({"그룹": groups, "코드": codes or {}}, f, ensure_ascii=False)
+
+    def _run(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = self.tw.main(["estimate", "--run-dir", self.run_dir,
+                                 "--inputs", self.inputs, "--expect-nick", "용팀장",
+                                 "--summary-out", self.summary])
+        return code, out.getvalue()
+
+    def _summary(self):
+        with open(self.summary, encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_그룹_2개면_자식_prep_2회와_argv(self):
+        self._inputs({"1번_용쌤1-1": ["U1", "U2", "U3"], "2번 용쌤2-1": ["U4", "U5"]},
+                     {"U1": "C1"})
+        code, out = self._run()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.argvs), 2)
+        av = self.argvs[0]
+        self.assertEqual(av[1:3], [self.tw.RUN_THUMBS, "prep"])
+        self.assertIn("--group-name=1번_용쌤1-1", av)
+        self.assertIn("--only-pending", av)
+        self.assertEqual(av[av.index("--expect-nick") + 1], "용팀장")
+        sub = av[av.index("--run-dir") + 1]
+        self.assertEqual(av[av.index("--estimate-out") + 1],
+                         os.path.join(sub, "estimate.json"))
+        self.assertEqual(os.path.dirname(sub), os.path.abspath(self.run_dir))
+        self.assertIn("--group-name=2번 용쌤2-1", self.argvs[1])
+        s = self._summary()
+        self.assertEqual(s["계정"], "용팀장")
+        self.assertEqual(s["코드"], {"U1": "C1"})
+        self.assertEqual([g["그룹명"] for g in s["그룹"]], ["1번_용쌤1-1", "2번 용쌤2-1"])
+        self.assertEqual(s["그룹"][0]["시트id"], "S-1번_용쌤1-1")
+        self.assertEqual(s["합계"], {"선택": 5, "K": 3, "M": 2, "A": 0, "D": 0, "E": 0,
+                                   "현황판제외": 0, "예상크레딧": 15, "최대크레딧": 30})
+        self.assertTrue(out.strip().splitlines()[-1].startswith("###THUMB###"))
+        self.assertIn("###GROUP### 1번_용쌤1-1 시작", out)
+
+    def test_한_그룹_실패는_격리(self):
+        self._inputs({"A": ["U1", "U2"], "B": ["U3", "U4", "U5"]})
+        self.codes = {"A": 1}
+        code, _out = self._run()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.argvs), 2)
+        s = self._summary()
+        self.assertEqual(s["그룹"][0]["오류"], "exit 1")
+        self.assertIsNone(s["그룹"][1]["오류"])
+        self.assertEqual(s["합계"]["K"], 2)
+        self.assertEqual(s["합계"]["예상크레딧"], 10)
+
+    def test_estimate_없으면_오류(self):
+        self._inputs({"A": ["U1", "U2"], "B": ["U3", "U4"]})
+        self.no_file = {"A"}
+        code, _out = self._run()
+        self.assertEqual(code, 0)
+        self.assertTrue(self._summary()["그룹"][0]["오류"])
+
+    def test_자식_exit4면_즉시_정지(self):
+        self._inputs({"A": ["U1", "U2"], "B": ["U3", "U4"]})
+        self.codes = {"A": 4}
+        code, out = self._run()
+        self.assertEqual(code, 4)
+        self.assertEqual(len(self.argvs), 1, "계정 불일치인데 다음 그룹을 돌렸다")
+        s = self._summary()
+        self.assertEqual(s["오류"], "계정불일치")
+        self.assertEqual(s["그룹"][0]["오류"], "계정불일치")
+        self.assertTrue(out.strip().splitlines()[-1].startswith("###THUMB###"))
+
+    def test_전_그룹_오류면_exit1(self):
+        self._inputs({"A": ["U1", "U2"], "B": ["U3", "U4"]})
+        self.codes = {"A": 1, "B": 3}
+        code, _out = self._run()
+        self.assertEqual(code, 1)
+        self.assertEqual(self._summary()["합계"]["K"], 0)
+
+    def test_inputs_깨짐_빈그룹은_exit2(self):
+        with open(self.inputs, "w", encoding="utf-8") as f:
+            f.write("{깨짐")
+        self.assertEqual(self._run()[0], 2)
+        self._inputs({})
+        self.assertEqual(self._run()[0], 2)
+        self._inputs({"A": []})
+        self.assertEqual(self._run()[0], 2)
+        self._inputs({"A": ["--sheet"]})
+        self.assertEqual(self._run()[0], 2, "플래그 모양 pid 를 자식 argv 에 넘겼다")
+        self.assertEqual(self.argvs, [])
+
+    def test_그룹폴더_정규화(self):
+        used = set()
+        a = self.tw._그룹폴더("1-1 / 가방", used)
+        self.assertNotIn("/", a)
+        self.assertNotIn(" ", a)
+        b = self.tw._그룹폴더("../../etc", used)
+        self.assertFalse(b.startswith("."))
+        self.assertNotIn("/", b)
+        c = self.tw._그룹폴더("1-1 / 가방", used)
+        self.assertNotEqual(a, c)
+        self.assertTrue(c.endswith("_2"))
+        d = self.tw._그룹폴더("1-1_/_가방".upper(), used)   # 대소문자만 다른 충돌
+        self.assertTrue(d.endswith("_3"))
+
+    def test_그룹명_경로조작은_run_dir_밖으로_못_나간다(self):
+        self._inputs({"../밖": ["U1", "U2"]})
+        self._run()
+        sub = self.argvs[0][self.argvs[0].index("--run-dir") + 1]
+        self.assertEqual(os.path.dirname(sub), os.path.abspath(self.run_dir))
+
+    def test_러너는_CLI_를_import_하지_않는다(self):
+        with open(os.path.join(SCRIPT_DIR, "thumb_web.py"), encoding="utf-8") as f:
+            src = f.read()
+        self.assertNotRegex(src, r"(?m)^\s*(import run_thumbs|from run_thumbs)")
+        self.assertIn("###THUMB###", src)
+
+
 if __name__ == "__main__":
     unittest.main()
