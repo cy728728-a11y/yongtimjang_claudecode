@@ -1927,7 +1927,7 @@ def post_market_gate(request: Request, 요청: GateReq = Depends(_게이트요�
          · kind ∈ {market_commit, market_poll} 아니면 400 · 도는 중이면 400
       ③ 판정 대상 = 그 market 폴더 체크포인트의 **성공 항목 첫 건** (없으면 400) — 화면 값 안 믿음
       ④ '정상' 은 체크 3개가 모두 참일 때만 — 하나라도 거짓이면 400(T-06-23)
-      ⑤ INSERT(누적) → 기록된 상태의 게이트 패널 조각
+      ⑤ INSERT(누적) → 기록된 상태의 게이트 패널 조각 + `#market-commit-next` oob 조각
     토큰·Origin 은 `security.guard` 가 이미 봤다.
     """
     잡 = jobs.job_status(요청.commit_job_id)
@@ -1961,7 +1961,9 @@ def post_market_gate(request: Request, 요청: GateReq = Depends(_게이트요�
 
     from webapp.main import templates  # 지연 import — main 이 이 모듈을 먼저 부른다
 
-    return templates.TemplateResponse(request, "_market_gate_panel.html",
+    # 패널 + 반영 버튼 자리(oob) — 버튼 자리는 hx-target 밖이라 oob 로 같이 갈아끼운다
+    # (Quick 260929-g1). 버튼 유무·상한·대상은 `_게이트패널ctx` 가 서버에서 정한다.
+    return templates.TemplateResponse(request, "_market_gate_response.html",
                                       {"게이트패널": _게이트패널ctx(잡, 폴더, 체크, 미리보기)})
 
 

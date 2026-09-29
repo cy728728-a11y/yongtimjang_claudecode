@@ -894,3 +894,55 @@ def test_게이트패널_템플릿에_safe_없음():
             / "_market_gate_panel.html").read_text(encoding="utf-8")
     assert "| safe" not in 본문 and "|safe" not in 본문
     assert 본문.count('hx-post="/market/gate"') >= 2
+
+
+# ── 게이트 판정 응답의 반영 버튼 oob 조각 (Quick 260929-g1) ─────────────────
+# 게이트 버튼은 패널만 outerHTML 로 갈아끼운다 — 결과 표 아래 반영 버튼 자리는
+# 응답이 hx-swap-oob 로 같이 실어 보내야 새로고침 없이 뜬다.
+
+def _oob조각(본문: str) -> str:
+    """응답에서 `#market-commit-next` oob 조각만 잘라낸다 — 없으면 빈 문자열."""
+    표식 = '<div id="market-commit-next" hx-swap-oob="true">'
+    if 표식 not in 본문:
+        return ""
+    시작 = 본문.index(표식)
+    return 본문[시작:본문.index("</div>", 시작) + len("</div>")]
+
+
+def test_게이트_정상_응답에_반영버튼_oob(화면, 엿듣기, tmp_run_dir, monkeypatch):
+    from webapp.routes import jobs as 라우트
+    미리, _, 반영 = _첫반영(tmp_run_dir)
+    monkeypatch.setattr(라우트, "_마켓반영상한", lambda: 7)
+    응답 = 화면.post(게이트경로, json=_게이트몸통(반영))
+    assert 응답.status_code == 200, 응답.text
+    조각 = _oob조각(응답.text)
+    assert 조각, "정상 응답에 #market-commit-next oob 조각이 없다"
+    assert "market-commit-btn" in 조각 and f'data-preview-job="{미리}"' in 조각
+    assert "반영 실행 (최대 7건)" in 조각   # 상한은 서버 `_마켓반영상한()` 이 정한다
+    assert 응답.text.count('id="market-commit-next"') == 1
+    assert not 엿듣기, "판정 기록이 잡을 만들었다"
+
+
+def test_게이트_이상_응답은_oob_빈자리(화면, 엿듣기, tmp_run_dir):
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    응답 = 화면.post(게이트경로, json=_게이트몸통(반영, "이상"))
+    assert 응답.status_code == 200, 응답.text
+    조각 = _oob조각(응답.text)
+    assert 조각, "이상 응답도 버튼 자리를 비워 덮어야 한다(이전 버튼 잔존 방지)"
+    assert "market-commit-btn" not in 응답.text and "반영 실행" not in 조각
+    assert not 엿듣기
+
+
+def test_결과표는_버튼자리를_항상_그린다_oob없이(화면, tmp_run_dir):
+    """oob 대상이 DOM 에 있어야 갈아끼워진다 — 판정 전에도 빈 자리가 있어야 한다."""
+    _, _, 반영 = _첫반영(tmp_run_dir)
+    본문 = 화면.get(f"/jobs/{반영}/result", headers={"HX-Request": "true"}).text
+    assert 'id="market-commit-next"' in 본문
+    assert "hx-swap-oob" not in 본문 and "market-commit-btn" not in 본문
+
+
+def test_반영버튼_조각_템플릿에_safe_없음():
+    폴더 = Path(__file__).resolve().parents[1] / "templates"
+    for 이름 in ("_market_commit_next.html", "_market_gate_response.html"):
+        본문 = (폴더 / 이름).read_text(encoding="utf-8")
+        assert "| safe" not in 본문 and "|safe" not in 본문, 이름

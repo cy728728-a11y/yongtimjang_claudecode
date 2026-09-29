@@ -1,0 +1,20 @@
+{# 게이트 '정상' 뒤 나머지 반영 버튼 자리 — Quick 260929-g1.
+
+   **자리(`#market-commit-next`)는 항상 그린다** — 버튼이 없을 때도 빈 div 로 남긴다. 게이트 판정
+   응답이 이 자리를 hx-swap-oob 로 갈아끼우므로, 대상이 DOM 에 없으면 htmx 가 조용히 버린다
+   (새로고침 전까지 버튼이 안 뜨던 원인).
+
+   버튼을 그릴지·상한·대상 미리보기는 전부 서버(`_게이트패널ctx` → `_마켓반영상한()`)가 정한다.
+   '이상' 이거나 판정 전이면 버튼 없는 빈 자리다.
+   `oob` 가 참이면 게이트 판정 응답에 실린 조각이다(`_market_gate_response.html`).
+   자동 이스케이프에 기댄다 — 이스케이프를 끄는 필터를 쓰지 마라. #}
+{% set gp = 게이트패널 %}
+<div id="market-commit-next"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if gp and gp.최신 and gp.최신.판정 == "정상" and gp.preview_job_id and gp.남은반영가능 > 0 %}
+    <p>
+      게이트 통과 — 이 미리보기의 남은 반영가능 {{ gp.남은반영가능 }}건 중 앞 {{ gp.상한 }}건까지 이어서 반영한다.
+      나머지는 다음 회차다.<br>
+      <button type="button" class="market-commit-btn" data-preview-job="{{ gp.preview_job_id }}">반영 실행 (최대 {{ gp.상한 }}건)</button>
+    </p>
+  {% endif %}
+</div>

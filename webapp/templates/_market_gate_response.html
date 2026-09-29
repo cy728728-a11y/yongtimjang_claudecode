@@ -1,0 +1,7 @@
+{# 게이트 판정(POST /market/gate) 응답 — Quick 260929-g1.
+
+   ① 게이트 패널: 버튼의 hx-target(closest .market-gate-panel)을 outerHTML 로 갈아끼운다.
+   ② 반영 버튼 자리: hx-swap-oob 로 결과 표 아래 `#market-commit-next` 를 같이 갱신한다 —
+      '정상' 이면 버튼이 새로고침 없이 뜨고, '이상' 이면 빈 자리로 남는다(서버가 정한다). #}
+{% include "_market_gate_panel.html" %}
+{% with oob = True %}{% include "_market_commit_next.html" %}{% endwith %}
