@@ -301,7 +301,7 @@ Plans:
   3. 기존 게이트(주문 3회 이상 + 쿠팡보정 가중마진 20%)가 그대로 걸려 유입만 있는 상품은 후보에 나타나지 않는다
   4. 이미 쿠팡에 올라간 상품이 두 번 복사되지 않는다 (매번 쿠팡 그룹 실물을 읽어 타오바오상품번호로 대조)
 
-**Plans:** 3/7 plans executed
+**Plans:** 4/7 plans executed
 
 Plans:
 **Wave 1**
@@ -312,7 +312,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-04-PLAN.md — [W2] 썸네일 웹 슬라이스(견적·승인·결과) + 실데이터 prep 스모크(크레딧 0) + uat
+- [x] 07-04-PLAN.md — [W2] 썸네일 웹 슬라이스(견적·승인·결과) + 실데이터 prep 스모크(크레딧 0) + uat
 - [ ] 07-05-PLAN.md — [W2] 쿠팡 웹 슬라이스(미리보기·접힌 커밋·결과) + 실데이터 미리보기(쓰기 0) + uat
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -335,7 +335,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. 홍보배너 식별 | 12/12 | Closed — 게이트 불통과 · 용팀장 결정으로 종료 (D-23) | 2026-09-25 |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 6/6 | Complete   | 2026-09-29 |
 | 6. 마켓 수정업로드 | 4/6 | In Progress|  |
-| 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 3/7 | In Progress|  |
+| 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 4/7 | In Progress|  |
 
 ## Sequencing Notes
 
