@@ -67,7 +67,7 @@ PYTHONPATH=.claude/lib .venv/bin/python3 $S <서브커맨드> --run-dir $RUN
 | S2 | `resolve --min-orders 3` | 상위 코드 → 불사자 조회(50개/콜) |
 | S3 | `build` | 불사자코드 병합 → 대표 1건 |
 | S4 | `ship` | 실측 배송비(P75) vs 불사자 입력값 대조 |
-| S5 | `gate --min-margin 20 --limit 100` | 쿠팡보정 가중마진 게이트 + 쿠팡 그룹 실물 대조 |
+| S5 | `gate --limit 100` | 쿠팡보정 가중마진 게이트 + 쿠팡 그룹 실물 대조. 기준은 `workspace.toml [coupang]` 이 정본 — min_margin 20 (CP-03 · 1차 파일럿 기준. 설정 파일은 07-07 용팀장 확인 전까지 15.0) · min_orders 3 |
 | S6 | `apply --commit [--limit N]` | 쿠팡 그룹으로 복사 **(쓰기)**. `--limit` 은 시험 복사용 |
 | S7 | `verify` | 중복 0 증명 · 판매가 검산 |
 | — | `models [--suggest]` | 모델명 중복·형식 검사(읽기 전용) |
@@ -174,6 +174,11 @@ R열의 약 11%는 base64형(`PTk/PT0/...`)이고 전부 `17-2 / 17-3 / 2-1` 그
 - 복사 배치는 20건. 응답이 신 productId 를 안 줄 때 전후 diff 로 매핑하는데,
   배치가 크면 매핑 오류 피해가 커진다.
 - 작업 전 `bulsaja_my_profile` 로 계정을 확인한다(용쌤/용팀장 계정이 다르다).
+- `gate` 는 쿠팡 그룹 목록이 `총상품수` 보다 덜 읽히거나 그룹 스냅샷이 **1건이라도 실패하면
+  exit 3 · candidates.json/rejected.json 을 쓰지 않는다**(D-17 — 부분 대조로 후보를 내면 재복사).
+  일시 오류(429 등)이니 다시 돌려라. 타오바오번호가 빈 그룹 상품은 불사자코드로 대조한다.
+- `--expect-nick <닉>`(계정 다르면 exit 4) · `apply --pids-file <승인pid.json>`(깨지면 exit 2,
+  전량 폴백 없음)은 관제탑 러너(`coupang_web.py preview|commit`)용이다. 터미널에선 안 써도 된다.
 
 ## 검증 (verify 가 하는 것)
 
