@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-05-PLAN.md
-last_updated: "2026-09-29T02:28:10.457Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-09-29T03:44:44.018Z"
 last_activity: 2026-09-29
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 47
-  completed_plans: 43
+  completed_plans: 44
   percent: 57
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 
 Phase: 05 (상세페이지 작업 버튼) — EXECUTING
 Plan: 6 of 6 (05-01 완료: detail_batch --inputs 주입구 · 오프라인 45테스트 · 크레딧 0)
-Status: Phase 07 executing — 07-05 완료(07-06·07-07 남음). BLOCKED: gws 인증 만료(쿠팡 prep·썸네일 견적) · ② 조인 공백(07-06 결정)
+Status: Phase 07 executing — 07-05 완료(07-06·07-07 남음). Phase 06: 06-05 완료(첫 1건 스토어 반영 성공 · 게이트 판정 대기 → 06-06). BLOCKED: gws 인증 만료(쿠팡 prep·썸네일 견적) · ② 조인 공백(07-06 결정)
 Last activity: 2026-09-29
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
@@ -35,7 +35,7 @@ Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
 Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Progress: [█████████░] 91%
 | Phase 04 P12 | 40min | 2 tasks | 7 files |
 | Phase 06 P03 | 12min | 3 tasks | 13 files |
 | Phase 05 P06 | 3일(사람확인대기) | 3 tasks | 4 files |
+| Phase 06 P05 | 10min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -135,6 +136,8 @@ Recent decisions affecting current work:
 - [Phase 05-06]: D-13 기록됨 — 불사자 AI 상세 생성 경로(웹앱 접수)는 aiImageGenerated 를 4/4 찍는다. 외부 반영 경로(Phase 3 STATE-04, 29건)는 여전히 태그로만 잡힌다 — 두 사실 모두 참, 경로가 다르다. 태그 쓰기 폴백(L-01 ④) 불필요
 - [Phase 05-06]: 육안 확인(용팀장, 2026-09-29): 실탄 4건 다 괜찮음 — 워터마크·위챗 잔여 없음, 10장 잘림으로 인한 내용 누락 안 보임
 - [Phase 07 plan]: 용팀장 부재 중 plan-phase 자동 선택(추천안) — 리서치 수행 · UI-SPEC 생략(Phase 1~6 선례, UI는 uat-verifier) · checker 경고 4건 중 메타 2건 수정·2건(07-01 파일 17개, 인프라 truths) 의도된 트레이드오프로 수용. 확인 대기: D-01·D-03·D-06·D-08(→07-06 체크포인트) / D-01·D-16·쿠팡 min_margin 15→20(→07-07 체크포인트). 건수 불일치 응답은 409로 통일. D-08 은 미룸(Phase 6 미완)
+- [Phase 06]: 06-05: D-09·D-03 용팀장 추천대로 확정 — 게이트 1회성·복원 기준 ⓐ(AI 접수 직전)
+- [Phase 06]: 06-05: confirm:false 응답은 변경 필드를 안 알려 준다 — 가격·상품명·옵션 동반 반영은 게이트 체크 ③으로만 잡는다
 
 ### Pending Todos
 
@@ -184,6 +187,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-29T02:28:10.452Z
+Last session: 2026-09-29T03:44:39.230Z
 Stopped at: Completed 07-03-PLAN.md
 Resume file: None

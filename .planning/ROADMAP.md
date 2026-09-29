@@ -280,7 +280,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 + Phase 5 05-06 완료 — 사람)*
 
-- [ ] 06-05-PLAN.md — 라이브 쓰기 0 스모크(미리보기·복원 미리보기 diff) → ★ 첫 1건 반영 승인(D-09·D-03 한 줄) → 1건 반영 · 게이트 패널
+- [x] 06-05-PLAN.md — 라이브 쓰기 0 스모크(미리보기·복원 미리보기 diff) → ★ 첫 1건 반영 승인(D-09·D-03 한 줄) → 1건 반영 · 게이트 패널
 
 **Wave 5** *(blocked on Wave 4 — 사람)*
 
@@ -334,7 +334,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. 작업 대상 확정 — 엔티티 해소 + 상세 상태 판정 | 7/7 | Complete   | 2026-09-21 |
 | 4. 홍보배너 식별 | 12/12 | Closed — 게이트 불통과 · 용팀장 결정으로 종료 (D-23) | 2026-09-25 |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 6/6 | Complete   | 2026-09-29 |
-| 6. 마켓 수정업로드 | 4/6 | In Progress|  |
+| 6. 마켓 수정업로드 | 5/6 | In Progress|  |
 | 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 5/7 | In Progress|  |
 
 ## Sequencing Notes

@@ -116,9 +116,9 @@
 
 ### 버튼 4 — 마켓 수정업로드 (MARKET)
 
-- [ ] **MARKET-01**: 생성 완료분을 `market_update` 로 스마트스토어에 반영한다
+- [x] **MARKET-01**: 생성 완료분을 `market_update` 로 스마트스토어에 반영한다
 - [x] **MARKET-02**: **1건 먼저 반영하고 스토어에서 육안 확인**한 뒤에야 나머지가 실행된다 (상하단 안내이미지 되돌림 모순 검증 게이트)
-- [ ] **MARKET-03**: 반영 전 원본 상세 HTML 을 보관한다
+- [x] **MARKET-03**: 반영 전 원본 상세 HTML 을 보관한다
 
 ### 버튼 5 — 쿠팡 복사 (CP)
 
@@ -224,9 +224,9 @@
 | DETAIL-05 | Phase 5 | Complete |
 | DETAIL-06 | Phase 5 | Complete |
 | DETAIL-07 | Phase 5 | Complete |
-| MARKET-01 | Phase 6 | Pending |
+| MARKET-01 | Phase 6 | Complete |
 | MARKET-02 | Phase 6 | Complete |
-| MARKET-03 | Phase 6 | Pending |
+| MARKET-03 | Phase 6 | Complete |
 | CP-01 | Phase 7 | Complete |
 | CP-02 | Phase 7 | Complete |
 | CP-03 | Phase 7 | Pending |
