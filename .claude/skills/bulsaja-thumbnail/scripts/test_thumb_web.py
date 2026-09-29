@@ -286,5 +286,289 @@ class NoFlagGoldenTest(Harness):
         self.assertNotIn("U06done", ensure[1])
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# 주입구 — prep --estimate-out / --only-pending / --expect-nick
+# ─────────────────────────────────────────────────────────────────────────
+
+class _가짜MCP:
+    """프로필 조회·대표 저장·재조회만 흉내 — 생성(크레딧) 도구가 불리면 터진다."""
+    nick = "용팀장"
+    profile_error = None
+    log = []
+
+    def __init__(self, *a, **k):
+        pass
+
+    def open(self):
+        _가짜MCP.log.append(["open"])
+
+    def close(self):
+        _가짜MCP.log.append(["close"])
+
+    def call_tool(self, name, payload):
+        _가짜MCP.log.append(["call_tool", name])
+        if name == "bulsaja_my_profile":
+            if _가짜MCP.profile_error:
+                raise _가짜MCP.profile_error
+            return {"닉네임": _가짜MCP.nick, "크레딧": "1,000"}
+        raise AssertionError(f"허용 안 된 도구 호출: {name}")
+
+    def generate(self, *a, **k):
+        raise AssertionError("생성(크레딧) 호출 — 절대 불리면 안 된다")
+
+    def update_thumbnails(self, pid, thumbs):
+        _가짜MCP.log.append(["update_thumbnails", pid])
+
+    def workdata(self, pid):
+        return {"썸네일": ["https://cdn.bulsaja.com/new.jpg"]}
+
+
+class EstimateOutTest(Harness):
+
+    def _estimate(self):
+        path = os.path.join(self.run_dir, "estimate.json")
+        if not os.path.exists(path):
+            return None
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+
+    def _args(self, ids, **extra):
+        return _prep_args(self.run_dir, ids=ids,
+                          estimate_out=os.path.join(self.run_dir, "estimate.json"),
+                          **extra)
+
+    def test_시나리오_5개_견적(self):
+        code, _out, _err = self._run_prep(self._args(list(PIDS)))
+        self.assertIsNone(code)
+        est = self._estimate()
+        self.assertEqual(est["선택"], PIDS)
+        self.assertEqual(sorted(est["대상"]), ["U01new", "U02new"])
+        self.assertEqual(est["이미가공"], {"U03back": "완료(기존 가공 확인)"})
+        self.assertEqual(est["정합검사"], ["U04aud"])
+        self.assertEqual(list(est["조회실패"]), ["U05err"])
+        self.assertEqual(est["삭제대상"], {})
+        self.assertEqual(est["현황판제외"], {})
+        self.assertEqual(est["예상크레딧"], 10)
+        self.assertEqual(est["최대크레딧"], 20)
+        self.assertEqual(est["시트id"], SHEET)
+        self.assertIsNone(est["오류"])
+
+    def test_대상_0건_조기반환에도_파일을_쓴다(self):
+        self.matrix_data["U01new"]["썸네일"] = "완료"
+        code, _o, _e = self._run_prep(self._args(["U01new"], only_pending=True))
+        self.assertIsNone(code)
+        est = self._estimate()
+        self.assertEqual(est["대상"], [])
+        self.assertEqual(est["예상크레딧"], 0)
+        self.assertEqual(est["최대크레딧"], 0)
+        self.assertEqual(est["현황판제외"], {"U01new": "완료"})
+
+    def test_조회실패만_있어도_파일을_쓴다(self):
+        self._run_prep(self._args(["U05err"]))
+        est = self._estimate()
+        self.assertIsNotNone(est, "조회실패 경로에서 견적 파일이 없다 — 고장과 0건을 못 가른다")
+        self.assertEqual(est["대상"], [])
+        self.assertEqual(list(est["조회실패"]), ["U05err"])
+        # 무플래그 규칙 유지 — 조회실패 0건은 sentinel 을 안 남긴다
+        self.assertFalse(os.path.exists(os.path.join(self.run_dir, "batches_index.json")))
+
+    def test_기작업만이면_이미가공만_찬다(self):
+        self._run_prep(self._args(["U03back"]))
+        est = self._estimate()
+        self.assertEqual(est["대상"], [])
+        self.assertEqual(est["이미가공"], {"U03back": "완료(기존 가공 확인)"})
+
+
+class OnlyPendingTest(Harness):
+
+    def test_ids_와_현황판_pending_교집합(self):
+        self.matrix_data["U02new"]["썸네일"] = "완료"
+        self.matrix_data["U03back"]["썸네일"] = "보류(원본404·삭제대상)"
+        est_path = os.path.join(self.run_dir, "estimate.json")
+        self._run_prep(_prep_args(self.run_dir, ids=["U01new", "U02new", "U03back"],
+                                  only_pending=True, estimate_out=est_path))
+        ensure = [c for c in self.calls if c[0] == "ensure"]
+        self.assertEqual(ensure, [["ensure", ["U01new"]]])
+        with open(est_path, encoding="utf-8") as f:
+            est = json.load(f)
+        self.assertEqual(est["현황판제외"],
+                         {"U02new": "완료", "U03back": "보류(원본404·삭제대상)"})
+        self.assertEqual(est["대상"], ["U01new"])
+
+    def test_재작업은_pending_이라_남는다(self):
+        self.matrix_data["U02new"]["썸네일"] = "재작업(색 다름)"
+        self._run_prep(_prep_args(self.run_dir, ids=["U02new"], only_pending=True))
+        ensure = [c for c in self.calls if c[0] == "ensure"]
+        self.assertEqual(ensure, [["ensure", ["U02new"]]])
+
+    def test_플래그_없으면_교집합_안_한다(self):
+        self.matrix_data["U02new"]["썸네일"] = "완료"
+        self._run_prep(_prep_args(self.run_dir, ids=["U01new", "U02new"]))
+        ensure = [c for c in self.calls if c[0] == "ensure"]
+        self.assertEqual(ensure, [["ensure", ["U01new", "U02new"]]])
+
+
+class ExpectNickTest(Harness):
+
+    def setUp(self):
+        super().setUp()
+        _가짜MCP.nick = "용팀장"
+        _가짜MCP.profile_error = None
+        _가짜MCP.log = []
+        run_thumbs.ThumbMCP = _가짜MCP
+
+    def test_닉_불일치면_시트_읽기_전에_exit4(self):
+        _가짜MCP.nick = "용쌤"
+        code, _o, err = self._run_prep(_prep_args(self.run_dir, ids=list(PIDS),
+                                                  expect_nick="용팀장"))
+        self.assertEqual(code, 4)
+        self.assertEqual(self.read_count, 0)
+        self.assertIn("[계정]", err)
+        self.assertIn(["close"], _가짜MCP.log)
+
+    def test_프로필_조회_예외도_exit4(self):
+        _가짜MCP.profile_error = RuntimeError("503")
+        code, _o, _e = self._run_prep(_prep_args(self.run_dir, ids=list(PIDS),
+                                                 expect_nick="용팀장"))
+        self.assertEqual(code, 4)
+        self.assertEqual(self.read_count, 0)
+
+    def test_닉_일치면_진행한다(self):
+        code, _o, _e = self._run_prep(_prep_args(self.run_dir, ids=list(PIDS),
+                                                 expect_nick="용팀장"))
+        self.assertIsNone(code)
+        self.assertGreaterEqual(self.read_count, 1)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 주입구 — apply --generate --max-credits · apply --commit --summary-out
+# ─────────────────────────────────────────────────────────────────────────
+
+class MaxCreditsTest(Harness):
+
+    def setUp(self):
+        super().setUp()
+        self._write_results(self._gen_products(["U01new", "U02new"]))
+
+    def test_누적0_계획10_상한10_통과(self):
+        code, seq, _o, _e = self._run_apply(_apply_args(self.run_dir, max_credits=10))
+        self.assertIsNone(code)
+        self.assertEqual([s[0] for s in seq], ["_guard_credits", "_generate"])
+
+    def test_재생성_누적이_상한을_넘기면_exit5(self):
+        self._write_generated({"U09x": {"생성본": "https://cdn.bulsaja.com/g.jpg",
+                                        "재생성횟수": 1}})
+        code, seq, _o, err = self._run_apply(_apply_args(self.run_dir, max_credits=10))
+        self.assertEqual(code, 5)
+        self.assertEqual(seq, [], "상한 초과인데 잔액조회·생성이 불렸다")
+        self.assertIn("승인 상한 초과", err)
+
+    def test_미회수_taskId_도_누적에_든다(self):
+        self._write_generated({"U09y": {"taskId": "t-1",
+                                        "오류": "접수함 — 결과 미확인"}})
+        code, seq, _o, _e = self._run_apply(_apply_args(self.run_dir, max_credits=14))
+        self.assertEqual(code, 5)
+        self.assertEqual(seq, [])
+        code, seq, _o, _e = self._run_apply(_apply_args(self.run_dir, max_credits=15))
+        self.assertIsNone(code)
+        self.assertEqual([s[0] for s in seq], ["_guard_credits", "_generate"])
+
+    def test_재생성_호출도_누적으로_막힌다(self):
+        # 1회차 2건 생성 완료(누적 10) → --ids 로 1건 재생성하려면 10 + 5 = 15
+        self._write_generated({
+            "U01new": {"생성본": "https://cdn.bulsaja.com/1.jpg", "재생성횟수": 1},
+            "U02new": {"생성본": "https://cdn.bulsaja.com/2.jpg", "재생성횟수": 1}})
+        code, seq, _o, _e = self._run_apply(
+            _apply_args(self.run_dir, max_credits=10, ids=["U01new"]))
+        self.assertEqual(code, 5)
+        self.assertEqual(seq, [])
+
+
+class CommitSummaryTest(Harness):
+
+    def setUp(self):
+        super().setUp()
+        _가짜MCP.log = []
+        run_thumbs.ThumbMCP = _가짜MCP
+        self._orig_update = snapshot.update
+        snapshot.update = lambda pid, **kw: None
+        self._write_results(self._gen_products(["U01new", "U02new"]))
+        self._write_generated({
+            "U01new": {"상품명": "유압자키", "생성본": "https://cdn.bulsaja.com/1.jpg",
+                       "후보": [], "재생성횟수": 1},
+            "U02new": {"상품명": "캠핑의자", "오류": "TimeoutError", "taskId": "t-2"}})
+        with open(os.path.join(self.run_dir, "decisions.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({}, f)
+
+    def tearDown(self):
+        snapshot.update = self._orig_update
+        super().tearDown()
+
+    def _commit(self, **extra):
+        run_thumbs._audit = lambda run_dir: ([], False)
+        args = _apply_args(self.run_dir, generate=False, commit=True, **extra)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            run_thumbs.cmd_apply(args)
+        return out.getvalue()
+
+    def test_summary_out_에_완료_보류(self):
+        path = os.path.join(self.run_dir, "commit_summary.json")
+        out = self._commit(summary_out=path)
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+        self.assertEqual(doc["완료"], ["U01new"])
+        self.assertEqual(doc["보류"], {"U02new": "보류(생성실패)"})
+        commit_lines = [ln for ln in out.splitlines() if ln.startswith("###COMMIT###")]
+        self.assertEqual(commit_lines, ["###COMMIT### 반영 1건 / 보류·실패 0건"])
+        # 원자 쓰기 — 임시 파일이 남지 않는다
+        self.assertEqual([n for n in os.listdir(self.run_dir) if n.endswith(".tmp")], [])
+
+    def test_플래그_없으면_요약_파일을_안_쓴다(self):
+        out = self._commit()
+        self.assertFalse(os.path.exists(os.path.join(self.run_dir, "commit_summary.json")))
+        self.assertIn("###COMMIT### 반영 1건 / 보류·실패 0건", out)
+
+
+class ArgparseFlagsTest(unittest.TestCase):
+    """새 플래그 5개가 파서에 있고, 기본값이 무플래그 경로를 고른다."""
+
+    def _parse(self, argv):
+        import unittest.mock as mock
+        captured = {}
+        with mock.patch.object(sys, "argv", ["run_thumbs.py", *argv]), \
+                mock.patch.object(run_thumbs, "cmd_prep",
+                                  lambda a: captured.setdefault("a", a)), \
+                mock.patch.object(run_thumbs, "cmd_apply",
+                                  lambda a: captured.setdefault("a", a)):
+            # set_defaults 가 main() 안에서 함수 객체를 잡으므로 여기서 다시 읽힌다
+            run_thumbs.main()
+        return captured["a"]
+
+    def test_prep_기본값(self):
+        a = self._parse(["prep", "--run-dir", "/tmp/x", "--sheet", "S"])
+        self.assertIsNone(a.estimate_out)
+        self.assertFalse(a.only_pending)
+        self.assertEqual(a.expect_nick, "")
+
+    def test_prep_플래그(self):
+        a = self._parse(["prep", "--run-dir", "/tmp/x", "--sheet", "S", "--ids", "a",
+                         "--only-pending", "--expect-nick", "용팀장",
+                         "--estimate-out", "/tmp/x/e.json"])
+        self.assertTrue(a.only_pending)
+        self.assertEqual(a.expect_nick, "용팀장")
+        self.assertEqual(a.estimate_out, "/tmp/x/e.json")
+
+    def test_apply_플래그(self):
+        a = self._parse(["apply", "--run-dir", "/tmp/x", "--sheet", "S"])
+        self.assertIsNone(a.max_credits)
+        self.assertIsNone(a.summary_out)
+        a = self._parse(["apply", "--run-dir", "/tmp/x", "--sheet", "S", "--generate",
+                         "--max-credits", "30", "--summary-out", "/tmp/x/s.json"])
+        self.assertEqual(a.max_credits, 30)
+        self.assertEqual(a.summary_out, "/tmp/x/s.json")
+
+
 if __name__ == "__main__":
     unittest.main()
