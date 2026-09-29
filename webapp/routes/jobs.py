@@ -1292,27 +1292,38 @@ def post_revert_round(request: Request, req: RevertRoundReq):
 # 대상은 **전부 서버가 계산한다.** 클라이언트가 groupId 나 상품 키를 보내는 인자가
 # 아예 없다 (D-11 / T-3-27) — `JobReq` 에 그런 필드가 없는 것이 그 방어의 전부다.
 
-# 이 페이즈의 작업 대상 후보 = 규칙③ + ⑤. ROADMAP 의 범위 정의이고
-# `03-CONTEXT.md` §domain 의 실측 모수(130 + 64 = 194행)가 이 둘이다.
+# 불사자 잡의 대상 규칙은 **두 원천으로 나뉜다** (quick 260929-j2, 07-CONTEXT 용팀장 확인).
+#   · 조인 스캔 대상 = ②③⑤ — 스캔은 몇 분짜리 읽기라 ② 를 넣어도 싸다. ② 를 빼면
+#     ② 행에 조인(불사자 코드)이 안 붙어 썸네일 웹 견적이 **항상 0건**이 된다(07-04 스모크).
+#   · 인덱스 범위 = ③⑤ — 인덱스는 **수 시간**짜리라 범위를 넓히면 그만큼 비용이 붙는다.
+#     ③⑤ 는 ROADMAP Phase 3 범위 정의이고 `03-CONTEXT.md` §domain 실측 모수(130 + 64 = 194행).
+# 둘을 한 튜플로 두면 ② 를 스캔에 넣는 순간 인덱스도 조용히 넓어진다 — 그래서 쪼갰다.
 # `board.RULE_ORDER` 에서 가져오지 않는다 — 그건 **표시 순서**라 뜻이 다르고,
 # 거기에 규칙이 하나 추가되는 날 이 잡의 대상이 조용히 늘어난다.
-불사자_대상규칙 = ("③원인분석", "⑤효자확정")
+조인스캔_대상규칙 = ("②썸네일교체", "③원인분석", "⑤효자확정")
+인덱스_대상규칙 = ("③원인분석", "⑤효자확정")
 
 
-def _스캔대상키(판정: dict) -> list[str]:
-    """③⑤ 행 → `"<계정alias>|<mallProductId>"` 목록. **중복은 없애고 순서는 지킨다.**
+def _규칙행키(판정: dict, 규칙들: tuple[str, ...]) -> list[str]:
+    """지정 규칙 행 → `"<계정alias>|<mallProductId>"` 목록. **중복은 없애고 순서는 지킨다.**
 
-    같은 상품이 ③과 ⑤에 동시에 있을 수 있다(그럴 일은 드물지만 규칙이 배타적이지
-    않다). 중복을 그대로 넘기면 같은 상품을 두 번 조회해 레이트리밋 예산을 버린다.
+    같은 상품이 여러 규칙에 동시에 있을 수 있다(규칙이 배타적이지 않다 — ②와 ③이
+    겹치기도 한다). 중복을 그대로 넘기면 같은 상품을 두 번 조회해 레이트리밋 예산을 버린다.
     정렬하지 않는 이유는 진행 로그의 순서가 판정 결과의 순서와 같아야 사람이
     "어디쯤 돌고 있나" 를 읽을 수 있기 때문이다.
+    판정값은 CLI 산출물에서 읽기만 한다 — 규칙을 여기서 재판정하지 않는다.
     """
     키들: list[str] = []
     본것: set[str] = set()
-    for alias, 계정 in ((판정 or {}).get("accounts") or {}).items():
-        규칙들 = (계정 or {}).get("rules") or {}
-        for 규칙 in 불사자_대상규칙:
-            for r in (규칙들.get(규칙) or []):
+    try:
+        계정들 = ((판정 or {}).get("accounts") or {}).items()
+    except AttributeError:
+        # 판정 파일 모양이 깨졌다 — 대상 0건으로 돌려 호출부가 400 을 낸다
+        return []
+    for alias, 계정 in 계정들:
+        규칙표 = (계정 or {}).get("rules") or {}
+        for 규칙 in 규칙들:
+            for r in (규칙표.get(규칙) or []):
                 if not isinstance(r, dict):
                     continue
                 mall = r.get("mallProductId")
@@ -1324,6 +1335,16 @@ def _스캔대상키(판정: dict) -> list[str]:
                 본것.add(키)
                 키들.append(키)
     return 키들
+
+
+def _스캔대상키(판정: dict) -> list[str]:
+    """조인 스캔 대상 — ②③⑤ 행 키."""
+    return _규칙행키(판정, 조인스캔_대상규칙)
+
+
+def _인덱스범위키(판정: dict) -> list[str]:
+    """인덱스 구축 범위 — ③⑤ 행 키. ② 는 **일부러 뺀다** (수 시간 비용)."""
+    return _규칙행키(판정, 인덱스_대상규칙)
 
 
 @router.post("/jobs/bulsaja/profile")
@@ -1344,14 +1365,14 @@ def post_bulsaja_profile(request: Request, req: JobReq = Depends(요청_풀기))
 
 @router.post("/jobs/bulsaja/scan")
 def post_bulsaja_scan(request: Request, req: JobReq = Depends(요청_풀기)):
-    """회차 **조인 스캔**. ③⑤ 행을 불사자에서 다시 읽어 산출물에 적는다 (읽기·크레딧 0).
+    """회차 **조인 스캔**. ②③⑤ 행을 불사자에서 다시 읽어 산출물에 적는다 (읽기·크레딧 0).
 
     대상은 여기서 만든다 — 화면이 고른 행 목록을 받지 않는다. 회차의 판정 결과가
     정본이고, 그래야 "본 것과 다른 게 돈다" 가 성립하지 않는다 (D-11 / FLOW-02).
 
     **빈 대상으로 잡을 만들지 않는다.** `create_job` 은 빈 목록도 파일로 떨구고
     자식은 `exit 2` 로 거부하지만, 그 잡은 레지스트리에 `failed` 로 남아 화면이
-    "인덱스가 비었나?" 로 오독한다. 원인은 회차에 ③⑤ 행이 없는 것뿐이고, 그건
+    "인덱스가 비었나?" 로 오독한다. 원인은 회차에 ②③⑤ 행이 없는 것뿐이고, 그건
     사용자가 고칠 것(다른 회차를 고르거나 판정을 다시 돌린다)이다.
     """
     if not req.run_dir:
@@ -1363,7 +1384,7 @@ def post_bulsaja_scan(request: Request, req: JobReq = Depends(요청_풀기)):
     if not 대상:
         raise HTTPException(
             status_code=400,
-            detail="이 회차에 ③원인분석·⑤효자확정 행이 없다 — 스캔할 대상이 0건이다. "
+            detail="이 회차에 ②썸네일교체·③원인분석·⑤효자확정 행이 없다 — 스캔할 대상이 0건이다. "
                    "다른 회차를 고르거나 판정을 다시 돌려라")
 
     return _작업만들기(request, "bulsaja_scan", req, only_ads=대상)
@@ -1418,9 +1439,9 @@ def post_bulsaja_index(request: Request, req: JobReq = Depends(요청_풀기)):
     #    41그룹(제외 후 40)을 내는데, ③⑤ 만 보면 31그룹(제외 후 30)이다 —
     #    작업 대상이 하나도 없는 마켓그룹 10개를 **수 시간 동안** 더 훑는다.
     #    이 페이즈가 D-18 로 2시간 7분을 깎아 낸 바로 그 비용이 도로 붙는다.
-    #    좁히는 기준은 스캔과 **같은 함수**에서 온다 — 둘이 갈라지면 스캔한 것과
-    #    인덱스한 것이 달라진다.
-    대상키 = set(_스캔대상키(판정))
+    #    좁히는 기준은 `_인덱스범위키`(③⑤)다 — 스캔 대상(②③⑤)과 **일부러 다르다.**
+    #    ③⑤ 는 스캔 대상의 부분집합이라 인덱스한 것은 전부 스캔돼 있다 (quick 260929-j2).
+    대상키 = set(_인덱스범위키(판정))
     rows = [r for r in board.fold_products(판정)
             if f"{r.get('acct')}|{r.get('mallProductId')}" in 대상키]
     if not rows:

@@ -462,6 +462,82 @@ def test_스캔대상키는_중복을_없애고_순서를_지킨다():
     assert _스캔대상키(None) == []
 
 
+def test_스캔과_인덱스의_대상규칙은_따로다():
+    """quick 260929-j2 — 스캔 대상 = ②③⑤, 인덱스 범위 = ③⑤ 로 **원천이 둘**이다.
+
+    ② 를 스캔에서 빼면 썸네일 웹 견적이 항상 0건이고(07-04 스모크), 인덱스에 넣으면
+    수 시간짜리 인덱스가 조용히 넓어진다. 값을 못 박아 둘이 다시 합쳐지는 걸 막는다.
+    """
+    from webapp.routes import jobs as 라우트
+
+    assert 라우트.조인스캔_대상규칙 == ("②썸네일교체", "③원인분석", "⑤효자확정")
+    assert 라우트.인덱스_대상규칙 == ("③원인분석", "⑤효자확정")
+    # 인덱스한 것은 전부 스캔돼 있어야 한다 — 인덱스 범위 ⊂ 스캔 대상
+    assert set(라우트.인덱스_대상규칙) <= set(라우트.조인스캔_대상규칙)
+
+    판정 = {"accounts": {"zz01": {"rules": {
+        "②썸네일교체": [{"mallProductId": "777"}, {"mallProductId": "111"}],
+        "③원인분석": [{"mallProductId": "111"}],
+        "⑤효자확정": [{"mallProductId": "333"}],
+    }}}}
+    assert 라우트._스캔대상키(판정) == ["zz01|777", "zz01|111", "zz01|333"]
+    assert 라우트._인덱스범위키(판정) == ["zz01|111", "zz01|333"], "② 가 인덱스 범위로 샜다"
+
+
+def test_스캔은_2번_행도_대상에_싣는다(화면, 프로필, 기대닉, 엿듣기, tmp_run_dir):
+    """② 만 있는 회차도 스캔이 돈다 — ② 에 조인이 붙어야 썸네일 견적이 0 이 아니다."""
+    _회차판정_갈아끼우기(tmp_run_dir, {"accounts": {"zz01": {"rules": {
+        "②썸네일교체": [{"mallProductId": "555"}],
+        "①노출0": [{"mallProductId": "999"}],         # 여전히 대상이 아니다
+    }}}})
+    프로필()
+    응답 = 화면.post("/jobs/bulsaja/scan", json={"run_dir": tmp_run_dir.name})
+    assert 응답.status_code == 200, 응답.text
+    assert 엿듣기["kind"] == "bulsaja_scan"
+    assert 엿듣기["only_ads"] == ["zz01|555"]
+
+
+def test_인덱스는_2번_행의_마켓그룹을_안_훑는다(화면, 프로필, 기대닉, 엿듣기, tmp_run_dir):
+    """🔴 비용 회귀 — ② 가 스캔에 들어갔어도 인덱스 범위는 ③⑤ 그대로다.
+
+    ③ 행과 ② 행을 **서로 다른 마켓그룹**에 걸어, 대상에 ③ 쪽 그룹만 들어오는지 본다.
+    ② 만 있는 회차면 인덱스는 400(대상 0건)이어야 한다.
+    """
+    _회차판정_갈아끼우기(tmp_run_dir, {"accounts": {"zz01": {"rules": {
+        "③원인분석": [{"adId": "nad-aaa", "mallProductId": "111",
+                    "adGroup": "판매상품_15-2_zzfakeA"}],
+        "②썸네일교체": [{"adId": "nad-ccc", "mallProductId": "333",
+                      "adGroup": "판매상품_20-3_zzfakeC"}],
+    }}}})
+    조인 = {"마켓그룹": [{"groupId": "9000001", "그룹명": "zzfake15-2"},
+                      {"groupId": "9000002", "그룹명": "zzfake20-3"}],
+           "제외그룹": None, "행": []}
+    잡 = tmp_run_dir.parent.parent.parent / "scan_out_j2.json"
+    잡.write_text(json.dumps(조인, ensure_ascii=False), encoding="utf-8")
+
+    진짜 = jobs.latest_done
+    try:
+        jobs.latest_done = lambda kind, run_dir=None: (
+            {"result_path": str(잡)} if kind == "bulsaja_scan" else 진짜(kind, run_dir))
+        프로필()
+        응답 = 화면.post("/jobs/bulsaja/index", json={"run_dir": tmp_run_dir.name})
+        assert 응답.status_code == 200, 응답.text
+        assert 엿듣기["kind"] == "bulsaja_index"
+        assert 엿듣기["only_ads"] == ["9000001"], "②썸네일교체 의 마켓그룹까지 훑는다"
+
+        # ② 만 남기면 인덱스 대상은 0건 → 400, 잡을 만들지 않는다
+        엿듣기.clear()
+        _회차판정_갈아끼우기(tmp_run_dir, {"accounts": {"zz01": {"rules": {
+            "②썸네일교체": [{"adId": "nad-ccc", "mallProductId": "333",
+                          "adGroup": "판매상품_20-3_zzfakeC"}],
+        }}}})
+        응답 = 화면.post("/jobs/bulsaja/index", json={"run_dir": tmp_run_dir.name})
+        assert 응답.status_code == 400, 응답.text
+        assert not 엿듣기, "② 만 있는데 인덱스 잡을 만들었다"
+    finally:
+        jobs.latest_done = 진짜
+
+
 def test_불사자_라우트_목차가_docstring_에_있다():
     """이 파일의 라우트 목록이 목차다 — 빠지면 다음 사람이 경로를 못 찾는다."""
     from webapp.routes import jobs as 라우터
