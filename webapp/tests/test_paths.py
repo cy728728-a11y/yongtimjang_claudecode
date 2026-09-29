@@ -363,3 +363,20 @@ def test_새_설정키가_workspace_toml_로_덮인다(tmp_path, monkeypatch):
     assert settings.DEFAULTS["expected_bulsaja_nick"] == ""
     with pytest.raises(KeyError):
         settings.cfg("expected_bulsaja_nick", required=True)
+
+
+# ── 9. Phase 7 러너 폴더 뿌리 (썸네일 · 쿠팡) ───────────────────────────
+#
+# 광고 회차 runs 와 **다른 트리**여야 한다 — `run_dir_path` 화이트리스트는 광고 runs 전용이라,
+# 쿠팡 폴더가 광고 runs 밑에 생기면 회차 목록에 끼어든다(RESEARCH Anti-Patterns).
+
+def test_썸네일_러너_뿌리는_data_root_밑_thumbnail_runs_다(tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "data_root", lambda: tmp_path)
+    assert paths.thumb_runs_root() == tmp_path / "thumbnail" / "runs"
+    assert paths.thumb_runs_root() != paths.runs_root()
+
+
+def test_쿠팡_러너_뿌리는_data_root_밑_coupang_runs_다(tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "data_root", lambda: tmp_path)
+    assert paths.coupang_runs_root() == tmp_path / "coupang" / "runs"
+    assert paths.coupang_runs_root() != paths.runs_root()

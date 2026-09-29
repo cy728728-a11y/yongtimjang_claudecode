@@ -754,3 +754,102 @@ def test_MarketArgv_마켓_필드도_플래그도_없다():
                      ("poll", {"detail_backup_dir": None, "backup_dir": None})):
         av = _마켓(mode=모드, **덮기).build()
         assert "--market" not in av
+
+
+# ── 썸네일 · 쿠팡 argv (Phase 7) ─────────────────────────────────────────
+#
+# 러너(thumb_web.py · coupang_web.py)는 07-02 · 07-03 이 만든다. 여기선 조립만 단언한다.
+
+def _쿠팡(mode="preview", **덮기):
+    기본 = dict(mode=mode, run_dir=Path("/tmp/zz-cp"), expect_nick="zz닉",
+                summary_out=Path("/tmp/zz-cp/summary.json"))
+    기본.update(덮기)
+    return A.CoupangArgv(**기본)
+
+
+def test_썸네일_견적_argv_모양():
+    av = A.ThumbArgv(run_dir=Path("/tmp/zz-th"), inputs=Path("/tmp/zz-th/inputs.json"),
+                     expect_nick="zz닉", summary_out=Path("/tmp/zz-th/summary.json")).build()
+    assert av == [str(A.PY_CLI), str(A.THUMB_WEB), "estimate",
+                  "--run-dir", "/tmp/zz-th", "--inputs", "/tmp/zz-th/inputs.json",
+                  "--expect-nick", "zz닉", "--summary-out", "/tmp/zz-th/summary.json"]
+    assert A.THUMB_WEB.name == "thumb_web.py"
+    assert "bulsaja-thumbnail" in A.THUMB_WEB.parts
+
+
+def test_썸네일_argv_프리픽스는_맨_앞이다():
+    av = A.ThumbArgv(run_dir=Path("/tmp/a"), inputs=Path("/tmp/a/i.json"), expect_nick="zz닉",
+                     summary_out=Path("/tmp/a/s.json"), prefix=["/usr/bin/caffeinate", "-i"]).build()
+    assert av[:3] == ["/usr/bin/caffeinate", "-i", str(A.PY_CLI)]
+
+
+def test_썸네일_argv_는_모르는_필드를_거부한다():
+    with pytest.raises(ValidationError):
+        A.ThumbArgv(run_dir=Path("/tmp/a"), inputs=Path("/tmp/a/i.json"), expect_nick="zz닉",
+                    summary_out=Path("/tmp/a/s.json"), groups=["1-1 그룹"])
+
+
+def test_쿠팡_미리보기_argv_는_기본_플래그만():
+    av = _쿠팡().build()
+    assert av == [str(A.PY_CLI), str(A.COUPANG_WEB), "preview",
+                  "--run-dir", "/tmp/zz-cp", "--expect-nick", "zz닉",
+                  "--summary-out", "/tmp/zz-cp/summary.json"]
+    assert "--limit" not in av and "--approved" not in av
+    assert A.COUPANG_WEB.name == "coupang_web.py"
+    assert "coupang-candidates" in A.COUPANG_WEB.parts
+
+
+def test_쿠팡_복사_argv_는_승인목록과_상한을_싣는다():
+    av = _쿠팡("commit", approved=Path("/tmp/zz-cp/approved_j1.json"), limit=10,
+             summary_out=Path("/tmp/zz-cp/commit_summary_j1.json")).build()
+    assert av[2] == "commit"
+    assert av[av.index("--approved") + 1] == "/tmp/zz-cp/approved_j1.json"
+    assert av[av.index("--limit") + 1] == "10"
+    assert 실행플래그 not in av   # 러너 서브커맨드이지 CLI 실행 플래그가 아니다
+
+
+@pytest.mark.parametrize("덮기", [
+    dict(approved=None, limit=10),
+    dict(approved=Path("/tmp/a.json"), limit=None),
+    dict(approved=Path("/tmp/a.json"), limit=0),
+    dict(approved=Path("/tmp/a.json"), limit=-3),
+])
+def test_쿠팡_복사는_상한_없이_조립되지_않는다(덮기):
+    """빈 값은 전량이 아니다 (D-13)."""
+    with pytest.raises(ValueError, match="상한 없는 복사는 없다"):
+        _쿠팡("commit", **덮기).build()
+
+
+@pytest.mark.parametrize("필드", [
+    dict(min_margin=20), dict(min_orders=3), dict(skip_group_check=True),
+    dict(strict_shipping=True), dict(market="coupang"),
+])
+def test_쿠팡_argv_에는_기준_skip_strict_필드가_없다(필드):
+    """필드가 없는 것이 방어다 (L-04 · D-15 · D-10) — extra=forbid 로 끼워 넣기도 막힌다."""
+    with pytest.raises(ValidationError):
+        _쿠팡(**필드)
+
+
+def test_웹앱_트리에_게이트_우회_플래그가_없다():
+    """`webapp/**` (.py .html .js, 테스트 포함) 에 게이트 우회·기준 플래그 0회 (L-04 · D-10 · D-15).
+
+    금지 문자열은 런타임에 조립한다 — 이 파일 자신이 걸리지 않게(맨 위 docstring 규율).
+    """
+    금지목록 = ("--" + "skip-group-check", "--" + "min-margin",
+              "--" + "min-orders", "--" + "strict-shipping")
+    웹앱 = Path(A.__file__).resolve().parent
+    본것 = 0
+    for f in list(웹앱.rglob("*.py")) + list(웹앱.rglob("*.html")) + list(웹앱.rglob("*.js")):
+        if "__pycache__" in f.parts:
+            continue
+        본문 = f.read_text(encoding="utf-8", errors="ignore")
+        본것 += 1
+        for 금지 in 금지목록:
+            assert 금지 not in 본문, f"{f} 에 '{금지}' 가 있다 — 기준은 CLI 기본값이 정본이다"
+    assert 본것 >= 10, f"파일을 {본것}개밖에 안 훑었다 — 순회가 고장났다"
+
+
+def test_phase7_설정키_기본값():
+    assert S.DEFAULTS["thumb_max_items"] == 20
+    assert S.DEFAULTS["coupang_copy_max_items"] == 20
+    assert S.DEFAULTS["coupang_first_max_items"] == 10

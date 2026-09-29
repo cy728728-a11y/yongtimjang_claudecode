@@ -70,6 +70,16 @@ def runs_root() -> Path:
     return ads_root() / "runs"
 
 
+def thumb_runs_root() -> Path:
+    """썸네일 견적 러너 폴더의 뿌리 (Phase 7). 광고 회차 runs 와 다른 트리다."""
+    return data_root() / "thumbnail" / "runs"
+
+
+def coupang_runs_root() -> Path:
+    """쿠팡 복사 러너 폴더의 뿌리 (Phase 7). 광고 회차가 없는 잡이라 여기 따로 둔다."""
+    return data_root() / "coupang" / "runs"
+
+
 def scan_run_dirs() -> list[str]:
     """`result.json` 이 있는 회차 **이름만** 최신순으로.
 

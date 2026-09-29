@@ -20,7 +20,7 @@
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from webapp import paths
 
@@ -65,6 +65,14 @@ DETAIL_BATCH = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
 # 06-02 가 만든 CLI 다. 마켓은 CLI 안에서 SMARTSTORE 로 고정돼 있어 웹앱이 넘길 값이 없다(L-07).
 MARKET_UPDATE = (paths.repo_root() / ".claude" / "skills" / "bulsaja-detail-page"
                  / "scripts" / "market_update.py")
+
+# 썸네일 견적 러너 · 쿠팡 복사 러너 (Phase 7). **같은 스킬 디렉터리다** — 러너는 각 스킬의
+# 검증된 CLI(run_thumbs.py · run_coupang.py) 옆에 산다. subprocess 경계 너머라 웹앱 venv 가
+# 아니라 CLI `.venv` 로 돈다(위 PY_CLI). 러너 자체는 07-02 · 07-03 이 만든다 — 여기선 argv 만.
+THUMB_WEB = (paths.repo_root() / ".claude" / "skills" / "bulsaja-thumbnail"
+             / "scripts" / "thumb_web.py")
+COUPANG_WEB = (paths.repo_root() / ".claude" / "skills" / "coupang-candidates"
+               / "scripts" / "coupang_web.py")
 
 # 계정 alias 의 모양. 상한(개수)은 두지 않는다 — 계정은 `~/.eroom/naver-ads.json` 에
 # 항목을 더하는 것만으로 늘어난다(지금 4개, 6개 예정). 개수를 코드에 박으면
@@ -432,4 +440,67 @@ class MarketArgv(BaseModel):
         av += ["--summary-out", str(self.summary_out)]
         av += ["--poll-interval", str(self.poll_interval)]
         av += ["--max-poll-min", str(self.max_poll_min)]
+        return av
+
+
+class ThumbArgv(BaseModel):
+    """`thumb_web.py estimate` 호출 한 번 (Phase 7 / THUMB-02).
+
+    **그룹명은 argv 로 넘기지 않는다** — 그룹명에 한글·공백이 들어가 `PlainArg` 제약 밖이다.
+    그룹→pid 묶음은 웹앱이 서버 쪽에서 쓴 `--inputs` 파일로만 간다.
+    기본값이 없다 — 기대 닉은 호출부(`jobs._build_argv`)가 `settings.cfg()` 로 읽어 넘긴다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_dir: Path            # --run-dir     썸네일 러너 폴더 (thumbnail/runs/web-<잡id>)
+    inputs: Path             # --inputs      웹앱이 쓴 {그룹: {그룹명: [pid…]}, 코드: {pid: 코드}}
+    expect_nick: Nick        # --expect-nick 자식이 계정을 한 번 더 확인한다(exit 4)
+    summary_out: Path        # --summary-out 견적 요약
+    prefix: list[str] = []   # `caffeinate -i` 자리 — `jobs._수면방지_프리픽스` 가 정한다
+
+    def build(self) -> list[str]:
+        """argv 리스트. 셸을 거치지 않으므로 따옴표·이스케이프가 필요 없다."""
+        av: list[str] = [*self.prefix, str(PY_CLI), str(THUMB_WEB), "estimate"]
+        av += ["--run-dir", str(self.run_dir)]
+        av += ["--inputs", str(self.inputs)]
+        av += ["--expect-nick", self.expect_nick]
+        av += ["--summary-out", str(self.summary_out)]
+        return av
+
+
+class CoupangArgv(BaseModel):
+    """`coupang_web.py preview|commit` 호출 한 번 (Phase 7 / CP-01~04).
+
+    **게이트 기준·skip·strict 필드가 없다 — 필드가 없는 것이 방어다(L-04 · D-15 · D-10).**
+    그룹 확인 건너뛰기·마진/주문 기준·배송비 엄격 모드는 CLI 기본값이 정본이다. 웹앱이 그 값을
+    고르는 길이 생기면 화면에서 기준을 낮춘 복사가 튀어나온다. `extra="forbid"` 라 누가
+    필드를 끼워 넣으려 해도 ValidationError 다.
+
+    commit 은 승인 목록(`--approved`)과 상한(`--limit` ≥1) 둘 다 없으면 **터진다** —
+    빈 값은 전량이 아니다(D-13).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["preview", "commit"]
+    run_dir: Path                  # --run-dir     coupang/runs/web-<미리보기잡id>
+    expect_nick: Nick              # --expect-nick 자식이 계정을 한 번 더 확인한다(exit 4)
+    summary_out: Path              # --summary-out preview=summary.json · commit=commit_summary_<잡id>.json
+    approved: Path | None = None   # --approved    commit 전용 — 웹앱이 쓴 승인 pid 목록
+    limit: int | None = None       # --limit       commit 전용 — 서버가 정한 상한(D-13)
+    prefix: list[str] = []         # `caffeinate -i` 자리
+
+    def build(self) -> list[str]:
+        """argv 리스트. 셸을 거치지 않으므로 따옴표·이스케이프가 필요 없다."""
+        av: list[str] = [*self.prefix, str(PY_CLI), str(COUPANG_WEB), self.mode]
+        av += ["--run-dir", str(self.run_dir)]
+        if self.mode == "commit":
+            # 🔴 상한 없는 복사는 없다 — None·0 을 '전량' 으로 읽는 길을 조립에서 끊는다(D-13).
+            if self.approved is None or self.limit is None or self.limit < 1:
+                raise ValueError("상한 없는 복사는 없다 — 승인 목록과 상한(≥1)이 둘 다 필요하다 (D-13)")
+            av += ["--approved", str(self.approved)]
+            av += ["--limit", str(self.limit)]
+        av += ["--expect-nick", self.expect_nick]
+        av += ["--summary-out", str(self.summary_out)]
         return av

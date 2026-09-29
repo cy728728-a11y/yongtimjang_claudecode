@@ -107,6 +107,12 @@ DEFAULTS = {
     "market_update_max_items": 20,  # 게이트 통과 뒤 1회 반영 상한(D-12). 게이트 전은 1건 고정
     "market_poll_interval": 20,     # upload_tasks 창 조회 간격(초) — RESEARCH Q2 15~30초
     "market_max_poll_min": 30,      # 반영·이어서 확인 1회의 폴링 상한(분). 넘기면 exit 3 → 이어서 확인
+
+    # ── Phase 7 (썸네일 · 쿠팡) 에서 더한 키 ──────────────────────────────
+    # 같은 규율 — 읽기는 settings.cfg("키", settings.DEFAULTS["키"]) 로만.
+    "thumb_max_items": 20,          # 썸네일 견적 1회 상한 — 스킬의 "상위 20" 관례(D-02)
+    "coupang_copy_max_items": 20,   # 쿠팡 복사 1회 상한 — CLI 배치 1개 크기(D-13)
+    "coupang_first_max_items": 10,  # 첫 쿠팡 복사는 더 작게 — 새 경로 첫 실탄(D-13 · PITFALLS 10-4)
 }
 
 _cache = None
