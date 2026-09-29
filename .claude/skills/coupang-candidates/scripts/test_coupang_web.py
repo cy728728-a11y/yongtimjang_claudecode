@@ -483,3 +483,332 @@ def test_verify_스냅샷_실패면_중복0_을_증명하지_않는다(monkeypat
     주입(monkeypatch, cli, 불사자)
     실행(monkeypatch, cli, ["verify", "--run-dir", R])
     assert json.loads(_읽기(os.path.join(R, "verified.json")))["중복0"] is False
+
+
+# ── Task 3: coupang_web.py 러너 ─────────────────────────────────────────
+#
+# 러너는 run_coupang 을 subprocess 로만 부른다. 여기선 `subprocess` 를 가짜로 바꿔
+# 단계마다 "그 단계가 썼을 파일" 을 써 주고 종료코드·출력을 돌려준다. 자식은 안 뜬다.
+
+import io  # noqa: E402
+
+COUPANG_WEB = SCRIPTS / "coupang_web.py"
+NICK = "용팀장"
+
+
+@pytest.fixture
+def web():
+    규격 = importlib.util.spec_from_file_location("_coupang_web_under_test", COUPANG_WEB)
+    모듈 = importlib.util.module_from_spec(규격)
+    규격.loader.exec_module(모듈)
+    return 모듈
+
+
+class _가짜프로세스:
+    def __init__(self, code, text):
+        self.code = code
+        self.stdout = io.StringIO(text)
+
+    def wait(self):
+        return self.code
+
+
+class 가짜자식:
+    """단계 이름 → fn(argv, run_dir) -> (종료코드, 출력). 시나리오에 없는 단계는 실패."""
+
+    PIPE = -1
+
+    def __init__(self, 시나리오):
+        self.s = dict(시나리오)
+        self.호출 = []
+
+    def _run(self, av):
+        stage = av[2]
+        self.호출.append(list(av))
+        if stage not in self.s:
+            raise AssertionError(f"시나리오에 없는 단계: {stage}")
+        return self.s[stage](av, av[av.index("--run-dir") + 1])
+
+    def call(self, av, **k):
+        return self._run(av)[0]
+
+    def Popen(self, av, **k):
+        return _가짜프로세스(*self._run(av))
+
+    def 단계들(self):
+        return [a[2] for a in self.호출]
+
+    def argv(self, stage):
+        return next(a for a in self.호출 if a[2] == stage)
+
+
+def _행(pid, 사유="통과(24.7%)"):
+    return {"대표pid": pid, "판매자상품코드": f"S{pid}", "상품명": f"상품{pid}", "사유": 사유}
+
+
+def _ok(av, R):
+    return 0, ""
+
+
+def _gate(통과, 탈락=(), 추가줄=()):
+    def fn(av, R):
+        with open(os.path.join(R, "candidates.json"), "w", encoding="utf-8") as f:
+            json.dump([_행(p) for p in 통과], f, ensure_ascii=False)
+        with open(os.path.join(R, "rejected.json"), "w", encoding="utf-8") as f:
+            json.dump([_행(p, s) for p, s in 탈락], f, ensure_ascii=False)
+        out = ["[gate] 쿠팡 그룹 기존 87건 → 원본 87종 (재복사 제외 대상)",
+               "[gate] 그룹읽기 총상품수 87 · 읽음 87 · 타오바오결측 0",
+               "[gate] 기준: 주문 3회 이상 AND 쿠팡보정마진 20.0% 이상",
+               f"  통과 {len(통과)}건 / 탈락 {len(탈락)}건", *추가줄]
+        return 0, "\n".join(out) + "\n"
+    return fn
+
+
+def _apply미리보기(av, R):
+    return 0, "[apply] 대상 2건 (이미 복사 0건 제외) → 그룹 1003308\n  ** 미리보기 **\n"
+
+
+def _미리보기시나리오(**바꿈):
+    s = {"prep": _ok, "resolve": _ok, "build": _ok, "ship": _ok,
+         "gate": _gate(["a", "b"], [("c", "주문수부족(2 < 3)"), ("e", "쿠팡그룹에이미있음"),
+                                    ("f", "쿠팡그룹에이미있음")]),
+         "apply": _apply미리보기}
+    s.update(바꿈)
+    return s
+
+
+def 러너(monkeypatch, web, 시나리오, argv):
+    자식 = 가짜자식(시나리오)
+    monkeypatch.setattr(web, "subprocess", 자식)
+    code = web.main(argv)
+    return code, 자식
+
+
+def _preview(monkeypatch, web, R, 시나리오):
+    return 러너(monkeypatch, web, 시나리오,
+              ["preview", "--run-dir", R, "--expect-nick", NICK,
+               "--summary-out", os.path.join(R, "summary.json")])
+
+
+def test_preview_여섯_단계를_순서대로_돈다(monkeypatch, web, tmp_path, capsys):
+    R = str(tmp_path / "run")
+    code, 자식 = _preview(monkeypatch, web, R, _미리보기시나리오())
+    assert code == 0
+    assert 자식.단계들() == ["prep", "resolve", "build", "ship", "gate", "apply"]
+    for a in 자식.호출:
+        assert a[3:5] == ["--run-dir", os.path.abspath(R)]
+        has = "--expect-nick" in a
+        assert has == (a[2] in {"resolve", "ship", "gate", "apply"}), a
+        if has:
+            assert a[a.index("--expect-nick") + 1] == NICK
+    assert COMMIT not in 자식.argv("apply")
+    assert capsys.readouterr().out.rstrip().splitlines()[-1].startswith("###COUPANG### preview")
+
+
+def test_preview_요약_스키마(monkeypatch, web, tmp_path):
+    R = str(tmp_path / "run")
+    _preview(monkeypatch, web, R, _미리보기시나리오())
+    s = json.loads(_읽기(os.path.join(R, "summary.json")))
+    assert s["정지단계"] is None
+    assert [d["이름"] for d in s["단계"]] == list(web.PREVIEW_STAGES)
+    assert s["기준"] == "[gate] 기준: 주문 3회 이상 AND 쿠팡보정마진 20.0% 이상"
+    assert [r["대표pid"] for r in s["통과"]] == ["a", "b"]
+    assert s["탈락사유별"] == {"주문수부족": 1, "쿠팡그룹에이미있음": 2}
+    assert s["이미있음"] == 2
+    assert s["그룹읽기"] == {"총상품수": 87, "읽음": 87, "타오바오결측": 0}
+    assert s["apply미리보기"] == {"대상": 2}
+
+
+@pytest.mark.parametrize("stage,code,want", [
+    ("ship", 1, 1), ("gate", 3, 3), ("resolve", 4, 4), ("prep", 2, 2),
+])
+def test_preview_비0_단계에서_멈춘다(monkeypatch, web, tmp_path, stage, code, want):
+    R = str(tmp_path / "run")
+    got, 자식 = _preview(monkeypatch, web, R,
+                        _미리보기시나리오(**{stage: lambda av, R, c=code: (c, "")}))
+    assert got == want
+    order = list(web.PREVIEW_STAGES)
+    assert 자식.단계들() == order[:order.index(stage) + 1]
+    s = json.loads(_읽기(os.path.join(R, "summary.json")))
+    assert s["정지단계"] == stage
+    assert s["통과"] == []
+
+
+# ── commit ──
+
+def _commit준비(R, 옛=("a", "b"), 승인=("a", "b")):
+    os.makedirs(R, exist_ok=True)
+    with open(os.path.join(R, "summary.json"), "w", encoding="utf-8") as f:
+        json.dump({"통과": [_행(p) for p in 옛]}, f)
+    p = os.path.join(R, "approved_job1.json")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(승인 if isinstance(승인, str) else json.dumps(list(승인)))
+    return p
+
+
+def _apply커밋(신pid없음=()):
+    def fn(av, R):
+        assert COMMIT in av
+        pids = json.loads(_읽기(av[av.index("--pids-file") + 1]))
+        with open(os.path.join(R, "copied.jsonl"), "a", encoding="utf-8") as f:
+            for p in pids:
+                f.write(json.dumps({"원본pid": p,
+                                    "신pid": None if p in 신pid없음 else f"N{p}"}) + "\n")
+        return 0, f"[apply] 대상 {len(pids)}건\n"
+    return fn
+
+
+def _verify(중복0=True, code=0):
+    def fn(av, R):
+        with open(os.path.join(R, "verified.json"), "w", encoding="utf-8") as f:
+            json.dump({"중복0": 중복0, "중복": {}, "판매가": [{"동일": True}],
+                       "그룹상품수": 90}, f)
+        return code, ""
+    return fn
+
+
+def _커밋시나리오(**바꿈):
+    s = {"gate": _gate(["a", "b"]), "apply": _apply커밋(), "verify": _verify()}
+    s.update(바꿈)
+    return s
+
+
+def _commit(monkeypatch, web, R, 승인파일, 시나리오, limit="10"):
+    return 러너(monkeypatch, web, 시나리오,
+              ["commit", "--run-dir", R, "--approved", 승인파일, "--limit", limit,
+               "--expect-nick", NICK,
+               "--summary-out", os.path.join(R, "commit_summary_job1.json")])
+
+
+def _cs(R):
+    return json.loads(_읽기(os.path.join(R, "commit_summary_job1.json")))
+
+
+@pytest.mark.parametrize("승인,limit", [
+    ("[]", "10"), ("{깨짐", "10"), ('{"a": 1}', "10"), ('["-x"]', "10"),
+    ('["a"]', "0"), ('["a"]', "-1"),
+])
+def test_commit_입력이_나쁘면_exit2_자식0(monkeypatch, web, tmp_path, 승인, limit):
+    R = str(tmp_path / "run")
+    p = _commit준비(R, 승인=승인)
+    code, 자식 = _commit(monkeypatch, web, R, p, _커밋시나리오(), limit=limit)
+    assert code == 2
+    assert 자식.호출 == []
+
+
+def test_commit_승인파일이_없으면_exit2(monkeypatch, web, tmp_path):
+    R = str(tmp_path / "run")
+    _commit준비(R)
+    code, 자식 = _commit(monkeypatch, web, R, os.path.join(R, "없음.json"), _커밋시나리오())
+    assert code == 2 and 자식.호출 == []
+
+
+def test_commit_미리보기_요약이_없으면_exit2(monkeypatch, web, tmp_path):
+    R = str(tmp_path / "run")
+    p = _commit준비(R)
+    os.remove(os.path.join(R, "summary.json"))
+    code, 자식 = _commit(monkeypatch, web, R, p, _커밋시나리오())
+    assert code == 2 and 자식.호출 == []
+
+
+def test_commit_재조회에서_늘어나면_복사0_exit5(monkeypatch, web, tmp_path):
+    R = str(tmp_path / "run")
+    p = _commit준비(R)
+    code, 자식 = _commit(monkeypatch, web, R, p, _커밋시나리오(gate=_gate(["a", "b", "z"])))
+    assert code == 5
+    assert 자식.단계들() == ["gate"]
+    s = _cs(R)
+    assert s["재조회"]["늘어남"] == ["z"]
+    assert s["재조회"]["상한경계"] is False
+    assert s["복사"] == []
+
+
+def test_commit_늘어남이_상한경계면_표시(monkeypatch, web, tmp_path):
+    R = str(tmp_path / "run")
+    옛 = [f"p{i:03d}" for i in range(100)]
+    p = _commit준비(R, 옛=옛, 승인=옛[:3])
+    code, _ = _commit(monkeypatch, web, R, p, _커밋시나리오(gate=_gate(옛[1:] + ["p100"])))
+    assert code == 5
+    assert _cs(R)["재조회"]["상한경계"] is True
+
+
+def test_commit_승인_교집합만_복사하고_빠짐을_적는다(monkeypatch, web, tmp_path, capsys):
+    R = str(tmp_path / "run")
+    p = _commit준비(R)
+    code, 자식 = _commit(monkeypatch, web, R, p, _커밋시나리오(
+        gate=_gate(["a"], [("b", "쿠팡그룹에이미있음")])))
+    assert code == 0
+    assert 자식.단계들() == ["gate", "apply", "verify"]
+    av = 자식.argv("apply")
+    assert COMMIT in av
+    assert av[av.index("--limit") + 1] == "10"
+    assert json.loads(_읽기(av[av.index("--pids-file") + 1])) == ["a"]
+    assert av[av.index("--expect-nick") + 1] == NICK
+    va = 자식.argv("verify")
+    assert va[va.index("--only") + 1] == "all"
+    s = _cs(R)
+    assert s["재조회"]["빠짐"] == {"b": "쿠팡그룹에이미있음"}
+    assert [r["원본pid"] for r in s["복사"]] == ["a"]
+    assert s["중복0"] is True
+    assert capsys.readouterr().out.rstrip().splitlines()[-1].startswith("###COUPANG### commit")
+
+
+def test_commit_승인_교집합이_비면_exit2_apply0(monkeypatch, web, tmp_path):
+    R = str(tmp_path / "run")
+    p = _commit준비(R, 승인=["b"])
+    code, 자식 = _commit(monkeypatch, web, R, p, _커밋시나리오(
+        gate=_gate(["a"], [("b", "마진미달(18.7% < 20.0%)")])))
+    assert code == 2
+    assert 자식.단계들() == ["gate"]
+    assert _cs(R)["재조회"]["빠짐"] == {"b": "마진미달(18.7% < 20.0%)"}
+
+
+def test_commit_verify_중복0_false_면_exit1(monkeypatch, web, tmp_path):
+    """verify --only all 은 중복이어도 0 으로 끝난다 — 파일로 판정한다(Pitfall 5)."""
+    R = str(tmp_path / "run")
+    p = _commit준비(R)
+    code, _ = _commit(monkeypatch, web, R, p, _커밋시나리오(verify=_verify(중복0=False)))
+    assert code == 1
+    assert _cs(R)["중복0"] is False
+
+
+def test_commit_복사는_이번_잡이_더한_행만_신pid없음_집계(monkeypatch, web, tmp_path):
+    R = str(tmp_path / "run")
+    p = _commit준비(R)
+    with open(os.path.join(R, "copied.jsonl"), "w", encoding="utf-8") as f:
+        f.write(json.dumps({"원본pid": "old", "신pid": "Nold"}) + "\n")
+    code, _ = _commit(monkeypatch, web, R, p, _커밋시나리오(apply=_apply커밋(신pid없음={"b"})))
+    assert code == 0
+    s = _cs(R)
+    assert [r["원본pid"] for r in s["복사"]] == ["a", "b"]
+    assert s["신pid없음"] == 1
+
+
+@pytest.mark.parametrize("stage,code", [("gate", 3), ("gate", 4), ("apply", 4), ("verify", 4)])
+def test_commit_자식_코드를_전달(monkeypatch, web, tmp_path, stage, code):
+    R = str(tmp_path / "run")
+    p = _commit준비(R)
+    base = _커밋시나리오()
+    inner = base[stage]
+
+    def fn(av, R, c=code):
+        inner(av, R)
+        return c, ""
+    base[stage] = fn
+    got, _ = _commit(monkeypatch, web, R, p, base)
+    assert got == code
+    assert _cs(R)["정지단계"] == stage
+
+
+# ── 가드 ──
+
+def test_러너_소스에_금지_플래그가_없다():
+    src = COUPANG_WEB.read_text(encoding="utf-8")
+    for 이름 in ("skip-group-check", "min-margin", "min-orders", "strict-shipping"):
+        assert ("--" + 이름) not in src, 이름
+
+
+def test_러너는_run_coupang_을_import_하지_않는다():
+    src = COUPANG_WEB.read_text(encoding="utf-8")
+    assert "import run_coupang" not in src and "from run_coupang" not in src
+    assert src.count('"' + "--" + "commit" + '"') == 1, "커밋 플래그는 상수 하나로만"
