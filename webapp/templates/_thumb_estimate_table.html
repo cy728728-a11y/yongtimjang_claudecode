@@ -1,0 +1,88 @@
+{# 썸네일 견적 표 (크레딧 0) — Plan 07-04 / THUMB-01 · THUMB-03 · D-03 · D-05 · D-06 · L-02.
+
+   **정본 = 러너 summary.json.** 합계(선택·K·M·A·D·E·현황판제외·예상·최대)와 계정은 그 파일 값을
+   그대로 옮긴다 — 여기서 크레딧을 곱하지 않는다(L-02). 예상 = K×5, 최대 = K×10 은 CLI 가 이미 계산했다.
+
+   그리지 않는 것: 재생성 버튼(L-03 — 타임아웃은 실패가 아니라 "아직"이다) · 곱셈 · 잔액 역산.
+   `_detail_estimate_table.html` 과 같은 뼈대 — **running → error → 집계 줄 먼저.**
+
+   자동 이스케이프에 기댄다 — 그룹명·사유에 원문이 섞여 들어온다. 이 파일에서 이스케이프를 끄는
+   필터를 쓰지 마라.
+
+   '실행 승인 — 크레딧 0' 은 잡이 아니다. 그룹별 web_approval.json 을 쓰고 인계 명령을 보여 줄
+   뿐이다(D-06). 버튼의 data 속성은 **잡 id 하나**다 — 서버는 상한을 summary 에서 다시 읽는다(T-07-21). #}
+
+{% if running %}
+  <p>썸네일 견적을 만드는 중이다… 위 진행 로그를 봐라. (크레딧 0 — 그룹별 prep 이 현황판·불사자를 조회하고 기작업 백필만 쓴다)</p>
+
+{% elif error and not 합계 %}
+  <p class="stale"><strong>견적을 못 읽었다 — {{ error }}</strong><br>
+    빈 표를 결과로 읽지 않게 표를 그리지 않는다.</p>
+
+{% else %}
+  {% if error %}<p class="stale"><strong>{{ error }}</strong></p>{% endif %}
+  {# 집계 줄 — 선택 N → 이미가공 M · 정합검사 A · 삭제대상 D · 조회실패 E · 현황판제외 → 생성 K. #}
+  <p>
+    <strong>선택 {{ 합계.get("선택", "?") }}</strong>
+    → 이미가공 {{ 합계.get("M", 0) }}
+    · 정합검사 {{ 합계.get("A", 0) }}
+    · 삭제대상 {{ 합계.get("D", 0) }}
+    · 조회실패 {{ 합계.get("E", 0) }}
+    · 현황판제외 {{ 합계.get("현황판제외", 0) }}
+    → <strong>생성 {{ 합계.get("K", 0) }}</strong>
+  </p>
+  <p>
+    예상 크레딧 <strong>{{ "{:,}".format(합계.get("예상크레딧", 0)) if 합계.get("예상크레딧") is number else 합계.get("예상크레딧") }}</strong>
+    · 최대 <strong>{{ "{:,}".format(합계.get("최대크레딧", 0)) if 합계.get("최대크레딧") is number else 합계.get("최대크레딧") }}</strong>
+    <small>(재생성 1회까지)</small>
+    · 계정 <strong>{{ 계정 or "?" }}</strong>
+    <br><small>잔액은 참고다 — 잔액 차이로 비용을 역산하지 마라. 비용 정본은 러너 집계(예상·최대)다.</small>
+    {% if 선택 is not none %}<br><small>보드에서 고른 상품 {{ 선택 }}건 — 웹에서 뺀 {{ 웹제외|length }}건은 아래 표.</small>{% endif %}
+  </p>
+
+  {% if not 합계.get("K") %}
+    <p class="stale">생성 대상 0건 — 이미 가공된 상품은 재작업 flag 가 필요하다(D-03, 미룸). 크레딧이 나가지 않는다.</p>
+  {% endif %}
+
+  {% for g in 그룹행 %}
+    <h4>{{ g.그룹명 }}
+      <small>
+        {% if g.오류 %}· <span class="stale">오류: {{ g.오류 }}</span>{% endif %}
+        · 예상 {{ g.예상크레딧 }} · 최대 {{ g.최대크레딧 }}
+        {% if g.승인됨 %}· 승인됨{% endif %}
+      </small>
+    </h4>
+    {% if g.행 %}
+      <table>
+        <thead><tr><th>판매자상품코드</th><th>분류</th><th>사유</th></tr></thead>
+        <tbody>
+        {% for r in g.행 %}<tr><td>{{ r.판매자상품코드 }}</td><td>{{ r.분류 }}</td><td>{{ r.사유 }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p><small>이 그룹에서 분류된 상품이 없다.</small></p>
+    {% endif %}
+  {% endfor %}
+
+  {% if 웹제외 %}
+    <p>웹에서 뺀 상품 {{ 웹제외|length }}건 <small>(규칙② 아님 · 조인 미해소 · 그룹명 미특정 · 상한초과)</small></p>
+    <table>
+      <thead><tr><th>판매자상품코드</th><th>사유</th></tr></thead>
+      <tbody>
+      {% for x in 웹제외 %}<tr><td>{{ x.판매자상품코드 }}</td><td>{{ x.사유 }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if 승인됨 %}
+    <p><strong>승인됨 — 아래 한 줄을 Claude 세션에 붙여 넣어라.</strong>
+      <small>첫 생성은 사람 승인 뒤 Claude 세션에서 <code>--max-credits &lt;승인상한&gt;</code> 으로 돈다. 서버는 이 명령을 실행하지 않는다.</small></p>
+    <ul>
+    {% for x in 인계 %}<li>{{ x.그룹명 }}: <code>{{ x.명령 }}</code></li>{% endfor %}
+    </ul>
+    <button type="button" data-thumb-result="{{ job.id }}">결과 보기</button>
+  {% elif not error %}
+    <button type="button" data-thumb-approve="{{ job.id }}"{% if not 합계.get("K") %} disabled{% endif %}>실행 승인 — 크레딧 0</button>
+    <p><small>누르면 그룹별 승인 파일(web_approval.json)만 쓴다 — 잡도 크레딧도 없다. 승인 상한 = 위 최대 크레딧.</small></p>
+  {% endif %}
+{% endif %}

@@ -239,7 +239,7 @@ def test_견적_조인산출물없으면_409(화면, 엿듣기, 썸네일판, mo
 # ── 견적 표 (GET /jobs/{id}/result) ─────────────────────────────────────────
 
 def test_견적표_도는중(화면, tmp_run_dir):
-    job_id = _견적잡(tmp_run_dir, 상태="running", 요약쓰기=False)
+    job_id = _견적잡(tmp_run_dir, 상태="starting", 요약쓰기=False)   # pid 없는 running 은 _reap 이 거둔다
     ctx = 화면.get(f"/jobs/{job_id}/result?format=json").json()
     assert ctx["running"] is True
 
@@ -268,8 +268,8 @@ def test_견적표_숫자는_summary_그대로(화면, tmp_run_dir):
     assert [x["판매자상품코드"] for x in ctx["웹제외"]] == ["zz05"]
 
     조각 = 화면.get(f"/jobs/{job_id}/result", headers={"HX-Request": "true"}).text
-    assert "17" in 조각 and "31" in 조각
-    assert "15" not in 조각.replace("15-2", "")      # 곱셈 결과가 없다
+    assert "<strong>17</strong>" in 조각 and "<strong>31</strong>" in 조각
+    assert "<strong>15</strong>" not in 조각 and "<strong>30</strong>" not in 조각   # 곱셈 결과가 없다
     assert "실행 승인 — 크레딧 0" in 조각
     assert "zz기대닉" in 조각
 

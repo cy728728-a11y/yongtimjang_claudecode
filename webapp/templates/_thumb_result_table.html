@@ -1,0 +1,52 @@
+{# 썸네일 결과 표 — Plan 07-04 / THUMB-02 · L-03 · D-08.
+
+   **읽기 전용이다.** 그룹 run-dir 의 generated.json · decisions.json · commit_summary.json 을
+   판매자상품코드 단위로 옮긴다. 상태 매핑은 routes/thumb.py `_행상태` docstring 이 정본이다.
+
+   그리지 않는 것: 재생성·반영 버튼(L-03 — 회수 대기는 recover 명령 텍스트만. 다시 생성하면
+   크레딧 이중 지불이다) · review.html 링크(경로 텍스트만 — 정적 라우트를 열지 않는다, T-07-23).
+
+   자동 이스케이프에 기댄다 — 이스케이프를 끄는 필터를 쓰지 마라. #}
+
+{% if error %}
+  <p class="stale"><strong>결과를 못 읽었다 — {{ error }}</strong></p>
+{% else %}
+  {% for g in 그룹 %}
+    <p>
+      <strong>{{ g.그룹명 }}</strong>
+      {% if g.오류 %}· <span class="stale">{{ g.오류 }}</span>{% endif %}
+      {% if g.파일 %}
+        · 승인 {{ "있음" if g.파일.승인 else "없음" }}
+        · 생성 기록 {{ "있음" if g.파일.generated else "아직 없음" }}
+        · 판정 {{ "있음" if g.파일.decisions else "아직 없음" }}
+        · 반영 요약 {{ "있음" if g.파일.commit_summary else "아직 없음" }}
+      {% endif %}
+      {% if g.review and g.review.경로 %}
+        <br><small>review.html: <code>{{ g.review.경로 }}</code> {{ "" if g.review.있음 else "(아직 없음)" }}</small>
+      {% endif %}
+    </p>
+  {% endfor %}
+
+  {% if 행 %}
+    <table>
+      <thead><tr><th>판매자상품코드</th><th>그룹</th><th>상태</th><th>크레딧</th><th>사유</th></tr></thead>
+      <tbody>
+      {% for r in 행 %}
+        <tr>
+          <td>{{ r.판매자상품코드 }}</td>
+          <td>{{ r.그룹명 }}</td>
+          <td>{{ "회수 대기" if r.상태 == "회수대기" else r.상태 }}</td>
+          <td>{{ r.크레딧 if r.크레딧 is not none else "" }}</td>
+          <td>{{ r.사유 }}
+            {% if r.명령 %}<br><small>크레딧은 이미 나갔다 — 다시 생성하지 말고 회수해라:</small> <code>{{ r.명령 }}</code>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>아직 결과가 없다 — 승인 뒤 Claude 세션에서 생성이 돌면 여기 보인다.</p>
+  {% endif %}
+{% endif %}
+
+<p><small>스토어 반영 미연결(Phase 6 완료 후) — 불사자 저장까지만 여기서 본다. 스마트스토어 반영은 D-08 로 미뤘다.</small></p>
