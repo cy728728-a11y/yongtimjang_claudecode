@@ -1,0 +1,250 @@
+{
+  "prep_ids": {
+    "exit": null,
+    "files": {
+      "audit_targets.json": [
+        "U04aud"
+      ],
+      "batches/batch_001.json": {
+        "배치": 1,
+        "규칙문서": "<REPO>/.claude/skills/bulsaja-thumbnail/references/배경생성-기본.md",
+        "products": [
+          {
+            "productId": "U02new",
+            "상품명": "캠핑의자",
+            "재작업사유": "",
+            "기존썸네일": [
+              "https://img.alicdn.com/b0.jpg",
+              "https://img.alicdn.com/b1.jpg",
+              "https://img.alicdn.com/b2.jpg"
+            ],
+            "대표이미지": "<RUN>/thumbs/U02new_rep_0.jpg",
+            "후보이미지": [
+              {
+                "index": 1,
+                "url": "https://img.alicdn.com/b1.jpg",
+                "path": "<RUN>/thumbs/U02new_cand_1.jpg"
+              },
+              {
+                "index": 2,
+                "url": "https://img.alicdn.com/b2.jpg",
+                "path": "<RUN>/thumbs/U02new_cand_2.jpg"
+              }
+            ],
+            "대표옵션명": "",
+            "대표옵션이미지": "",
+            "대표옵션이미지경로": ""
+          }
+        ]
+      },
+      "batches_index.json": [
+        {
+          "n": 1,
+          "path": "<RUN>/batches/batch_001.json",
+          "imgs": 3,
+          "count": 1
+        }
+      ],
+      "results/result_000.json": {
+        "배치": 0,
+        "선기록": true,
+        "products": [
+          {
+            "productId": "U01new",
+            "상품명": "유압자키",
+            "재작업사유": "",
+            "기존썸네일": [
+              "https://img.alicdn.com/a0.jpg",
+              "https://img.alicdn.com/a1.jpg"
+            ],
+            "대표이미지": "<RUN>/thumbs/U01new_rep_0.jpg",
+            "후보이미지": [
+              {
+                "index": 1,
+                "url": "https://img.alicdn.com/a1.jpg",
+                "path": "<RUN>/thumbs/U01new_cand_1.jpg"
+              }
+            ],
+            "대표옵션명": "기본형",
+            "대표옵션이미지": "https://img.alicdn.com/a-main.jpg",
+            "대표옵션이미지경로": "<RUN>/thumbs/U01new_9.jpg",
+            "기준이미지경로": "<RUN>/thumbs/U01new_9.jpg",
+            "모드": "기본"
+          }
+        ]
+      }
+    },
+    "calls": [
+      [
+        "read",
+        "SHEET_FAKE"
+      ],
+      [
+        "ensure",
+        [
+          "U01new",
+          "U02new",
+          "U03back",
+          "U04aud",
+          "U05err"
+        ]
+      ],
+      [
+        "mark_many",
+        "SHEET_FAKE",
+        "썸네일",
+        {
+          "U03back": "완료(기존 가공 확인)"
+        }
+      ]
+    ],
+    "stdout": [
+      "  시트: SHEET_FAKE",
+      "[2/4] 스냅샷 확보 5건",
+      "  조회 실패 1건: ['U05err']",
+      "[3/4] 기작업 백필 1건(대표가 이미 cdn.bulsaja.com · 대표옵션 이미지 없음)",
+      "  정합검사 대상 1건(가공됨+대표옵션 있음 — 자동 완료 금지) → audit 서브커맨드로 대조해라",
+      "  실제 대상 2건",
+      "",
+      "###PREP### 배치 1개 / 대상 2건",
+      "  대표옵션 확정 선기록 1건 / 비전 판단 1건(옵션정리 미완료·단일상품)",
+      "  배치: <RUN>/batches",
+      "  다음(Workflow 모드): python run_thumbs.py pending --run-dir <R> → thumb-fanout 호출 → apply",
+      "  다음(수동 폴백): Claude 가 배치를 읽고 기준이미지·모드·(레시피면)프롬프트를 정해 results/result_NNN.json 생성 → apply"
+    ]
+  },
+  "prep_pending": {
+    "exit": null,
+    "files": {
+      "audit_targets.json": [
+        "U04aud"
+      ],
+      "batches/batch_001.json": {
+        "배치": 1,
+        "규칙문서": "<REPO>/.claude/skills/bulsaja-thumbnail/references/배경생성-기본.md",
+        "products": [
+          {
+            "productId": "U02new",
+            "상품명": "캠핑의자",
+            "재작업사유": "",
+            "기존썸네일": [
+              "https://img.alicdn.com/b0.jpg",
+              "https://img.alicdn.com/b1.jpg",
+              "https://img.alicdn.com/b2.jpg"
+            ],
+            "대표이미지": "<RUN>/thumbs/U02new_rep_0.jpg",
+            "후보이미지": [
+              {
+                "index": 1,
+                "url": "https://img.alicdn.com/b1.jpg",
+                "path": "<RUN>/thumbs/U02new_cand_1.jpg"
+              },
+              {
+                "index": 2,
+                "url": "https://img.alicdn.com/b2.jpg",
+                "path": "<RUN>/thumbs/U02new_cand_2.jpg"
+              }
+            ],
+            "대표옵션명": "",
+            "대표옵션이미지": "",
+            "대표옵션이미지경로": ""
+          }
+        ]
+      },
+      "batches_index.json": [
+        {
+          "n": 1,
+          "path": "<RUN>/batches/batch_001.json",
+          "imgs": 3,
+          "count": 1
+        }
+      ],
+      "results/result_000.json": {
+        "배치": 0,
+        "선기록": true,
+        "products": [
+          {
+            "productId": "U01new",
+            "상품명": "유압자키",
+            "재작업사유": "",
+            "기존썸네일": [
+              "https://img.alicdn.com/a0.jpg",
+              "https://img.alicdn.com/a1.jpg"
+            ],
+            "대표이미지": "<RUN>/thumbs/U01new_rep_0.jpg",
+            "후보이미지": [
+              {
+                "index": 1,
+                "url": "https://img.alicdn.com/a1.jpg",
+                "path": "<RUN>/thumbs/U01new_cand_1.jpg"
+              }
+            ],
+            "대표옵션명": "기본형",
+            "대표옵션이미지": "https://img.alicdn.com/a-main.jpg",
+            "대표옵션이미지경로": "<RUN>/thumbs/U01new_9.jpg",
+            "기준이미지경로": "<RUN>/thumbs/U01new_9.jpg",
+            "모드": "기본"
+          }
+        ]
+      }
+    },
+    "calls": [
+      [
+        "read",
+        "SHEET_FAKE"
+      ],
+      [
+        "ensure",
+        [
+          "U01new",
+          "U02new",
+          "U03back",
+          "U04aud",
+          "U05err"
+        ]
+      ],
+      [
+        "mark_many",
+        "SHEET_FAKE",
+        "썸네일",
+        {
+          "U03back": "완료(기존 가공 확인)"
+        }
+      ]
+    ],
+    "stdout": [
+      "  시트: SHEET_FAKE",
+      "[1/4] 현황판 '썸네일' 대상(미착수+재작업) 5건",
+      "[2/4] 스냅샷 확보 5건",
+      "  조회 실패 1건: ['U05err']",
+      "[3/4] 기작업 백필 1건(대표가 이미 cdn.bulsaja.com · 대표옵션 이미지 없음)",
+      "  정합검사 대상 1건(가공됨+대표옵션 있음 — 자동 완료 금지) → audit 서브커맨드로 대조해라",
+      "  실제 대상 2건",
+      "",
+      "###PREP### 배치 1개 / 대상 2건",
+      "  대표옵션 확정 선기록 1건 / 비전 판단 1건(옵션정리 미완료·단일상품)",
+      "  배치: <RUN>/batches",
+      "  다음(Workflow 모드): python run_thumbs.py pending --run-dir <R> → thumb-fanout 호출 → apply",
+      "  다음(수동 폴백): Claude 가 배치를 읽고 기준이미지·모드·(레시피면)프롬프트를 정해 results/result_NNN.json 생성 → apply"
+    ]
+  },
+  "apply_generate": {
+    "exit": null,
+    "seq": [
+      [
+        "_guard_credits",
+        [
+          "U01new",
+          "U02new"
+        ]
+      ],
+      [
+        "_generate",
+        [
+          "U01new",
+          "U02new"
+        ]
+      ]
+    ]
+  }
+}
