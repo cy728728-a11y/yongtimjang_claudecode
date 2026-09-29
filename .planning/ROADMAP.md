@@ -247,6 +247,7 @@ Plans:
 **Wave 5** *(blocked on Wave 4)*
 
 - [x] 05-06-PLAN.md — 실탄 1회 · 브라우저 닫고 완주 · 2차 견적 접수 0 (SC-3) · D-13 실측 · (조건부) 태그 폴백 결정
+
 **UI hint**: yes
 
 ### Phase 6: 마켓 수정업로드
@@ -284,6 +285,7 @@ Plans:
 **Wave 5** *(blocked on Wave 4 — 사람)*
 
 - [ ] 06-06-PLAN.md — 스토어 육안 판정 + 다음 행동 승인 → 게이트 기록 · 상하단 모순 확정 → 나머지 반영 또는 (승인 시) 복원
+
 **UI hint**: yes
 
 ### Phase 7: 남은 버튼 — 썸네일 교체 / 쿠팡 복사
@@ -299,7 +301,25 @@ Plans:
   3. 기존 게이트(주문 3회 이상 + 쿠팡보정 가중마진 20%)가 그대로 걸려 유입만 있는 상품은 후보에 나타나지 않는다
   4. 이미 쿠팡에 올라간 상품이 두 번 복사되지 않는다 (매번 쿠팡 그룹 실물을 읽어 타오바오상품번호로 대조)
 
-**Plans**: TBD
+**Plans:** 7 plans (3 waves — 두 트랙 병렬)
+
+Plans:
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — [W1] 공유 파일 집중: 잡 kind 3종·가드·argv 모델·설정·경로·결과표 디스패치·보드 자리·_alive 좀비
+- [ ] 07-02-PLAN.md — [W1] 썸네일 CLI 주입구(--estimate-out/--only-pending/--expect-nick/--max-credits/--summary-out) + thumb_web.py 러너 + SKILL 인계 절
+- [ ] 07-03-PLAN.md — [W1] 쿠팡 CLI 주입구(--expect-nick/--pids-file) + gate fail-closed(D-17) + coupang_web.py 러너 + min_margin 20
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07-04-PLAN.md — [W2] 썸네일 웹 슬라이스(견적·승인·결과) + 실데이터 prep 스모크(크레딧 0) + uat
+- [ ] 07-05-PLAN.md — [W2] 쿠팡 웹 슬라이스(미리보기·접힌 커밋·결과) + 실데이터 미리보기(쓰기 0) + uat
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 07-06-PLAN.md — [W3] 🔒 첫 썸네일 생성 승인 체크포인트(D-01/03/06/08 확인) → 인계 실행
+- [ ] 07-07-PLAN.md — [W3] 🔒 첫 쿠팡 복사 승인 체크포인트(D-01/16·min_margin 확인) → 10건 복사·중복0
+
 **UI hint**: yes
 
 ## Progress
@@ -315,7 +335,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. 홍보배너 식별 | 12/12 | Closed — 게이트 불통과 · 용팀장 결정으로 종료 (D-23) | 2026-09-25 |
 | 5. 상세페이지 작업 버튼 ★ Core Value | 6/6 | Complete   | 2026-09-29 |
 | 6. 마켓 수정업로드 | 4/6 | In Progress|  |
-| 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/TBD | Not started | - |
+| 7. 남은 버튼 — 썸네일 교체 / 쿠팡 복사 | 0/7 | Planned | - |
 
 ## Sequencing Notes
 

@@ -465,14 +465,14 @@ MCP 를 여는 자리는 전부 `CoupangMCP().open()` 이다(resolve·ship·gate
 | A4 | 복사본 스냅샷이 원본의 `불사자코드` 를 승계한다(코드 주석 2026-09-13) | D-17 ③ | 낮음 — 2차 키일 뿐, 1차 키 동작 불변 |
 | A5 | 스킬 키워드 트리거("썸네일 작업 이어서 <run-dir>")로 인계 세션이 뜬다 | D-06 | 낮음 — 안 뜨면 명령에 스킬명 명시 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **쿠팡 게이트 마진 20 vs 설정 15**
+1. **쿠팡 게이트 마진 20 vs 설정 15** — RESOLVED: 07-03 에서 `workspace.toml` min_margin=20.0 + 테스트, 07-07 체크포인트에서 용팀장 확인
    - What we know: CP-03·ROADMAP SC-3·SKILL 명령표·1차 파일럿 = 20. `workspace.toml` = 15.0. D-15 = 웹은 기준 인자 안 넘김.
    - Recommendation: `workspace.toml` 을 20.0 으로(설정 한 줄 + 테스트). 용팀장 확인 항목에 올린다 — 메모리상 2차엔 18 로 낮출 여지도 언급됨. 추천안으로 진행(메모리 `go-with-recommendation-by-default`).
-2. **썸네일 `recover` 웹 버튼**
+2. **썸네일 `recover` 웹 버튼** — RESOLVED: 07-04 에서 버튼 없이 복사용 명령만 표시
    - `recover` 는 크레딧 0 이지만 불사자 쓰기(순서 복원)가 있고, 회수 후 verdict·commit 은 어차피 Claude 세션. 린 MVP 권장: 버튼 없이 **복사용 recover 명령**만 표시. 버튼이 필요하면 `thumb_recover` ∈ WRITE_KINDS·BULSAJA_KINDS.
-3. **쿠팡 prep 소요시간** — 12탭 gws 읽기 + ship workdata 수백 회. 실측 없음 → 첫 미리보기 스모크에서 기록.
+3. **쿠팡 prep 소요시간** — OPEN(실측 항목): 07-05 라이브 미리보기 스모크에서 기록 — 12탭 gws 읽기 + ship workdata 수백 회. 실측 없음 → 첫 미리보기 스모크에서 기록.
 
 ## Environment Availability
 

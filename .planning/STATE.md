@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
+status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-09-29T00:58:46.718Z"
-last_activity: 2026-09-29
+last_updated: "2026-09-29T01:34:56.289Z"
+last_activity: 2026-09-29 -- Phase 7 planning complete
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 40
+  total_plans: 47
   completed_plans: 38
   percent: 57
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 
 Phase: 05 (상세페이지 작업 버튼) — EXECUTING
 Plan: 6 of 6 (05-01 완료: detail_batch --inputs 주입구 · 오프라인 45테스트 · 크레딧 0)
-Status: Phase complete — ready for verification
-Last activity: 2026-09-29
+Status: Ready to execute
+Last activity: 2026-09-29 -- Phase 7 planning complete
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 
@@ -134,6 +134,7 @@ Recent decisions affecting current work:
 - [06-04]: 게이트는 전역 1회성 — `market_gate` 최신 판정 한 줄이 모든 미리보기의 반영 상한을 정한다(없음·DB 손상 1 · 정상 `market_update_max_items` · 이상이면 반영 400). 판정 대상은 서버가 체크포인트 성공 첫 건에서 정한다
 - [Phase 05-06]: D-13 기록됨 — 불사자 AI 상세 생성 경로(웹앱 접수)는 aiImageGenerated 를 4/4 찍는다. 외부 반영 경로(Phase 3 STATE-04, 29건)는 여전히 태그로만 잡힌다 — 두 사실 모두 참, 경로가 다르다. 태그 쓰기 폴백(L-01 ④) 불필요
 - [Phase 05-06]: 육안 확인(용팀장, 2026-09-29): 실탄 4건 다 괜찮음 — 워터마크·위챗 잔여 없음, 10장 잘림으로 인한 내용 누락 안 보임
+- [Phase 07 plan]: 용팀장 부재 중 plan-phase 자동 선택(추천안) — 리서치 수행 · UI-SPEC 생략(Phase 1~6 선례, UI는 uat-verifier) · checker 경고 4건 중 메타 2건 수정·2건(07-01 파일 17개, 인프라 truths) 의도된 트레이드오프로 수용. 확인 대기: D-01·D-03·D-06·D-08(→07-06 체크포인트) / D-01·D-16·쿠팡 min_margin 15→20(→07-07 체크포인트). 건수 불일치 응답은 409로 통일. D-08 은 미룸(Phase 6 미완)
 
 ### Pending Todos
 
