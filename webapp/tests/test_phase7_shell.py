@@ -88,9 +88,10 @@ def test_트랙_라우터_모듈은_빈_결과표로_시작한다():
     """07-01 은 자리만 깐다 — 채우는 건 07-04 · 07-05 다.
 
     07-04 가 썸네일 트랙을 채웠다 — 자기 kind(thumb_estimate) **하나만** 등록한다(T-07-06).
+    07-05 가 쿠팡 트랙을 채웠다 — 자기 kind 둘(coupang_preview · coupang_commit)만 등록한다.
     """
     assert set(썸네일트랙.결과표) == {"thumb_estimate"}
-    assert 쿠팡트랙.결과표 == {}
+    assert set(쿠팡트랙.결과표) == {"coupang_preview", "coupang_commit"}
     assert 썸네일트랙.router is not 쿠팡트랙.router
 
 
