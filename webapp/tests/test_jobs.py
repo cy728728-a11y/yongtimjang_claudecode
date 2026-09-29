@@ -1667,3 +1667,244 @@ def test_market잡_기본값():
     assert settings.DEFAULTS["market_update_max_items"] == 20
     assert settings.DEFAULTS["market_poll_interval"] == 20
     assert settings.DEFAULTS["market_max_poll_min"] == 30
+
+
+# ── Phase 7 · 07-01 — 썸네일 견적 · 쿠팡 후보/복사 잡 3종 ─────────────────────
+# 자식을 **한 번도 띄우지 않는다**(`안띄운다`). coupang_commit 은 진짜로 돌면 불사자에 사본을 만든다.
+# data_root 를 반드시 tmp 로 돌린다 — 안 돌리면 러너 폴더가 실제 ~/python_work/data 밑에 생긴다.
+
+칠단계3종 = ("thumb_estimate", "coupang_preview", "coupang_commit")
+
+
+@pytest.fixture
+def 칠판(잡판, 계정확인, 안띄운다, monkeypatch, tmp_path):
+    """계정 확인 통과 + data_root tmp. (tmp 루트를 돌려준다)"""
+    _toml덮기(monkeypatch, expected_bulsaja_nick="zz기대계정")
+    settings.load(force=True)
+    계정확인("zz기대계정")
+    # data_root 자체를 돌리면 광고 회차(tmp_run_dir)까지 딸려 간다 — 러너 뿌리 둘만 돌린다.
+    뿌리 = tmp_path / "data"
+    monkeypatch.setattr(paths, "thumb_runs_root", lambda: 뿌리 / "thumbnail" / "runs")
+    monkeypatch.setattr(paths, "coupang_runs_root", lambda: 뿌리 / "coupang" / "runs")
+    return 뿌리
+
+
+def _썸네일입력() -> dict:
+    return {"그룹": {"zz1-1 테스트그룹": ["zzp1", "zzp2"]}, "코드": {"zzp1": "zz01", "zzp2": "zz02"}}
+
+
+def _쿠팡미리보기끝(code: int = 0, status: str = "done") -> str:
+    미리 = jobs.create_job("coupang_preview")
+    import sqlite3
+    jobs._PROCS.pop(미리, None)
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("UPDATE jobs SET status=?, exit_code=? WHERE id=?", (status, code, 미리))
+        cx.commit()
+    finally:
+        cx.close()
+    return 미리
+
+
+def test_phase7_kind_가_등록돼_있다():
+    for k in 칠단계3종:
+        assert k in jobs.KINDS
+        assert k in jobs.JobKind.__args__
+
+
+def test_phase7_가드집합():
+    """복사만 쓰기(되돌릴 수 없다 · D-11). 셋 다 계정 사전점검(L-05). exit3 은 폴링미완이 아니다."""
+    assert "coupang_commit" in jobs.WRITE_KINDS
+    assert "thumb_estimate" not in jobs.WRITE_KINDS
+    assert "coupang_preview" not in jobs.WRITE_KINDS
+    for k in 칠단계3종:
+        assert k in jobs.BULSAJA_KINDS
+        assert k not in jobs.POLL_INCOMPLETE_OK_KINDS
+    assert {"thumb_estimate", "coupang_preview"} <= jobs.SINGLETON_KINDS
+    assert "coupang_commit" not in jobs.SINGLETON_KINDS
+
+
+def test_phase7_수면방지(monkeypatch):
+    monkeypatch.setattr(jobs.os.path, "exists", lambda p: True)
+    for k in 칠단계3종:
+        assert jobs._수면방지_프리픽스(k) == [jobs.CAFFEINATE, "-i"]
+
+
+@pytest.mark.parametrize("kind", 칠단계3종)
+def test_phase7_exit3_은_failed(잡판, kind):
+    """러너 3 = 쿠팡 그룹 부분 읽기 실패 등 재시도 필요 — 폴링미완(done)이 아니다(D-17)."""
+    상태 = jobs.job_status(_도는행(kind, 3))
+    assert 상태["status"] == "failed" and 상태["exit_code"] == 3
+
+
+def test_thumb_견적_그룹_0개는_거부(칠판, tmp_run_dir):
+    with pytest.raises(ValueError):
+        jobs.create_job("thumb_estimate", run_dir=tmp_run_dir.name, thumb_inputs={"그룹": {}})
+    with pytest.raises(ValueError):
+        jobs.create_job("thumb_estimate", run_dir=tmp_run_dir.name, thumb_inputs=None)
+    with pytest.raises(ValueError):
+        jobs.create_job("thumb_estimate", run_dir=tmp_run_dir.name,
+                        thumb_inputs={"그룹": {"zz그룹": []}})
+    assert _행수() == 0
+
+
+def test_thumb_inputs_는_다른_kind_에_못_준다(칠판):
+    with pytest.raises(ValueError):
+        jobs.create_job("coupang_preview", thumb_inputs=_썸네일입력())
+
+
+def test_thumb_견적_argv_와_폴더(칠판, tmp_run_dir, monkeypatch):
+    잡 = jobs.create_job("thumb_estimate", run_dir=tmp_run_dir.name, thumb_inputs=_썸네일입력())
+    폴더 = 칠판 / "thumbnail" / "runs" / f"web-{잡}"
+    assert jobs.thumb_dir_of(잡) == 폴더
+    av = json.loads(jobs._row(잡)["argv"])
+    i = av.index(str(jobs.argv.PY_CLI))
+    assert av[i + 1] == str(jobs.argv.THUMB_WEB) and av[i + 2] == "estimate"
+    assert Path(av[av.index("--run-dir") + 1]) == 폴더
+    assert Path(av[av.index("--inputs") + 1]) == 폴더 / "inputs.json"
+    assert av[av.index("--expect-nick") + 1] == "zz기대계정"
+    assert jobs.result_path_of(잡) == 폴더 / "summary.json"
+    assert json.loads((폴더 / "inputs.json").read_text(encoding="utf-8")) == _썸네일입력()
+    assert jobs._row(잡)["run_dir"] == tmp_run_dir.name
+
+
+def test_쿠팡_미리보기_run_dir_칸은_비고_폴더는_자기id(칠판):
+    미리 = jobs.create_job("coupang_preview")
+    폴더 = 칠판 / "coupang" / "runs" / f"web-{미리}"
+    행 = jobs._row(미리)
+    assert 행["run_dir"] is None
+    av = json.loads(행["argv"])
+    assert "preview" in av
+    assert Path(av[av.index("--run-dir") + 1]) == 폴더
+    assert jobs.result_path_of(미리) == 폴더 / "summary.json"
+    assert "--limit" not in av and "--approved" not in av
+
+
+def test_쿠팡잡에_회차를_주면_거부(칠판, tmp_run_dir):
+    with pytest.raises(ValueError):
+        jobs.create_job("coupang_preview", run_dir=tmp_run_dir.name)
+
+
+def test_쿠팡_복사_argv_상한_승인목록(칠판):
+    미리 = _쿠팡미리보기끝()
+    복사 = jobs.create_job("coupang_commit", parent_job_id=미리,
+                           coupang_approved=["zzp1", "zzp2"], copy_limit=10)
+    폴더 = jobs.coupang_dir_of(미리)
+    av = json.loads(jobs._row(복사)["argv"])
+    assert "commit" in av
+    assert av[av.index("--limit") + 1] == "10"
+    승인 = Path(av[av.index("--approved") + 1])
+    assert 승인 == 폴더 / f"approved_{복사}.json"
+    assert json.loads(승인.read_text(encoding="utf-8")) == ["zzp1", "zzp2"]
+    assert Path(av[av.index("--run-dir") + 1]) == 폴더
+    assert jobs.result_path_of(복사) == 폴더 / f"commit_summary_{복사}.json"
+    assert jobs._row(복사)["run_dir"] is None
+
+
+@pytest.mark.parametrize("덮기", [
+    dict(copy_limit=None), dict(copy_limit=0), dict(copy_limit=True), dict(copy_limit=-1),
+    dict(coupang_approved=[]), dict(coupang_approved=None), dict(coupang_approved=[""]),
+])
+def test_쿠팡_복사는_상한_승인목록_없이_안_만들어진다(칠판, 덮기):
+    """빈 값은 전량이 아니다 (D-13 · T-07-02)."""
+    미리 = _쿠팡미리보기끝()
+    인자 = dict(parent_job_id=미리, coupang_approved=["zzp1"], copy_limit=5)
+    인자.update(덮기)
+    전 = _행수()
+    with pytest.raises(ValueError):
+        jobs.create_job("coupang_commit", **인자)
+    assert _행수() == 전
+
+
+def test_쿠팡_복사_부모가_틀리면_거부(칠판, tmp_run_dir):
+    # 부모 없음
+    with pytest.raises(ValueError):
+        jobs.create_job("coupang_commit", coupang_approved=["zzp1"], copy_limit=5)
+    # 부모 미완(running)
+    도는 = jobs.create_job("coupang_preview")
+    with pytest.raises(ValueError):
+        jobs.create_job("coupang_commit", parent_job_id=도는, coupang_approved=["zzp1"],
+                        copy_limit=5)
+    jobs._PROCS.pop(도는, None)
+    # 부모 실패
+    실패 = _쿠팡미리보기끝(code=2, status="failed")
+    with pytest.raises(ValueError):
+        jobs.create_job("coupang_commit", parent_job_id=실패, coupang_approved=["zzp1"],
+                        copy_limit=5)
+    # 부모 kind 가 다름
+    썸 = jobs.create_job("thumb_estimate", run_dir=tmp_run_dir.name, thumb_inputs=_썸네일입력())
+    _끝냄(썸)
+    with pytest.raises(ValueError):
+        jobs.create_job("coupang_commit", parent_job_id=썸, coupang_approved=["zzp1"],
+                        copy_limit=5)
+
+
+def test_copy_limit_은_다른_kind_에_못_준다(칠판):
+    with pytest.raises(ValueError):
+        jobs.create_job("coupang_preview", copy_limit=5)
+
+
+def test_coupang_build_argv_상한_None_거부(tmp_path, 기대닉):
+    with pytest.raises(ValueError, match="상한 없는 복사는 없다"):
+        jobs._build_argv("coupang_commit", "zzjob", None, [], None, tmp_path / "s.json", False,
+                         coupang_dir=tmp_path, approved_path=tmp_path / "a.json", copy_limit=None)
+
+
+def test_폴더_유도는_잡id_모양만_받는다():
+    for 나쁜 in ("../x", "zz", "", "a/b"):
+        with pytest.raises(ValueError):
+            jobs.coupang_dir_of(나쁜)
+        with pytest.raises(ValueError):
+            jobs.thumb_dir_of(나쁜)
+
+
+def test_first_coupang_commit_done_은_디비를_만들지_않는다(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "없음.db"))
+    assert jobs.first_coupang_commit_done() is False
+    assert not (tmp_path / "없음.db").exists()
+
+
+def test_first_coupang_commit_done_은_성공한_복사만_본다(잡판):
+    assert jobs.first_coupang_commit_done() is False
+    jobs.job_status(_도는행("coupang_commit", 2))        # failed
+    assert jobs.first_coupang_commit_done() is False
+    jobs.job_status(_도는행("coupang_preview", 0))       # 다른 kind done
+    assert jobs.first_coupang_commit_done() is False
+    jobs.job_status(_도는행("coupang_commit", 0))        # done/0
+    assert jobs.first_coupang_commit_done() is True
+
+
+class _가짜ps:
+    def __init__(self, stat=None, 터짐=False):
+        self.stat, self.터짐, self.불림 = stat, 터짐, []
+
+    def __call__(self, cmd, **kw):
+        self.불림.append(cmd)
+        if self.터짐:
+            raise OSError("ps 없음")
+        return subprocess.CompletedProcess(cmd, 0, stdout=self.stat, stderr="")
+
+
+@pytest.mark.parametrize("stat, 기대", [("Z+\n", False), ("Z\n", False), ("S\n", True),
+                                        ("R+\n", True), ("", True)])
+def test_좀비_판정(monkeypatch, stat, 기대):
+    """좀비는 kill(0) 이 성공해도 죽은 것이다 — 가드를 영원히 잡지 않게(T-07-04)."""
+    monkeypatch.setattr(jobs.os, "kill", lambda pid, sig: None)
+    가짜 = _가짜ps(stat)
+    monkeypatch.setattr(jobs.subprocess, "run", 가짜)
+    assert jobs._alive(12345) is 기대
+    assert 가짜.불림 and 가짜.불림[0][:3] == ["ps", "-o", "stat="]
+
+
+def test_좀비_판정_ps_예외면_살아있다고_본다(monkeypatch):
+    monkeypatch.setattr(jobs.os, "kill", lambda pid, sig: None)
+    monkeypatch.setattr(jobs.subprocess, "run", _가짜ps(터짐=True))
+    assert jobs._alive(12345) is True
+
+
+def test_좀비_판정은_waitpid_를_쓰지_않는다():
+    """거두면 Popen.poll 이 ECHILD → returncode 0 으로 오기록한다(RESEARCH A1)."""
+    import inspect
+    본문 = inspect.getsource(jobs._alive)
+    코드줄 = [l for l in 본문.splitlines() if "waitpid" in l and "금지" not in l]
+    assert not 코드줄

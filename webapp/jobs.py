@@ -49,6 +49,7 @@ HTTP 요청을 쏘는 모양이 되면 그때 다시 짜야 한다.
 """
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import uuid
@@ -70,14 +71,16 @@ JobKind = Literal["prep", "run", "bids_preview", "bids_commit",
                   "bulsaja_profile", "bulsaja_index", "bulsaja_scan",
                   "banner_scan",
                   "detail_estimate", "detail_submit", "detail_poll",
-                  "market_preview", "market_commit", "market_poll"]
+                  "market_preview", "market_commit", "market_poll",
+                  "thumb_estimate", "coupang_preview", "coupang_commit"]
 
 KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
                           "revert_only", "revert_all", "synthetic",
                           "bulsaja_profile", "bulsaja_index", "bulsaja_scan",
                           "banner_scan",
                           "detail_estimate", "detail_submit", "detail_poll",
-                          "market_preview", "market_commit", "market_poll")
+                          "market_preview", "market_commit", "market_poll",
+                          "thumb_estimate", "coupang_preview", "coupang_commit")
 
 # 전역 1개 가드의 대상. **왜 전역인가:**
 # ENG-04(대상별 잠금)는 Phase 2 지만 **위험은 Phase 1 에 있다.** `run_bids` 가
@@ -88,7 +91,11 @@ KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
 # 쓰기가 아닌 것까지 막는 가드는 사람이 가드를 끄게 만든다.
 WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "revert_all",
                                          "detail_submit", "detail_poll",
-                                         "market_commit", "market_poll"})
+                                         "market_commit", "market_poll",
+                                         "coupang_commit"})
+# **쿠팡 복사(`coupang_commit`)는 되돌릴 수 없는 복사다**(D-11) — 불사자에 쿠팡 그룹 사본을 만들고
+# 업로드까지 간다. 지우는 길은 사람 손뿐이라 넓게 막는다. **쿠팡 후보 뽑기(`coupang_preview`)와
+# 썸네일 견적(`thumb_estimate`)은 넣지 않는다** — 둘 다 불사자에 쓰기 0 이다(D-11 · D-02).
 # **마켓 반영(`market_commit`)은 스토어 상세를 바꾸는 진짜 쓰기다**(D-07). **이어서 확인
 # (`market_poll`)도 넣는다** — 접수는 안 하지만 같은 `market_status.json` 을 읽고-고치고-통째로
 # 쓴다. 둘이 겹치면 taskId 기록이 사라져 이미 접수된 반영을 못 찾고 다시 반영(이중 반영)한다.
@@ -111,7 +118,11 @@ WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "
 # 프로필이 없을 때 프로필을 만들 수 없다(닭·달걀). 계정 확인은 그 자체로 읽기 조회 1회다.
 BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan",
                                            "detail_estimate", "detail_submit", "detail_poll",
-                                           "market_preview", "market_commit", "market_poll"})
+                                           "market_preview", "market_commit", "market_poll",
+                                           "thumb_estimate", "coupang_preview", "coupang_commit"})
+# Phase 7 세 kind 도 전부 불사자 MCP 를 부른다(L-05) — 썸네일 견적은 기작업·현황판 대조를, 쿠팡
+# 후보 뽑기는 쿠팡 그룹 중복 조회를, 복사는 복사 자체를 한다. 틀린 계정으로 후보를 뽑으면
+# "이미있음" 판정이 남의 계정 기준이 되고, 그대로 복사하면 중복 사본이 생긴다.
 # 마켓 잡 3종도 셋 다 불사자 MCP 를 부른다(미리보기도 workdata·confirm:false 를 부른다).
 # 틀린 계정으로 미리보기를 내면 "반영가능" 판정이 남의 계정 기준이 된다(T-06-18).
 # 상세 잡 3종은 **셋 다** 불사자 MCP 를 부른다(견적도 기작업 태그·잔액을 실시간 조회한다).
@@ -142,7 +153,10 @@ BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan",
 #    동시에 쓰면 반쪽 파일이 서로의 입력이 된다. 사유가 다르니 같은 집합에 있다는 이유로
 #    위 레이트리밋 서술을 이 잡에 옮겨 읽지 마라.
 SINGLETON_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan", "banner_scan",
-                                             "detail_estimate", "market_preview"})
+                                             "detail_estimate", "market_preview",
+                                             "thumb_estimate", "coupang_preview"})
+# 🔵 **`thumb_estimate` · `coupang_preview` 도 레이트리밋 때문이다**(D-09) — 같은 kind 중복만 막는다.
+#    쓰기 0 이라 전역 쓰기 가드 밖이다. 쿠팡 복사는 이미 `WRITE_KINDS` 가 전역으로 하나만 허용한다.
 # 🔵 **`market_preview` 도 레이트리밋 때문이다** — `detail_estimate` 와 같은 사유. 쓰기 가드 밖이다.
 # 🔵 **`detail_estimate` 는 레이트리밋 때문이다** — 위 불사자 잡들과 같은 사유(MCP 조회 합산이
 #    서버 정책을 넘는다). 쓰기 가드 밖이라 전역 락이 막아 주지 않으므로 여기서 같은 종류만 막는다.
@@ -404,7 +418,17 @@ def _now() -> str:
 
 
 def _alive(pid: int | None) -> bool:
-    """시그널 0 = 존재 확인만. 프로세스에 아무 영향이 없다."""
+    """시그널 0 = 존재 확인만. 프로세스에 아무 영향이 없다.
+
+    **좀비(`ps` stat 첫 글자 Z)는 죽은 것으로 본다.** 서버가 재시작돼 `_PROCS` 에 Popen 이
+    없는데 자식이 끝나면, 거둘 부모가 없어 좀비로 남는다. 좀비도 `kill(0)` 은 성공하므로
+    예전엔 그 행이 영원히 `running` 이었고 WRITE 가드를 붙잡았다(Folded Todo
+    job-reap-depends-on-polling · T-07-04).
+
+    🔴 **`os.waitpid(WNOHANG)` 로 거두는 것은 금지다** — 그러면 뒤에 오는 `Popen.poll()` 이
+    ECHILD 를 받아 returncode 0 으로 적는다. 실패한 잡이 done/0 이 된다(RESEARCH A1).
+    그래서 상태만 **읽고**(ps) 거두지는 않는다.
+    """
     if not pid:
         return False
     try:
@@ -412,6 +436,14 @@ def _alive(pid: int | None) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
+        return True
+    try:
+        r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
+                           capture_output=True, text=True, timeout=2)
+        if (r.stdout or "").strip().startswith("Z"):
+            return False
+    except Exception:
+        # ps 를 못 부르면 살아 있다고 둔다 — 멀쩡한 잡을 orphaned 로 찍는 쪽이 더 나쁘다.
         return True
     return True
 
@@ -426,6 +458,8 @@ POLL_INCOMPLETE_OK_KINDS: frozenset[str] = frozenset({"detail_submit", "detail_p
 # 마켓 반영·이어서 확인도 3 = 대기 미완(upload_tasks 창에서 아직 종결 안 봄)이다(D-08). failed 로
 # 적으면 사람이 다시 반영을 누른다. `market_poll` 은 D-08 이어서 확인 전용 세 번째 kind 다
 # (RESEARCH Open Q5). 미리보기는 폴링이 없어 3 이 나오면 그건 이상이다 — 넣지 않는다.
+# ⚠️ Phase 7 세 kind(thumb_estimate · coupang_preview · coupang_commit)도 넣지 않는다 — 러너의
+# exit 3 은 폴링 미완이 아니라 **쿠팡 그룹 부분 읽기 실패 등 재시도 필요**다(D-17). failed 가 맞다.
 
 
 def _finish(cx: sqlite3.Connection, job_id: str, code: int, kind: str | None = None) -> None:
@@ -720,6 +754,67 @@ def _마켓폴더(kind: str, job_id: str, parent_job_id: str | None, run_dir: st
     return d, 상세폴더 / "before_detail"
 
 
+# ── Phase 7 러너 폴더 (썸네일 · 쿠팡) ──────────────────────────────────────
+# 광고 회차 `web/` 밑이 아니다 — 쿠팡 잡은 광고 회차가 없다. `paths.run_dir_path` 화이트리스트는
+# 광고 runs 전용이라 쿠팡 잡 행의 `run_dir` 칸은 비운다(RESEARCH Anti-Patterns).
+# 폴더 이름은 **잡 id 에서만** 유도한다 — 요청에서 경로를 받지 않는다(T-07-03).
+COUPANG_KINDS: tuple[str, ...] = ("coupang_preview", "coupang_commit")
+
+# uuid4 모양. `routes/jobs.py` 의 `JobId` 와 같은 규칙 — 모양이 아니면 경로를 만들지 않는다.
+_잡ID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+                  r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
+def _잡id검사(job_id: str) -> str:
+    if not isinstance(job_id, str) or not _잡ID.match(job_id):
+        raise ValueError("잡 id 모양이 아니다 — 폴더를 만들지 않는다")
+    return job_id
+
+
+def thumb_dir_of(job_id: str) -> Path:
+    """썸네일 견적 잡 하나의 러너 폴더 — `thumbnail/runs/web-<잡id>/`."""
+    return paths.thumb_runs_root() / f"web-{_잡id검사(job_id)}"
+
+
+def coupang_dir_of(preview_job_id: str) -> Path:
+    """쿠팡 미리보기 하나의 러너 폴더 — `coupang/runs/web-<미리보기잡id>/`.
+
+    **한 미리보기에서 나온 복사는 전부 같은 폴더다** — 복사 러너가 미리보기 요약을
+    `<폴더>/summary.json` 고정 이름에서 읽는다. 복사 잡은 자기 id 가 아니라 부모 id 로 부른다.
+    """
+    return paths.coupang_runs_root() / f"web-{_잡id검사(preview_job_id)}"
+
+
+def _write_json_atomic(path: Path, obj) -> Path:
+    """tmp → `os.replace` 원자 쓰기(`_write_detail_inputs` 모양). 반쯤 쓴 파일을 자식이 읽지 않게."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
+    return path
+
+
+def _썸네일입력검사(doc) -> dict:
+    """`{"그룹": {그룹명: [pid…]}, "코드": {pid: 판매자상품코드}}` 모양인지. 그룹 0개 = ValueError.
+
+    빈 값은 전량이 아니다 — 그룹이 비었는데 러너가 "전 그룹" 으로 읽는 길을 여기서 끊는다.
+    """
+    if not isinstance(doc, dict):
+        raise ValueError("썸네일 입력은 dict 여야 한다")
+    그룹 = doc.get("그룹")
+    if not isinstance(그룹, dict) or not 그룹:
+        raise ValueError("썸네일 견적에는 그룹이 1개 이상 필요하다 — 빈 값은 전량이 아니다")
+    for 이름, pids in 그룹.items():
+        if not isinstance(이름, str) or not 이름.strip():
+            raise ValueError("썸네일 입력의 그룹명이 비었다")
+        if not isinstance(pids, list) or not pids or not all(isinstance(x, str) and x for x in pids):
+            raise ValueError(f"그룹 {이름!r} 의 상품 목록이 비었거나 모양이 틀렸다")
+    코드 = doc.get("코드", {})
+    if not isinstance(코드, dict):
+        raise ValueError("썸네일 입력의 코드 맵은 dict 여야 한다")
+    return doc
+
+
 # ── 수면 방지 프리픽스 (ENG-06 / T-3-37) ────────────────────────────────────
 # 인덱스 구축은 실측 3시간 32분짜리 폴링이다. 그 사이 맥북이 idle sleep 에 들어가면
 # 자식이 통째로 멈춘다. `man caffeinate` 기준 **utility 를 인자로 주면 그 프로세스
@@ -750,8 +845,11 @@ def _수면방지_프리픽스(kind: str) -> list[str]:
     """
     # 상세 접수·이어서 확인도 붙인다(D-15) — 접수 뒤 폴링이 수십 분이다. 견적은 수 초라 안 붙인다.
     # 마켓 반영·이어서 확인도 붙인다 — upload_tasks 창 폴링이 최대 수십 분이다(D-07).
+    # Phase 7 세 kind 도 붙인다 — 쿠팡 복사는 ship 단계가 수 분, 후보 뽑기도 쿠팡 그룹 전수 조회,
+    # 썸네일 견적은 prep 이 이미지를 받는다. 중간에 idle sleep 이 끊으면 반쯤 쓴 산출물이 남는다.
     if kind not in ("bulsaja_index", "banner_scan", "detail_submit", "detail_poll",
-                    "market_commit", "market_poll"):
+                    "market_commit", "market_poll",
+                    "thumb_estimate", "coupang_preview", "coupang_commit"):
         return []
     try:
         return [CAFFEINATE, "-i"] if os.path.exists(CAFFEINATE) else []
@@ -766,7 +864,11 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
                 max_credits: int | None = None,
                 market_dir: Path | None = None,
                 detail_backup_dir: Path | None = None,
-                max_items: int | None = None) -> list[str]:
+                max_items: int | None = None,
+                thumb_dir: Path | None = None,
+                coupang_dir: Path | None = None,
+                approved_path: Path | None = None,
+                copy_limit: int | None = None) -> list[str]:
     """kind → `AdsArgv`. **조립은 `webapp/argv.py` 한 곳에서만** 일어난다 (T-1-10)."""
     if kind in ("prep", "run"):
         return argv_mod.AdsArgv(subcommand=kind, run_dir=run_dir,
@@ -972,6 +1074,45 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
             prefix=_수면방지_프리픽스(kind),
         ).build()
 
+    if kind == "thumb_estimate":
+        # 🔴 입력 파일 없는 견적은 없다 — 그룹 목록이 비면 러너가 무엇을 볼지 모른다.
+        if thumb_dir is None:
+            raise ValueError("썸네일 견적에는 러너 폴더가 필요하다")
+        if targets_path is None:
+            raise ValueError("썸네일 견적에는 inputs 파일이 반드시 있어야 한다 — 빈 값은 전량이 아니다")
+        if result_path is None:
+            raise ValueError("썸네일 견적에는 산출물 경로가 필요하다")
+        settings.load(force=True)
+        return argv_mod.ThumbArgv(
+            run_dir=thumb_dir,
+            inputs=targets_path,
+            expect_nick=settings.cfg("expected_bulsaja_nick", required=True),
+            summary_out=result_path,
+            prefix=_수면방지_프리픽스(kind),
+        ).build()
+
+    if kind in COUPANG_KINDS:
+        if coupang_dir is None:
+            raise ValueError("쿠팡 잡에는 러너 폴더가 필요하다")
+        if result_path is None:
+            raise ValueError("쿠팡 잡에는 산출물 경로가 필요하다")
+        if kind == "coupang_commit":
+            # 🔴 상한 없는 복사는 없다 — None 을 '전량' 으로 읽는 길을 조립 전에 끊는다(D-13).
+            if copy_limit is None:
+                raise ValueError("상한 없는 복사는 없다 (D-13)")
+            if approved_path is None:
+                raise ValueError("쿠팡 복사에는 승인 목록 파일이 반드시 있어야 한다 (D-13)")
+        settings.load(force=True)
+        return argv_mod.CoupangArgv(
+            mode="preview" if kind == "coupang_preview" else "commit",
+            run_dir=coupang_dir,
+            expect_nick=settings.cfg("expected_bulsaja_nick", required=True),
+            summary_out=result_path,
+            approved=approved_path if kind == "coupang_commit" else None,
+            limit=copy_limit if kind == "coupang_commit" else None,
+            prefix=_수면방지_프리픽스(kind),
+        ).build()
+
     raise ValueError(f"argv 를 조립할 수 없는 작업 종류다: {kind}")
 
 
@@ -984,7 +1125,10 @@ def create_job(kind: str, *, run_dir: str | None = None,
                argv_override: list[str] | None = None,
                detail_inputs: dict | None = None,
                max_credits: int | None = None,
-               max_items: int | None = None) -> str:
+               max_items: int | None = None,
+               thumb_inputs: dict | None = None,
+               coupang_approved: list[str] | None = None,
+               copy_limit: int | None = None) -> str:
     """작업을 만들고 자식을 띄운 뒤 `job_id` 를 즉시 돌려준다. **블로킹하지 않는다.**
 
     **이 함수는 HTTP 를 모른다** (D-17 / ENG-07). 요청 객체를 받지 않고 상태코드를
@@ -1033,6 +1177,34 @@ def create_job(kind: str, *, run_dir: str | None = None,
         raise ValueError(f"{kind} 에는 대상 문서가 반드시 있어야 한다 — 빈 값은 전량이 아니다")
     if max_items is not None and kind != "market_commit":
         raise ValueError("max_items 는 마켓 반영 전용이다")
+    # Phase 7 kind-전용 인자. 다른 kind 에 주면 터뜨린다 — 조용히 무시하면 "상한을 줬는데 안 먹는" 잡이 된다.
+    if thumb_inputs is not None and kind != "thumb_estimate":
+        raise ValueError("thumb_inputs 는 썸네일 견적 전용이다")
+    if (coupang_approved is not None or copy_limit is not None) and kind != "coupang_commit":
+        raise ValueError("coupang_approved · copy_limit 은 쿠팡 복사 전용이다")
+    if kind == "thumb_estimate":
+        _썸네일입력검사(thumb_inputs)
+        if not run_dir:
+            raise ValueError("썸네일 견적에는 광고 회차가 필요하다 — 보드 재구성의 근거다")
+        if only_ads is not None or targets_path_override is not None or detail_inputs is not None:
+            raise ValueError("썸네일 견적의 대상은 thumb_inputs 하나다")
+    if kind in COUPANG_KINDS:
+        # 쿠팡 잡은 광고 회차가 없다. run_dir 을 받으면 광고 runs 화이트리스트에 엉뚱한 뜻이 실린다.
+        if run_dir:
+            raise ValueError("쿠팡 잡에는 회차(run_dir)를 주지 않는다 — 광고 회차와 무관하다")
+        if only_ads is not None or targets_path_override is not None or detail_inputs is not None:
+            raise ValueError("쿠팡 잡은 대상 목록을 받지 않는다 — 후보는 CLI 가 뽑는다")
+        if kind == "coupang_preview" and parent_job_id:
+            raise ValueError("쿠팡 후보 뽑기에는 부모 잡이 없다")
+    if kind == "coupang_commit":
+        # 🔴 빈 값은 전량이 아니다(D-13 · T-07-02). 상한·승인목록·부모 셋 다 없으면 만들지 않는다.
+        if isinstance(copy_limit, bool) or not isinstance(copy_limit, int) or copy_limit < 1:
+            raise ValueError("상한 없는 복사는 없다 — copy_limit 은 1 이상 정수다 (D-13)")
+        if (not isinstance(coupang_approved, list) or not coupang_approved
+                or not all(isinstance(x, str) and x for x in coupang_approved)):
+            raise ValueError("쿠팡 복사에는 승인 목록이 1건 이상 필요하다 — 빈 값은 전량이 아니다 (D-13)")
+        if not parent_job_id:
+            raise ValueError("쿠팡 복사에는 부모 미리보기 잡이 필요하다")
 
     # ①.5 불사자 계정 가드 (ENG-08). **자식을 띄우기 전이고, 트랜잭션을 열기도 전이다.**
     #      여기가 라우트가 아니라 `create_job` 인 것이 핵심이다 — v2 의 APScheduler 가
@@ -1135,6 +1307,9 @@ def create_job(kind: str, *, run_dir: str | None = None,
         detail_dir = None
         market_dir = None
         detail_backup_dir = None
+        thumb_dir = None
+        coupang_dir = None
+        approved_path = None
         if run_dir and kind in BIDS_KINDS:
             접두 = "preview" if kind == "bids_preview" else "result"
             result_path = _web_dir(run_dir) / f"{접두}_{job_id}.json"
@@ -1182,6 +1357,30 @@ def create_job(kind: str, *, run_dir: str | None = None,
             market_dir, detail_backup_dir = _마켓폴더(kind, job_id, parent_job_id, run_dir, cx)
             result_path = (market_dir / "preview.json" if kind == "market_preview"
                            else market_dir / f"summary_{job_id}.json")
+        elif kind == "thumb_estimate":
+            # 러너 폴더는 잡 id 에서만 유도한다. 행의 run_dir 은 광고 회차(보드 재구성용)다.
+            thumb_dir = thumb_dir_of(job_id)
+            thumb_dir.mkdir(parents=True, exist_ok=True)
+            targets_path = _write_json_atomic(thumb_dir / "inputs.json", thumb_inputs)
+            result_path = thumb_dir / "summary.json"
+        elif kind == "coupang_preview":
+            coupang_dir = coupang_dir_of(job_id)
+            coupang_dir.mkdir(parents=True, exist_ok=True)
+            result_path = coupang_dir / "summary.json"
+        elif kind == "coupang_commit":
+            # 부모는 **성공한** 쿠팡 미리보기여야 한다 — 미완·실패 미리보기의 요약으로 복사하면
+            # 본 적 없는 후보가 복사된다(D-13). 트랜잭션 안에서 본다(가드와 같은 창).
+            부모 = cx.execute("SELECT kind, status, exit_code FROM jobs WHERE id = ?",
+                              (parent_job_id,)).fetchone()
+            if (부모 is None or 부모["kind"] != "coupang_preview"
+                    or 부모["status"] != "done" or 부모["exit_code"] != 0):
+                raise ValueError("쿠팡 복사의 부모는 성공(done/0)한 쿠팡 후보 뽑기여야 한다")
+            coupang_dir = coupang_dir_of(parent_job_id)
+            coupang_dir.mkdir(parents=True, exist_ok=True)
+            approved_path = _write_json_atomic(coupang_dir / f"approved_{job_id}.json",
+                                               list(coupang_approved))
+            targets_path = approved_path
+            result_path = coupang_dir / f"commit_summary_{job_id}.json"
 
         # ④ argv
         if argv_override:
@@ -1193,7 +1392,11 @@ def create_job(kind: str, *, run_dir: str | None = None,
                               max_credits=max_credits,
                               market_dir=market_dir,
                               detail_backup_dir=detail_backup_dir,
-                              max_items=max_items)
+                              max_items=max_items,
+                              thumb_dir=thumb_dir,
+                              coupang_dir=coupang_dir,
+                              approved_path=approved_path,
+                              copy_limit=copy_limit)
 
         cx.execute(
             "INSERT INTO jobs (id, kind, run_dir, accounts, argv, status, log_path, "
@@ -1345,6 +1548,29 @@ def latest_done(kind: str, run_dir: str | None = None) -> dict | None:
     finally:
         cx.close()
     return _as_dict(row) if row else None
+
+
+def first_coupang_commit_done() -> bool:
+    """성공(done/0)한 쿠팡 복사가 한 번이라도 있었나.
+
+    **첫 실행 판정은 대장이 아니라 잡 레지스트리다(D-13 · L-07).** 로컬 대장 파일을 새로 두면
+    진실이 둘이 된다. 첫 복사는 상한을 더 작게(`coupang_first_max_items`) 잡는 근거다.
+    레지스트리가 아직 없으면 **만들지 않고** False 다 — `latest_done` 과 같은 규율(T-1-01b).
+    """
+    if not db_path().is_file():
+        return False
+    cx = _conn()
+    try:
+        cx.execute("BEGIN IMMEDIATE")
+        _reap(cx)
+        cx.commit()
+        row = cx.execute("SELECT 1 FROM jobs WHERE kind = 'coupang_commit' AND status = 'done' "
+                         "AND exit_code = 0 LIMIT 1").fetchone()
+    except sqlite3.Error:
+        return False
+    finally:
+        cx.close()
+    return row is not None
 
 
 def recent_jobs(limit: int = 20) -> list[dict]:
