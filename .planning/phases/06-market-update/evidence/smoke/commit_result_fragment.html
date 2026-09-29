@@ -1,0 +1,142 @@
+
+
+
+  <div id="market-gate-slot">
+
+
+<section id="market-gate-panel" class="market-gate-panel"
+         style="border:2px solid var(--pico-primary, #1095c1);padding:0.8rem 1rem;margin-bottom:1rem;">
+  
+    <h4 style="margin-bottom:0.4rem;">첫 1건 육안 확인 — 이 확인 전에는 나머지가 나가지 않는다</h4>
+    <p style="margin-bottom:0.4rem;">
+      판매자상품코드 <strong>qsSraitcTdz7tBjz9hAxC</strong>
+      · 채널상품번호 <code>12485256958</code>
+      
+        · <a href="https://smartstore.naver.com/main/products/12485256958" target="_blank" rel="noopener noreferrer">스마트스토어에서 열기</a>
+        <small>(<code>https://smartstore.naver.com/main/products/12485256958</code>)</small>
+      
+      <br><small>상단 안내이미지 <code>https://cdn.bulsaja.com/users/11154/marketGroups/1001138/fixedImages/Dr-dzgLdBZ/top.png?t=1758132742293</code></small>
+      <br><small>하단 안내이미지 <code>https://cdn.bulsaja.com/users/11154/marketGroups/1001138/fixedImages/KdBPx8qIk_/bottom.png?t=1758132745195</code>
+        · 설정 날짜 2025-09-18</small>
+    </p>
+    <p style="margin-bottom:0.4rem;"><small>
+      용팀장 브라우저에서 스토어 상품을 직접 열어 확인해라 (에이전트는 네이버에 접속하지 않는다).
+      셋 다 맞을 때만 '정상' 이 기록된다.
+    </small></p>
+    <fieldset style="margin-bottom:0.4rem;">
+      <label><input type="checkbox" name="체크_본문" value="true">
+        ① 본문이 AI 상세로 바뀌었다</label>
+      <label><input type="checkbox" name="체크_상하단" value="true">
+        ② 상단·하단 안내이미지가 현재 불사자 설정 것이다</label>
+      <label><input type="checkbox" name="체크_기타필드" value="true">
+        ③ 가격·상품명·옵션 등 다른 곳이 의도치 않게 바뀌지 않았다</label>
+    </fieldset>
+    <label>스토어 상하단 교체 여부
+      <select name="스토어교체여부">
+        <option value="모름">모름</option>
+        <option value="교체됨">교체됨</option>
+        <option value="미교체">미교체</option>
+      </select>
+    </label>
+    <label>메모 (증상 · 최대 500자)
+      <input type="text" name="메모" maxlength="500">
+    </label>
+    <p id="market-gate-error" class="stale" hidden></p>
+    <p>
+      <button type="button" class="market-gate-ok"
+              hx-post="/market/gate"
+              hx-vals='{"commit_job_id": "b862a591-b66b-4195-8d1c-5497ae931e7b", "판정": "정상"}'
+              hx-include="closest .market-gate-panel"
+              hx-target="closest .market-gate-panel" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-on::response-error="var b = document.getElementById('market-gate-error');
+                var m = ''; try { m = JSON.parse(event.detail.xhr.responseText).detail; } catch (e) {}
+                b.textContent = '판정을 기록하지 못했다 (' + event.detail.xhr.status + ') ' + (m || '');
+                b.hidden = false;">정상 — 나머지 진행 허용</button>
+      <button type="button" class="market-gate-bad secondary"
+              hx-post="/market/gate"
+              hx-vals='{"commit_job_id": "b862a591-b66b-4195-8d1c-5497ae931e7b", "판정": "이상"}'
+              hx-include="closest .market-gate-panel"
+              hx-target="closest .market-gate-panel" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-on::response-error="var b = document.getElementById('market-gate-error');
+                var m = ''; try { m = JSON.parse(event.detail.xhr.responseText).detail; } catch (e) {}
+                b.textContent = '판정을 기록하지 못했다 (' + event.detail.xhr.status + ') ' + (m || '');
+                b.hidden = false;">이상 있음 — 멈춤</button>
+    </p>
+
+  
+</section>
+</div>
+
+  <p>
+    <strong>성공 1</strong>
+    · 실패 0
+    · 스킵 0
+    · <strong>대기 0</strong>
+    · 미반영(게이트 대기) 3
+    <br><small>작업 폴더 <code>/Users/choiyongsmacbook/python_work/data/naver-ads/runs/2026-09-20/web/market_dd911562-084d-4e56-9b1d-1091359637d2</code></small>
+  </p>
+
+  
+
+  
+    <table>
+      <thead><tr>
+        <th>판매자상품코드</th><th>상태</th><th>사유</th>
+        <th>ⓐ 원본 백업</th><th>ⓑ 반영 전 백업</th><th>작업번호(끝 8자리)</th>
+      </tr></thead>
+      <tbody>
+      
+        <tr>
+          <td>qsSraitcTdz7tBjz9hAxC</td>
+          <td>성공</td>
+          <td></td>
+          <td><small><code>/Users/choiyongsmacbook/python_work/data/naver-ads/runs/2026-09-20/web/detail_e9693275-80fc-4a84-8bc2-bb59c40eaf90/before_detail/U01K5HV90GFFGJFZTBG4PBVQZQ3.json</code></small>
+              <small>(있음)</small></td>
+          <td><small><code>/Users/choiyongsmacbook/python_work/data/naver-ads/runs/2026-09-20/web/market_dd911562-084d-4e56-9b1d-1091359637d2/before_market/U01K5HV90GFFGJFZTBG4PBVQZQ3.json</code></small>
+              <small>(있음)</small></td>
+          <td><small>50141911</small></td>
+        </tr>
+      
+        <tr>
+          <td>spG75IlKWKBbmWm2JoUNj</td>
+          <td>미반영(게이트 대기)</td>
+          <td></td>
+          <td><small><code>/Users/choiyongsmacbook/python_work/data/naver-ads/runs/2026-09-20/web/detail_e9693275-80fc-4a84-8bc2-bb59c40eaf90/before_detail/U01KC0FBZARY0X725R9DMGTGASZ.json</code></small>
+              <small>(있음)</small></td>
+          <td><small><code>/Users/choiyongsmacbook/python_work/data/naver-ads/runs/2026-09-20/web/market_dd911562-084d-4e56-9b1d-1091359637d2/before_market/U01KC0FBZARY0X725R9DMGTGASZ.json</code></small>
+              <small>(있음)</small></td>
+          <td><small></small></td>
+        </tr>
+      
+        <tr>
+          <td>Gm17iKZezLACxlOcgKzsS</td>
+          <td>미반영(게이트 대기)</td>
+          <td></td>
+          <td><small><code>/Users/choiyongsmacbook/python_work/data/naver-ads/runs/2026-09-20/web/detail_e9693275-80fc-4a84-8bc2-bb59c40eaf90/before_detail/U01K5BQPMNAMDW8DVNDD0HRWMS1.json</code></small>
+              <small>(있음)</small></td>
+          <td><small><code>/Users/choiyongsmacbook/python_work/data/naver-ads/runs/2026-09-20/web/market_dd911562-084d-4e56-9b1d-1091359637d2/before_market/U01K5BQPMNAMDW8DVNDD0HRWMS1.json</code></small>
+              <small>(있음)</small></td>
+          <td><small></small></td>
+        </tr>
+      
+        <tr>
+          <td>7H5U34CcDCaCF54I8uPyG</td>
+          <td>미반영(게이트 대기)</td>
+          <td></td>
+          <td><small><code>/Users/choiyongsmacbook/python_work/data/naver-ads/runs/2026-09-20/web/detail_e9693275-80fc-4a84-8bc2-bb59c40eaf90/before_detail/U01K5H6KT40SPD0AEPTCW1HB3P4.json</code></small>
+              <small>(있음)</small></td>
+          <td><small><code>/Users/choiyongsmacbook/python_work/data/naver-ads/runs/2026-09-20/web/market_dd911562-084d-4e56-9b1d-1091359637d2/before_market/U01K5H6KT40SPD0AEPTCW1HB3P4.json</code></small>
+              <small>(있음)</small></td>
+          <td><small></small></td>
+        </tr>
+      
+      </tbody>
+    </table>
+  
+
+  
+  
+
+<div id="market-commit-next">
+  
+</div>
