@@ -50,6 +50,7 @@ import coupang_rules as R                                # noqa: E402
 ORDERS_SHEET = "sheets.orders"
 FIND_BATCH = 50          # find_by_code 최대 50개/콜
 COPY_BATCH = 20          # 복사 배치 — 응답이 신 pid 를 안 줄 때 diff 매핑 오류 피해를 줄인다
+LINEAGE_SLEEP = 0.2      # gate 계보 대조 workdata 호출 간격(초) — 테스트는 0 으로 바꾼다
 
 # `--expect-nick` (관제탑 러너용, D-14). main() 이 파싱 뒤 채운다. 빈 문자열 = 검사 안 함
 # (무플래그 = 종전 동작). MCP 를 여는 모든 단계가 CoupangMCP.open() 한 곳을 지나므로
@@ -411,12 +412,14 @@ def cmd_gate(args):
     # 새 run-dir 로 돌리면 방어선이 사라진다. 복사본은 불사자코드를 **승계**하지만
     # 목록 조회에는 그 필드가 없으므로, 스냅샷의 타오바오상품번호로 대조한다.
     # (2026-09-13 시험 복사로 승계 확인: 원본·복사본 모두 74FOyS2vS6DZg9NggZ8Ty)
+    # MCP 연결은 그룹읽기 → 계보 대조(4층)까지 한 번으로 묶는다 — 끝에서 닫는다.
     already, already_codes = set(), set()
-    if not args.skip_group_check:
-        gid = int(cfg("coupang.group_id", required=True))
-        mcp = CoupangMCP()
-        mcp.open()
-        try:
+    mcp, gid = None, None
+    try:
+        if not args.skip_group_check:
+            gid = int(cfg("coupang.group_id", required=True))
+            mcp = CoupangMCP()
+            mcp.open()
             # **fail-closed (D-17).** 목록이 덜 읽히거나 스냅샷이 1건이라도 실패하면
             # 후보 파일을 쓰지 않고 끝낸다 — 부분 대조로 후보를 내면 빠진 상품이 재복사된다.
             try:
@@ -425,29 +428,83 @@ def cmd_gate(args):
                 print(f"[gate] {e} — 부분 대조 금지. 다시 돌려라")
                 return 3
             snaps, errs = snapshot.ensure([i["productId"] for i in items], mcp=mcp, log=None)
-        finally:
+            if errs:
+                print(f"[gate] 쿠팡 그룹 스냅샷 {len(errs)}건 실패 — 부분 대조 금지. 다시 돌려라")
+                for pid, why in list(errs.items())[:5]:
+                    print(f"    {pid}: {why}")
+                return 3
+            already = {str((snaps.get(i["productId"]) or {}).get("타오바오상품번호") or "")
+                       for i in items}
+            already.discard("")
+            # 2차 키: 복사본은 불사자코드를 승계한다(RESEARCH A4). 타오바오번호가 빈 그룹
+            # 상품도 이걸로 걸린다 — 1차 키(타오바오) 동작은 그대로다.
+            already_codes = {str((snaps.get(i["productId"]) or {}).get("불사자코드") or "")
+                             for i in items}
+            already_codes.discard("")
+            missing_tb = sum(1 for i in items
+                             if not str((snaps.get(i["productId"]) or {}).get("타오바오상품번호") or ""))
+            print(f"[gate] 쿠팡 그룹 기존 {len(items)}건 → 원본 {len(already)}종 (재복사 제외 대상)")
+            if missing_tb:
+                print(f"[gate] 그룹 상품 타오바오번호 결측 {missing_tb}건 — 불사자코드로 대조")
+            print(f"[gate] 그룹읽기 총상품수 {total if total is not None else '미상'} · "
+                  f"읽음 {len(items)} · 타오바오결측 {missing_tb}")
+        return _gate_판정(args, sales, reps, diffs, min_margin, min_orders,
+                          already, already_codes, mcp, gid)
+    finally:
+        if mcp is not None:
             mcp.close()
-        if errs:
-            print(f"[gate] 쿠팡 그룹 스냅샷 {len(errs)}건 실패 — 부분 대조 금지. 다시 돌려라")
-            for pid, why in list(errs.items())[:5]:
-                print(f"    {pid}: {why}")
-            return 3
-        already = {str((snaps.get(i["productId"]) or {}).get("타오바오상품번호") or "")
-                   for i in items}
-        already.discard("")
-        # 2차 키: 복사본은 불사자코드를 승계한다(RESEARCH A4). 타오바오번호가 빈 그룹
-        # 상품도 이걸로 걸린다 — 1차 키(타오바오) 동작은 그대로다.
-        already_codes = {str((snaps.get(i["productId"]) or {}).get("불사자코드") or "")
-                         for i in items}
-        already_codes.discard("")
-        missing_tb = sum(1 for i in items
-                         if not str((snaps.get(i["productId"]) or {}).get("타오바오상품번호") or ""))
-        print(f"[gate] 쿠팡 그룹 기존 {len(items)}건 → 원본 {len(already)}종 (재복사 제외 대상)")
-        if missing_tb:
-            print(f"[gate] 그룹 상품 타오바오번호 결측 {missing_tb}건 — 불사자코드로 대조")
-        print(f"[gate] 그룹읽기 총상품수 {total if total is not None else '미상'} · "
-              f"읽음 {len(items)} · 타오바오결측 {missing_tb}")
 
+
+def _쿠팡사본찾기(mcp, row, gid):
+    """같은 계보(불사자코드) 전체에서 **쿠팡 마켓그룹에 배정된 상품**을 찾는다 (4층 · 260930-c4).
+
+    그룹 목록 대조(3층)는 지금 쿠팡 그룹 **안**에 있는 사본만 본다. 사본을 상품그룹
+    (`구매_가공완료` 등)으로 옮기면 목록에서 빠져 원본이 다시 후보가 된다
+    (07-07 머그컵 `oEEpBU9Ol7PCRzQGyww2J`). 서버 신호로 막는다:
+      ① `find_by_code([불사자코드])` = 같은 계보(원본·사본·재수집분) 전건
+      ② 각 상품 workdata 의 `uploadSelectedMarketGroupId` = 마켓그룹.
+         상품그룹을 옮겨도 이 값은 쿠팡 그대로 남는다(2026-09-30 실측).
+    계보 필드(복사원본 pid)는 workdata 에 없어서 이 조합이 유일한 서버 신호다.
+    로컬 대장(과거 run-dir copied.jsonl 합집합)은 정본이 아니라 쓰지 않는다.
+
+    조회가 하나라도 불완전하면 RuntimeError — 호출부가 exit 3(D-17 fail-closed).
+    """
+    code = row["불사자코드"]
+    try:
+        r = mcp.find_by_code([code])
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(f"계보 조회 실패 {code}: {type(e).__name__}") from e
+    if not isinstance(r, dict) or r.get("success") is False:
+        raise RuntimeError(f"계보 조회 실패 {code}: 응답 이상")
+    if r.get("더있음"):
+        # 이어받기 인자가 없다 — 덜 읽힌 계보로 판정하면 사본을 놓친다.
+        raise RuntimeError(f"계보 덜 읽힘 {code}: 더있음")
+    fam = r.get("항목") or []
+    if not fam:
+        # 대표 자신조차 안 나온다 = 조회가 비정상이다.
+        raise RuntimeError(f"계보 조회 0건 {code}")
+    hits = []
+    for it in fam:
+        pid = it.get("productId")
+        if not pid:
+            raise RuntimeError(f"계보 항목 productId 없음 {code}")
+        try:
+            wd = mcp.raw_workdata(pid)
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"계보 workdata 실패 {pid}: {type(e).__name__}") from e
+        data = wd.get("data") if isinstance(wd, dict) else None
+        if not isinstance(data, dict):
+            raise RuntimeError(f"계보 workdata 응답 이상 {pid}")
+        if str(data.get("uploadSelectedMarketGroupId") or "") == str(gid):
+            hits.append({"productId": pid,
+                         "판매자상품코드": str(it.get("판매자상품코드") or ""),
+                         "그룹": it.get("그룹") or "그룹없음"})
+        time.sleep(LINEAGE_SLEEP)
+    return hits
+
+
+def _gate_판정(args, sales, reps, diffs, min_margin, min_orders,
+               already, already_codes, mcp, gid):
     passed, rejected = [], []
     for key, rep in reps.items():
         code = rep["판매자상품코드"]
@@ -490,6 +547,31 @@ def cmd_gate(args):
         (passed if ok else rejected).append(row)
 
     passed.sort(key=lambda r: (-(r["합산주문수"] or 0), -(r["쿠팡보정마진"] or 0)))
+    # **계보 대조 (4층 · 260930-c4).** 쿠팡 그룹 밖으로 옮겨진 사본까지 본다.
+    # 상한이 있으면 생존이 `limit` 건 찰 때까지만 조회한다 — 나머지는 어차피 상한초과다.
+    if mcp is not None and passed:
+        keep, lineage_rej = [], []
+        for r in passed:
+            if args.limit and len(keep) >= args.limit:
+                keep.append(r)          # 조회 안 함 — 아래 상한 처리로 넘어간다
+                continue
+            try:
+                hits = _쿠팡사본찾기(mcp, r, gid)
+            except RuntimeError as e:
+                print(f"[gate] {e} — 부분 대조 금지. 다시 돌려라")
+                return 3
+            if hits:
+                h = hits[0]
+                extra = f" 외 {len(hits) - 1}건" if len(hits) > 1 else ""
+                r["사유"] = f"이미복사된사본있음({h['판매자상품코드']} · {h['그룹']}{extra})"
+                r["쿠팡사본"] = hits
+                lineage_rej.append(r)
+                print(f"[gate] 제외 {r['판매자상품코드']} — 이미 복사된 사본 있음: "
+                      f"{h['판매자상품코드']} ({h['그룹']}){extra}")
+            else:
+                keep.append(r)
+        passed = keep
+        rejected.extend(lineage_rej)
     if args.limit:
         over = passed[args.limit:]
         for r in over:

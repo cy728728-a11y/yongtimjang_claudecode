@@ -17,6 +17,9 @@
 gate stdout 은 옛 줄이 새 출력 안에 **순서대로** 다 있으면 통과다(D-17 이 진단 줄을 더한다).
 다시 만들 때만 `COUPANG_GOLDEN_WRITE=1` — 평소엔 비교만 한다.
 
+260930-c4 에서 gate `calls` 만 의도적으로 갱신했다 — 통과 후보마다 계보 대조
+(`find_by_code` + 계보 전건 `workdata`)가 붙었다. candidates·rejected 바이트와 stdout 은 그대로.
+
 기준값은 테스트가 cfg 로 **명시 주입**한다(min_margin 15.0) — workspace.toml 이 바뀌어도
 골든이 흔들리지 않게.
 
@@ -60,6 +63,9 @@ class 가짜불사자:
     - 그룹 상품 목록은 `그룹` 을 pageSize 로 잘라 준다. `총상품수` 는 따로 줄 수 있다
       (조기 종료 시나리오 — 빈 페이지로 덜 읽힌 채 끝나는 경우).
     - `스냅샷` = {pid: {타오바오상품번호, 불사자코드}} · `스냅샷실패` = 오류로 돌려줄 pid 집합
+    - 계보 대조(260930-c4): `계보` = {불사자코드: [find_by_code 항목]} — 없으면 대표 자신 1건
+      (`U0{키}rep`). `마켓그룹` = {pid: uploadSelectedMarketGroupId} — 없으면 스마트스토어(1001189).
+      `계보더있음`·`계보실패`(코드 집합) · `workdata실패`(pid 집합) 로 실패를 재현한다.
     """
 
     def __init__(self, 그룹=(), 스냅샷=None, 닉="용팀장", 총상품수=None, 끊김=None):
@@ -73,6 +79,11 @@ class 가짜불사자:
         self.열림 = 0
         self.닫힘 = 0
         self.복사 = []
+        self.계보 = {}
+        self.마켓그룹 = {}
+        self.계보더있음 = set()
+        self.계보실패 = set()
+        self.workdata실패 = set()
 
     def call_tool(self, name, args):
         self.호출.append((name, copy.deepcopy(args)))
@@ -89,6 +100,20 @@ class 가짜불사자:
             total = len(self.그룹) if self.총상품수 is None else self.총상품수
             return {"항목": copy.deepcopy(items), "더있음": page * size < len(self.그룹),
                     "총상품수": total}
+        if name == "bulsaja_product_find_by_code":
+            (code,) = args["codes"]          # gate 는 계보를 코드 1개씩 조회한다
+            if code in self.계보실패:
+                raise RuntimeError("429")
+            기본 = [{"productId": f"U0{code[1:-4]}rep", "판매자상품코드": f"S{code[1:-4]}code",
+                   "불사자코드": code, "그룹": "구매_가공완료"}]
+            return {"success": True, "항목": copy.deepcopy(self.계보.get(code, 기본)),
+                    "더있음": code in self.계보더있음}
+        if name == "bulsaja_product_workdata":
+            pid = args["productId"]
+            if pid in self.workdata실패:
+                raise RuntimeError("500")
+            return {"data": {"ID": pid,
+                             "uploadSelectedMarketGroupId": self.마켓그룹.get(pid, 1001189)}}
         raise AssertionError(f"시나리오에 없는 도구 호출: {name}")
 
     def 이름들(self):
@@ -138,6 +163,7 @@ def 주입(monkeypatch, cli, 불사자, 설정=None):
         return v
 
     monkeypatch.setattr(cli, "cfg", _cfg)
+    monkeypatch.setattr(cli, "LINEAGE_SLEEP", 0)
     return 불사자
 
 
@@ -364,6 +390,107 @@ def test_gate_기준은_cfg_를_따른다(monkeypatch, cli, tmp_path, capsys):
     assert "[gate] 기준: 주문 3회 이상 AND 쿠팡보정마진 20.0% 이상" in capsys.readouterr().out
     assert _후보(R) == [대표pid("A")]
     assert _탈락사유(R)[대표pid("B")].startswith("마진미달")
+
+
+# ── 260930-c4: 계보 대조 — 쿠팡 그룹 밖으로 옮겨진 사본 ──────────────────
+#
+# 07-07 실측 재현: 원본 `03lPOGjwQKt96y4uNt1Ik`(머그컵)의 파일럿 사본 `oEEpBU9Ol7PCRzQGyww2J`
+# 가 상품그룹 `구매_가공완료` 로 옮겨져 쿠팡 그룹 목록엔 없다. 그래도 그 사본의 마켓그룹
+# (uploadSelectedMarketGroupId)은 쿠팡(1003308) 그대로다 → 원본은 후보에서 빠져야 한다.
+
+def _머그컵계보(불사자):
+    """A 의 계보 = 대표 + 재수집분(스마트스토어 그룹) + 쿠팡 사본(그룹 밖으로 이동)."""
+    불사자.계보[불사자코드("A")] = [
+        {"productId": 대표pid("A"), "판매자상품코드": 판매코드("A"),
+         "불사자코드": 불사자코드("A"), "그룹": "구매_가공완료"},
+        {"productId": "U0Arecollect", "판매자상품코드": "SArecollect",
+         "불사자코드": 불사자코드("A"), "그룹": None},
+        {"productId": "U0Acopy", "판매자상품코드": "oEEpBU9Ol7PCRzQGyww2J",
+         "불사자코드": 불사자코드("A"), "그룹": "구매_가공완료"},
+    ]
+    불사자.마켓그룹.update({"U0Arecollect": 5914, "U0Acopy": GID})
+    return 불사자
+
+
+def test_gate_쿠팡그룹_밖_사본이_있으면_제외(monkeypatch, cli, tmp_path, capsys):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 주입(monkeypatch, cli, _머그컵계보(기본불사자()))
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) == 0
+    out = capsys.readouterr().out
+    assert _후보(R) == [대표pid("B")]
+    assert _탈락사유(R)[대표pid("A")] == "이미복사된사본있음(oEEpBU9Ol7PCRzQGyww2J · 구매_가공완료)"
+    assert ("[gate] 제외 SAcode — 이미 복사된 사본 있음: oEEpBU9Ol7PCRzQGyww2J (구매_가공완료)"
+            in out)
+    assert "탈락 이미복사된사본있음: 1건" in out
+    rej = {r["대표pid"]: r for r in json.loads(_읽기(os.path.join(R, "rejected.json")))}
+    assert rej[대표pid("A")]["쿠팡사본"] == [
+        {"productId": "U0Acopy", "판매자상품코드": "oEEpBU9Ol7PCRzQGyww2J", "그룹": "구매_가공완료"}]
+    # 계보 전건의 마켓그룹을 서버에서 읽었다 — 로컬 스냅샷 캐시가 아니다
+    wd = [a["productId"] for n, a in 불사자.호출 if n == "bulsaja_product_workdata"]
+    assert set(wd) >= {대표pid("A"), "U0Arecollect", "U0Acopy"}
+    # 쓰기 도구는 한 번도 안 불렀다
+    assert not any("copy" in n for n in 불사자.이름들())
+
+
+def test_gate_재수집_사본만_있으면_제외하지_않는다(monkeypatch, cli, tmp_path):
+    """같은 불사자코드라도 쿠팡 마켓그룹이 아니면(스마트스토어 재수집·사본) 막지 않는다."""
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = _머그컵계보(기본불사자())
+    불사자.마켓그룹["U0Acopy"] = 1001189
+    주입(monkeypatch, cli, 불사자)
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) == 0
+    assert _후보(R) == [대표pid("A"), 대표pid("B")]
+
+
+def test_gate_쿠팡사본이_여럿이면_외_N건(monkeypatch, cli, tmp_path):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = _머그컵계보(기본불사자())
+    불사자.마켓그룹["U0Arecollect"] = GID
+    주입(monkeypatch, cli, 불사자)
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) == 0
+    assert _탈락사유(R)[대표pid("A")] == "이미복사된사본있음(SArecollect · 그룹없음 외 1건)"
+
+
+@pytest.mark.parametrize("고장", ["find예외", "더있음", "workdata실패", "0건"])
+def test_gate_계보조회_실패면_후보파일을_안_쓰고_exit3(monkeypatch, cli, tmp_path, capsys, 고장):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 기본불사자()
+    if 고장 == "find예외":
+        불사자.계보실패 = {불사자코드("B")}
+    elif 고장 == "더있음":
+        불사자.계보더있음 = {불사자코드("A")}
+    elif 고장 == "workdata실패":
+        불사자.workdata실패 = {대표pid("B")}
+    else:
+        불사자.계보[불사자코드("A")] = []
+    주입(monkeypatch, cli, 불사자)
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) == 3
+    assert "부분 대조 금지" in capsys.readouterr().out
+    assert not os.path.exists(os.path.join(R, "candidates.json"))
+    assert not os.path.exists(os.path.join(R, "rejected.json"))
+    assert 불사자.열림 == 불사자.닫힘 == 1
+
+
+def test_gate_상한이_차면_나머지는_계보조회_안함(monkeypatch, cli, tmp_path):
+    """--limit 1: A 가 사본 있어 빠지면 B 를 조회해 채우고, 그 뒤는 조회하지 않는다."""
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 주입(monkeypatch, cli, _머그컵계보(기본불사자()))
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R, "--limit", "1"]) == 0
+    assert _후보(R) == [대표pid("B")]
+    불사자2 = 주입(monkeypatch, cli, 기본불사자())
+    R2 = 런디렉터리_만들기(str(tmp_path / "run2"))
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R2, "--limit", "1"]) == 0
+    조회 = [a["codes"] for n, a in 불사자2.호출 if n == "bulsaja_product_find_by_code"]
+    assert 조회 == [[불사자코드("A")]]
+    assert _탈락사유(R2)[대표pid("B")] == "상한초과(상위 1건 밖)"
+
+
+def test_gate_연결은_한번_프로필도_한번(monkeypatch, cli, tmp_path):
+    R = 런디렉터리_만들기(str(tmp_path / "run"))
+    불사자 = 주입(monkeypatch, cli, 기본불사자())
+    assert 실행(monkeypatch, cli, ["gate", "--run-dir", R, "--expect-nick", "용팀장"]) == 0
+    assert 불사자.열림 == 불사자.닫힘 == 1
+    assert 불사자.이름들().count("bulsaja_my_profile") == 1
 
 
 # ── Task 2: --expect-nick (D-14) ────────────────────────────────────────

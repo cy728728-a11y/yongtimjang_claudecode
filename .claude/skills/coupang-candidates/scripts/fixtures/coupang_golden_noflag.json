@@ -24,6 +24,36 @@
      "page": 1,
      "pageSize": 50
     }
+   ],
+   [
+    "bulsaja_product_find_by_code",
+    {
+     "codes": [
+      "BAcode"
+     ]
+    }
+   ],
+   [
+    "bulsaja_product_workdata",
+    {
+     "productId": "U0Arep",
+     "mode": "full"
+    }
+   ],
+   [
+    "bulsaja_product_find_by_code",
+    {
+     "codes": [
+      "BBcode"
+     ]
+    }
+   ],
+   [
+    "bulsaja_product_workdata",
+    {
+     "productId": "U0Brep",
+     "mode": "full"
+    }
    ]
   ]
  },
