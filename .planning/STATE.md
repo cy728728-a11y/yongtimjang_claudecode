@@ -179,6 +179,7 @@ Recent decisions affecting current work:
 | 260929-g1 | 게이트 정상 직후 반영 실행 버튼을 새로고침 없이 표시 (hx-swap-oob, 06 P2) | 2026-09-29 | 79d68d9 | [260929-g1-market-gate-next-button](./quick/260929-g1-market-gate-next-button/) |
 | 260929-t1 | ② 체크박스 선택으로 썸네일 견적 버튼 켜짐 (thumb.js 가 rowSelectionChanged 구독, 07 UAT P1) | 2026-09-29 | 84970ef | [260929-t1-thumb-estimate-btn-selection](./quick/260929-t1-thumb-estimate-btn-selection/) |
 | 260929-j2 | 조인 스캔 대상에 ② 추가, 인덱스 범위는 ③⑤ 유지 (원천 분리, 07 썸네일 견적 0건) | 2026-09-29 | fa11c74 | [260929-j2-join-scan-rule2](./quick/260929-j2-join-scan-rule2/) |
+| 260930-m3 | 새 미리보기가 형제 미리보기에서 이미 반영된 상품을 반영됨으로 보고 대상에서 제외 · 남은 0건 문구 (06-06 P1) | 2026-09-30 | db19e3f | [260930-m3-market-preview-dedupe](./quick/260930-m3-market-preview-dedupe/) |
 
 ## Deferred Items
 
