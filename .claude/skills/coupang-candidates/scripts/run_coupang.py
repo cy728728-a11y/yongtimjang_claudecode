@@ -566,8 +566,9 @@ def _gate_판정(args, sales, reps, diffs, min_margin, min_orders,
                 r["사유"] = f"이미복사된사본있음({h['판매자상품코드']} · {h['그룹']}{extra})"
                 r["쿠팡사본"] = hits
                 lineage_rej.append(r)
-                print(f"[gate] 제외 {r['판매자상품코드']} — 이미 복사된 사본 있음: "
-                      f"{h['판매자상품코드']} ({h['그룹']}){extra}")
+                # 화면·로그에는 사본 전부를 적는다 — 어느 사본을 정리할지는 사람이 본다.
+                전부 = ", ".join(f"{x['판매자상품코드']} ({x['그룹']})" for x in hits)
+                print(f"[gate] 제외 {r['판매자상품코드']} — 이미 복사된 사본 있음: {전부}")
             else:
                 keep.append(r)
         passed = keep

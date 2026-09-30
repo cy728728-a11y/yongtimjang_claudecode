@@ -442,13 +442,15 @@ def test_gate_재수집_사본만_있으면_제외하지_않는다(monkeypatch, 
     assert _후보(R) == [대표pid("A"), 대표pid("B")]
 
 
-def test_gate_쿠팡사본이_여럿이면_외_N건(monkeypatch, cli, tmp_path):
+def test_gate_쿠팡사본이_여럿이면_외_N건(monkeypatch, cli, tmp_path, capsys):
     R = 런디렉터리_만들기(str(tmp_path / "run"))
     불사자 = _머그컵계보(기본불사자())
     불사자.마켓그룹["U0Arecollect"] = GID
     주입(monkeypatch, cli, 불사자)
     assert 실행(monkeypatch, cli, ["gate", "--run-dir", R]) == 0
     assert _탈락사유(R)[대표pid("A")] == "이미복사된사본있음(SArecollect · 그룹없음 외 1건)"
+    assert ("[gate] 제외 SAcode — 이미 복사된 사본 있음: SArecollect (그룹없음), "
+            "oEEpBU9Ol7PCRzQGyww2J (구매_가공완료)") in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("고장", ["find예외", "더있음", "workdata실패", "0건"])
