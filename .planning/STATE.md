@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-05-PLAN.md
-last_updated: "2026-09-29T03:44:44.018Z"
-last_activity: 2026-09-29
+stopped_at: Completed 06-06-PLAN.md
+last_updated: "2026-09-30T10:51:19.804Z"
+last_activity: 2026-09-30
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 47
-  completed_plans: 44
-  percent: 57
+  completed_plans: 45
+  percent: 71
 ---
 
 # Project State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 
 Phase: 05 (상세페이지 작업 버튼) — EXECUTING
 Plan: 6 of 6 (05-01 완료: detail_batch --inputs 주입구 · 오프라인 45테스트 · 크레딧 0)
-Status: Phase 07 executing — 07-05 완료(07-06·07-07 남음). Phase 06: 06-05 완료(첫 1건 스토어 반영 성공 · 게이트 판정 대기 → 06-06). BLOCKED: gws 인증 만료(쿠팡 prep·썸네일 견적) · ② 조인 공백(07-06 결정)
-Last activity: 2026-09-29
+Status: Phase 07 executing — 07-05 완료(07-06·07-07 남음). Phase 06: **6/6 완료(2026-09-30)** — 게이트 정상·교체됨, 회차 2026-09-20 AI 상세 4건 전부 스토어 반영. BLOCKED: gws 인증 만료(쿠팡 prep·썸네일 견적) · ② 조인 공백(07-06 결정)
+Last activity: 2026-09-30
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 
@@ -72,6 +72,7 @@ Progress: [█████████░] 94%
 | Phase 06 P03 | 12min | 3 tasks | 13 files |
 | Phase 05 P06 | 3일(사람확인대기) | 3 tasks | 4 files |
 | Phase 06 P05 | 10min | 3 tasks | 8 files |
+| Phase 06 P06 | 7min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,7 @@ Recent decisions affecting current work:
 - [04-12]: 회차 2026-09-20 정본 = 사람 라벨 우선 판정. 새 회차 배너 판정(사람 확인 11분 vs 비전 끄고 어휘군 단독)은 Phase 5 discuss 에서. `banner_vision2_max_calls` 0 복귀
 - [06-03]: 게이트 닫힘(상한 1)에서 같은 미리보기의 두 번째 반영은 서버가 거부 — 앞선 반영이 체크포인트를 안 남겼을 때만 재시도. 상한 결정은 `_마켓반영상한()` 한 곳(06-04 가 판정 읽기로 교체)
 - [06-04]: 게이트는 전역 1회성 — `market_gate` 최신 판정 한 줄이 모든 미리보기의 반영 상한을 정한다(없음·DB 손상 1 · 정상 `market_update_max_items` · 이상이면 반영 400). 판정 대상은 서버가 체크포인트 성공 첫 건에서 정한다
+- [06-06]: 상하단 모순 판명 — 수정업로드는 현재 불사자 그룹 설정 상하단을 올린다(게이트 정상·교체됨, 2026-09-30). 상하단 교체 프로젝트와 순서 제약 없음
 - [Phase 05-06]: D-13 기록됨 — 불사자 AI 상세 생성 경로(웹앱 접수)는 aiImageGenerated 를 4/4 찍는다. 외부 반영 경로(Phase 3 STATE-04, 29건)는 여전히 태그로만 잡힌다 — 두 사실 모두 참, 경로가 다르다. 태그 쓰기 폴백(L-01 ④) 불필요
 - [Phase 05-06]: 육안 확인(용팀장, 2026-09-29): 실탄 4건 다 괜찮음 — 워터마크·위챗 잔여 없음, 10장 잘림으로 인한 내용 누락 안 보임
 - [Phase 07 plan]: 용팀장 부재 중 plan-phase 자동 선택(추천안) — 리서치 수행 · UI-SPEC 생략(Phase 1~6 선례, UI는 uat-verifier) · checker 경고 4건 중 메타 2건 수정·2건(07-01 파일 17개, 인프라 truths) 의도된 트레이드오프로 수용. 확인 대기: D-01·D-03·D-06·D-08(→07-06 체크포인트) / D-01·D-16·쿠팡 min_margin 15→20(→07-07 체크포인트). 건수 불일치 응답은 409로 통일. D-08 은 미룸(Phase 6 미완)
@@ -159,7 +161,7 @@ Recent decisions affecting current work:
   **2026-09-26 05-06 실측:** 불사자 AI 상세 생성 경로(웹앱 접수 d4b3a37f)는 `aiImageGenerated=True` 를 **4/4 찍는다** — 2차 견적 b591a063 이 4건 전부 aiImageGenerated 근거로 스킵(접수 0 · 크레딧 0). D-13 기록됨, 태그 쓰기 폴백 불필요. 외부 반영 경로(29건)는 여전히 태그로만 잡힌다
 
 - ~~**[05-06 선행 — Phase 6 D-03]** 06-01 선행 실행~~ — 해소(위와 같음)
-- **[Phase 6 게이트]** 수정업로드가 상하단 안내이미지를 어느 시점 기준으로 올리는지 모순 미해결 — 1건 육안 확인으로 깬다 (MARKET-02)
+- ~~**[Phase 6 게이트]** 수정업로드가 상하단 안내이미지를 어느 시점 기준으로 올리는지 모순 미해결 — 1건 육안 확인으로 깬다 (MARKET-02)~~ — **해소 — 판정 정상 (evidence/06-06-gate.md).** 2026-09-30 용팀장 "전부 정상" · 스토어 상하단 교체됨 → 수정업로드는 **현재 그룹 설정** 상하단을 올린다(D-11 후자). 상하단 교체 순서 제약 없음. 나머지 3건 반영 성공(b14b83ce)
 - **[Phase 4 → 5]** 홍보배너 게이트는 **불통과로 종료**(D-23). 새 회차는 기계 판정만으로 상품 이미지 약 14% 가 빠진다 — Phase 5 discuss 에서 사람 확인 vs 어휘군 단독을 정해야 실작업 투입
 - **[환경]** 이 맥북에 `bulsaja-yongssaem` MCP 서버 항목이 없다 — 용쌤 계정 전환 경로가 끊겨 있음 (ENG-08 착수 시 확인)
 - OQ-7: 회차마다 든 계정 수가 다른데 화면이 말하지 않는다. 실측 2026-08-29=2계정 · 2026-08-30=4계정 · 2026-09-20=1계정(판정 전). 신선도 배너(D-16)는 경과일만 보여준다 — 01-07/01-08 이 신선도만 보고 회차를 고르면 빠진 계정의 소재가 조용히 대상에서 사라진다(실제 광고비). 배너·드롭다운에 계정 수를 노출할지 01-07 에서 결정할 것
@@ -188,6 +190,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-29T03:44:39.230Z
-Stopped at: Completed 07-03-PLAN.md
+Last session: 2026-09-30T10:51:19.799Z
+Stopped at: Completed 06-06-PLAN.md
 Resume file: None
