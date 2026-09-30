@@ -1,0 +1,226 @@
+{
+ "계정": "부킹",
+ "확인모드": "balanced",
+ "생성시각": "2026-09-30T19:48:03+09:00",
+ "최대taskId": "50330132",
+ "기본창행수": 30,
+ "PENDING행수": 0,
+ "PROCESSING행수": 0,
+ "기본창": [
+  {
+   "taskId": "50330132",
+   "productId": "U01M3JVGW84ZAPKSDCS4R4JN8YR",
+   "상태": "성공",
+   "작업": "수정",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50328752",
+   "productId": "U01K5BKA8BNXP9BEZ75E1D5W1KC",
+   "상태": "실패",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50328751",
+   "productId": "U01KVQNBHNZHFX2WNPK00QXTJ3C",
+   "상태": "실패",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50328750",
+   "productId": "U01K5BGJMA9SXN8NGZ2RQ116R78",
+   "상태": "실패",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50328749",
+   "productId": "U01KVQNBHQY51BSHC7AB809VBDC",
+   "상태": "실패",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327955",
+   "productId": "U01M3RSJF0F1FM757HX11G2RE2E",
+   "상태": "성공",
+   "작업": "업로드",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327958",
+   "productId": "U01M3RSH8QRDPXZ5EX2M507PR9V",
+   "상태": "성공",
+   "작업": "업로드",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327758",
+   "productId": "U01K59VQWZGCB552HN64VJZFM7K",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327745",
+   "productId": "U01K59VQWZGWJG73JNXMEKKNDMD",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327740",
+   "productId": "U01K59VQWZGY5H47EPX5364AZQB",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327739",
+   "productId": "U01K59VQWZH4VWVH8ACJQ0XBC7W",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327734",
+   "productId": "U01K59VQWZHDD7V1ND0B1RJRW2X",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327729",
+   "productId": "U01K59VQWZHHEMJWQYBXM8W4NAY",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327717",
+   "productId": "U01K59VQWZHVY6TBKBM5EK3H612",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327714",
+   "productId": "U01K59VQWZK3E6EW4T6JTC59E9X",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327710",
+   "productId": "U01K59VQWZKTWSZVYV1QTTRW48D",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327704",
+   "productId": "U01K59VQWZMAATAAAPEK4HEPEMP",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327698",
+   "productId": "U01K59VQWZMWHFHYXF6KMQ30QS4",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327689",
+   "productId": "U01K59VR45PNN0HAYCXX0DFN8D3",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327687",
+   "productId": "U01K59VR45Q606WHH0E1CND3JZC",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327682",
+   "productId": "U01K59VR45QB94AHGMGSKMXAVAA",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327677",
+   "productId": "U01K59VR45QB9JXG8BXT0PZQD03",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327671",
+   "productId": "U01K59VR45QFHJ6S60KCTTGAHBY",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327661",
+   "productId": "U01K59VR45XRRQ88P3PS0KKRRT6",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327659",
+   "productId": "U01K59VRB5K8NYK6K2T5YTS3G6T",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327653",
+   "productId": "U01K59VRB5KWKPTJYF6A6HJBE3G",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327646",
+   "productId": "U01K59VRB5M2ZVYR5CS3JR1VNDQ",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327635",
+   "productId": "U01K59VRJFYBP26R83AYE3QFV4X",
+   "상태": "성공",
+   "작업": "삭제",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327631",
+   "productId": "U01M3RSJF0F1FM757HX11G2RE2E",
+   "상태": "실패",
+   "작업": "업로드",
+   "마켓": "스마트스토어"
+  },
+  {
+   "taskId": "50327628",
+   "productId": "U01M3RSH8QRDPXZ5EX2M507PR9V",
+   "상태": "실패",
+   "작업": "업로드",
+   "마켓": "스마트스토어"
+  }
+ ],
+ "work_progress_마켓작업": {
+  "대기": 0,
+  "진행중": 0,
+  "내역": []
+ }
+}
