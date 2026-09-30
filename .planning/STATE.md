@@ -181,6 +181,7 @@ Recent decisions affecting current work:
 | 260929-j2 | 조인 스캔 대상에 ② 추가, 인덱스 범위는 ③⑤ 유지 (원천 분리, 07 썸네일 견적 0건) | 2026-09-29 | fa11c74 | [260929-j2-join-scan-rule2](./quick/260929-j2-join-scan-rule2/) |
 | 260930-m3 | 새 미리보기가 형제 미리보기에서 이미 반영된 상품을 반영됨으로 보고 대상에서 제외 · 남은 0건 문구 (06-06 P1) | 2026-09-30 | db19e3f | [260930-m3-market-preview-dedupe](./quick/260930-m3-market-preview-dedupe/) |
 | 260930-c4 | 쿠팡 gate 가 쿠팡 그룹 밖으로 옮겨진 사본도 제외 (계보 find_by_code + workdata 마켓그룹, 07-07 머그컵) | 2026-09-30 | ff9cfd8 | [260930-c4-coupang-gate-all-copies](./quick/260930-c4-coupang-gate-all-copies/) |
+| fast-261001 | 쿠팡 미리보기 통과 0건이면 apply 없이 정상 종료 (잡 '실패' 표시 수정) | 2026-10-01 | 06d2c45 | — |
 
 ## Deferred Items
 
