@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-30T15:29:32.871Z",
+  "phase": "7",
+  "phase_name": "thumb-coupang",
+  "phase_dir": ".planning/phases/07-thumb-coupang",
+  "plan": 6,
+  "task": 1,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "07-01 공유 파일 배선", "status": "done", "commit": "255f178"},
+    {"id": 2, "name": "07-02 썸네일 CLI 플래그 + thumb_web.py", "status": "done", "commit": "3b1e5b8"},
+    {"id": 3, "name": "07-03 쿠팡 CLI + D-17 + coupang_web.py", "status": "done", "commit": "35ec74e"},
+    {"id": 4, "name": "07-04 썸네일 웹", "status": "done"},
+    {"id": 5, "name": "07-05 쿠팡 웹", "status": "done", "commit": "3a8431d"},
+    {"id": 6, "name": "07-06 썸네일 실탄 — 견적 3개 완료(크레딧 0), 승인 대기", "status": "in_progress", "commit": "933e2d8"},
+    {"id": 7, "name": "07-07 쿠팡 실탄 — 새 규칙 미리보기 통과 0건, 복사할 것 없음", "status": "in_progress", "commit": "8a778c8"}
+  ],
+  "remaining_tasks": [
+    {"id": 6, "name": "07-06 Task1 승인 → 폴더별 Claude 세션 생성 → 판정·반영", "status": "not_started"},
+    {"id": 7, "name": "07-07 승인/종결 판단 — 후보 0건이면 '복사 대상 없음'으로 닫기", "status": "not_started"},
+    {"id": 8, "name": "Phase 7 검증 (gsd-verifier) + 마감", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "쿠팡 미리보기 후보 0건일 때 apply 가 exit 2 → 잡이 '실패'로 표시된다 (표시만의 문제)", "type": "technical", "workaround": "summary.json 의 통과 0 을 보고 '복사 대상 없음'으로 판단"},
+    {"description": "잡 회수가 폴링에 의존 — 아무도 GET /jobs/{id} 를 안 하면 끝난 잡이 좀비 running 으로 남는다", "type": "technical", "workaround": "감시 루프는 DB 만 읽지 말고 GET /jobs/{id} (HX-Request) 를 주기적으로 친다"}
+  ],
+  "human_actions_pending": [
+    {"action": "썸네일 5건 생성 승인 (예상 25 · 최대 50 크레딧) — '썸네일 전부 승인' / 일부 / 보류", "context": "07-06 blocking checkpoint. 견적 b84d5903·9aaf92ea·e5d4d9e8", "blocking": true},
+    {"action": "PLIG74(타이로드엔드볼 풀러) 2026-02-11 쿠팡 사본 4건(그룹 '구매')이 쿠팡용이 맞는지 확인", "context": "07-07 새 gate 가 이것 때문에 제외 → 쿠팡 후보 0건", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "Phase 4 게이트 불통과 종료 (D-23)", "rationale": "진도 우선 — 용팀장", "phase": "4"},
+    {"decision": "Phase 7 확인 필요 결정 전부 추천대로 · min_margin 20.0 (workspace.toml 반영됨)", "rationale": "용팀장 2026-09-29", "phase": "7"},
+    {"decision": "쿠팡 gate 는 불사자 uploadSelectedMarketGroupId 로 모든 그룹의 쿠팡 사본을 대조한다 (로컬 대장 금지)", "rationale": "그룹 밖으로 옮긴 파일럿 사본을 못 잡아 재복사될 뻔함", "phase": "7"},
+    {"decision": "마켓 반영 '이미 반영됨' 판단은 같은 회차 모든 market_status.json 합집합", "rationale": "불사자에 마켓반영 신호 없음 — 06-06 이중반영 위험", "phase": "6"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "용팀장 답을 받는다: 썸네일 승인 여부 + PLIG74 2월 사본 쿠팡용 여부. 썸네일 승인이면 07-06 Task1 승인 기록 후 폴더별 '썸네일 작업 이어서 \"<폴더>\"' 를 Claude 세션(bulsaja-thumbnail 스킬)으로 실행",
+  "context_notes": "Phase 5·6 완료·검증 통과. 서버 :8765 는 2026-09-30 재시작(토큰 alzgALU151gRuH5V3u_yik3RKmFjFU29skvaPTJwaEY). 크레딧 사용 누계 200(AI 상세 4건). 스토어 반영 4건. 쿠팡 복사 0."
+}
