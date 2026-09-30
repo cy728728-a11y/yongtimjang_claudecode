@@ -763,6 +763,20 @@ def test_preview_비0_단계에서_멈춘다(monkeypatch, web, tmp_path, stage, 
     assert s["통과"] == []
 
 
+def test_preview_통과_0건이면_apply_없이_정상종료(monkeypatch, web, tmp_path, capsys):
+    R = str(tmp_path / "run")
+    code, 자식 = _preview(monkeypatch, web, R, _미리보기시나리오(
+        gate=_gate([], [("e", "쿠팡그룹에이미있음")]),
+        apply=lambda av, R: (2, "")))
+    assert code == 0
+    assert 자식.단계들() == ["prep", "resolve", "build", "ship", "gate"]
+    s = json.loads(_읽기(os.path.join(R, "summary.json")))
+    assert s["정지단계"] is None
+    assert s["통과"] == []
+    assert s["apply미리보기"] == {"대상": 0}
+    assert "preview 통과 0" in capsys.readouterr().out
+
+
 # ── commit ──
 
 def _commit준비(R, 옛=("a", "b"), 승인=("a", "b")):

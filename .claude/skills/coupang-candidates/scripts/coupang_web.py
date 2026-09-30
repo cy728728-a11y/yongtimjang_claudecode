@@ -173,6 +173,11 @@ def cmd_preview(args):
         if stage == "gate" and code == 0:
             part, _, _ = _gate_요약(run_dir, lines)
             summary.update(part)
+            # 통과 0건이면 apply 를 부르지 않는다 — apply 는 후보가 없으면 exit 2 라
+            # 잡이 '실패'로 보였다(2026-09-30 d65c780a). 0건은 결과지 오류가 아니다.
+            if not summary["통과"]:
+                summary["apply미리보기"] = {"대상": 0}
+                break
         if stage == "apply" and code == 0:
             m = next((_apply대상.search(ln) for ln in lines if _apply대상.search(ln)), None)
             summary["apply미리보기"] = {"대상": int(m.group(1)) if m else None}
