@@ -676,6 +676,47 @@ def _마켓손댐(v: dict | None) -> bool:
     return bool(v.get("taskId")) or str(v.get("status") or "") in ("접수", "대기", "성공", "실패")
 
 
+def _마켓체크포인트_합침(폴더: Path | None, 체크: dict | None) -> dict:
+    """이 미리보기의 체크포인트 + **같은 회차 형제 market 폴더들의 '손댄' 항목** (Quick 260930-m3).
+
+    미리보기마다 `market_<미리보기id>/` 폴더가 새로 생긴다. 이 폴더 체크포인트만 보면 옛 미리보기에서
+    이미 반영(성공·접수·대기·실패)된 상품을 모르고 다시 '이번 반영' 으로 넣는다 → 스토어에 두 번 나간다
+    (06-06 P1). 그래서 같은 `web/` 아래 **모든** `market_*/market_status.json` 을 합친다.
+
+    - 이 폴더 항목이 손댄 상태면 그대로 둔다(자기 기록이 우선).
+    - 형제 항목은 `_마켓손댐` 인 것만 이월한다 — 스킵(쓰기 전 멈춤)은 재시도 가능하니 옮기지 않는다.
+      형제가 여럿이면 '성공' 을 우선한다. 이월 항목엔 `이월출처`(폴더명)를 붙인다.
+    - 불사자 서버엔 "이 상세가 이미 마켓에 반영됐다" 는 신호가 없다(workdata 는 채널상품번호만 준다)
+      → 로컬 체크포인트 합집합이 유일한 근거다.
+    - **형제 체크포인트가 깨졌으면 `_체크포인트깨짐`** — 빈 값으로 삼키면 이중 반영이다.
+    """
+    합침 = dict(체크 or {})
+    if 폴더 is None:
+        return 합침
+    try:
+        형제들 = sorted((p for p in 폴더.parent.glob("market_*/market_status.json")
+                       if p.parent != 폴더), key=lambda p: p.parent.name)
+    except OSError:
+        형제들 = []
+    for p in 형제들:
+        try:
+            형제 = _마켓체크포인트(p.parent, 없으면={}) or {}
+        except _체크포인트깨짐:
+            raise _체크포인트깨짐(f"형제 미리보기 체크포인트({p.parent.name}/market_status.json)가 "
+                             f"깨졌다 — 이미 반영된 상품을 가려낼 수 없다")
+        for pid, v in 형제.items():
+            if not _마켓손댐(v):
+                continue                     # 스킵 등 쓰기 전 멈춤 — 이월하지 않는다
+            기존 = 합침.get(pid)
+            if _마켓손댐(기존) and not 기존.get("이월출처"):
+                continue                     # 이 폴더 자기 기록이 우선
+            if (_마켓손댐(기존) and str(기존.get("status") or "") == "성공"
+                    and str(v.get("status") or "") != "성공"):
+                continue                     # 이미 '성공' 을 이월했다 — 성공이 이긴다
+            합침[pid] = {**v, "이월출처": p.parent.name}
+    return 합침
+
+
 def _마켓대기수(체크: dict | None) -> int:
     """아직 종결 안 된 건 — 접수·대기. 이어서 확인이 받을 몫이다."""
     return sum(1 for v in (체크 or {}).values()
@@ -720,7 +761,8 @@ def _마켓미리보기ctx(상태: dict) -> dict:
         return {**기본, "error": f"미리보기 산출물(preview.json)이 없거나 깨졌다 — 진행 로그를 봐라 "
                                  f"(종료코드 {코드}: {_마켓종료코드안내.get(코드, '알 수 없음')})"}
     try:
-        체크 = _마켓체크포인트(폴더, 없으면={}) or {}
+        # 형제 미리보기에서 이미 반영된 상품까지 '반영됨' 으로 본다 (Quick 260930-m3)
+        체크 = _마켓체크포인트_합침(폴더, _마켓체크포인트(폴더, 없으면={}) or {})
     except _체크포인트깨짐 as e:
         return {**기본, "error": str(e)}
 
@@ -927,9 +969,14 @@ def _게이트패널ctx(상태: dict, 폴더: Path | None, 체크: dict | None,
     elif 최신 and 최신.get("판정") == "정상":
         미리잡 = _미리보기잡_of(상태)
         if 미리잡 is not None:
-            남은 = sum(1 for it in ((미리보기 or {}).get("items") or [])
-                     if isinstance(it, dict) and str(it.get("판정") or "") == "반영가능"
-                     and not _마켓손댐((체크 or {}).get(it.get("productId"))))
+            try:
+                합침 = _마켓체크포인트_합침(폴더, 체크)
+            except _체크포인트깨짐:
+                합침 = None                   # 못 가리면 남은 수를 모른다 — 0 으로 두고 버튼 안 그림
+            남은 = 0 if 합침 is None else sum(
+                1 for it in ((미리보기 or {}).get("items") or [])
+                if isinstance(it, dict) and str(it.get("판정") or "") == "반영가능"
+                and not _마켓손댐(합침.get(it.get("productId"))))
             패널.update({"preview_job_id": 미리잡.get("id"), "남은반영가능": 남은,
                          "상한": _마켓반영상한()})
     return 패널
@@ -1877,6 +1924,16 @@ def post_market_commit(request: Request, req: MarketCommitReq):
         raise HTTPException(status_code=400,
                             detail="첫 1건 반영이 이미 나갔다 — 스토어에서 눈으로 확인하고 "
                                    "게이트 판정을 기록한 뒤에 나머지가 열린다")
+    # 형제 미리보기에서 이미 반영된 상품은 대상에서 뺀다 — 새 폴더는 옛 반영을 모른다(Quick 260930-m3).
+    try:
+        합침 = _마켓체크포인트_합침(폴더, 체크)
+    except _체크포인트깨짐 as e:
+        raise HTTPException(status_code=400, detail=f"{e} — 손으로 확인하기 전엔 반영하지 않는다")
+    # 게이트 닫힘인데 형제 미리보기가 이미 첫 1건을 내보냈다 → 여기서 또 1건이면 판정 전 2건이다(D-09)
+    if 상한 == 1 and any(isinstance(v, dict) and v.get("이월출처") for v in 합침.values()):
+        raise HTTPException(status_code=400,
+                            detail="다른 미리보기에서 첫 1건 반영이 이미 나갔다 — 그 반영 결과 표에서 "
+                                   "게이트 판정을 기록한 뒤에 나머지가 열린다")
 
     문서 = _마켓미리보기문서(폴더)
     if 문서 is None:
@@ -1886,7 +1943,7 @@ def post_market_commit(request: Request, req: MarketCommitReq):
         if not isinstance(it, dict) or str(it.get("판정") or "") != "반영가능":
             continue
         pid = it.get("productId")
-        if not pid or _마켓손댐(체크.get(pid)):
+        if not pid or _마켓손댐(합침.get(pid)):
             continue
         남은.append({"productId": str(pid), "판매자상품코드": str(it.get("판매자상품코드") or "")})
     if not 남은:

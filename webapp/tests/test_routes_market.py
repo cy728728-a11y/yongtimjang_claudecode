@@ -814,7 +814,10 @@ def test_미리보기ctx_정상이면_최대N과_다음회차(화면, tmp_run_di
     from webapp import settings as 설정
     _, _, 반영 = _첫반영(tmp_run_dir)
     화면.post(게이트경로, json=_게이트몸통(반영))
-    새미리, _ = _미리보기체인(tmp_run_dir)
+    # 새 미리보기 — zzp1 은 형제(첫 반영)에서 이미 성공했다 → '반영됨'(Quick 260930-m3)
+    새미리, _ = _미리보기체인(tmp_run_dir, 항목=[
+        _미리보기항목(p, c) for p, c in (("zzp1", "zz01"), ("zzp2", "zz02"),
+                                        ("zzp4", "zz04"), ("zzp5", "zz05"))])
     j = 화면.get(f"/jobs/{새미리}/result?format=json").json()
     assert j["버튼문구"] == "반영 실행 (최대 20건)" and j["상한"] == 20
     진짜 = 설정.cfg
@@ -822,8 +825,9 @@ def test_미리보기ctx_정상이면_최대N과_다음회차(화면, tmp_run_di
                         2 if d == "market_update_max_items" else 진짜(d, default, required))
     j = 화면.get(f"/jobs/{새미리}/result?format=json").json()
     표시 = {h["판매자상품코드"]: h["반영표시"] for h in j["항목"]}
-    assert 표시["zz01"] == "이번 반영" and 표시["zz02"] == "이번 반영"
-    assert 표시["zz04"] == "다음 회차"
+    assert 표시["zz01"] == "반영됨(성공)"
+    assert 표시["zz02"] == "이번 반영" and 표시["zz04"] == "이번 반영"
+    assert 표시["zz05"] == "다음 회차"
     assert j["버튼문구"] == "반영 실행 (최대 2건)"
 
 
@@ -946,3 +950,86 @@ def test_반영버튼_조각_템플릿에_safe_없음():
     for 이름 in ("_market_commit_next.html", "_market_gate_response.html"):
         본문 = (폴더 / 이름).read_text(encoding="utf-8")
         assert "| safe" not in 본문 and "|safe" not in 본문, 이름
+
+
+# ── 형제 미리보기 이중 반영 방지 (Quick 260930-m3 · 06-06 P1) ───────────────────
+# 미리보기마다 market 폴더가 새로 생긴다. 옛 폴더에서 이미 반영된 상품을 새 미리보기가 다시
+# '이번 반영' 으로 넣으면 스토어에 두 번 나간다 — 같은 회차의 형제 체크포인트를 합쳐 거른다.
+
+_옛성공 = {"워터마크": "100", "items": {
+    "zzp1": {"판매자상품코드": "zz01", "status": "성공", "taskId": "task-zz-00000301"}}}
+
+
+def test_형제미리보기_성공은_반영됨이고_대상에서_빠진다(화면, 엿듣기, tmp_run_dir, monkeypatch):
+    from webapp.routes import jobs as 라우트
+    monkeypatch.setattr(라우트, "_마켓반영상한", lambda: 20)
+    _미리보기체인(tmp_run_dir, market_status=_옛성공)     # 옛 미리보기 — zzp1 성공
+    새미리, 새폴더 = _미리보기체인(tmp_run_dir)          # 새 폴더 — 체크포인트 없음
+    assert not (새폴더 / "market_status.json").exists()
+    j = 화면.get(f"/jobs/{새미리}/result?format=json").json()
+    assert j["error"] is None
+    표시 = {h["판매자상품코드"]: h["반영표시"] for h in j["항목"]}
+    assert 표시["zz01"] == "반영됨(성공)"
+    assert 표시["zz02"] == "이번 반영" and 표시["zz04"] == "이번 반영"
+    assert j["남은반영가능"] == 2
+    응답 = 화면.post(반영경로, json={"preview_job_id": 새미리})
+    assert 응답.status_code == 200, 응답.text
+    assert [x["productId"] for x in 엿듣기["detail_inputs"]["items"]] == ["zzp2", "zzp4"]
+
+
+def test_형제미리보기가_전부_반영했으면_400(화면, 엿듣기, tmp_run_dir, monkeypatch):
+    from webapp.routes import jobs as 라우트
+    monkeypatch.setattr(라우트, "_마켓반영상한", lambda: 20)
+    _미리보기체인(tmp_run_dir, market_status={"워터마크": "100", "items": {
+        p: {"판매자상품코드": c, "status": "성공", "taskId": f"task-{p}"}
+        for p, c in (("zzp1", "zz01"), ("zzp2", "zz02"), ("zzp4", "zz04"))}})
+    새미리, _ = _미리보기체인(tmp_run_dir)
+    본문 = 화면.get(f"/jobs/{새미리}/result", headers={"HX-Request": "true"}).text
+    assert "market-commit-btn" not in 본문 and "반영할 상품이 0건" in 본문
+    assert 화면.post(반영경로, json={"preview_job_id": 새미리}).status_code == 400
+    assert not 엿듣기
+
+
+def test_형제미리보기_스킵은_이월하지_않는다(화면, 엿듣기, tmp_run_dir, monkeypatch):
+    """스킵은 쓰기 전 멈춤 — 다음 반영에서 다시 시도할 수 있어야 한다."""
+    from webapp.routes import jobs as 라우트
+    monkeypatch.setattr(라우트, "_마켓반영상한", lambda: 20)
+    _미리보기체인(tmp_run_dir, market_status={"워터마크": "100", "items": {
+        "zzp1": {"판매자상품코드": "zz01", "status": "스킵", "taskId": None}}})
+    새미리, _ = _미리보기체인(tmp_run_dir)
+    assert 화면.post(반영경로, json={"preview_job_id": 새미리}).status_code == 200
+    assert [x["productId"] for x in 엿듣기["detail_inputs"]["items"]] == ["zzp1", "zzp2", "zzp4"]
+
+
+def test_게이트전_형제가_첫1건을_냈으면_새미리보기_반영도_400(화면, 엿듣기, tmp_run_dir):
+    """상한 1(판정 전)인데 다른 미리보기에서 이미 1건 나갔다 — 여기서 또 1건이면 판정 전 2건이다."""
+    _미리보기체인(tmp_run_dir, market_status=_옛성공)
+    새미리, _ = _미리보기체인(tmp_run_dir)
+    응답 = 화면.post(반영경로, json={"preview_job_id": 새미리})
+    assert 응답.status_code == 400
+    assert "게이트 판정" in 응답.json()["detail"]
+    assert not 엿듣기
+
+
+def test_형제_체크포인트가_깨졌으면_반영400(화면, 엿듣기, tmp_run_dir, monkeypatch):
+    from webapp.routes import jobs as 라우트
+    monkeypatch.setattr(라우트, "_마켓반영상한", lambda: 20)
+    _, 옛폴더 = _미리보기체인(tmp_run_dir)
+    (옛폴더 / "market_status.json").write_text("{깨짐", encoding="utf-8")
+    새미리, _ = _미리보기체인(tmp_run_dir)
+    응답 = 화면.post(반영경로, json={"preview_job_id": 새미리})
+    assert 응답.status_code == 400 and "형제" in 응답.json()["detail"]
+    assert not 엿듣기
+    assert "형제" in (화면.get(f"/jobs/{새미리}/result?format=json").json()["error"] or "")
+
+
+def test_게이트패널_남은0건이면_진행하라_문구가_없다(화면, 엿듣기, tmp_run_dir):
+    """반영가능 전부가 성공했으면 '나머지를 진행해라' 가 아니라 '남은 0건' 이다."""
+    from webapp import market_gate_store
+    market_gate_store.판정기록("정상", "zz01", "zzp1", "job-zz", "교체됨", "")
+    _, _, 반영 = _첫반영(tmp_run_dir, 체크={"워터마크": "100", "items": {
+        p: {"판매자상품코드": c, "status": "성공", "taskId": f"task-{p}"}
+        for p, c in (("zzp1", "zz01"), ("zzp2", "zz02"), ("zzp4", "zz04"))}})
+    본문 = 화면.get(f"/jobs/{반영}/result", headers={"HX-Request": "true"}).text
+    assert "나머지를 진행해라" not in 본문 and "나머지 " not in 본문.split("게이트가 열렸다")[-1][:60]
+    assert 'id="market-gate-nothing-left"' in 본문
