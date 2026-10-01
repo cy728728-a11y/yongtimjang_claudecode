@@ -158,3 +158,109 @@ def test_summarize_그밖의_쓰기잡은_모른다(tmp_path):
 def test_테스트는_실데이터루트_감사파일을_만들지_않는다():
     """실 데이터루트 control-tower/ 에 감사 파일이 생기면 격리가 뚫린 것이다."""
     assert audit.audit_path() != Path.home() / "python_work" / "data" / "control-tower" / "audit.jsonl"
+
+
+# ── 엔진 종료 지점 3곳 → 감사 1줄 (FLOW-07 · T-02-10) ─────────────────────────
+
+from datetime import datetime  # noqa: E402
+
+from webapp import jobs  # noqa: E402
+
+
+class _끝난:
+    def __init__(self, code):
+        self.code, self.pid = code, os.getpid()
+
+    def poll(self):
+        return self.code
+
+
+@pytest.fixture
+def 감사판(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setattr(settings, "JOB_LOG_DIR", str(tmp_path / "logs"))
+    jobs.init_db()
+    yield tmp_path / "audit.jsonl"
+    jobs._PROCS.clear()
+
+
+def _줄(경로: Path) -> list[dict]:
+    if not 경로.is_file():
+        return []
+    return [json.loads(x) for x in 경로.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+def _박기(kind: str, pid) -> str:
+    import sqlite3
+    import uuid
+    job_id = str(uuid.uuid4())
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("INSERT INTO jobs (id, kind, accounts, argv, status, log_path, pid, started_at) "
+                   "VALUES (?,?,?,?,?,?,?,?)",
+                   (job_id, kind, '["zz1"]', "[]", "running", "x.log", pid,
+                    datetime.now().astimezone().isoformat(timespec="seconds")))
+        cx.commit()
+    finally:
+        cx.close()
+    return job_id
+
+
+def _죽은pid() -> int:
+    import subprocess
+    import sys
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()
+    return p.pid
+
+
+def test_감사_정상종료_1줄_반복_reap_에도_1줄(감사판):
+    잡 = _박기("bids_commit", os.getpid())
+    jobs._PROCS[잡] = _끝난(2)
+    jobs.job_status(잡)
+    jobs.job_status(잡)
+    jobs.recent_jobs()
+    jobs.latest_done("bids_commit")
+    줄 = _줄(감사판)
+    assert len(줄) == 1
+    assert 줄[0]["잡id"] == 잡 and 줄[0]["상태"] == "failed" and 줄[0]["종료코드"] == 2
+
+
+def test_감사_orphaned_1줄(감사판):
+    잡 = _박기("prune_commit", _죽은pid())
+    assert jobs.job_status(잡)["status"] == "orphaned"
+    jobs.job_status(잡)
+    줄 = _줄(감사판)
+    assert len(줄) == 1 and 줄[0]["상태"] == "orphaned" and 줄[0]["종료코드"] is None
+
+
+def test_감사_spawn_실패_1줄(감사판, monkeypatch):
+    def 터짐(argv_list, log_path):
+        raise OSError("못 띄움")
+    monkeypatch.setattr(jobs, "spawn", 터짐)
+    with pytest.raises(RuntimeError):
+        jobs.create_job("prep", accounts=["zz1"])
+    줄 = _줄(감사판)
+    assert len(줄) == 1 and 줄[0]["상태"] == "failed" and 줄[0]["종료코드"] == -1
+    assert 줄[0]["종류"] == "prep"
+
+
+def test_감사_비쓰기잡은_0줄(감사판):
+    잡 = _박기("prune_preview", os.getpid())
+    jobs._PROCS[잡] = _끝난(0)
+    assert jobs.job_status(잡)["status"] == "done"
+    고아 = _박기("synthetic", _죽은pid())
+    assert jobs.job_status(고아)["status"] == "orphaned"
+    assert _줄(감사판) == []
+
+
+def test_감사_롤백_거부_뒤에도_중복_0(감사판, monkeypatch):
+    """끝난 쓰기 잡이 거둬진 직후 가드가 거부해도 done 1줄만 남는다 (Pitfall 2)."""
+    monkeypatch.setattr(jobs, "spawn", lambda a, l: _끝난(None))
+    잡 = _박기("bids_commit", _죽은pid())
+    jobs._PROCS[잡] = _끝난(0)
+    with pytest.raises(ValueError):
+        jobs.create_job("bids_commit", run_dir="없는회차-zz", only_ads=["x"])
+    jobs.job_status(잡)
+    줄 = _줄(감사판)
+    assert len(줄) == 1 and 줄[0]["상태"] == "done" and 줄[0]["종료코드"] == 0

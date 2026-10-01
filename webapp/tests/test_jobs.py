@@ -2055,3 +2055,130 @@ def test_prune_전용_인자는_다른_kind_에_못_준다(잡판, 안띄운다,
                         prune_retry=True)
     with pytest.raises(ValueError):
         jobs.create_job("prune_preview", run_dir=tmp_run_dir.name, prune_max_items=10)
+
+
+# ── Phase 2 · 02-02 — 롤백 버그 · 기동 reap (ENG-05 · Pitfall 2 · 4) ─────────────
+
+def _죽은pid() -> int:
+    """방금 끝난 프로세스의 pid — kill(0) 이 ProcessLookupError 를 낸다."""
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()
+    return p.pid
+
+
+def _행박기(kind: str, pid: int | None, status: str = "running",
+            started_at: str | None = None) -> str:
+    import sqlite3
+    job_id = str(uuid.uuid4())
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("INSERT INTO jobs (id, kind, accounts, argv, status, log_path, pid, started_at) "
+                   "VALUES (?,?,?,?,?,?,?,?)",
+                   (job_id, kind, "[]", "[]", status, "x.log", pid,
+                    started_at or datetime.now().astimezone().isoformat(timespec="seconds")))
+        cx.commit()
+    finally:
+        cx.close()
+    return job_id
+
+
+def _상태(job_id: str) -> dict:
+    import sqlite3
+    cx = sqlite3.connect(jobs.db_path())
+    cx.row_factory = sqlite3.Row
+    try:
+        return dict(cx.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone())
+    finally:
+        cx.close()
+
+
+def test_롤백_거부된_create_job_뒤에도_종료코드가_남는다(잡판, 안띄운다, tmp_run_dir):
+    """가드 트랜잭션이 롤백돼도 그 전에 거둔 종료가 사라지지 않는다 (Pitfall 2 · T-02-11)."""
+    A = _행박기("bids_commit", _죽은pid())
+    jobs._PROCS[A] = _끝난프로세스(0)            # 끝났지만 아직 안 거둔 쓰기 잡
+    with pytest.raises(ValueError):
+        jobs.create_job("bids_commit", run_dir="없는회차-zz", only_ads=["x"])
+    상태 = jobs.job_status(A)
+    assert 상태["status"] == "done" and 상태["exit_code"] == 0
+
+
+def test_기동_reap_DB_없으면_0_이고_만들지_않는다(tmp_path, monkeypatch):
+    monkeypatch.delenv("CT_SKIP_STARTUP_REAP", raising=False)
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "없음.db"))
+    assert jobs.reap_on_startup() == 0
+    assert not (tmp_path / "없음.db").exists()
+
+
+def test_기동_reap_죽은_pid_는_orphaned(잡판, monkeypatch):
+    monkeypatch.delenv("CT_SKIP_STARTUP_REAP", raising=False)
+    죽은 = _행박기("synthetic", _죽은pid())
+    assert jobs.reap_on_startup() == 1
+    assert _상태(죽은)["status"] == "orphaned"
+
+
+def test_기동_reap_스위치가_켜지면_손대지_않는다(잡판):
+    죽은 = _행박기("synthetic", _죽은pid())
+    assert os.environ.get("CT_SKIP_STARTUP_REAP") == "1"
+    assert jobs.reap_on_startup() == 0
+    assert _상태(죽은)["status"] == "running"
+
+
+class _가짜ps_lstart:
+    """`ps -o lstart=` 만 가짜로 답한다. stat 질의(좀비 판정)는 살아 있다고 답한다."""
+
+    def __init__(self, lstart=None, 터짐=False):
+        self.lstart, self.터짐 = lstart, 터짐
+
+    def __call__(self, cmd, **kw):
+        if any("lstart" in c for c in cmd):
+            if self.터짐:
+                raise OSError("ps 없음")
+            return subprocess.CompletedProcess(cmd, 0, stdout=self.lstart, stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout="S\n", stderr="")
+
+
+def _lstart(t: datetime) -> str:
+    return t.strftime("%a %b %d %H:%M:%S %Y") + "\n"
+
+
+def test_기동_reap_pid_재사용은_orphaned(잡판, monkeypatch):
+    """재부팅 뒤 남이 pid 를 재사용하면 '영원히 running' 이 된다 (Pitfall 4 · T-02-12)."""
+    monkeypatch.delenv("CT_SKIP_STARTUP_REAP", raising=False)
+    한시간전 = (datetime.now().astimezone() - timedelta(hours=1)).isoformat(timespec="seconds")
+    잡 = _행박기("synthetic", os.getpid(), started_at=한시간전)
+    monkeypatch.setattr(jobs.subprocess, "run", _가짜ps_lstart(_lstart(datetime.now())))
+    assert jobs.reap_on_startup() == 1
+    assert _상태(잡)["status"] == "orphaned"
+
+
+@pytest.mark.parametrize("가짜", [_가짜ps_lstart(터짐=True), _가짜ps_lstart("모르는 모양\n"),
+                                  _가짜ps_lstart(_lstart(datetime.now() - timedelta(hours=3)))])
+def test_기동_reap_ps_실패나_먼저_뜬_프로세스는_건드리지_않는다(잡판, monkeypatch, 가짜):
+    monkeypatch.delenv("CT_SKIP_STARTUP_REAP", raising=False)
+    한시간전 = (datetime.now().astimezone() - timedelta(hours=1)).isoformat(timespec="seconds")
+    잡 = _행박기("synthetic", os.getpid(), started_at=한시간전)
+    monkeypatch.setattr(jobs.subprocess, "run", 가짜)
+    assert jobs.reap_on_startup() == 0
+    assert _상태(잡)["status"] == "running"
+
+
+def test_기동_lifespan_이_예외없이_뜨고_실DB를_안_연다(monkeypatch):
+    """autouse 격리 상태에서 TestClient(app) 진입 — 기동 reap 이 db_path 조차 안 본다."""
+    from fastapi.testclient import TestClient
+    from webapp.main import app
+
+    def 금지():
+        raise AssertionError("기동 reap 이 실 webapp.db 를 열려 했다")
+    monkeypatch.setattr(jobs, "db_path", 금지)
+    with TestClient(app, base_url=f"http://127.0.0.1:{settings.PORT}"):
+        pass
+
+
+def test_기동_lifespan_이_정리건수를_찍는다(잡판, monkeypatch, capsys):
+    monkeypatch.delenv("CT_SKIP_STARTUP_REAP", raising=False)
+    _행박기("synthetic", _죽은pid())
+    from fastapi.testclient import TestClient
+    from webapp.main import app
+    with TestClient(app, base_url=f"http://127.0.0.1:{settings.PORT}"):
+        pass
+    assert "[기동] 고아 잡 1건 정리" in capsys.readouterr().out
