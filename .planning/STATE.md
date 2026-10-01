@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-01-PLAN.md
+stopped_at: Completed 02-02-PLAN.md
 last_updated: "2026-10-01T07:37:00.689Z"
 last_activity: 2026-10-01
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 48
+  completed_plans: 49
   percent: 86
 ---
 
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 02 (꺼진 소재 정리) — EXECUTING
-Plan: 1 of 6 (02-01 완료: prune CLI 4플래그 · 산출물 스키마 · ⑥ 행 statusReason/productLive · 네이버 API 0)
-Status: 02-01 완료 — 다음 02-02
+Plan: 2 of 6 (02-02 완료: prune 잡 2종 · 미리보기당 커밋 1회 · 기동 고아 정리 · 쓰기 잡 감사 · 롤백 버그 수정)
+Status: 02-02 완료 — 다음 02-03 (운영 :8765 재시작은 02-06)
 Last activity: 2026-10-01
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
-Phase 02 (꺼진 소재 정리): 2026-10-01 실행 시작 — 02-01 CLI 계약 완료.
+Phase 02 (꺼진 소재 정리): 2026-10-01 실행 시작 — 02-01 CLI 계약 · 02-02 엔진 안전 계약 완료.
 
 Progress: [█████████░] 91%
 
@@ -108,6 +108,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-05 htmx 폼은 stdlib parse_qsl 로 직접 푼다 — python-multipart 의존성을 늘리지 않는다
 - [Phase 02]: 02-01 D-06 exit 5 미구현 — revived_filter 교집합이라 발동 불가. new_since_preview 보고 + 목록 밖 DELETE 0회 테스트로 대체
 - [Phase 02]: 02-01 prune 산출물 최상위 adIds = 다음 --only-ads 입력. 커밋 targets 는 재조회 전 대상, total/adIds 는 items 기준
+- [Phase 02]: 02-02 prune_commit ∈ WRITE_KINDS·caffeinate, 미리보기당 성공 커밋 1회(트랜잭션 안 BusyError, prune_retry 만 예외), 상한 prune_max_items=8000(D-07 용팀장 확인 필요)
+- [Phase 02]: 02-02 쓰기 잡 감사는 DB 커밋 후에만 1줄(starting 시한 초과 포함). create_job 의 _reap 은 가드 트랜잭션 밖 — 롤백 시 종료코드 소실 버그 수정
 - [Phase ?]: 01-06 폴링과 SSE 를 조각 단위로 분리 — 패널 전체를 2초마다 outerHTML 로 교체하면 그 안의 EventSource 가 2초마다 끊겼다 붙는다. _job_status.html 만 폴링이 때린다
 - [Phase ?]: 01-06 진행 로그는 매 접속 오프셋 0 전량 재생. 재연결 헤더에 이어받기를 맡기지 않는다 — htmx-ext-sse 가 재연결 때 EventSource 를 새로 만들어 그 상태를 버린다 (T-1-27)
 - [Phase ?]: 01-06 sse-close 는 연결을 여는 엘리먼트에 붙인다(sse.js:235). 자식에 붙이면 조용히 무시돼 작업 종료 후 무한 재연결 — 리서치·플랜 예제가 틀렸다. vendoring 소스가 문서보다 정본
@@ -196,5 +198,5 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-10-01T07:37:00.684Z
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None

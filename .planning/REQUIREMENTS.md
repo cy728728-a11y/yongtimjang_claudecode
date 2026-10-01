@@ -15,8 +15,8 @@
       (`run_ads.py` 가 네임스페이스 없는 이름을 `sys.path.insert` 로 import 하고, `run_yong.py` 가 토큰을 환경변수로 주입한다. in-process 면 계정 자격증명이 작업 간에 섞인다)
 - [x] **ENG-02**: 실행한 작업이 브라우저를 닫아도 계속 돌고, 재접속하면 그동안의 출력을 처음부터 이어서 볼 수 있다
 - [x] **ENG-03**: 자식 프로세스의 출력을 append-only 로그 파일에 쌓고, 화면은 그 파일의 오프셋부터 재생한다 (스트림 직결 금지 — 닫힌 사이 출력이 사라진다)
-- [ ] **ENG-04**: 같은 대상에 같은 작업이 동시에 두 번 돌지 않는다 (작업 잠금)
-- [ ] **ENG-05**: 서버를 재시작하면 고아가 된 작업을 감지해 상태를 정리한다
+- [x] **ENG-04**: 같은 대상에 같은 작업이 동시에 두 번 돌지 않는다 (작업 잠금)
+- [x] **ENG-05**: 서버를 재시작하면 고아가 된 작업을 감지해 상태를 정리한다
 - [x] **ENG-06**: 수십 분짜리 작업 중 맥북이 절전으로 자지 않는다 (`caffeinate -i`)
 - [x] **ENG-07**: 작업 생성이 HTTP 핸들러가 아니라 **호출 가능한 함수**로 존재한다 (3단계 스케줄 자동화가 같은 경로를 쓰게 하기 위함)
 - [x] **ENG-08**: 작업 시작 전 `bulsaja_my_profile` 로 계정을 확인하고, 기대 계정(부킹/용쌤)이 아니면 실행을 거부한다
@@ -40,7 +40,7 @@
 - [x] **FLOW-04**: 확인 강도가 버튼마다 다르다 — 되돌릴 수 있는 작업은 모달 없이 되돌리기 버튼만, 되돌릴 수 없는 작업만 건수 타이핑
 - [x] **FLOW-05**: 결과가 **항목 단위**로 남는다 — 성공 / 실패 / 스킵을 사유와 함께 구분해 보여준다
 - [ ] **FLOW-06**: 실패한 항목만 골라 재시도할 수 있다
-- [ ] **FLOW-07**: 실행 이력이 감사 로그(JSONL)로 남는다 — 언제·뭘·몇 건·크레딧 얼마
+- [x] **FLOW-07**: 실행 이력이 감사 로그(JSONL)로 남는다 — 언제·뭘·몇 건·크레딧 얼마
 
 ### 보드 (BOARD)
 
@@ -169,8 +169,8 @@
 | ENG-01 | Phase 1 | Complete |
 | ENG-02 | Phase 1 | Complete |
 | ENG-03 | Phase 1 | Complete |
-| ENG-04 | Phase 2 | Pending |
-| ENG-05 | Phase 2 | Pending |
+| ENG-04 | Phase 2 | Complete |
+| ENG-05 | Phase 2 | Complete |
 | ENG-06 | Phase 2 → **Phase 3 에서 선취 완료** | Complete |
 | ENG-07 | Phase 1 | Complete |
 | ENG-08 | Phase 3 | Complete |
@@ -187,7 +187,7 @@
 | FLOW-04 | Phase 1 | Complete |
 | FLOW-05 | Phase 1 | Complete |
 | FLOW-06 | Phase 2 | Pending |
-| FLOW-07 | Phase 2 | Pending |
+| FLOW-07 | Phase 2 | Complete |
 | BOARD-01 | Phase 1 | Complete |
 | BOARD-02 | Phase 1 | Complete |
 | BOARD-03 | Phase 1 | Complete |
