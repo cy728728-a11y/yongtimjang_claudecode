@@ -49,7 +49,7 @@
 - [x] **BOARD-03**: 다중 선택 시 **"보이는 것만"과 "필터 전체"를 명시적으로 구분**한다 — 헤더 체크박스는 현재 페이지만 고르고, 전체 선택은 별도 확인을 거친다
 - [x] **BOARD-04**: 선택한 항목 수와 예상 비용이 실행 버튼 옆에 항상 보인다
 - [x] **BOARD-05**: 정지된 소재의 과거 실적을 현재 유입으로 표시하지 않는다 (물갈이 부산물인 연동끊김 대량정지 방어)
-- [ ] **BOARD-06**: 판정이 틀렸을 때 **1클릭으로 오판정 표시**를 남긴다 (2단계 자동화의 승인 근거가 된다)
+- [x] **BOARD-06**: 판정이 틀렸을 때 **1클릭으로 오판정 표시**를 남긴다 (2단계 자동화의 승인 근거가 된다)
 
 ### 버튼 1 — 입찰가 인상 (BID)
 
@@ -193,7 +193,7 @@
 | BOARD-03 | Phase 1 | Complete |
 | BOARD-04 | Phase 1 | Complete |
 | BOARD-05 | Phase 2 | Complete |
-| BOARD-06 | Phase 2 | Pending |
+| BOARD-06 | Phase 2 | Complete |
 | BID-01 | Phase 1 | Complete |
 | BID-02 | Phase 1 | Complete |
 | BID-03 | Phase 1 | Complete |

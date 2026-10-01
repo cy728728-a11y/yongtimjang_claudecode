@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "02-03 완료 — 다음 02-04 (운영 :8765 재시작은 02-06)"
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-10-01T07:58:14.582Z"
+status: "02-04 완료 — 다음 02-05 (운영 :8765 재시작은 02-06)"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-10-01T08:05:27.130Z"
 last_activity: 2026-10-01
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 50
+  completed_plans: 51
   percent: 86
 ---
 
@@ -26,16 +26,16 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 02 (꺼진 소재 정리) — EXECUTING
-Plan: 3 of 6 complete (02-03 완료: 꺼진 소재 정리 웹 슬라이스 — 미리보기 → 건수 타이핑 삭제 → 실패분 재시도)
-Status: 02-03 완료 — 다음 02-04 (운영 :8765 재시작은 02-06)
+Plan: 4 of 6 complete (02-04 완료: 보드 정지사유·광고 정지 배지·꺼진 소재 합산 배제 + 오판정 1클릭)
+Status: 02-04 완료 — 다음 02-05 (운영 :8765 재시작은 02-06)
 Last activity: 2026-10-01
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
-Phase 02 (꺼진 소재 정리): 2026-10-01 실행 시작 — 02-01 CLI 계약 · 02-02 엔진 안전 계약 · 02-03 웹 슬라이스 완료 (Phase 02, 3 of 6 complete).
+Phase 02 (꺼진 소재 정리): 2026-10-01 실행 시작 — 02-01 CLI 계약 · 02-02 엔진 안전 계약 · 02-03 웹 슬라이스 · 02-04 정지 표시·오판정 완료 (Phase 02, 4 of 6 complete).
 
-Progress: [█████████░] 94%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -200,6 +200,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-01T07:58:01.580Z
+Last session: 2026-10-01T08:05:27.125Z
 Stopped at: Completed 02-03-PLAN.md
 Resume file: None
