@@ -57,6 +57,17 @@ class PruneCommitReq(BaseModel):
     typed_count: StrictInt = Field(ge=0)
 
 
+class PruneRetryReq(BaseModel):
+    """실패분 재시도 요청 — 커밋 잡 id + **사람이 타이핑한 실패 건수** (FLOW-06 · D-08 · T-02-22).
+
+    재시도 대상 목록을 받지 않는다 — 서버가 커밋 산출물(실패) ∩ 미리보기 산출물(adIds) 로 유도한다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    commit_job_id: JobId
+    typed_count: StrictInt = Field(ge=0)
+
+
 # ── 상한 — 결정은 이 한 곳 ──────────────────────────────────────────────────
 
 def _삭제상한() -> int:
@@ -230,6 +241,78 @@ def post_prune_commit(request: Request, req: PruneCommitReq):
     return {"job_id": 결과["job_id"], "건수": 합계, "상한": 상한}
 
 
+# ── ③ 실패분만 재시도 ───────────────────────────────────────────────────────
+
+def _재시도대상(결과문서: dict, 미리보기문서: dict) -> dict[str, list[str]]:
+    """계정 → 재시도할 adId. 커밋 산출물의 실패(실패·재시도소진) ∩ 미리보기 adIds. 결정은 이 한 곳.
+
+    결과 조각(건수 안내)과 재시도 라우트(대상 파일)가 같은 함수를 써야 화면이 말한 수와 서버가 센
+    수가 어긋나지 않는다.
+    """
+    본것 = {str(a) for a in (미리보기문서.get("adIds") or [])}
+    계정별: dict[str, list[str]] = {}
+    for alias, v in _계정들(결과문서).items():
+        for x in v.get("items") or []:
+            if not isinstance(x, dict) or x.get("결과") not in _실패결과:
+                continue
+            ad = str(x.get("adId") or "")
+            if ad in 본것 and ad not in 계정별.get(alias, []):
+                계정별.setdefault(alias, []).append(ad)
+    return 계정별
+
+
+@router.post("/jobs/prune/retry")
+def post_prune_retry(request: Request, req: PruneRetryReq):
+    """**실패분만 다시 지운다 — 되돌릴 수 없다.** 실패 건수 타이핑이 승인이다 (FLOW-06 · D-08).
+
+      ① 커밋 잡인가(400) · 도는 중이 아닌가(409) · done 인가(400)
+      ② 원 미리보기 검사 — 24시간은 **미리보기** started_at 기준(FLOW-03 과 일관)
+      ③ 같은 미리보기의 삭제가 도는 중이면 409 (성공한 커밋은 있어도 된다 — 그게 재시도의 전제)
+      ④ 대상 = 커밋 산출물의 실패(실패·재시도소진) adId ∩ 미리보기 산출물 adIds → 0 이면 400
+      ⑤ 상한 초과 400 · typed_count ≠ 대상 수 409
+      ⑥ create_job(prune_commit, parent=원 미리보기, only_ads=대상, prune_retry=True)
+
+    D-08 의 '같은 미리보기 파일' 대신 그 부분집합을 보낸다 — 이미 지운 수천 건이 재조회에 없음으로
+    결과 표를 덮지 않게. 진행 파일(delete_progress) 재개가 2차 방어로 남는다. 대상은 CLI 산출물
+    두 개에서만 유도 — 브라우저 목록을 받지 않는다(T-02-22).
+    """
+    커밋 = jobs.job_status(req.commit_job_id)
+    if 커밋 is None or 커밋.get("kind") != "prune_commit":
+        raise HTTPException(status_code=400, detail="꺼진 소재 삭제 작업이 아니다 — 재시도할 결과가 없다")
+    if 커밋.get("status") in jobs.LIVE_STATUSES:
+        raise HTTPException(status_code=409, detail="삭제가 아직 도는 중이다 — 끝나고 결과를 봐라")
+    if 커밋.get("status") != "done":
+        raise HTTPException(status_code=400,
+                            detail=f"삭제가 정상으로 안 끝났다({커밋.get('status')}, 종료코드 "
+                                   f"{커밋.get('exit_code')}) — 결과를 모르니 새 미리보기부터")
+    미리보기id = 커밋.get("parent_job_id") or ""
+    부모 = jobs.job_status(미리보기id) if 미리보기id else None
+    미리보기 = _미리보기검사(부모)
+    _자식검사(미리보기id, 성공도_막기=False)
+
+    결과문서 = _산출물(커밋)
+    if 결과문서 is None:
+        raise HTTPException(status_code=400, detail="삭제 산출물이 없거나 깨졌다 — 새 미리보기부터")
+    계정별 = _재시도대상(결과문서, 미리보기)
+    대상 = [ad for alias in sorted(계정별) for ad in 계정별[alias]]
+    if not 대상:
+        raise HTTPException(status_code=400, detail="재시도할 실패 건이 0건이다 (미리보기에 있던 소재 기준)")
+    상한 = _삭제상한()
+    if len(대상) > 상한:
+        raise HTTPException(status_code=400,
+                            detail=f"재시도 대상 {len(대상):,}건 > 상한 {상한:,}건 — 새 미리보기를 나눠 떠라")
+    if req.typed_count != len(대상):
+        raise HTTPException(
+            status_code=409,
+            detail=(f"화면이 본 건수({req.typed_count:,})와 지금 재시도할 건수"
+                    f"({len(대상):,})가 다르다 — 다시 확인해라"))
+
+    결과 = _상세잡만들기("prune_commit", run_dir=부모.get("run_dir"), accounts=sorted(계정별),
+                        parent_job_id=미리보기id, only_ads=대상, prune_retry=True,
+                        prune_max_items=_삭제상한())
+    return {"job_id": 결과["job_id"], "건수": len(대상), "상한": 상한}
+
+
 # ── 결과 조각 ctx (GET /jobs/{id}/result 가 결과표로 부른다) ────────────────
 
 def _표행(alias: str, r: dict) -> dict:
@@ -314,7 +397,8 @@ def _삭제결과ctx(상태: dict) -> dict:
     """
     상태 = 상태 or {}
     기본 = {"job": _투영(상태), "running": False, "error": None, "계정행": [], "제외행": [],
-            "실패행": [], "실패목록": [], "새로꺼짐": 0, "합": {}, "재시도가능": False}
+            "실패행": [], "실패목록": [], "새로꺼짐": 0, "합": {}, "재시도가능": False,
+            "재시도건수": 0}
     if 상태.get("status") in jobs.LIVE_STATUSES:
         return {**기본, "running": True}
     문서 = _산출물(상태)
@@ -352,15 +436,18 @@ def _삭제결과ctx(상태: dict) -> dict:
     계정행.sort(key=lambda r: (0 if r["중단"] or r["건너뜀"] else
                                1 if r["실패"] or r["재시도소진"] else 2, r["계정"]))
     실패목록 = [r["adId"] for r in 실패행 if r["adId"]]
-    재시도가능 = False
+    재시도가능, 재시도건수 = False, 0
     if 실패목록 and 상태.get("status") == "done":
         부모 = jobs.job_status(상태.get("parent_job_id") or "") if 상태.get("parent_job_id") else None
         경과 = _경과초((부모 or {}).get("started_at"))
-        재시도가능 = bool(부모 and 경과 is not None and 경과 <= _미리보기유효시간
-                         and not any(c.get("status") in jobs.LIVE_STATUSES
-                                     for c in jobs.children_of(부모["id"], "prune_commit")))
+        부모문서 = _산출물(부모) if 부모 else None
+        if (부모 and 부모문서 and 경과 is not None and 경과 <= _미리보기유효시간
+                and not any(c.get("status") in jobs.LIVE_STATUSES
+                            for c in jobs.children_of(부모["id"], "prune_commit"))):
+            재시도건수 = sum(len(v) for v in _재시도대상(문서, 부모문서).values())
+            재시도가능 = 재시도건수 > 0
     기본.update({"계정행": 계정행, "제외행": 제외행, "실패행": 실패행, "실패목록": 실패목록,
-                "합": 합, "재시도가능": 재시도가능})
+                "합": 합, "재시도가능": 재시도가능, "재시도건수": 재시도건수})
     return 기본
 
 

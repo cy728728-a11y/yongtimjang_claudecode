@@ -704,3 +704,13 @@ def test_재시도_결과조각_실패가_없으면_재시도영역_없음(삭�
     cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({}, 성공={"zza": ["nad-zza-000"]}))
     본문 = _조각(삭제판, cid)
     assert 'id="prune-retry-details"' not in 본문
+
+
+# ── 가드 (T-02-17) — 새 POST 3개도 Origin/토큰 미들웨어 뒤에 있다 ─────────────
+
+@pytest.mark.parametrize("경로", [미리보기경로, 커밋경로, 재시도경로])
+def test_새_POST_는_교차출처와_토큰없음을_403(삭제판, 경로):
+    from webapp import security
+    assert 삭제판.post(경로, json={}, headers={"Origin": "https://evil.com"}).status_code == 403
+    assert 삭제판.post(경로, json={}, headers={security.HEADER_NAME: "wrong"}).status_code == 403
+    assert not jobs.recent_jobs()

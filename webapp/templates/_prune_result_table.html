@@ -67,5 +67,15 @@
   {% endif %}
 
   {% if 재시도가능 %}
+    {# 실패분만 재시도(FLOW-06 · D-08) — 같은 4중 마찰: 맨 아래 · 접힘 · contrast · 실패 건수 타이핑.
+       대상은 서버가 이 결과의 실패 ∩ 원 미리보기 목록으로 정한다 — 브라우저는 건수만 보낸다. #}
+    <details id="prune-retry-details">
+      <summary>실패분만 재시도 ({{ 재시도건수 }}건)</summary>
+      <p><strong>되돌릴 수 없다.</strong> 위 실패 표 중 미리보기에 있던 소재만 다시 지운다 — 같은 미리보기(24시간 안)에서만.<br>
+        <small>실행 직전에 다시 조회해 그 사이 살아난 소재는 뺀다 · 이미 지운 건은 진행 파일로 건너뛴다.</small></p>
+      <label for="prune-retry-count">재시도할 실패 건수를 직접 입력해라 ({{ 재시도건수 }})</label>
+      <input type="number" id="prune-retry-count" inputmode="numeric" min="0" step="1" autocomplete="off">
+      <button type="button" class="contrast" id="prune-retry-btn" data-commit-job="{{ job.id }}">실패분만 재시도 — 되돌릴 수 없음</button>
+    </details>
   {% endif %}
 {% endif %}

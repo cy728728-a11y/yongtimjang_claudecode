@@ -6,10 +6,12 @@
  *   #prune-body · #prune-preview-job
  *   (조각 안) #prune-preview-grid · #prune-preview-rows
  *             #prune-commit-details · #prune-typed-count · #prune-commit-btn · #prune-result(여기서 만든다)
+ *             #prune-retry-details · #prune-retry-count · #prune-retry-btn
  *
  * 부르는 라우트:
  *   POST /jobs/prune/preview  { run_dir, accounts }              — 광고 쓰기 0
  *   POST /jobs/prune/commit   { preview_job_id, typed_count }    — 몸통엔 잡 id + 건수만
+ *   POST /jobs/prune/retry    { commit_job_id, typed_count }     — 실패분만 (대상은 서버가 유도)
  *
  * 대상 소재 목록·상한을 요청에 싣지 마라 — 서버가 CLI 산출물에서 정한다(SAFE-06 · D-02).
  * board.js 가 노출한 window.관제탑 훅만 쓴다. board.js 를 고치지 마라.
@@ -163,6 +165,11 @@
       if (삭제) {
         타이핑실행("prune-typed-count", 삭제, "/jobs/prune/commit",
                    "preview_job_id", "data-preview-job", "꺼진 소재 삭제");
+      }
+      var 재시도 = ev.target.closest("#prune-retry-btn");
+      if (재시도) {
+        타이핑실행("prune-retry-count", 재시도, "/jobs/prune/retry",
+                   "commit_job_id", "data-commit-job", "실패분 재시도");
       }
     });
   }
