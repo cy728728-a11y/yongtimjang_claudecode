@@ -927,3 +927,148 @@ def test_보드_화면에_광고정지_배지_컬럼이_있다():
     js = (WEBAPP / "static" / "board.js").read_text(encoding="utf-8")
     assert "광고 정지" in js
     assert 'field: "광고정지"' in js
+
+
+# ── 오판정 1클릭 (Plan 02-04 / BOARD-06 · D-14) ─────────────────────────────
+#
+# 판정(result.json)은 **바꾸지 않는다.** 사람이 "이 판정 틀렸다" 를 남기는 기록일 뿐이고,
+# 2단계 자동화의 승인 근거 데이터가 된다. 최신 줄이 이긴다(되돌리기 = 다시 누르기).
+
+오판정키 = "cy728|12610054809"
+
+
+@pytest.fixture
+def 오판정판(tmp_run_dir, client, tmp_path, monkeypatch):
+    """tmp 회차 + 토큰 달린 client. GET / 의 보드 행을 JSON 으로 꺼내는 헬퍼를 붙인다."""
+    from webapp import security, settings
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setattr(settings, "JOB_LOG_DIR", str(tmp_path / "logs"))
+    client.cookies.set(security.COOKIE_NAME, security.BOOT_TOKEN)
+
+    def 행들():
+        r = client.get("/")
+        assert r.status_code == 200, r.text[:300]
+        시작 = r.text.index('id="board-rows">') + len('id="board-rows">')
+        끝 = r.text.index("</script>", 시작)
+        return {f'{x["acct"]}|{x["mallProductId"]}': x for x in json.loads(r.text[시작:끝])}
+
+    def 보내기(**몸):
+        본문 = {"run_dir": tmp_run_dir.name, "key": 오판정키, "rule": "②", "on": True}
+        본문.update(몸)
+        return client.post("/board/misjudged", json=본문)
+
+    client.행들 = 행들
+    client.보내기 = 보내기
+    client.회차 = tmp_run_dir
+    return client
+
+
+def _줄들(run_dir: Path) -> list[dict]:
+    return [json.loads(x) for x in
+            (run_dir / "misjudged.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+def test_오판정_POST_는_한_줄을_남긴다(오판정판):
+    규칙 = _행(board.fold_products(json.loads(
+        (오판정판.회차 / "result.json").read_text(encoding="utf-8"))),
+        "cy728", "12610054809")["rules"]
+    r = 오판정판.보내기(rule=규칙, memo="효자인데 ② 로 걸렸다")
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "오판정": True}
+
+    줄 = _줄들(오판정판.회차)
+    assert len(줄) == 1
+    assert set(줄[0]) == {"시각", "규칙", "상품키", "메모", "on"}
+    assert 줄[0]["규칙"] == 규칙 and 줄[0]["상품키"] == 오판정키 and 줄[0]["on"] is True
+    # 한국어가 \uXXXX 로 부풀지 않는다 — 사람이 파일을 열어 읽는 기록이다
+    assert "효자인데" in (오판정판.회차 / "misjudged.jsonl").read_text(encoding="utf-8")
+
+
+def test_오판정은_최신_줄이_이긴다(오판정판):
+    assert 오판정판.행들()[오판정키]["오판정"] is False
+    assert 오판정판.보내기(on=True).status_code == 200
+    assert 오판정판.행들()[오판정키]["오판정"] is True
+    assert 오판정판.보내기(on=False).status_code == 200
+    assert len(_줄들(오판정판.회차)) == 2
+    assert 오판정판.행들()[오판정키]["오판정"] is False
+    assert 오판정판.보내기(on=True).status_code == 200
+    assert len(_줄들(오판정판.회차)) == 3
+    행 = 오판정판.행들()
+    assert 행[오판정키]["오판정"] is True
+    # 다른 행은 안 물든다
+    assert all(v["오판정"] is False for k, v in 행.items() if k != 오판정키)
+
+
+@pytest.mark.parametrize("몸, 코드", [
+    ({"key": "cy728|99999999999"}, 400),                 # 결과에 없는 상품 (T-02-27)
+    ({"key": "../etc|passwd"}, 422),                     # 보드키 모양 밖
+    ({"key": "cy728"}, 422),
+    ({"rule": "②x"}, 422),                               # 규칙 기호만
+    ({"rule": ""}, 422),
+    ({"rule": "①" * 13}, 422),
+    ({"memo": "가" * 201}, 422),                         # 메모 상한 (T-02-28)
+    ({"extra": 1}, 422),                                 # extra=forbid
+    ({"run_dir": "2099-01-01"}, 400),                    # 회차 화이트리스트 밖 (T-02-26)
+    ({"run_dir": "../../etc"}, 400),
+    ({"on": "yes"}, 422),                                # bool 엄격
+])
+def test_오판정_요청_검증(오판정판, 몸, 코드):
+    r = 오판정판.보내기(**몸)
+    assert r.status_code == 코드, r.text
+    assert not (오판정판.회차 / "misjudged.jsonl").exists()
+
+
+def test_오판정_POST_는_가드를_탄다(오판정판):
+    """다른 Origin · 토큰 없음 · 교차 사이트 → 403 (T-02-25). 기록이 안 남는다."""
+    본문 = {"run_dir": 오판정판.회차.name, "key": 오판정키, "rule": "②", "on": True}
+    헤더 = dict(오판정판.headers)
+    r = 오판정판.post("/board/misjudged", json=본문,
+                    headers={"Origin": "http://evil.example", "X-CT-Token": 헤더.get("x-ct-token", "")})
+    assert r.status_code == 403
+    r = 오판정판.post("/board/misjudged", json=본문, headers={"X-CT-Token": "wrong-token"})
+    assert r.status_code == 403
+    from fastapi.testclient import TestClient
+    from webapp.main import app
+    from webapp import settings
+    맨 = TestClient(app, base_url=f"http://127.0.0.1:{settings.PORT}")
+    assert 맨.post("/board/misjudged", json=본문,
+                  headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+    assert not (오판정판.회차 / "misjudged.jsonl").exists()
+
+
+def test_오판정_파일이_없어도_GET_은_만들지_않는다(오판정판):
+    """GET / 는 파일을 읽기만 한다 — 없으면 만들지 않는다 (T-02-29 · V-SAFE-01d)."""
+    전 = sorted(p.name for p in 오판정판.회차.iterdir())
+    행 = 오판정판.행들()
+    assert 행 and all(v["오판정"] is False for v in 행.values())
+    assert sorted(p.name for p in 오판정판.회차.iterdir()) == 전
+    assert not (오판정판.회차 / "misjudged.jsonl").exists()
+
+
+def test_오판정_깨진_줄은_건너뛴다(오판정판):
+    (오판정판.회차 / "misjudged.jsonl").write_text(
+        "{깨진 줄\n"
+        + json.dumps({"시각": "x", "규칙": "②", "상품키": 오판정키, "메모": "", "on": True},
+                     ensure_ascii=False) + "\n"
+        + "[1, 2]\n"
+        + '{"상품키": "cy728|12610054809"}\n'          # on 없는 줄 — 상태를 바꾸지 않는다
+        + "\n",
+        encoding="utf-8")
+    바이트 = (오판정판.회차 / "misjudged.jsonl").read_bytes()
+    assert 오판정판.행들()[오판정키]["오판정"] is True
+    assert (오판정판.회차 / "misjudged.jsonl").read_bytes() == 바이트
+
+
+def test_오판정은_판정_결과를_바꾸지_않는다(오판정판):
+    """result.json 바이트가 그대로다 (D-14 · T-02-30)."""
+    전 = (오판정판.회차 / "result.json").read_bytes()
+    assert 오판정판.보내기(on=True).status_code == 200
+    assert 오판정판.보내기(on=False).status_code == 200
+    assert (오판정판.회차 / "result.json").read_bytes() == 전
+
+
+def test_오판정_버튼은_서버_왕복_뒤에만_표식한다():
+    js = (WEBAPP / "static" / "board.js").read_text(encoding="utf-8")
+    assert "/board/misjudged" in js
+    assert 'field: "오판정"' in js
+    assert "stopPropagation" in js
