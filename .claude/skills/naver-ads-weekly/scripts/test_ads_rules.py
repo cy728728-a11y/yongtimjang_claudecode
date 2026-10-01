@@ -155,5 +155,50 @@ class TestSummary(unittest.TestCase):
         self.assertEqual(res["_summary"]["cost"], 0)
 
 
+class TestPausedAdsRule6(unittest.TestCase):
+    """BOARD-05 — 꺼진 소재는 ⑥ 에만 있고, 정지사유·게재 여부를 싣는다."""
+
+    def _off(self, ad_id, mall="1", reason="AD_ABNORMAL_INTERLOCK"):
+        return dict(ad(ad_id, enable=False, mall=mall), statusReason=reason,
+                    editTm="2026-09-01T00:00:00Z")
+
+    def test_꺼진_소재의_30일_실적은_2345_어디에도_없다(self):
+        ads = [self._off("off1")]
+        s30 = {"off1": stat(imp=500, clk=50, ctr=0.5, cost=9000)}
+        pur = {"off1": {"cnt": 1, "amt": 30000}}
+        res = R.classify(ads, {}, {}, s30, pur)
+        for k in ("②썸네일교체", "③원인분석", "④효자후보", "⑤효자확정"):
+            self.assertNotIn("off1", [r["adId"] for r in res[k]], k)
+        self.assertEqual([r["adId"] for r in res["⑥삭제대상"]], ["off1"])
+
+    def test_정지_행에_statusReason_editTm(self):
+        res = R.classify([self._off("off1", reason="AD_DISAPPROVED")], {}, {}, {}, {})
+        row = res["⑥삭제대상"][0]
+        self.assertEqual(row["statusReason"], "AD_DISAPPROVED")
+        self.assertEqual(row["editTm"], "2026-09-01T00:00:00Z")
+
+    def test_productLive_같은_상품_게재중이면_True_아니면_False(self):
+        ads = [self._off("off1", mall="M1"), ad("on1", mall="M1"), self._off("off2", mall="M2")]
+        res = R.classify(ads, {}, {}, {}, {})
+        by = {r["adId"]: r for r in res["⑥삭제대상"]}
+        self.assertIs(by["off1"]["productLive"], True)
+        self.assertIs(by["off2"]["productLive"], False)
+
+    def test_productLive_mallProductId_없으면_False(self):
+        ads = [self._off("off1", mall=None), ad("on1", mall=None)]
+        res = R.classify(ads, {}, {}, {}, {})
+        self.assertIs(res["⑥삭제대상"][0]["productLive"], False)
+
+    def test_1에서5_행에는_정지_필드가_없다(self):
+        ads = [ad("on1"), ad("on2"), self._off("off1")]
+        s30 = {"on2": stat(imp=500, clk=50, ctr=0.5)}
+        res = R.classify(ads, {}, {}, s30, {"on2": {"cnt": 1, "amt": 1}})
+        for k in ("①노출0", "②썸네일교체", "③원인분석", "④효자후보", "⑤효자확정"):
+            for r in res[k]:
+                self.assertNotIn("statusReason", r, k)
+                self.assertNotIn("productLive", r, k)
+        self.assertTrue(res["①노출0"] and res["⑤효자확정"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
