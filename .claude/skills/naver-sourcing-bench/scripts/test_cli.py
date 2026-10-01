@@ -116,3 +116,19 @@ def test_bench_from_scan_marks_done(tmp_path):
 
     assert C.bench_from_scan(sh, tmp_path, run, "2026-10-02", OPTS) == 1
     assert sh.cells == [(S.SCAN_TAB, 0, S.SCAN_COL["벤치완료"], "Y")]
+
+
+def test_bench_detail_driver_missing_marks_manual(tmp_path):
+    def run(name, items, opts, t):
+        if name == "search":
+            return [{"kind": "page", "key": "kw", "상태": "성공", "products": [prod(1, 900)]}]
+        raise RuntimeError("드라이버 파일 읽기 실패: detail")
+
+    sh = FakeSheet()
+    assert C.do_bench(sh, "kw", tmp_path / "b.json", run, "2026-10-02", OPTS) == 1
+    assert sh.tabs[S.BENCH_TAB][-1][23] == "옵션수동"
+
+
+def test_cli_bench_options_off_by_default():
+    assert C.build_parser().parse_args(["bench", "--keyword", "x"]).options is False
+    assert C.build_parser().parse_args(["bench", "--keyword", "x", "--options"]).options is True

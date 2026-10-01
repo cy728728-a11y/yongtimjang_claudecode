@@ -118,7 +118,13 @@ def do_bench(sheet, keyword, ckpt_path, run, date, opts, with_options=True):
         need = [{"url": p["url"]} for p in picks if p["url"] not in ck["details"]]
         for chunk in _chunks(need, aside_bridge.auto_chunk(len(need), SEC_DETAIL, opts["sleepMax"])):
             stop = False
-            for d in run("detail", chunk, opts, 115):
+            try:
+                details = run("detail", chunk, opts, 115)
+            except RuntimeError as e:
+                # 상세 드라이버가 없거나 Aside 실패 → 남은 상품은 옵션수동
+                print(f"[warn] 옵션 수집 불가: {e} — 9·10열은 수동", flush=True)
+                break
+            for d in details:
                 if d.get("상태") in STOP:
                     stop = True
                     break
@@ -156,7 +162,7 @@ def _sheet(args):
     return Sheet(sid)
 
 
-def main():
+def build_parser():
     ap = argparse.ArgumentParser(description="네이버 사입 소싱 벤치마크")
     ap.add_argument("--sheet", help="스프레드시트 ID (기본: runs/config.json)")
     ap.add_argument("--sleep", type=float, default=3.0)
@@ -171,12 +177,17 @@ def main():
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--keyword")
     g.add_argument("--from-scan", action="store_true")
-    p.add_argument("--no-options", action="store_true", help="상세 옵션 수집 생략(9·10열 수동)")
+    # 2026-10-01 실측: 스마트스토어 옵션 데이터를 읽을 수 없어 기본은 끈다(9·10열 수동).
+    p.add_argument("--options", action="store_true", help="상세 옵션 수집 시도(drivers/detail.js 필요)")
     p = sub.add_parser("annotate")
     p.add_argument("--row", type=int, required=True, help="카테고리스캔 탭의 시트 행 번호(헤더=1)")
     p.add_argument("--volume", default="")
     p.add_argument("--competition", default="")
-    args = ap.parse_args()
+    return ap
+
+
+def main():
+    args = build_parser().parse_args()
 
     opts = {"sleep": args.sleep, "sleepMax": args.sleep_max}
     date = dt.date.today().isoformat()
@@ -200,10 +211,10 @@ def main():
             require_login()
             sh = _sheet(args)
             if args.from_scan:
-                n = bench_from_scan(sh, RUNS, aside_bridge.run_driver, date, opts, not args.no_options)
+                n = bench_from_scan(sh, RUNS, aside_bridge.run_driver, date, opts, args.options)
             else:
                 n = do_bench(sh, args.keyword, RUNS / f"bench-{_slug(args.keyword)}.json",
-                             aside_bridge.run_driver, date, opts, not args.no_options)
+                             aside_bridge.run_driver, date, opts, args.options)
             print(f"후보 {n}행 추가")
         elif args.cmd == "annotate":
             sh = _sheet(args)
