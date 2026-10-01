@@ -1908,3 +1908,150 @@ def test_좀비_판정은_waitpid_를_쓰지_않는다():
     본문 = inspect.getsource(jobs._alive)
     코드줄 = [l for l in 본문.splitlines() if "waitpid" in l and "금지" not in l]
     assert not 코드줄
+
+
+# ── Phase 2 · 02-02 — 꺼진 소재 정리 잡 2종 (prune_preview · prune_commit) ──────
+# 자식을 **한 번도 띄우지 않는다**(`안띄운다`). prune_commit 은 진짜로 돌면 소재를 DELETE 한다.
+
+def _prune미리보기끝(run_dir: str, code: int = 0, status: str = "done") -> str:
+    """성공한 미리보기 잡 하나 + 그 산출물 파일(다음 --only-ads 입력)."""
+    미리 = jobs.create_job("prune_preview", run_dir=run_dir, accounts=["zz1"])
+    산출 = jobs.result_path_of(미리)
+    산출.write_text(json.dumps({"adIds": ["nad-1", "nad-2"], "accounts": {}}), encoding="utf-8")
+    import sqlite3
+    jobs._PROCS.pop(미리, None)
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("UPDATE jobs SET status=?, exit_code=? WHERE id=?", (status, code, 미리))
+        cx.commit()
+    finally:
+        cx.close()
+    return 미리
+
+
+def test_prune_kind_가_등록돼_있다():
+    for k in ("prune_preview", "prune_commit"):
+        assert k in jobs.KINDS
+        assert k in jobs.JobKind.__args__
+        assert k not in jobs.BULSAJA_KINDS
+    assert "prune_commit" in jobs.WRITE_KINDS
+    assert "prune_preview" not in jobs.WRITE_KINDS
+    assert "prune_preview" in jobs.SINGLETON_KINDS
+
+
+def test_prune_수면방지_caffeinate(monkeypatch):
+    monkeypatch.setattr(jobs.os.path, "exists", lambda p: True)
+    assert jobs._수면방지_프리픽스("prune_commit") == [jobs.CAFFEINATE, "-i"]
+    assert jobs._수면방지_프리픽스("prune_preview") == []
+
+
+def test_prune_build_argv_대상_상한_없으면_거부(tmp_path):
+    with pytest.raises(ValueError, match="대상 파일"):
+        jobs._build_argv("prune_commit", "zzjob", "2026-08-30", [], None, tmp_path / "r.json",
+                         True, prune_max_items=8000)
+    with pytest.raises(ValueError, match="상한"):
+        jobs._build_argv("prune_commit", "zzjob", "2026-08-30", [], tmp_path / "t.json",
+                         tmp_path / "r.json", True, prune_max_items=None)
+
+
+def test_prune_미리보기_argv(잡판, 안띄운다, tmp_run_dir):
+    미리 = jobs.create_job("prune_preview", run_dir=tmp_run_dir.name, accounts=["zz1"])
+    av = json.loads(jobs._row(미리)["argv"])
+    산출 = tmp_run_dir / "web" / f"prune_preview_{미리}.json"
+    assert jobs.result_path_of(미리) == 산출
+    assert "prune" in av
+    assert av[av.index("--preview-out") + 1] == str(산출)
+    assert av[av.index("--backup-tag") + 1] == 미리
+    assert ("--" + "commit") not in av
+    assert "--only-ads" not in av and "--max-items" not in av
+    assert av[0] != jobs.CAFFEINATE
+
+
+def test_prune_커밋_argv_는_미리보기_산출물을_그대로_쓴다(잡판, 안띄운다, tmp_run_dir, monkeypatch):
+    monkeypatch.setattr(jobs.os.path, "exists", lambda p: True)
+    미리 = _prune미리보기끝(tmp_run_dir.name)
+    커밋 = jobs.create_job("prune_commit", run_dir=tmp_run_dir.name, accounts=["zz1"],
+                           parent_job_id=미리, prune_max_items=8000,
+                           targets_path_override=jobs.result_path_of(미리))
+    av = json.loads(jobs._row(커밋)["argv"])
+    assert av[:2] == [jobs.CAFFEINATE, "-i"]
+    assert ("--" + "commit") in av
+    assert Path(av[av.index("--only-ads") + 1]) == jobs.result_path_of(미리).resolve()
+    assert av[av.index("--max-items") + 1] == "8000"
+    assert av[av.index("--backup-tag") + 1] == 커밋
+    assert jobs.result_path_of(커밋) == tmp_run_dir / "web" / f"prune_result_{커밋}.json"
+    assert jobs._row(커밋)["target_count"] == 2
+
+
+def test_prune_재시도는_부분집합_파일을_쓴다(잡판, 안띄운다, tmp_run_dir):
+    미리 = _prune미리보기끝(tmp_run_dir.name)
+    커밋 = jobs.create_job("prune_commit", run_dir=tmp_run_dir.name, accounts=["zz1"],
+                           parent_job_id=미리, prune_max_items=10,
+                           only_ads=["a", "b"], prune_retry=True)
+    av = json.loads(jobs._row(커밋)["argv"])
+    대상 = Path(av[av.index("--only-ads") + 1])
+    assert 대상 == tmp_run_dir / "web" / f"targets_{커밋}.json"
+    assert json.loads(대상.read_text(encoding="utf-8")) == ["a", "b"]
+
+
+@pytest.mark.parametrize("상한", [None, 0, -1, True, "8000"])
+def test_prune_커밋은_상한_없이_안_만들어진다(잡판, 안띄운다, tmp_run_dir, 상한):
+    미리 = _prune미리보기끝(tmp_run_dir.name)
+    전 = _행수()
+    with pytest.raises(ValueError):
+        jobs.create_job("prune_commit", run_dir=tmp_run_dir.name, parent_job_id=미리,
+                        prune_max_items=상한, targets_path_override=jobs.result_path_of(미리))
+    assert _행수() == 전
+
+
+def test_prune_커밋은_대상_없이_안_만들어진다(잡판, 안띄운다, tmp_run_dir):
+    미리 = _prune미리보기끝(tmp_run_dir.name)
+    with pytest.raises(ValueError):
+        jobs.create_job("prune_commit", run_dir=tmp_run_dir.name, parent_job_id=미리,
+                        prune_max_items=10)
+
+
+def test_prune_커밋_부모가_틀리면_거부(잡판, 안띄운다, tmp_run_dir):
+    좋은 = _prune미리보기끝(tmp_run_dir.name)
+    대상 = jobs.result_path_of(좋은)
+    인자 = dict(run_dir=tmp_run_dir.name, prune_max_items=10, targets_path_override=대상)
+    with pytest.raises(ValueError):                                   # 부모 없음
+        jobs.create_job("prune_commit", **인자)
+    with pytest.raises(ValueError):                                   # 부모 실패
+        jobs.create_job("prune_commit", parent_job_id=_prune미리보기끝(
+            tmp_run_dir.name, code=2, status="failed"), **인자)
+    다른 = jobs.create_job("bids_preview", run_dir=tmp_run_dir.name, only_ads=["x"])
+    _끝냄(다른)
+    with pytest.raises(ValueError):                                   # 부모 kind 다름
+        jobs.create_job("prune_commit", parent_job_id=다른, **인자)
+
+
+def test_prune_같은_미리보기_두번째_커밋은_409(잡판, 안띄운다, tmp_run_dir):
+    """ENG-04 · D-09 — DB 트랜잭션 안에서 본다. 재시도 표시만 예외다."""
+    미리 = _prune미리보기끝(tmp_run_dir.name)
+    인자 = dict(run_dir=tmp_run_dir.name, parent_job_id=미리, prune_max_items=10)
+    첫 = jobs.create_job("prune_commit", targets_path_override=jobs.result_path_of(미리), **인자)
+    _끝냄(첫)
+    with pytest.raises(jobs.BusyError, match="이미 삭제했다"):
+        jobs.create_job("prune_commit", targets_path_override=jobs.result_path_of(미리), **인자)
+    재시도 = jobs.create_job("prune_commit", only_ads=["nad-2"], prune_retry=True, **인자)
+    assert jobs._row(재시도)["parent_job_id"] == 미리
+
+
+def test_prune_재시도도_도는_쓰기잡이_있으면_409(잡판, 안띄운다, tmp_run_dir):
+    미리 = _prune미리보기끝(tmp_run_dir.name)
+    인자 = dict(run_dir=tmp_run_dir.name, parent_job_id=미리, prune_max_items=10)
+    jobs.create_job("prune_commit", targets_path_override=jobs.result_path_of(미리), **인자)
+    with pytest.raises(jobs.BusyError):
+        jobs.create_job("prune_commit", only_ads=["nad-2"], prune_retry=True, **인자)
+
+
+def test_prune_전용_인자는_다른_kind_에_못_준다(잡판, 안띄운다, tmp_run_dir):
+    with pytest.raises(ValueError):
+        jobs.create_job("bids_preview", run_dir=tmp_run_dir.name, only_ads=["x"],
+                        prune_max_items=10)
+    with pytest.raises(ValueError):
+        jobs.create_job("bids_preview", run_dir=tmp_run_dir.name, only_ads=["x"],
+                        prune_retry=True)
+    with pytest.raises(ValueError):
+        jobs.create_job("prune_preview", run_dir=tmp_run_dir.name, prune_max_items=10)

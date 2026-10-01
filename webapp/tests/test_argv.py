@@ -854,3 +854,31 @@ def test_phase7_설정키_기본값():
     assert S.DEFAULTS["thumb_max_items"] == 20
     assert S.DEFAULTS["coupang_copy_max_items"] == 20
     assert S.DEFAULTS["coupang_first_max_items"] == 10
+
+
+# ── Phase 2 (꺼진 소재 정리) — prune 서브커맨드 ──────────────────────────────
+
+def test_prune_argv_전체_플래그(tmp_path):
+    대상, 산출 = tmp_path / "t.json", tmp_path / "q.json"
+    av = A.AdsArgv(subcommand="prune", run_dir="2026-08-30", accounts=["a"], commit=True,
+                   only_ads=대상, max_items=8000, backup_tag="j1", preview_out=산출).build()
+    i = av.index("prune")
+    assert av[i - 1].endswith("run_ads.py")
+    assert 실행플래그 in av
+    assert av[av.index("--only-ads") + 1] == str(대상)
+    assert av[av.index("--max-items") + 1] == "8000"
+    assert av[av.index("--backup-tag") + 1] == "j1"
+    assert av[av.index("--preview-out") + 1] == str(산출)
+    assert all(isinstance(a, str) for a in av)
+
+
+def test_prune_argv_상한_태그_없으면_플래그도_없다():
+    av = A.AdsArgv(subcommand="prune", run_dir="2026-08-30").build()
+    assert "--max-items" not in av and "--backup-tag" not in av
+    assert 실행플래그 not in av
+
+
+@pytest.mark.parametrize("나쁜태그", ["", "a b", "../x", "-x;rm", "x" * 65])
+def test_prune_backup_tag_는_모양을_검사한다(나쁜태그):
+    with pytest.raises(ValidationError):
+        A.AdsArgv(subcommand="prune", run_dir="2026-08-30", backup_tag=나쁜태그)
