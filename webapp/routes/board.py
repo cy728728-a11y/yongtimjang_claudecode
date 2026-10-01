@@ -4,6 +4,7 @@
 
     GET /                토큰(쿼리) → 쿠키 교환 후 보드 렌더                  [읽기]
     GET /?run_dir=<회차>  다른 회차로 갈아타기                                 [읽기]
+    POST /board/misjudged 보드 행 오판정 표시/해제 — <회차>/misjudged.jsonl append [쓰기·기록만]
 
 화면에는 보드 말고 **도는 작업 패널**도 실린다. 그 패널이 진행 로그 스트림을 여는
 유일한 자리라, 새로고침·재접속 때 여기서 작업을 실어 주지 않으면 성공기준 3
@@ -22,12 +23,16 @@
 이벤트 루프가 멈춰 SSE 진행 로그가 같이 끊긴다(Anti-Patterns).
 """
 import json
+from datetime import datetime
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints
 
 from webapp import board, bulsaja_index, jobs, join, paths, security, settings, state
+from webapp.routes.jobs import 보드키
 
 router = APIRouter()
 
@@ -253,6 +258,98 @@ def _최근상세(run_dir: str) -> dict | None:
         return None                    # 이력 창이 고장나도 보드는 떠야 한다
     return None
 
+# ── 오판정 기록 (Plan 02-04 / BOARD-06 · D-14) ─────────────────────────────
+#
+# **판정 결과는 바꾸지 않는다** — 2단계 자동화의 승인 근거 데이터(D-14)를 쌓는 기록일 뿐이다.
+# `result.json` 을 고치면 CLI 산출물이 정본이라는 계약(세 번째 길)이 깨지고, "판정이 틀렸다"
+# 는 사실 자체가 지워진다. 그래서 회차 폴더에 줄 단위로 **덧붙이기만** 한다.
+# 되돌리기 버튼은 따로 없다 — 다시 누르면 `on: false` 줄이 붙고 **최신 줄이 이긴다**.
+_오판정파일 = "misjudged.jsonl"
+
+# 규칙 값: 그 행의 `rules` 문자열 전체(예 "②③")를 기록한다 — 판정 근거 데이터라
+# 과기록이 누락보다 낫다(RESEARCH Open Q3). 규칙 기호 밖 글자는 받지 않는다.
+규칙기호들 = Annotated[str, StringConstraints(pattern=f"^[{board.RULE_ORDER}]{{1,12}}$")]
+
+
+class MisjudgedReq(BaseModel):
+    """오판정 요청. 받는 것은 이 다섯 개뿐이다 (T-02-26 · extra=forbid)."""
+    model_config = ConfigDict(extra="forbid")
+
+    run_dir: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+    key: 보드키
+    rule: 규칙기호들
+    # 메모는 사람이 쓰는 한 줄이다. 상한은 거친 방어선(T-02-28) — 화면은 textContent 로만 그린다.
+    memo: str = Field(default="", max_length=200)
+    on: StrictBool
+
+
+def _오판정읽기(run_dir_name: str) -> dict:
+    """`<회차>/misjudged.jsonl` → `{상품키: on}` — 키별 **마지막 줄**이 이긴다.
+
+    **GET 에서 부른다 — 읽기만 한다.** 파일이 없으면 만들지 않고 `{}` 다(T-02-29 ·
+    V-SAFE-01d). 깨진 줄(JSON 아님 · dict 아님 · `on` 이 bool 아님)은 그 줄만 건너뛴다 —
+    사람이 손으로 고친 파일 한 줄 때문에 보드가 통째로 안 뜨면 안 된다.
+    """
+    표: dict = {}
+    try:
+        경로 = paths.run_dir_path(run_dir_name) / _오판정파일
+        if not 경로.is_file():
+            return 표
+        줄들 = 경로.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return 표                          # 기록을 못 읽어도 보드는 떠야 한다
+    for 줄 in 줄들:
+        try:
+            값 = json.loads(줄)
+        except Exception:
+            continue
+        if not isinstance(값, dict):
+            continue
+        키, on = 값.get("상품키"), 값.get("on")
+        if isinstance(키, str) and isinstance(on, bool):
+            표[키] = on
+    return 표
+
+
+@router.post("/board/misjudged")
+def post_misjudged(req: MisjudgedReq):
+    """보드 행 하나에 오판정 표시를 남기거나 푼다 (BOARD-06 · D-14).
+
+    가드(Origin · sec-fetch-site · 토큰)는 `security.guard` 미들웨어가 이미 본다(T-02-25).
+    여기서 보는 것:
+      1. 회차가 화이트리스트에 있나 → 아니면 400 (T-02-26)
+      2. 그 회차 판정 결과에 **그 상품 행이 실제로 있나** → 아니면 400 (T-02-27).
+         없는 상품에 남은 기록은 어느 화면에도 안 보이는데 사람은 눌렀다고 믿는다.
+      3. 한 줄 append. 실패는 500 + 예외 이름만(경로·내부 구조를 싣지 않는다 — ASVS V7)
+    """
+    try:
+        회차 = paths.run_dir_path(req.run_dir)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"{e}")
+
+    result, err = _load_result(req.run_dir)
+    if err:
+        raise HTTPException(status_code=400, detail="판정 결과를 못 읽었다 — 판정을 다시 돌려라")
+    있는키 = {f"{r.get('acct')}|{r.get('mallProductId')}" for r in board.fold_products(result)}
+    if req.key not in 있는키:
+        raise HTTPException(status_code=400, detail="이 회차 판정 결과에 없는 상품이다")
+
+    줄 = {
+        "시각": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "규칙": req.rule,
+        "상품키": req.key,
+        "메모": req.memo,
+        "on": req.on,
+    }
+    try:
+        # 1인·작은 줄이라 append 한 번이면 원자적으로 충분하다(RESEARCH Pattern 8).
+        with open(회차 / _오판정파일, "a", encoding="utf-8") as f:
+            f.write(json.dumps(줄, ensure_ascii=False) + "\n")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"오판정 기록 실패: {type(e).__name__}")
+    return {"ok": True, "오판정": req.on}
+
+
 @router.get("/")
 def home(request: Request, t: str | None = None, run_dir: str | None = None):
     """`?t=` 로 들어오면 쿠키를 심고 **깨끗한 `/`** 로 털어낸다.
@@ -361,6 +458,11 @@ def home(request: Request, t: str | None = None, run_dir: str | None = None):
         excluded=settings.cfg("index_excluded_groups",
                               settings.DEFAULTS["index_excluded_groups"]),
         done_tags=settings.cfg("done_tags", settings.DEFAULTS["done_tags"]))
+    # 오판정 표식을 얹는다 (BOARD-06). `fold_products` 는 고치지 않는다 — 판정과 사람 기록은
+    # 다른 층이다. 파일이 없으면 만들지 않고 전 행 False (GET 은 쓰지 않는다 · V-SAFE-01d).
+    오판정표 = _오판정읽기(선택)
+    for r in ctx["rows"]:
+        r["오판정"] = bool(오판정표.get(f"{r.get('acct')}|{r.get('mallProductId')}", False))
     ctx["index_health"] = _인덱스표시(ctx["rows"], join_doc)
     ctx["resolution"] = join.resolution(ctx["rows"])
     ctx["cleanup"] = join.cleanup_groups(ctx["rows"])

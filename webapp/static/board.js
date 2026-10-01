@@ -186,6 +186,51 @@
     return 말;
   }
 
+  // ── 오판정 1클릭 (Plan 02-04 / BOARD-06 · D-14) ───────────────────────────
+  // 판정을 바꾸는 버튼이 **아니다.** "이 판정 틀렸다" 를 회차 폴더에 한 줄 남길 뿐이고,
+  // 다시 누르면 해제 줄이 붙어 최신 줄이 이긴다. 표식은 **서버 왕복이 성공한 뒤에만**
+  // 바뀐다 — 먼저 칠하면 기록이 실패해도 화면은 남겼다고 거짓말한다.
+  function 오판정(cell) {
+    var row = cell.getRow();
+    var d = row.getData();
+    var 버튼 = document.createElement("button");
+    버튼.type = "button";
+    버튼.className = "secondary outline";
+    버튼.style.padding = "0 .3rem";
+    버튼.style.margin = "0";
+    버튼.style.fontSize = ".75rem";
+    버튼.textContent = d.오판정 ? "오판정 ✓" : "오판정";
+    버튼.title = d.오판정 ? "오판정 표시됨 — 누르면 해제한다" : "이 행의 판정이 틀렸다고 기록한다(판정은 안 바뀐다)";
+    버튼.addEventListener("click", function (e) {
+      // 행 클릭 선택(selectableRows)으로 번지지 않게 — 오판정 누르다 행이 선택되면
+      // 그 행이 다음 쓰기 작업의 대상이 된다.
+      e.stopPropagation();
+      if (!window.관제탑) { return; }
+      버튼.disabled = true;
+      window.관제탑.요청("/board/misjudged", {
+        run_dir: window.관제탑.회차(), key: d.key, rule: d.rules, on: !d.오판정
+      }).then(function (응답) {
+        if (!응답.ok) {
+          버튼.disabled = false;
+          window.관제탑.오류표시("오판정 기록 실패 (" + 응답.code + "): " + 응답.본문);
+          return;
+        }
+        var 값;
+        try { 값 = JSON.parse(응답.본문).오판정; } catch (err) { 값 = void 0; }
+        if (typeof 값 !== "boolean") {
+          버튼.disabled = false;
+          window.관제탑.오류표시("오판정 응답을 못 읽었다 — 새로고침해서 확인해라");
+          return;
+        }
+        row.update({ 오판정: 값 });           // 셀이 다시 그려진다(새 버튼)
+      }).catch(function (err) {
+        버튼.disabled = false;
+        window.관제탑.오류표시("오판정 기록 실패: " + err);
+      });
+    });
+    return 버튼;
+  }
+
   // 숫자 정렬에서 빈칸은 항상 아래로. 안 그러면 노출 내림차순 첫 페이지가
   // 통계 없는 ① 행으로 덮인다.
   var 빈칸아래 = { alignEmptyValues: "bottom" };
@@ -276,7 +321,10 @@
     // 꺼진 소재 정지 (BOARD-05). 정렬은 끈다 — true/null/false 3값 정렬은 사람이 못 읽는다.
     { title: "정지", field: "광고정지", width: 64, headerSort: false,
       formatter: 정지, tooltip: 정지전문 },
-    { title: "상품ID", field: "mallProductId", width: 84, tooltip: true }
+    { title: "상품ID", field: "mallProductId", width: 84, tooltip: true },
+    // 오판정 (BOARD-06). 정렬은 끈다 — 버튼 칸이다.
+    { title: "오판정", field: "오판정", width: 56, hozAlign: "center", headerSort: false,
+      formatter: 오판정 }
   ];
 
   var table = new Tabulator("#board", {
