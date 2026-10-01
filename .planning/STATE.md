@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-10-01T07:37:00.689Z"
+status: "02-03 완료 — 다음 02-04 (운영 :8765 재시작은 02-06)"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-10-01T07:58:14.582Z"
 last_activity: 2026-10-01
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 53
-  completed_plans: 49
+  completed_plans: 50
   percent: 86
 ---
 
@@ -26,16 +26,16 @@ See: .planning/PROJECT.md (updated 2026-09-19)
 ## Current Position
 
 Phase: 02 (꺼진 소재 정리) — EXECUTING
-Plan: 2 of 6 (02-02 완료: prune 잡 2종 · 미리보기당 커밋 1회 · 기동 고아 정리 · 쓰기 잡 감사 · 롤백 버그 수정)
-Status: 02-02 완료 — 다음 02-03 (운영 :8765 재시작은 02-06)
+Plan: 3 of 6 complete (02-03 완료: 꺼진 소재 정리 웹 슬라이스 — 미리보기 → 건수 타이핑 삭제 → 실패분 재시도)
+Status: 02-03 완료 — 다음 02-04 (운영 :8765 재시작은 02-06)
 Last activity: 2026-10-01
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
-Phase 02 (꺼진 소재 정리): 2026-10-01 실행 시작 — 02-01 CLI 계약 · 02-02 엔진 안전 계약 완료.
+Phase 02 (꺼진 소재 정리): 2026-10-01 실행 시작 — 02-01 CLI 계약 · 02-02 엔진 안전 계약 · 02-03 웹 슬라이스 완료 (Phase 02, 3 of 6 complete).
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [█████████░] 91%
 | Phase 05 P06 | 3일(사람확인대기) | 3 tasks | 4 files |
 | Phase 06 P05 | 10min | 3 tasks | 8 files |
 | Phase 06 P06 | 7min | 3 tasks | 8 files |
+| Phase 02 P03 | 40min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,8 @@ Recent decisions affecting current work:
 - [Phase 07 plan]: 용팀장 부재 중 plan-phase 자동 선택(추천안) — 리서치 수행 · UI-SPEC 생략(Phase 1~6 선례, UI는 uat-verifier) · checker 경고 4건 중 메타 2건 수정·2건(07-01 파일 17개, 인프라 truths) 의도된 트레이드오프로 수용. 확인 대기: D-01·D-03·D-06·D-08(→07-06 체크포인트) / D-01·D-16·쿠팡 min_margin 15→20(→07-07 체크포인트). 건수 불일치 응답은 409로 통일. D-08 은 미룸(Phase 6 미완)
 - [Phase 06]: 06-05: D-09·D-03 용팀장 추천대로 확정 — 게이트 1회성·복원 기준 ⓐ(AI 접수 직전)
 - [Phase 06]: 06-05: confirm:false 응답은 변경 필드를 안 알려 준다 — 가격·상품명·옵션 동반 반영은 게이트 체크 ③으로만 잡는다
+- [Phase 02]: 02-03: 실패분 재시도는 실패 ∩ 미리보기 adId 부분집합 파일로 보낸다(D-08 변형)
+- [Phase 02]: 02-03: 미리보기 산출물 adIds 와 targets 가 어긋나면 커밋 400 · prune 커밋 재요청은 409(쿠팡 400 과 의도적 차이)
 
 ### Pending Todos
 
@@ -197,6 +200,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-10-01T07:37:00.684Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-10-01T07:58:01.580Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
