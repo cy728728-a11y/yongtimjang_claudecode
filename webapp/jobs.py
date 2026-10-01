@@ -52,13 +52,14 @@ import os
 import re
 import sqlite3
 import subprocess
+import threading
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
 from webapp import argv as argv_mod
-from webapp import bulsaja_index, paths, settings
+from webapp import audit, bulsaja_index, paths, settings
 
 # 모듈 이름을 짧게 한 번 더 노출한다 — 테스트·라우트가 `jobs.argv.PY_CLI` 로 집는다.
 argv = argv_mod
@@ -471,11 +472,61 @@ POLL_INCOMPLETE_OK_KINDS: frozenset[str] = frozenset({"detail_submit", "detail_p
 # exit 3 은 폴링 미완이 아니라 **쿠팡 그룹 부분 읽기 실패 등 재시도 필요**다(D-17). failed 가 맞다.
 
 
+# ── 감사 훅 (FLOW-07 · D-11) ─────────────────────────────────────────────────
+# 종료 지점(정상 종료 `_finish` · `_reap` 의 orphaned/starting 시한 초과 · spawn 실패)은 **파일을
+# 쓰지 않고 job_id 만 여기 적는다.** 파일은 `_커밋후감사` 가 **DB 커밋 이후에만** 쓴다.
+# 롤백될 수 있는 트랜잭션 안에서 쓰면 "롤백된 done" 과 "다음 reap 의 orphaned" 가 둘 다 남는다
+# (02-RESEARCH Pitfall 2). WRITE_KINDS 만 적는다 — 미리보기·판정은 감사 대상이 아니다.
+_감사대기: list[str] = []
+# 한 job_id 는 프로세스 수명 동안 한 번만 기록한다(여러 조회 함수가 같은 잡을 반복 reap 해도 1줄).
+_감사함: set[str] = set()
+# 스레드풀에서 두 요청이 동시에 비울 수 있다 — 목록·집합 조작만 이 락으로 묶는다.
+_감사락 = threading.Lock()
+
+
+def _감사예약(job_id: str, kind: str | None) -> None:
+    if kind in WRITE_KINDS:
+        with _감사락:
+            if job_id not in _감사대기 and job_id not in _감사함:
+                _감사대기.append(job_id)
+
+
+def _커밋후감사(cx: sqlite3.Connection) -> None:
+    """`cx.commit()` 후 대기 중인 쓰기 잡의 감사 줄을 남긴다.
+
+    행을 **커밋 뒤에 다시 읽는다.** 아직 살아 있는 상태(다른 스레드의 미커밋 reap 이 적어 둔 것)
+    면 기록하지 않고 대기열에 남긴다 — 그 스레드의 커밋 뒤에 기록된다. 기록 실패는 audit 이
+    삼킨다(잡 종료를 막지 않는다).
+    """
+    cx.commit()
+    with _감사락:
+        대기 = list(_감사대기)
+    for job_id in 대기:
+        try:
+            row = cx.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        except sqlite3.Error:
+            continue
+        with _감사락:
+            if row is None:
+                if job_id in _감사대기:
+                    _감사대기.remove(job_id)
+                continue
+            if row["status"] in LIVE_STATUSES:
+                continue                       # 아직 커밋 안 된 남의 reap — 그쪽 커밋 뒤에 기록된다
+            if job_id in _감사대기:
+                _감사대기.remove(job_id)
+            if job_id in _감사함:
+                continue
+            _감사함.add(job_id)
+        audit.record(dict(row))
+
+
 def _finish(cx: sqlite3.Connection, job_id: str, code: int, kind: str | None = None) -> None:
     성공 = code == 0 or (code == 3 and kind in POLL_INCOMPLETE_OK_KINDS)
     cx.execute("UPDATE jobs SET status = ?, exit_code = ?, ended_at = ? WHERE id = ?",
                ("done" if 성공 else "failed", code, _now(), job_id))
     _PROCS.pop(job_id, None)
+    _감사예약(job_id, kind)
 
 
 def _reap(cx: sqlite3.Connection) -> None:
@@ -503,9 +554,10 @@ def _reap(cx: sqlite3.Connection) -> None:
         if not _alive(r["pid"]):
             cx.execute("UPDATE jobs SET status = 'orphaned', ended_at = ? WHERE id = ?",
                        (_now(), r["id"]))
+            _감사예약(r["id"], r["kind"])
 
     한계 = datetime.now().astimezone() - timedelta(seconds=STARTING_TIMEOUT_SEC)
-    for r in cx.execute("SELECT id, started_at FROM jobs WHERE status = 'starting'").fetchall():
+    for r in cx.execute("SELECT id, kind, started_at FROM jobs WHERE status = 'starting'").fetchall():
         try:
             시작 = datetime.fromisoformat(r["started_at"])
         except (TypeError, ValueError):
@@ -513,6 +565,7 @@ def _reap(cx: sqlite3.Connection) -> None:
         if 시작 is None or 시작 < 한계:
             cx.execute("UPDATE jobs SET status = 'failed', exit_code = -1, ended_at = ? "
                        "WHERE id = ? AND status = 'starting'", (_now(), r["id"]))
+            _감사예약(r["id"], r["kind"])      # 띄우다 죽은 쓰기 잡도 끝난 잡이다 — 감사 1줄
 
 
 # ── 자식 띄우기 ─────────────────────────────────────────────────────────────
@@ -1277,14 +1330,26 @@ def create_job(kind: str, *, run_dir: str | None = None,
     BULSAJA_접두 = {"bulsaja_scan": "join", "bulsaja_index": "index",
                     "bulsaja_profile": "profile"}
 
+    # ⓪ 끝난 잡 거두기는 **가드 트랜잭션 밖의 별도 짧은 트랜잭션**이다(Pitfall 2 · T-02-11).
+    #    가드가 raise 하면 commit 없이 닫혀 _finish 의 UPDATE 가 롤백되는데 _PROCS 는 이미 비어
+    #    다음 reap 이 orphaned 로 찍었다 — 종료코드 소실 + 감사 중복. 두 트랜잭션 사이에 끝난 잡은
+    #    running 으로 한 번 더 남아 409 쪽(안전 방향)으로만 틀린다.
+    cx = _conn()
+    try:
+        cx.execute("BEGIN IMMEDIATE")
+        _reap(cx)
+        _커밋후감사(cx)
+    finally:
+        cx.close()
+
     cx = _conn()
     try:
         # ① 가드 ~ ⑤ INSERT 를 한 트랜잭션에 묶는다. 두 요청이 스레드풀에서
         #    겹쳐도 "둘 다 비었네" 를 보고 둘 다 들어가는 일이 없다.
         #    가드를 **맨 먼저** 본다 — 어차피 거부될 작업 때문에 회차에 대상 파일을
         #    떨구고 나서 409 를 내면 run-dir/web 에 쓰레기가 쌓인다.
+        #    **여기서는 `_reap` 을 부르지 않는다** — 위 ⓪ 참조.
         cx.execute("BEGIN IMMEDIATE")
-        _reap(cx)
         if kind in WRITE_KINDS:
             표시 = ",".join("?" * len(WRITE_KINDS))
             상태표시 = ",".join("?" * len(LIVE_STATUSES))
@@ -1498,7 +1563,8 @@ def create_job(kind: str, *, run_dir: str | None = None,
         try:
             cx.execute("UPDATE jobs SET status='failed', exit_code=-1, ended_at=? WHERE id=?",
                        (_now(), job_id))
-            cx.commit()
+            _감사예약(job_id, kind)
+            _커밋후감사(cx)
         finally:
             cx.close()
         raise RuntimeError(f"작업을 띄우지 못했다: {type(e).__name__}: {e}")
@@ -1553,7 +1619,7 @@ def job_status(job_id: str) -> dict | None:
     try:
         cx.execute("BEGIN IMMEDIATE")
         _reap(cx)
-        cx.commit()
+        _커밋후감사(cx)
         row = cx.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     finally:
         cx.close()
@@ -1602,7 +1668,7 @@ def latest_done(kind: str, run_dir: str | None = None) -> dict | None:
     try:
         cx.execute("BEGIN IMMEDIATE")
         _reap(cx)
-        cx.commit()
+        _커밋후감사(cx)
         조건 = "kind = ? AND status = 'done'"
         인자: tuple = (kind,)
         if run_dir:
@@ -1618,6 +1684,69 @@ def latest_done(kind: str, run_dir: str | None = None) -> dict | None:
     return _as_dict(row) if row else None
 
 
+def _남의프로세스(pid: int | None, started_at: str | None) -> bool:
+    """pid 가 살아 있지만 **잡보다 늦게 뜬 남의 프로세스**인가 (Pitfall 4 · T-02-12).
+
+    맥북 재부팅 뒤 옛 잡의 pid 를 다른 프로세스가 쓰면 `_alive()` 가 참이라 그 행이
+    `running` 으로 남아 전역 쓰기 가드를 영원히 잡는다. `ps -o lstart=` 의 프로세스 시작시각이
+    잡 `started_at` 보다 늦으면 남의 것이다. **ps 실패·파싱 실패면 False(건드리지 않는다)** —
+    멀쩡히 도는 잡을 orphaned 로 찍는 쪽이 더 나쁘다(`_alive` 와 같은 판단).
+    기동 때만 부른다. 일반 `_alive` 는 건드리지 않는다(좀비 규칙 등 이미 섬세하다).
+    """
+    if not pid or not started_at:
+        return False
+    try:
+        r = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True,
+                           text=True, timeout=2, env={**os.environ, "LC_ALL": "C"})
+        글 = " ".join((r.stdout or "").split())
+        if not 글:
+            return False
+        뜬때 = datetime.strptime(글, "%a %b %d %H:%M:%S %Y").astimezone()
+        잡때 = datetime.fromisoformat(started_at)
+        # lstart 는 초 단위라 같은 초에 뜬 자기 자식을 남으로 오판하지 않게 1초 여유를 둔다.
+        return 뜬때 > 잡때 + timedelta(seconds=1)
+    except Exception:
+        return False
+
+
+def reap_on_startup() -> int:
+    """서버 기동 때 고아 잡을 한 번 정리한다 (ENG-05 · D-10). 정리 건수를 돌려준다.
+
+    · `CT_SKIP_STARTUP_REAP=1` 이면 0 — 테스트(conftest autouse)가 실 webapp.db 를 못 건드리게(Pitfall 3).
+    · 레지스트리 파일이 없으면 **만들지 않고** 0 — `first_coupang_commit_done` 과 같은 규율(T-1-01b).
+    · PID 재사용 검사(`_남의프로세스`) → `_reap` → 커밋 후 감사. 바뀐 행 = 기동 전 살아 있던 행 중
+      더는 살아 있지 않은 행.
+    · sqlite3.Error 는 삼키고 0 — 기동 실패로 번지지 않는다(lifespan 도 한 번 더 감싼다).
+    """
+    if os.environ.get("CT_SKIP_STARTUP_REAP") == "1":
+        return 0
+    if not db_path().is_file():
+        return 0
+    상태표시 = ",".join("?" * len(LIVE_STATUSES))
+    cx = _conn()
+    try:
+        cx.execute("BEGIN IMMEDIATE")
+        전 = {r["id"] for r in cx.execute(
+            f"SELECT id FROM jobs WHERE status IN ({상태표시})", LIVE_STATUSES).fetchall()}
+        for r in cx.execute("SELECT id, kind, pid, started_at FROM jobs "
+                            "WHERE status = 'running'").fetchall():
+            if r["id"] in _PROCS:
+                continue                       # 이 프로세스가 띄운 잡 — poll() 이 정본이다
+            if _남의프로세스(r["pid"], r["started_at"]):
+                cx.execute("UPDATE jobs SET status = 'orphaned', ended_at = ? WHERE id = ?",
+                           (_now(), r["id"]))
+                _감사예약(r["id"], r["kind"])
+        _reap(cx)
+        후 = {r["id"] for r in cx.execute(
+            f"SELECT id FROM jobs WHERE status IN ({상태표시})", LIVE_STATUSES).fetchall()}
+        _커밋후감사(cx)
+        return len(전 - 후)
+    except sqlite3.Error:
+        return 0
+    finally:
+        cx.close()
+
+
 def first_coupang_commit_done() -> bool:
     """성공(done/0)한 쿠팡 복사가 한 번이라도 있었나.
 
@@ -1631,7 +1760,7 @@ def first_coupang_commit_done() -> bool:
     try:
         cx.execute("BEGIN IMMEDIATE")
         _reap(cx)
-        cx.commit()
+        _커밋후감사(cx)
         row = cx.execute("SELECT 1 FROM jobs WHERE kind = 'coupang_commit' AND status = 'done' "
                          "AND exit_code = 0 LIMIT 1").fetchone()
     except sqlite3.Error:
@@ -1647,7 +1776,7 @@ def recent_jobs(limit: int = 20) -> list[dict]:
     try:
         cx.execute("BEGIN IMMEDIATE")
         _reap(cx)
-        cx.commit()
+        _커밋후감사(cx)
         rows = cx.execute(
             "SELECT * FROM jobs ORDER BY started_at DESC, rowid DESC LIMIT ?",
             (int(limit),)).fetchall()

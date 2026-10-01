@@ -31,6 +31,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from webapp import jobs as job_engine  # 아래 `routes.jobs` 와 이름이 겹친다 — 별칭 필수
 from webapp import security, settings
 
 # 경로는 이 파일 기준으로 잡는다. 절대경로를 박으면 다른 PC 에서 조용히 깨진다.
@@ -60,6 +61,12 @@ async def lifespan(app: FastAPI):
         # 재현이 어려운 "가끔 안 보임" 버그로 나타나므로 기동 때 크게 경고한다.
         print(f"[경고] WEB_CONCURRENCY={conc} — 워커는 반드시 1이어야 한다. "
               f"진행 로그가 간헐적으로 안 뜬다", flush=True)
+    # ENG-05 · D-10 — 기동 시 고아 잡 정리. 실패해도 서버는 뜬다(정리는 다음 조회 때 지연으로도 돈다).
+    try:
+        n = job_engine.reap_on_startup()
+        print(f"[기동] 고아 잡 {n}건 정리", flush=True)
+    except Exception as e:
+        print(f"[기동] 고아 잡 정리 실패 — 서버는 뜬다: {type(e).__name__}", flush=True)
     print(f"→ http://127.0.0.1:{settings.PORT}/?t={security.BOOT_TOKEN}", flush=True)
     yield
 
