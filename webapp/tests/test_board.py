@@ -822,3 +822,108 @@ def test_보드를_새로_열면_최근_상세결과가_되살아난다(조인�
     본문 = c.get("/").text
     assert 'hx-get="/jobs/00000000-0000-4000-8000-000000000001/result"' in 본문
     assert "00000000-0000-4000-8000-000000000009/result" not in 본문   # 다른 회차
+
+
+# ── 꺼진 소재 정지사유 · 광고 정지 배지 · 합산 배제 (Plan 02-04 / BOARD-05 · SC-4) ──
+#
+# 🔴 이 블록이 지키는 것: **꺼진 소재의 과거 실적이 현재 유입처럼 보이지 않는다.**
+#    물갈이 부산물인 연동끊김 대량정지(수천 건)가 "유입 있는 상품" 으로 읽히면
+#    상세페이지 작업 대상을 잘못 고른다 (Core Value 오독).
+
+def _off(adId, mall, reason="AD_ABNORMAL_INTERLOCK", live=False, **더):
+    """규칙⑥ 행 하나. `live=...` 대신 `live=None` 이면 productLive 키를 **아예 뺀다**(옛 result.json)."""
+    r = {"adId": adId, "adGroup": "판매상품_1-1_그룹", "title": f"상품{mall}",
+         "mallProductId": mall, "bid": 70, "useGroupBid": True, "groupBid": 70,
+         "statusReason": reason, "editTm": "2026-09-20T00:00:00.000Z"}
+    if live is not None:
+        r["productLive"] = live
+    r.update(더)
+    return r
+
+
+def _결과(rules: dict) -> dict:
+    return {"accounts": {"acctA": {"rules": rules}}}
+
+
+def test_꺼진_소재가_전부_정지면_광고정지_배지다():
+    """⑥ 행 2개가 전부 productLive False → 정지사유 {"연동끊김": 2}, 광고정지 True (D-13)."""
+    rows = board.fold_products(_결과({"⑥삭제대상": [_off("a1", "P"), _off("a2", "P")]}))
+    p = _행(rows, "acctA", "P")
+    assert p["정지사유"] == {"연동끊김": 2}
+    assert p["광고정지"] is True
+    assert "_live_flags" not in p              # 내부 필드는 화면으로 새지 않는다
+
+
+def test_게재중_소재가_있으면_광고정지가_아니다():
+    """⑥ 행이 productLive True 면(같은 상품에 게재중 소재가 있다) 배지를 안 붙인다."""
+    rows = board.fold_products(_결과({
+        "②썸네일교체": [{"adId": "b1", "mallProductId": "Q", "title": "q", "imp": 100, "clk": 2}],
+        "⑥삭제대상": [_off("b2", "Q", live=True)],
+    }))
+    q = _행(rows, "acctA", "Q")
+    assert q["광고정지"] is False
+    assert q["정지사유"] == {"연동끊김": 1}
+
+
+def test_옛_result_면_광고정지를_추정하지_않는다():
+    """productLive 키가 없는 ⑥ 행 → 광고정지 None (배지 미표시 + 판정 다시 안내 · T-02-31)."""
+    rows = board.fold_products(_결과({"⑥삭제대상": [_off("c1", "R", live=None),
+                                                 _off("c2", "R", live=False)]}))
+    assert _행(rows, "acctA", "R")["광고정지"] is None
+
+    # 기존 픽스처의 ⑥ 행도 옛 모양이다 — 같은 규칙을 따른다
+    from webapp.tests.conftest import RESULT_MIN
+    옛것 = json.loads(RESULT_MIN.read_text(encoding="utf-8"))
+    assert _행(board.fold_products(옛것), "cy7728", "12999000111")["광고정지"] is None
+
+
+def test_꺼진_소재가_없으면_정지사유가_비고_배지도_없다():
+    rows = board.fold_products(_결과({
+        "②썸네일교체": [{"adId": "d1", "mallProductId": "S", "title": "s", "imp": 10, "clk": 1}]}))
+    s = _행(rows, "acctA", "S")
+    assert s["정지사유"] == {}
+    assert s["광고정지"] is False
+
+
+def test_정지사유는_검수중_거부를_따로_센다():
+    """연동끊김 · 검수중 · 거부를 한 칸에 뭉치지 않는다 (D-12). 모르는 코드는 원문."""
+    rows = board.fold_products(_결과({"⑥삭제대상": [
+        _off("e1", "T"), _off("e2", "T", reason="AD_UNDER_REVIEW"),
+        _off("e3", "T", reason="AD_DISAPPROVED"), _off("e4", "T", reason="AD_DISAPPROVED"),
+        _off("e5", "T", reason="SOMETHING_NEW"),
+    ]}))
+    assert _행(rows, "acctA", "T")["정지사유"] == {
+        "연동끊김": 1, "검수중": 1, "거부": 2, "SOMETHING_NEW": 1}
+
+
+def test_꺼진_소재의_과거_실적은_합산하지_않는다():
+    """⑥ 행에 지표 키가 (가짜로) 생겨도 상품 행 imp/clk 는 ②~⑤ 소재 값만 (SC-4 고정).
+
+    지금은 ⑥ 행에 지표 키가 아예 없어 0 이지만, 미래에 CLI 가 키를 실어도
+    과거 실적이 현재 유입으로 둔갑하지 않게 막는다.
+    """
+    rows = board.fold_products(_결과({
+        "②썸네일교체": [{"adId": "f1", "mallProductId": "U", "title": "u",
+                     "imp": 100, "clk": 5, "cost": 300}],
+        "⑥삭제대상": [_off("f2", "U", imp=99999, clk=777, cost=55555, purCnt=3, purAmt=9000)],
+    }))
+    u = _행(rows, "acctA", "U")
+    assert u["imp"] == 100
+    assert u["clk"] == 5
+    assert u["cost"] == 300
+    assert u["purCnt"] is None
+    assert u["ctr"] == pytest.approx(5.0)
+
+    # ⑥ 만 가진 상품은 지표가 전부 빈칸이다 (0 도 아니다)
+    only6 = _행(board.fold_products(_결과({"⑥삭제대상": [_off("g1", "V", imp=500, clk=50)]})),
+                "acctA", "V")
+    assert only6["imp"] is None
+    assert only6["clk"] is None
+    assert only6["ctr"] is None
+
+
+def test_보드_화면에_광고정지_배지_컬럼이_있다():
+    """board.js 가 정지 컬럼을 그리고, 텍스트는 innerHTML 로 넣지 않는다 (T-02-28)."""
+    js = (WEBAPP / "static" / "board.js").read_text(encoding="utf-8")
+    assert "광고 정지" in js
+    assert 'field: "광고정지"' in js
