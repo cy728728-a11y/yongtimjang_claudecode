@@ -67,7 +67,7 @@ PYTHONPATH=.claude/lib .venv/bin/python3 $S <서브커맨드> --run-dir $RUN
 | S2 | `resolve --min-orders 3` | 상위 코드 → 불사자 조회(50개/콜) |
 | S3 | `build` | 불사자코드 병합 → 대표 1건 |
 | S4 | `ship` | 실측 배송비(P75) vs 불사자 입력값 대조 |
-| S5 | `gate --limit 100` | 쿠팡보정 가중마진 게이트 + 쿠팡 그룹 실물 대조. 기준은 `workspace.toml [coupang]` 이 정본 — min_margin 20 (CP-03 · 1차 파일럿 기준. 설정 파일은 07-07 용팀장 확인 전까지 15.0) · min_orders 3 |
+| S5 | `gate --limit 100` | 쿠팡보정 가중마진 게이트 + 쿠팡 그룹 실물 대조. 기준은 `workspace.toml [coupang]` 이 정본 — min_margin 20 (CP-03 · 2026-09-29 용팀장 확정. 설정이 빠져도 코드 기본값 20) · min_orders 3 |
 | S6 | `apply --commit [--limit N]` | 쿠팡 그룹으로 복사 **(쓰기)**. `--limit` 은 시험 복사용 |
 | S7 | `verify` | 중복 0 증명 · 판매가 검산 |
 | — | `models [--suggest]` | 모델명 중복·형식 검사(읽기 전용) |

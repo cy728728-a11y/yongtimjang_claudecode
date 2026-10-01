@@ -405,7 +405,7 @@ def cmd_gate(args):
         print("[gate] reps.json 이 없다. build 먼저.", file=sys.stderr)
         return 2
 
-    min_margin = args.min_margin if args.min_margin is not None else cfg("coupang.min_margin", 15.0)
+    min_margin = args.min_margin if args.min_margin is not None else cfg("coupang.min_margin", 20.0)
     min_orders = args.min_orders if args.min_orders is not None else cfg("coupang.min_orders", 3)
 
     # **실물 대조 (3중 방어의 3층).** `copied.jsonl` 은 run-dir 안에만 있어서,

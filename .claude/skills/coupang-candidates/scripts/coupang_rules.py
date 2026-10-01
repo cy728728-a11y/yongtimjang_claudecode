@@ -56,7 +56,7 @@ def adjust_margin(가중마진, 쿠팡수수료, 평균ss수수료=None):
     return float(가중마진) - (float(쿠팡수수료) - ss)
 
 
-def passes(rec, min_margin=15.0, min_orders=3, category_fee=None):
+def passes(rec, min_margin=20.0, min_orders=3, category_fee=None):
     """후보 1건 판정 → `(통과여부, 사유)`.
 
     게이트는 **하나뿐**(마진 하한선)이고 주문수 컷은 그 앞의 선별자다.

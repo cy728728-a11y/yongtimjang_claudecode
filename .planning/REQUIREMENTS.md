@@ -124,14 +124,14 @@
 
 - [x] **CP-01**: 버튼 하나로 prep→resolve→build→ship→gate→apply 전공정을 돌린다
 - [x] **CP-02**: `apply --commit` 만 따로 확인받는다
-- [ ] **CP-03**: 기존 게이트(주문 3회 이상 + 쿠팡보정 가중마진 20%)를 그대로 유지한다 — 유입만 있는 상품은 올리지 않는다
+- [x] **CP-03**: 기존 게이트(주문 3회 이상 + 쿠팡보정 가중마진 20%)를 그대로 유지한다 — 유입만 있는 상품은 올리지 않는다
 - [x] **CP-04**: 중복 복사 방지는 기존 `gate` 방식(쿠팡 그룹 실물을 매번 읽어 타오바오상품번호로 대조)을 그대로 쓴다
 
 ### 버튼 6 — 썸네일 교체 (THUMB)
 
-- [ ] **THUMB-01**: 규칙②(노출 100+ & CTR<1%) 대상을 판정해 보여준다
-- [ ] **THUMB-02**: 기존 `bulsaja-thumbnail` 스킬로 실행한다
-- [ ] **THUMB-03**: 접수 전 예상 크레딧을 보고한다
+- [x] **THUMB-01**: 규칙②(노출 100+ & CTR<1%) 대상을 판정해 보여준다
+- [x] **THUMB-02**: 기존 `bulsaja-thumbnail` 스킬로 실행한다
+- [x] **THUMB-03**: 접수 전 예상 크레딧을 보고한다
 
 ---
 
@@ -229,11 +229,11 @@
 | MARKET-03 | Phase 6 | Complete |
 | CP-01 | Phase 7 | Complete |
 | CP-02 | Phase 7 | Complete |
-| CP-03 | Phase 7 | Pending |
+| CP-03 | Phase 7 | Complete |
 | CP-04 | Phase 7 | Complete |
-| THUMB-01 | Phase 7 | Pending |
-| THUMB-02 | Phase 7 | Pending |
-| THUMB-03 | Phase 7 | Pending |
+| THUMB-01 | Phase 7 | Complete |
+| THUMB-02 | Phase 7 | Complete |
+| THUMB-03 | Phase 7 | Complete |
 
 **Coverage:**
 - v1 requirements: 66 total
