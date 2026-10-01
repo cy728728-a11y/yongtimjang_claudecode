@@ -77,7 +77,11 @@ def do_scan(sheet, master, root_path, ckpt_path, run, date, opts):
             if r.get("상태") in STOP:
                 stopped = True
                 break
-            ck["done"][r["key"]] = r
+            # 성공·결과없음만 확정. 파싱실패는 재실행 때 다시 연다.
+            if r.get("상태") in ("성공", "조회실패"):
+                ck["done"][r["key"]] = r
+            else:
+                print(f"[warn] {r.get('key')} {r.get('상태')}: {r.get('error') or ''} — 재실행 시 다시 시도", flush=True)
         _save(ckpt_path, ck)
         if stopped:
             break
@@ -111,6 +115,10 @@ def do_bench(sheet, keyword, ckpt_path, run, date, opts, with_options=True):
             raise SystemExit(4)
         ck["page"] = page
         _save(ckpt_path, ck)
+    if ck["page"].get("상태") != "성공":
+        print(f"[warn] '{keyword}' 검색 {ck['page'].get('상태')}: {ck['page'].get('error') or ''} — 재실행 시 다시 검색",
+              flush=True)
+        return None
     picks = rules.bench_filter(ck["page"].get("products") or [])
     have = {rules.norm_url(r[6]) for r in sheet.read(S.BENCH_TAB) if len(r) > 6}
     picks = [p for p in picks if rules.norm_url(p["url"]) not in have]
@@ -150,7 +158,10 @@ def bench_from_scan(sheet, ckpt_dir, run, date, opts, with_options=True):
         kw = str(row[kc]).strip()
         if not kw or str(row[dc]).strip():
             continue
-        total += do_bench(sheet, kw, Path(ckpt_dir) / f"bench-{_slug(kw)}.json", run, date, opts, with_options)
+        n = do_bench(sheet, kw, Path(ckpt_dir) / f"bench-{_slug(kw)}.json", run, date, opts, with_options)
+        if n is None:          # 검색 실패 — 벤치완료를 찍지 않아 다음 실행에 다시 잡힌다
+            continue
+        total += n
         sheet.set_cell(S.SCAN_TAB, i, dc, "Y")
     return total
 
@@ -215,6 +226,8 @@ def main():
             else:
                 n = do_bench(sh, args.keyword, RUNS / f"bench-{_slug(args.keyword)}.json",
                              aside_bridge.run_driver, date, opts, args.options)
+                if n is None:
+                    sys.exit(1)
             print(f"후보 {n}행 추가")
         elif args.cmd == "annotate":
             sh = _sheet(args)

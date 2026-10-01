@@ -54,3 +54,12 @@ def test_set_cell_a1():
 def test_error_reply_raises():
     with pytest.raises(G.GwsError):
         G.Sheet("SID", runner=Fake([{"error": {"code": 403, "message": "x"}}])).read("후보")
+
+
+def test_gws_nonzero_exit_raises(monkeypatch):
+    import subprocess
+    monkeypatch.setattr(G.shutil, "which", lambda n: "/bin/gws")
+    monkeypatch.setattr(G.subprocess, "run",
+                        lambda *a, **k: subprocess.CompletedProcess(a, 1, stdout="", stderr="token expired"))
+    with pytest.raises(G.GwsError):
+        G._gws_runner(["sheets"])

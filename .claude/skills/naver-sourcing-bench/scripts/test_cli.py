@@ -132,3 +132,27 @@ def test_bench_detail_driver_missing_marks_manual(tmp_path):
 def test_cli_bench_options_off_by_default():
     assert C.build_parser().parse_args(["bench", "--keyword", "x"]).options is False
     assert C.build_parser().parse_args(["bench", "--keyword", "x", "--options"]).options is True
+
+
+def test_scan_failed_page_not_cached(tmp_path):
+    state = {"n": 0}
+
+    def run(name, items, opts, t):
+        state["n"] += 1
+        return [{"kind": "page", "key": i["코드"], "상태": "파싱실패", "error": "x", "products": []} for i in items]
+
+    ck = tmp_path / "scan.json"
+    C.do_scan(FakeSheet(), MASTER, "A>B", ck, run, "2026-10-02", OPTS)
+    C.do_scan(FakeSheet(), MASTER, "A>B", ck, run, "2026-10-02", OPTS)
+    assert state["n"] == 2                      # 실패 페이지는 재실행 때 다시 연다
+
+
+def test_bench_from_scan_failed_search_not_marked(tmp_path):
+    row = ["2026-10-02", "A", "B", "C1", "", "10", 3, "x", "압축봉", "", "", "", ""]
+    sh = FakeSheet(scan_rows=[row])
+
+    def run(name, items, opts, t):
+        return [{"kind": "page", "key": "압축봉", "상태": "파싱실패", "products": []}]
+
+    assert C.bench_from_scan(sh, tmp_path, run, "2026-10-02", OPTS) == 0
+    assert sh.cells == []

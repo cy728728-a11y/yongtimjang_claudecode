@@ -84,3 +84,12 @@ def test_rep_price_and_options_text():
     assert rules.rep_price([], 15000) == 15000
     assert rules.options_text(opts) == "흰:13,900 / 검:12,900"
     assert rules.options_text([]) == ""
+
+
+def test_norm_url_keeps_product_id_query_on_other_malls():
+    a = rules.norm_url("https://www.daisomall.co.kr/pd/pdr/SCR_PDR_0001?pdNo=1030782&utm_source=naver")
+    b = rules.norm_url("https://www.daisomall.co.kr/pd/pdr/SCR_PDR_0001?pdNo=1078943")
+    assert a != b
+    assert a == "https://www.daisomall.co.kr/pd/pdr/SCR_PDR_0001?pdNo=1030782"
+    assert rules.norm_url("https://search.shopping.naver.com/catalog/123?query=x") == \
+        "https://search.shopping.naver.com/catalog/123"

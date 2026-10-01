@@ -14,8 +14,14 @@ def to_int(v):
     return int(digits) if digits else None
 
 
+_PATH_ID_HOSTS = ("smartstore.naver.com", "brand.naver.com", "search.shopping.naver.com")
+_TRACKING = re.compile(r"^(utm_|nl-|NaPm$|n_|nv_|cr_|fbclid$|gclid$)", re.I)
+
+
 def norm_url(url):
-    """추적 파라미터를 떼어 같은 상품이면 같은 문자열이 되게 한다."""
+    """추적 파라미터를 떼어 같은 상품이면 같은 문자열이 되게 한다.
+    상품ID가 경로에 있는 네이버 계열만 쿼리를 통째로 버리고, 다른 몰은 쿼리에 ID 가 있어
+    (예: daisomall ?pdNo=) 추적 파라미터만 뗀다."""
     try:
         s = urlsplit(str(url).strip())
     except ValueError:
@@ -23,7 +29,11 @@ def norm_url(url):
     host = s.netloc.lower()
     if host.startswith("m.smartstore."):
         host = host[2:]
-    return f"https://{host}{s.path.rstrip('/')}"
+    base = f"https://{host}{s.path.rstrip('/')}"
+    if host in _PATH_ID_HOSTS or not s.query:
+        return base
+    keep = [kv for kv in s.query.split("&") if kv and not _TRACKING.match(kv.split("=", 1)[0])]
+    return base + ("?" + "&".join(keep) if keep else "")
 
 
 def _split(path):

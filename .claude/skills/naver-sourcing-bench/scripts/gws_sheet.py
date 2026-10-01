@@ -21,6 +21,9 @@ def _gws_runner(argv):
                            encoding="utf-8", errors="replace", timeout=120)
     except (OSError, subprocess.TimeoutExpired) as e:
         raise GwsError(f"gws 실행 실패: {e}")
+    if r.returncode != 0:
+        # 인증 만료 등. 빈 응답을 {} 로 삼키면 '0행 추가' 성공처럼 보인다.
+        raise GwsError(f"gws 종료코드 {r.returncode}: {((r.stdout or '') + (r.stderr or ''))[-300:]}")
     try:
         return json.loads(r.stdout or "{}")
     except ValueError:
