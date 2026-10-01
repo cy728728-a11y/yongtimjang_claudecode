@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed Phase 07 (07-06·07-07) — 2026-10-01
-last_updated: "2026-09-30T15:30:24.056Z"
-last_activity: 2026-09-30
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-10-01T07:37:00.689Z"
+last_activity: 2026-10-01
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 47
-  completed_plans: 47
+  total_plans: 53
+  completed_plans: 48
   percent: 86
 ---
 
@@ -21,21 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-19)
 
 **Core value:** 유입이나 판매가 있는데 상세페이지가 중국어 원본·단순번역인 상품을, 중복 작업 없이 한 화면에서 골라 고치고 반영하는 것
-**Current focus:** Phase 05 — 상세페이지 작업 버튼 ★ Core Value (discuss 필요)
+**Current focus:** Phase 02 — 꺼진 소재 정리(prune-ads)
 
 ## Current Position
 
-Phase: 05 (상세페이지 작업 버튼) — EXECUTING
-Plan: 6 of 6 (05-01 완료: detail_batch --inputs 주입구 · 오프라인 45테스트 · 크레딧 0)
-Status: **Phase 07 완료(2026-10-01)** — 검증 4/4 · human_needed 1(다음 쿠팡 실복사 때 중복0 실측, 07-HUMAN-UAT.md). 썸네일 5건 불사자 반영(25크레딧) · 쿠팡 0건 종결(기존 사본 2건 차단). 남은 것: Phase 2(꺼진 소재 정리) 여부 · D-08(썸네일→스토어 반영 연결) · Phase 1 되돌리기 실탄
-Last activity: 2026-09-30
+Phase: 02 (꺼진 소재 정리) — EXECUTING
+Plan: 1 of 6 (02-01 완료: prune CLI 4플래그 · 산출물 스키마 · ⑥ 행 statusReason/productLive · 네이버 API 0)
+Status: 02-01 완료 — 다음 02-02
+Last activity: 2026-10-01
 
 Phase 04 (banner-detection): 12/12 완료 · **게이트 불통과 · 용팀장 결정으로 종료 (2026-09-25, D-23)**. 회차 2026-09-20 은 사람 라벨 우선 판정이 정본. 새 회차 배너 판정 방식은 Phase 5 discuss 에서 (04-GATE.md §17-8)
 
 Phase 01 (board-bid-raise): 9/9 완료. 검증 미완 — `01-HUMAN-UAT.md` 의 되돌리기 실탄 1건 열려 있다.
-Phase 02 (꺼진 소재 정리): 2026-09-21 결정으로 Phase 3~5 뒤로 이월.
+Phase 02 (꺼진 소재 정리): 2026-10-01 실행 시작 — 02-01 CLI 계약 완료.
 
-Progress: [█████████░] 94%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -106,6 +106,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-05 작업 생성은 HTTP 를 모르는 jobs.create_job 함수. 라우트는 예외를 상태코드로 번역만 (D-17/ENG-07)
 - [Phase 01]: 01-05 쓰기 잡(prep·bids_commit·revert_*)은 전역 1개. 가드+INSERT 를 BEGIN IMMEDIATE 로 원자 결합 (Pitfall 3)
 - [Phase 01]: 01-05 htmx 폼은 stdlib parse_qsl 로 직접 푼다 — python-multipart 의존성을 늘리지 않는다
+- [Phase 02]: 02-01 D-06 exit 5 미구현 — revived_filter 교집합이라 발동 불가. new_since_preview 보고 + 목록 밖 DELETE 0회 테스트로 대체
+- [Phase 02]: 02-01 prune 산출물 최상위 adIds = 다음 --only-ads 입력. 커밋 targets 는 재조회 전 대상, total/adIds 는 items 기준
 - [Phase ?]: 01-06 폴링과 SSE 를 조각 단위로 분리 — 패널 전체를 2초마다 outerHTML 로 교체하면 그 안의 EventSource 가 2초마다 끊겼다 붙는다. _job_status.html 만 폴링이 때린다
 - [Phase ?]: 01-06 진행 로그는 매 접속 오프셋 0 전량 재생. 재연결 헤더에 이어받기를 맡기지 않는다 — htmx-ext-sse 가 재연결 때 EventSource 를 새로 만들어 그 상태를 버린다 (T-1-27)
 - [Phase ?]: 01-06 sse-close 는 연결을 여는 엘리먼트에 붙인다(sse.js:235). 자식에 붙이면 조용히 무시돼 작업 종료 후 무한 재연결 — 리서치·플랜 예제가 틀렸다. vendoring 소스가 문서보다 정본
@@ -193,6 +195,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-30T10:51:19.799Z
-Stopped at: Completed 06-06-PLAN.md
+Last session: 2026-10-01T07:37:00.684Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None

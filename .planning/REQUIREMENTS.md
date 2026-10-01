@@ -27,10 +27,10 @@
 - [x] **SAFE-01**: 서버는 `127.0.0.1` 에만 바인드하고, Host 헤더 화이트리스트와 Origin 검증을 통과한 요청만 받는다
 - [x] **SAFE-02**: 부팅 시 발급한 랜덤 토큰이 있어야 쓰기 요청이 통과한다 (다른 탭의 사이트가 CSRF 로 크레딧을 태우는 걸 막는다)
 - [x] **SAFE-03**: 자격증명(광고 시크릿·불사자 토큰)이 화면·로그·에러 메시지에 절대 나오지 않는다
-- [ ] **SAFE-04**: 백업이 선행되는 작업은 **백업 실패 시 쓰기를 중단**한다
-- [ ] **SAFE-05**: `--commit` 직전에 대상을 재조회해, 미리보기 시점 이후 상태가 바뀐 항목은 제외하고 그 사실을 보고한다
-- [ ] **SAFE-06**: 미리보기와 실행이 **같은 대상 선정 함수**를 쓴다 (둘이 갈라지면 본 것과 다른 게 실행된다)
-- [ ] **SAFE-07**: 1회 실행 건수 상한과 크레딧 상한을 넘으면 실행이 거부된다
+- [x] **SAFE-04**: 백업이 선행되는 작업은 **백업 실패 시 쓰기를 중단**한다
+- [x] **SAFE-05**: `--commit` 직전에 대상을 재조회해, 미리보기 시점 이후 상태가 바뀐 항목은 제외하고 그 사실을 보고한다
+- [x] **SAFE-06**: 미리보기와 실행이 **같은 대상 선정 함수**를 쓴다 (둘이 갈라지면 본 것과 다른 게 실행된다)
+- [x] **SAFE-07**: 1회 실행 건수 상한과 크레딧 상한을 넘으면 실행이 거부된다
 
 ### 실행 틀 — 3단 계약 (FLOW)
 
@@ -48,7 +48,7 @@
 - [x] **BOARD-02**: 계정·규칙·상태로 거르고, 정렬하고, 검색한다 (계정 수를 화면·코드에 박지 않는다)
 - [x] **BOARD-03**: 다중 선택 시 **"보이는 것만"과 "필터 전체"를 명시적으로 구분**한다 — 헤더 체크박스는 현재 페이지만 고르고, 전체 선택은 별도 확인을 거친다
 - [x] **BOARD-04**: 선택한 항목 수와 예상 비용이 실행 버튼 옆에 항상 보인다
-- [ ] **BOARD-05**: 정지된 소재의 과거 실적을 현재 유입으로 표시하지 않는다 (물갈이 부산물인 연동끊김 대량정지 방어)
+- [x] **BOARD-05**: 정지된 소재의 과거 실적을 현재 유입으로 표시하지 않는다 (물갈이 부산물인 연동끊김 대량정지 방어)
 - [ ] **BOARD-06**: 판정이 틀렸을 때 **1클릭으로 오판정 표시**를 남긴다 (2단계 자동화의 승인 근거가 된다)
 
 ### 버튼 1 — 입찰가 인상 (BID)
@@ -60,9 +60,9 @@
 
 ### 버튼 2 — 꺼진 소재 정리 (PRUNE)
 
-- [ ] **PRUNE-01**: 규칙⑥ 중 `AD_ABNORMAL_INTERLOCK` 만 삭제 대상으로 판정한다 (검수중·거부는 제외)
-- [ ] **PRUNE-02**: 백업이 성공한 뒤에만 삭제가 실행된다
-- [ ] **PRUNE-03**: 삭제 대상을 실행 전에 전부 나열해 보여준다
+- [x] **PRUNE-01**: 규칙⑥ 중 `AD_ABNORMAL_INTERLOCK` 만 삭제 대상으로 판정한다 (검수중·거부는 제외)
+- [x] **PRUNE-02**: 백업이 성공한 뒤에만 삭제가 실행된다
+- [x] **PRUNE-03**: 삭제 대상을 실행 전에 전부 나열해 보여준다
 
 ### 엔티티 해소 (JOIN)
 
@@ -177,10 +177,10 @@
 | SAFE-01 | Phase 1 | Complete |
 | SAFE-02 | Phase 1 | Complete |
 | SAFE-03 | Phase 1 | Complete |
-| SAFE-04 | Phase 2 | Pending |
-| SAFE-05 | Phase 2 | Pending |
-| SAFE-06 | Phase 2 | Pending |
-| SAFE-07 | Phase 2 | Pending |
+| SAFE-04 | Phase 2 | Complete |
+| SAFE-05 | Phase 2 | Complete |
+| SAFE-06 | Phase 2 | Complete |
+| SAFE-07 | Phase 2 | Complete |
 | FLOW-01 | Phase 1 | Complete |
 | FLOW-02 | Phase 1 | Complete |
 | FLOW-03 | Phase 2 | Pending |
@@ -192,15 +192,15 @@
 | BOARD-02 | Phase 1 | Complete |
 | BOARD-03 | Phase 1 | Complete |
 | BOARD-04 | Phase 1 | Complete |
-| BOARD-05 | Phase 2 | Pending |
+| BOARD-05 | Phase 2 | Complete |
 | BOARD-06 | Phase 2 | Pending |
 | BID-01 | Phase 1 | Complete |
 | BID-02 | Phase 1 | Complete |
 | BID-03 | Phase 1 | Complete |
 | BID-04 | Phase 1 | Complete |
-| PRUNE-01 | Phase 2 | Pending |
-| PRUNE-02 | Phase 2 | Pending |
-| PRUNE-03 | Phase 2 | Pending |
+| PRUNE-01 | Phase 2 | Complete |
+| PRUNE-02 | Phase 2 | Complete |
+| PRUNE-03 | Phase 2 | Complete |
 | JOIN-01 | Phase 3 | Complete |
 | JOIN-02 | Phase 3 | Complete |
 | JOIN-03 | Phase 3 | Complete |
