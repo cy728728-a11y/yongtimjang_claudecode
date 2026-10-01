@@ -15,7 +15,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -239,6 +239,30 @@ def cmd_bids(args):
 
 
 def cmd_prune(args):
+    """⑥ 꺼진 소재 삭제. 웹이 감쌀 주입구(--only-ads/--preview-out/--max-items/--backup-tag)는
+    cmd_bids 의 쌍둥이다. 플래그가 없으면 기존 동작·종료코드 0 그대로(L-02).
+
+    종료코드: 0 정상(계정 aborted 여도 0 — 결과는 산출물에서 읽는다) ·
+              1 --only-ads 깨짐 / --preview-out 쓰기 실패 / --backup-tag 모양 불량 ·
+              2 --max-items 초과(백업 전 중단, 삭제 0)
+    """
+    only_path = getattr(args, "only_ads", None)
+    preview_out = getattr(args, "preview_out", None)
+    max_items = getattr(args, "max_items", None)
+    tag = getattr(args, "backup_tag", None)
+
+    # 되돌릴 수 없는 명령이다 — 대상 파일이 깨졌을 때 전량으로 폴백하면
+    # 본 적 없는 소재 수천 건이 지워진다(T-02-02, cmd_bids 와 같은 문구)
+    try:
+        only = _load_only_ads(only_path)
+    except Exception as e:
+        print(f"--only-ads 읽기 실패 — 전량 실행으로 폴백하지 않는다: {type(e).__name__}: {e}")
+        return 1
+    # 태그는 백업 파일명에 그대로 붙는다 — 경로 문자를 막는다(T-02-04)
+    if tag is not None and not prune.TAG_RE.match(str(tag)):
+        print(f"--backup-tag 모양 불량 — [A-Za-z0-9_-]{{1,64}} 만 받는다: {tag!r}")
+        return 1
+
     run_dir = run_dir_of(args.run_dir)
     accts = {a.get("alias"): a for a in _accounts(args.account)}
     acc_dir = run_dir / "accounts"
@@ -248,16 +272,55 @@ def cmd_prune(args):
     # 요지가 "빠진 게 안 보이는 것" 이었으므로 그 자체를 어기는 셈이다. prep 된 계정과
     # 자격증명 있는 계정의 합집합을 돌아, 어느 쪽이 빠졌는지 각각 다른 문구로 남긴다.
     expected = args.account or sorted(prepped | set(accts))
+
+    # SAFE-07: 상한 초과면 백업·재조회·DELETE 전에 전량 거부한다 — 앞에서 N건 자르지 않는다.
+    # 잘라서 지우면 "어느 N건이 지워졌나" 를 사람이 고른 적이 없게 된다.
+    if max_items is not None:
+        합계 = sum(prune.count_targets(run_dir, a, only) for a in expected
+                 if a in accts and a in prepped)
+        if 합계 > max_items:
+            print(f"삭제 대상 {합계}건 > 상한 {max_items}건 — 전량 거부. 계정을 나눠 미리보기해라")
+            return 2
+
+    # 리턴값을 더 이상 버리지 않는다 — 미리보기 표·커밋 입력·결과 표가 이 산출물 하나로 만들어진다
+    outputs = {}
     for alias in expected:
         acct = accts.get(alias)
         if not acct:
             print(f"[{alias}] 자격증명 없음 — 건너뛴다")
+            outputs[alias] = {"skipped": "자격증명 없음"}
             continue
         if alias not in prepped:
             print(f"[{alias}] prep 없음 — 건너뛴다")
+            outputs[alias] = {"skipped": "prep 없음"}
             continue
-        prune.run_prune(acct, run_dir, commit=args.commit)
-    return 0
+        outputs[alias] = prune.run_prune(acct, run_dir, commit=args.commit, only_ads=only,
+                                         tag=tag, collect_items=bool(preview_out))
+    if not preview_out:
+        return 0
+    return _dump_preview(args.preview_out, _prune_document(outputs, args.commit, max_items))
+
+
+def _prune_document(outputs, commit, limit):
+    """계정별 반환값을 산출물 최상위 모양으로 감싼다.
+
+    최상위 adIds 가 있으므로 이 파일 자체가 다음 실행의 --only-ads 입력이 된다(SAFE-06).
+    dry-run 이면 targets, commit 이면 실제 DELETE 를 시도한 items 에서 모은다.
+    """
+    accounts, ad_ids = {}, []
+    for alias, v in outputs.items():
+        v = dict(v or {})
+        v.setdefault("skipped", None)
+        v.setdefault("aborted", None)
+        v.setdefault("backup", None)
+        v.setdefault("keep", {})
+        v.setdefault("targets", [])
+        src = v.get("items") if commit else v.get("targets")
+        ad_ids.extend(r["adId"] for r in (src or []) if r.get("adId"))
+        accounts[alias] = v
+    return {"generated": datetime.now().isoformat(timespec="seconds"),
+            "mode": "commit" if commit else "dry-run", "limit": limit,
+            "total": len(ad_ids), "adIds": ad_ids, "accounts": accounts}
 
 
 def main():
@@ -283,6 +346,10 @@ def main():
     s.add_argument("--run-dir")
     s.add_argument("--account", nargs="*")
     s.add_argument("--commit", action="store_true", help="실제로 삭제한다(되돌릴 수 없다)")
+    s.add_argument("--only-ads", help="대상 adId 목록 JSON 파일 — 이 목록에 있는 소재만 처리한다")
+    s.add_argument("--preview-out", help="계정별 계획/결과를 이 JSON 파일에 쓴다")
+    s.add_argument("--max-items", type=int, help="1회 삭제 상한 — 넘으면 전량 거부(자르지 않는다)")
+    s.add_argument("--backup-tag", help="백업 파일명에 붙일 태그 — 웹은 잡 id 를 넘긴다")
     args = ap.parse_args()
     return {"prep": cmd_prep, "run": cmd_run, "apply": cmd_apply, "bids": cmd_bids,
             "prune": cmd_prune, "accounts": cmd_accounts}[args.cmd](args)
