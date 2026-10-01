@@ -80,6 +80,8 @@ def classify(ads, group_of, stats_7d, stats_30d, purchases):
           if a["nccAdId"] not in stats_7d and a.get("inspectStatus") not in INSPECT_WAITING]
 
     r2, r3, r4, r5 = [], [], [], []
+    # BOARD-05: 꺼진 소재의 과거 실적은 현재 유입 판정에 들어가지 않는다 — live 만 순회한다.
+    # test_ads_rules.TestPausedAdsRule6 이 고정한다.
     for a in live:
         s = stats_30d.get(a["nccAdId"])
         if not s:
@@ -96,6 +98,10 @@ def classify(ads, group_of, stats_7d, stats_30d, purchases):
             r4.append(row)
         if pur:
             r5.append(dict(row, purCnt=pur["cnt"], purAmt=pur["amt"]))
+
+    # ⑥ 행 보강용 — 같은 계정·같은 상품에 게재중 소재가 하나라도 있으면 상품은 아직 광고 중이다.
+    # ad_info 를 고치지 않고 ⑥ 행에만 붙인다: ad_info 에 넣으면 ①~⑤ 행까지 불어나 result.json(2.2MB)이 커진다
+    live_malls = {(a.get("referenceData") or {}).get("mallProductId") for a in live} - {None}
 
     # ② 는 노출 많은 순 — 노출은 많은데 클릭이 안 되는 쪽이 썸네일 문제가 가장 확실하다
     r2.sort(key=lambda x: -x["imp"])
@@ -118,6 +124,9 @@ def classify(ads, group_of, stats_7d, stats_30d, purchases):
         "③원인분석": r3,
         "④효자후보": r4,
         "⑤효자확정": r5,
-        "⑥삭제대상": [info_of(a) for a in off],
+        "⑥삭제대상": [dict(info_of(a), statusReason=a.get("statusReason"),
+                         editTm=a.get("editTm"),
+                         productLive=(a.get("referenceData") or {}).get("mallProductId") in live_malls)
+                    for a in off],
         "_summary": summary,
     }
