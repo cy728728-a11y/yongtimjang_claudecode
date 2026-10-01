@@ -298,3 +298,259 @@ def test_보드_회차가_없으면_삭제_패널이_없다(삭제판, monkeypat
     monkeypatch.setattr(paths, "scan_runs", lambda: [])
     본문 = 삭제판.get("/").text
     assert 'id="prune"' not in 본문
+
+
+# ── ② 삭제(커밋) — 요청 모양 ────────────────────────────────────────────────
+
+def test_커밋_요청에_다른_필드가_있으면_422(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    for 몸통 in ({"preview_job_id": pid, "typed_count": 5, "adIds": ["nad-zza-000"]},
+                 {"preview_job_id": pid, "typed_count": 5, "max_items": 99999},
+                 {"preview_job_id": pid, "typed_count": "5"},
+                 {"preview_job_id": pid, "typed_count": True},
+                 {"preview_job_id": pid, "typed_count": -1},
+                 {"preview_job_id": pid},
+                 {"preview_job_id": "../../etc", "typed_count": 5}):
+        응답 = 삭제판.post(커밋경로, json=몸통)
+        assert 응답.status_code == 422, 몸통
+    assert not jobs.children_of(pid, "prune_commit")
+
+
+# ── ② 삭제 — 부모 검사 ──────────────────────────────────────────────────────
+
+def test_커밋_부모가_없거나_종류가_다르면_400(삭제판, tmp_run_dir):
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": str(uuid.uuid4()), "typed_count": 5})
+    assert 응답.status_code == 400
+    남 = _행박기("bids_preview", run_dir=tmp_run_dir.name)
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": 남, "typed_count": 5})
+    assert 응답.status_code == 400
+
+
+def test_커밋_부모가_도는_중이면_409(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir, 상태="starting")
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 5})
+    assert 응답.status_code == 409, 응답.text
+
+
+def test_커밋_부모가_실패했으면_400(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir, 상태="failed", exit_code=1)
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 5})
+    assert 응답.status_code == 400
+
+
+def test_커밋_24시간_넘은_미리보기는_400(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir, 시작=_지금(25))
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 5})
+    assert 응답.status_code == 400
+    assert "24시간" in 응답.json()["detail"]
+    assert not jobs.children_of(pid, "prune_commit")
+
+
+def test_커밋_멱등_성공한_삭제가_있으면_409(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    _행박기("prune_commit", parent=pid, run_dir=tmp_run_dir.name)
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 5})
+    assert 응답.status_code == 409
+    assert "이미 삭제" in 응답.json()["detail"]
+
+
+def test_커밋_멱등_삭제가_도는_중이면_409(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    _행박기("prune_commit", 상태="starting", parent=pid, run_dir=tmp_run_dir.name)
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 5})
+    assert 응답.status_code == 409
+
+
+def test_커밋_산출물이_깨졌으면_400(삭제판, tmp_run_dir):
+    for pid in (_미리보기잡(tmp_run_dir, 깨짐=True), _미리보기잡(tmp_run_dir, 쓰기=False)):
+        응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 5})
+        assert 응답.status_code == 400, 응답.text
+    문서 = _미리보기문서()
+    문서["adIds"] = "전부"
+    pid = _미리보기잡(tmp_run_dir, 문서=문서)
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 5})
+    assert 응답.status_code == 400
+
+
+def test_커밋_대상_0건이면_400(삭제판, tmp_run_dir):
+    문서 = _미리보기문서(total=0, adIds=[])
+    for v in 문서["accounts"].values():
+        v["targets"] = []
+    pid = _미리보기잡(tmp_run_dir, 문서=문서)
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 0})
+    assert 응답.status_code == 400
+
+
+def test_커밋_상한_초과면_400(삭제판, tmp_run_dir, 상한):
+    상한(3)
+    pid = _미리보기잡(tmp_run_dir)
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 5})
+    assert 응답.status_code == 400
+    assert "상한" in 응답.json()["detail"]
+    assert not jobs.children_of(pid, "prune_commit")
+
+
+def test_커밋_타이핑_건수가_다르면_409_이고_잡을_안_만든다(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 4})
+    assert 응답.status_code == 409
+    assert "화면이 본 건수" in 응답.json()["detail"]
+    assert not jobs.children_of(pid, "prune_commit")
+
+
+def test_커밋_쓰기잡이_도는_중이면_409(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    _행박기("bids_commit", 상태="starting", run_dir=tmp_run_dir.name)
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 5})
+    assert 응답.status_code == 409, 응답.text
+
+
+def test_커밋_only_ads_는_부모_산출물_그대로(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    응답 = 삭제판.post(커밋경로, json={"preview_job_id": pid, "typed_count": 5})
+    assert 응답.status_code == 200, 응답.text
+    cid = 응답.json()["job_id"]
+    상태 = jobs.job_status(cid)
+    assert 상태["kind"] == "prune_commit" and 상태["parent_job_id"] == pid
+    av = _argv(cid)
+    부모경로 = jobs.job_status(pid)["result_path"]
+    assert str(Path(av[av.index(_대상플래그) + 1]).resolve()) == str(Path(부모경로).resolve())
+    assert _커밋플래그 in av
+    assert av[av.index(_상한플래그) + 1] == str(settings.DEFAULTS["prune_max_items"])
+    i = av.index("--account")
+    assert av[i + 1:i + 3] == ["zza", "zzb"]
+    assert "zzc" not in av, "대상 없는 계정까지 돌린다"
+    if Path("/usr/bin/caffeinate").exists():
+        assert av[0].endswith("caffeinate") and av[1] == "-i"
+
+
+def test_커밋_상한은_한_곳에서만():
+    from webapp.routes import prune
+    src = Path(prune.__file__).read_text(encoding="utf-8")
+    assert src.count("def _삭제상한") == 1
+    assert "prune_max_items=_삭제상한()" in src
+
+
+# ── ② 삭제 결과 조각 ────────────────────────────────────────────────────────
+
+def _결과문서(**덮기) -> dict:
+    a = [_대상행("zza", i) for i in range(7)]
+    items = ([{"adId": a[i]["adId"], "status": 200, "결과": "성공", "err": None} for i in range(3)]
+             + [{"adId": a[3]["adId"], "status": 404, "결과": "이미없음", "err": None},
+                {"adId": a[4]["adId"], "status": 500, "결과": "실패", "err": "server <b>boom</b>"}])
+    문서 = {"generated": "2026-09-30T11:00:00", "mode": "commit", "limit": 8000,
+            "total": len(items), "adIds": [x["adId"] for x in items],
+            "accounts": {
+                "zza": {"paused": 9, "deletable": 5, "keep": {}, "backup": "/x/paused_zza_t.json",
+                        "aborted": None, "skipped": None, "targets": a, "items": items,
+                        "result": {"ok": 3, "gone": 1, "fail": 1},
+                        "excluded": [{"adId": a[5]["adId"], "사유": "다시_켜짐"},
+                                     {"adId": a[6]["adId"], "사유": "재조회에_없음"}],
+                        "new_since_preview": 2},
+                "zzb": {"paused": 2, "deletable": 2, "keep": {}, "backup": None,
+                        "aborted": "backup_failed", "skipped": None,
+                        "targets": [_대상행("zzb", 0), _대상행("zzb", 1)]},
+                "zzc": {"paused": 1, "deletable": 1, "keep": {}, "backup": "/x/paused_zzc_t.json",
+                        "aborted": "recheck_failed", "skipped": None,
+                        "targets": [_대상행("zzc", 0)]},
+            }}
+    문서.update(덮기)
+    return 문서
+
+
+def _커밋잡(run_dir: Path, parent: str, *, 문서=None, 상태="done", exit_code=0,
+           쓰기=True) -> str:
+    job_id = str(uuid.uuid4())
+    결과 = run_dir / "web" / f"prune_result_{job_id}.json"
+    결과.parent.mkdir(parents=True, exist_ok=True)
+    if 쓰기:
+        결과.write_text(json.dumps(_결과문서() if 문서 is None else 문서, ensure_ascii=False),
+                       encoding="utf-8")
+    cx = sqlite3.connect(jobs.db_path())
+    try:
+        cx.execute("INSERT INTO jobs (id, kind, run_dir, accounts, argv, status, log_path, "
+                   "targets_path, result_path, parent_job_id, exit_code, started_at) "
+                   "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (job_id, "prune_commit", run_dir.name, "[]", "[]", 상태, "/dev/null", None,
+                    str(결과), parent, exit_code if 상태 not in jobs.LIVE_STATUSES else None,
+                    _지금()))
+        cx.commit()
+    finally:
+        cx.close()
+    return job_id
+
+
+def test_결과_ctx_계정별_성공_이미없음_실패(삭제판, tmp_run_dir):
+    from webapp.routes.prune import _삭제결과ctx
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid)
+    ctx = _삭제결과ctx(jobs.job_status(cid))
+    assert not ctx["error"]
+    계정 = {r["계정"]: r for r in ctx["계정행"]}
+    assert (계정["zza"]["성공"], 계정["zza"]["이미없음"], 계정["zza"]["실패"]) == (3, 1, 1)
+    assert 계정["zza"]["제외"] == 2 and 계정["zza"]["새로꺼짐"] == 2
+    assert ctx["새로꺼짐"] == 2
+    assert ctx["실패목록"] == ["nad-zza-004"]
+    assert [r["adId"] for r in ctx["실패행"]] == ["nad-zza-004"]
+    assert {r["사유"] for r in ctx["제외행"]} == {"다시 켜짐", "재조회에 없음(이미 삭제됐거나 조회 실패)"}
+    # 중단 계정이 위, 깨끗한 계정이 아래(flow.result_rows 관례 — 안 된 것을 화면 밖으로 밀지 않는다)
+    순서 = [r["계정"] for r in ctx["계정행"]]
+    assert 순서.index("zzb") < 순서.index("zza") and 순서.index("zzc") < 순서.index("zza")
+
+
+def test_결과_조각_excluded_사유와_새로꺼짐과_중단계정(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid)
+    본문 = _조각(삭제판, cid)
+    assert "다시 켜짐" in 본문
+    assert "재조회에 없음(이미 삭제됐거나 조회 실패)" in 본문
+    assert "미리보기 이후 새로 꺼진 2건 — 이번엔 안 지움" in 본문
+    assert "백업을 못 써서 이 계정은 한 건도 지우지 않았다" in 본문
+    assert "재확인 조회가 0건/실패" in 본문
+    assert "<b>boom</b>" not in 본문           # 오류 원문 이스케이프
+    # 실패 표가 제외 표 위에 — 실패·제외가 성공 요약보다 먼저 눈에 띈다
+    assert 본문.index("nad-zza-004") < 본문.index("nad-zza-005")
+
+
+def test_결과_backup_failed_는_prune_전용_문구(삭제판, tmp_run_dir):
+    from webapp.routes.prune import _삭제결과ctx
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid)
+    계정 = {r["계정"]: r for r in _삭제결과ctx(jobs.job_status(cid))["계정행"]}
+    assert 계정["zzb"]["중단"] == "백업을 못 써서 이 계정은 한 건도 지우지 않았다"
+    assert "광고비" not in 계정["zzb"]["중단"]
+
+
+def test_결과_산출물이_없고_종료코드_2면_상한초과_삭제0(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 쓰기=False, 상태="failed", exit_code=2)
+    본문 = _조각(삭제판, cid)
+    assert "상한 초과" in 본문 and "삭제 0" in 본문
+
+
+def test_결과_도는_중이면_읽지_않는다(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 상태="starting")
+    본문 = _조각(삭제판, cid)
+    assert "도는 중" in 본문
+
+
+def test_결과_템플릿에_safe_필터가_없다():
+    from webapp import main
+    src = (Path(main.__file__).parent / "templates" / "_prune_result_table.html").read_text(
+        encoding="utf-8")
+    assert "| safe" not in src and "|safe" not in src
+
+
+def test_flow_중단사유에_recheck_failed():
+    from webapp import flow
+    assert "recheck_failed" in flow.중단사유
+    assert flow.aborted_accounts({"accounts": {"zz": {"aborted": "recheck_failed"}}})["zz"] \
+        == flow.중단사유["recheck_failed"]
+
+
+def test_prune_js_요청에_대상목록이_없다():
+    from webapp import main
+    src = (Path(main.__file__).parent / "static" / "prune.js").read_text(encoding="utf-8")
+    assert "typed_count" in src and "/jobs/prune/commit" in src
+    assert "adIds" not in src
