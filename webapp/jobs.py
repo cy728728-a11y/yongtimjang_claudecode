@@ -72,7 +72,8 @@ JobKind = Literal["prep", "run", "bids_preview", "bids_commit",
                   "banner_scan",
                   "detail_estimate", "detail_submit", "detail_poll",
                   "market_preview", "market_commit", "market_poll",
-                  "thumb_estimate", "coupang_preview", "coupang_commit"]
+                  "thumb_estimate", "coupang_preview", "coupang_commit",
+                  "prune_preview", "prune_commit"]
 
 KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
                           "revert_only", "revert_all", "synthetic",
@@ -80,7 +81,8 @@ KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
                           "banner_scan",
                           "detail_estimate", "detail_submit", "detail_poll",
                           "market_preview", "market_commit", "market_poll",
-                          "thumb_estimate", "coupang_preview", "coupang_commit")
+                          "thumb_estimate", "coupang_preview", "coupang_commit",
+                          "prune_preview", "prune_commit")
 
 # 전역 1개 가드의 대상. **왜 전역인가:**
 # ENG-04(대상별 잠금)는 Phase 2 지만 **위험은 Phase 1 에 있다.** `run_bids` 가
@@ -92,7 +94,11 @@ KINDS: tuple[str, ...] = ("prep", "run", "bids_preview", "bids_commit",
 WRITE_KINDS: frozenset[str] = frozenset({"prep", "bids_commit", "revert_only", "revert_all",
                                          "detail_submit", "detail_poll",
                                          "market_commit", "market_poll",
-                                         "coupang_commit"})
+                                         "coupang_commit", "prune_commit"})
+# **꺼진 소재 삭제(`prune_commit`)는 되돌릴 수 없는 DELETE 다 — L-05 전역 1개.** 백업 파일이
+# 있어도 재등록은 새 소재(새 adId)라 "되돌리기" 가 아니다. **미리보기(`prune_preview`)는 넣지
+# 않는다** — 광고 쓰기 0 이고 자기 산출물·백업 파일만 쓴다. 넣으면 미리보기 하나에 입찰가 인상이 409 가 된다.
+# `BULSAJA_KINDS` 에도 넣지 않는다 — 광고 API 만 부르고 불사자 MCP 는 0회다.
 # **쿠팡 복사(`coupang_commit`)는 되돌릴 수 없는 복사다**(D-11) — 불사자에 쿠팡 그룹 사본을 만들고
 # 업로드까지 간다. 지우는 길은 사람 손뿐이라 넓게 막는다. **쿠팡 후보 뽑기(`coupang_preview`)와
 # 썸네일 견적(`thumb_estimate`)은 넣지 않는다** — 둘 다 불사자에 쓰기 0 이다(D-11 · D-02).
@@ -154,7 +160,10 @@ BULSAJA_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan",
 #    위 레이트리밋 서술을 이 잡에 옮겨 읽지 마라.
 SINGLETON_KINDS: frozenset[str] = frozenset({"bulsaja_index", "bulsaja_scan", "banner_scan",
                                              "detail_estimate", "market_preview",
-                                             "thumb_estimate", "coupang_preview"})
+                                             "thumb_estimate", "coupang_preview",
+                                             "prune_preview"})
+# 🔵 **`prune_preview` 는 계정당 수 MB ads.json 읽기·백업 중복 방지다.** 같은 미리보기 둘이
+#    같은 회차에서 같은 백업 파일을 동시에 쓰면 반쪽 백업이 남는다. 쓰기 가드 밖이다.
 # 🔵 **`thumb_estimate` · `coupang_preview` 도 레이트리밋 때문이다**(D-09) — 같은 kind 중복만 막는다.
 #    쓰기 0 이라 전역 쓰기 가드 밖이다. 쿠팡 복사는 이미 `WRITE_KINDS` 가 전역으로 하나만 허용한다.
 # 🔵 **`market_preview` 도 레이트리밋 때문이다** — `detail_estimate` 와 같은 사유. 쓰기 가드 밖이다.
@@ -847,9 +856,11 @@ def _수면방지_프리픽스(kind: str) -> list[str]:
     # 마켓 반영·이어서 확인도 붙인다 — upload_tasks 창 폴링이 최대 수십 분이다(D-07).
     # Phase 7 세 kind 도 붙인다 — 쿠팡 복사는 ship 단계가 수 분, 후보 뽑기도 쿠팡 그룹 전수 조회,
     # 썸네일 견적은 prep 이 이미지를 받는다. 중간에 idle sleep 이 끊으면 반쯤 쓴 산출물이 남는다.
+    # 꺼진 소재 삭제도 붙인다 — ENG-06 은 Phase 3 에서 완료. 8,000건 DELETE ≈ 25~40분이라 kind 만 더한다.
     if kind not in ("bulsaja_index", "banner_scan", "detail_submit", "detail_poll",
                     "market_commit", "market_poll",
-                    "thumb_estimate", "coupang_preview", "coupang_commit"):
+                    "thumb_estimate", "coupang_preview", "coupang_commit",
+                    "prune_commit"):
         return []
     try:
         return [CAFFEINATE, "-i"] if os.path.exists(CAFFEINATE) else []
@@ -868,7 +879,8 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
                 thumb_dir: Path | None = None,
                 coupang_dir: Path | None = None,
                 approved_path: Path | None = None,
-                copy_limit: int | None = None) -> list[str]:
+                copy_limit: int | None = None,
+                prune_max_items: int | None = None) -> list[str]:
     """kind → `AdsArgv`. **조립은 `webapp/argv.py` 한 곳에서만** 일어난다 (T-1-10)."""
     if kind in ("prep", "run"):
         return argv_mod.AdsArgv(subcommand=kind, run_dir=run_dir,
@@ -901,6 +913,24 @@ def _build_argv(kind: str, job_id: str, run_dir: str | None, accounts: list[str]
                                 revert=True, commit=commit,
                                 only_ads=targets_path if kind == "revert_only" else None,
                                 preview_out=result_path).build()
+
+    if kind == "prune_preview":
+        # 미리보기는 광고 쓰기 0. 산출물(`--preview-out`)이 그대로 커밋의 `--only-ads` 입력이 된다
+        # (최상위 adIds — 02-01 계약). 백업 태그는 잡 id — 같은 날 두 백업이 서로 덮지 않게(Pitfall 1).
+        return argv_mod.AdsArgv(subcommand="prune", run_dir=run_dir, accounts=accounts,
+                                preview_out=result_path, backup_tag=job_id).build()
+
+    if kind == "prune_commit":
+        # 🔴 빈 값은 전량이 아니다. `--only-ads` 가 없으면 CLI 는 계정 deletable 전량을 지운다 —
+        # revert_only·bulsaja_index 와 같은 부류라 조립 전에 터뜨린다(SAFE-06 · D-07).
+        if targets_path is None:
+            raise ValueError("prune_commit 에는 대상 파일이 반드시 있어야 한다 — 빈 값은 전량이 아니다")
+        if prune_max_items is None:
+            raise ValueError("상한 없는 삭제는 없다 (SAFE-07)")
+        return argv_mod.AdsArgv(subcommand="prune", run_dir=run_dir, accounts=accounts,
+                                commit=True, only_ads=targets_path,
+                                max_items=prune_max_items, preview_out=result_path,
+                                backup_tag=job_id, prefix=_수면방지_프리픽스(kind)).build()
 
     if kind in ("bulsaja_profile", "bulsaja_index", "bulsaja_scan"):
         # 대상 파일 규약은 광고 쪽과 같다 — `_write_targets` 가 쓰는 **JSON 배열** 하나다.
@@ -1128,7 +1158,9 @@ def create_job(kind: str, *, run_dir: str | None = None,
                max_items: int | None = None,
                thumb_inputs: dict | None = None,
                coupang_approved: list[str] | None = None,
-               copy_limit: int | None = None) -> str:
+               copy_limit: int | None = None,
+               prune_max_items: int | None = None,
+               prune_retry: bool = False) -> str:
     """작업을 만들고 자식을 띄운 뒤 `job_id` 를 즉시 돌려준다. **블로킹하지 않는다.**
 
     **이 함수는 HTTP 를 모른다** (D-17 / ENG-07). 요청 객체를 받지 않고 상태코드를
@@ -1182,6 +1214,21 @@ def create_job(kind: str, *, run_dir: str | None = None,
         raise ValueError("thumb_inputs 는 썸네일 견적 전용이다")
     if (coupang_approved is not None or copy_limit is not None) and kind != "coupang_commit":
         raise ValueError("coupang_approved · copy_limit 은 쿠팡 복사 전용이다")
+    if (prune_max_items is not None or prune_retry) and kind != "prune_commit":
+        raise ValueError("prune_max_items · prune_retry 는 꺼진 소재 삭제 전용이다")
+    if kind == "prune_commit":
+        # 🔴 빈 값은 전량이 아니다(SAFE-06 · SAFE-07 · D-07). 상한·대상·부모 셋 다 없으면 만들지 않는다.
+        if (isinstance(prune_max_items, bool) or not isinstance(prune_max_items, int)
+                or prune_max_items < 1):
+            raise ValueError("상한 없는 삭제는 없다 (SAFE-07) — prune_max_items 는 1 이상 정수다")
+        if only_ads is None and targets_path_override is None:
+            raise ValueError("꺼진 소재 삭제에는 대상 파일이 반드시 있어야 한다 — 빈 값은 전량이 아니다")
+        if not parent_job_id:
+            raise ValueError("꺼진 소재 삭제에는 부모 미리보기 잡이 필요하다")
+        if not run_dir:
+            raise ValueError("꺼진 소재 삭제에는 회차가 필요하다")
+    if kind == "prune_preview" and not run_dir:
+        raise ValueError("꺼진 소재 미리보기에는 회차가 필요하다")
     if kind == "thumb_estimate":
         _썸네일입력검사(thumb_inputs)
         if not run_dir:
@@ -1332,6 +1379,26 @@ def create_job(kind: str, *, run_dir: str | None = None,
                                  "회차의 web/ 밑에 같이 남아야 추적이 된다")
             else:
                 result_path = _web_dir(run_dir) / f"{BULSAJA_접두[kind]}_{job_id}.json"
+        elif kind in ("prune_preview", "prune_commit"):
+            # 미리보기·결과 모두 회차의 `web/` 밑 — 미리보기 산출물이 커밋의 대상 파일이 되므로
+            # `_override_targets` 의 web/ 부모 검사를 그대로 통과한다.
+            접두 = "prune_preview" if kind == "prune_preview" else "prune_result"
+            result_path = _web_dir(run_dir) / f"{접두}_{job_id}.json"
+            if kind == "prune_commit":
+                # 부모는 **성공한** 미리보기여야 한다 — 실패·미완 미리보기의 반쪽 산출물로 지우면
+                # 본 적 없는 소재가 지워진다. 트랜잭션 안에서 본다(가드와 같은 창).
+                부모 = cx.execute("SELECT kind, status, exit_code FROM jobs WHERE id = ?",
+                                  (parent_job_id,)).fetchone()
+                if (부모 is None or 부모["kind"] != "prune_preview"
+                        or 부모["status"] != "done" or 부모["exit_code"] != 0):
+                    raise ValueError("꺼진 소재 삭제의 부모는 성공(done/0)한 미리보기여야 한다")
+                # 멱등(ENG-04 · D-09). 라우트 검사만으로는 두 탭 동시 POST 창이 남는다 — DB 트랜잭션
+                # 안에서 본다(SINGLETON 가드와 같은 논리). 다른 커밋 kind 에는 소급하지 않는다(Deferred).
+                if not prune_retry and cx.execute(
+                        "SELECT 1 FROM jobs WHERE parent_job_id = ? AND kind = 'prune_commit' "
+                        "AND status = 'done' AND exit_code = 0 LIMIT 1",
+                        (parent_job_id,)).fetchone():
+                    raise BusyError("이 미리보기로 이미 삭제했다 — 실패분 재시도나 새 미리보기를 써라")
         elif kind == "banner_scan":
             # `BULSAJA_접두` 에 얹지 않고 분기를 따로 둔다 — 이 잡은 불사자 계열이
             # 아니다(MCP 0회). 한 조건문에 섞으면 다음 사람이 "배너도 불사자 잡" 으로
@@ -1396,7 +1463,8 @@ def create_job(kind: str, *, run_dir: str | None = None,
                               thumb_dir=thumb_dir,
                               coupang_dir=coupang_dir,
                               approved_path=approved_path,
-                              copy_limit=copy_limit)
+                              copy_limit=copy_limit,
+                              prune_max_items=prune_max_items)
 
         cx.execute(
             "INSERT INTO jobs (id, kind, run_dir, accounts, argv, status, log_path, "

@@ -109,13 +109,19 @@ class AdsArgv(BaseModel):
     `accounts`·`prefix` 의 기본값이 빈 리스트인 것에 의미가 있다 — 아래 `build()` 주석.
     """
 
-    subcommand: Literal["prep", "run", "apply", "bids", "accounts"]
+    subcommand: Literal["prep", "run", "apply", "bids", "accounts", "prune"]
     run_dir: str | None = None
     accounts: list[Alias] = []
     commit: bool = False
     revert: bool = False
     only_ads: Path | None = None
     preview_out: Path | None = None
+    # Phase 2 (꺼진 소재 정리) — prune 전용. None 이면 플래그 자체를 안 붙인다(무플래그 = 기존 동작).
+    # 상한 0/None 을 "전량" 으로 읽는 길은 조립 전(`jobs._build_argv`)에서 끊는다(SAFE-07).
+    max_items: int | None = None
+    # 백업 파일명 꼬리표(`paused_<alias>_<날짜>_<tag>.json`). 웹은 항상 **서버가 만든 잡 id** 만
+    # 넘긴다. CLI 의 `prune.TAG_RE` 와 같은 모양으로 여기서 한 번 더 막는다(T-02-15).
+    backup_tag: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,64}$")] | None = None
     # Phase 2 의 `caffeinate -i` 자리 (ENG-06). 예: ["/usr/bin/caffeinate", "-i"]
     # 맥북 idle sleep 이 수십 분짜리 폴링을 끊는다. `man caffeinate` 기준
     # utility 를 지정하면 그 프로세스 수명 동안만 assertion 이 유지된다 —
@@ -148,6 +154,11 @@ class AdsArgv(BaseModel):
             av += ["--only-ads", str(self.only_ads)]
         if self.preview_out:
             av += ["--preview-out", str(self.preview_out)]
+        # 숫자도 `str()` — argv 컬럼 JSON 직렬화와 Popen 은 문자열만 받는다(위 경로와 같은 관례).
+        if self.max_items is not None:
+            av += ["--max-items", str(self.max_items)]
+        if self.backup_tag:
+            av += ["--backup-tag", self.backup_tag]
 
         return av
 
