@@ -2126,8 +2126,8 @@ def get_job_result(job_id: str, request: Request, format: str | None = None):
     # import 해도 순환이 안 생기게. **기존 키가 우선이다**: 트랙 모듈이 실수로 `bids_commit` 같은
     # 기존 kind 를 등록해도 그 표를 덮지 못한다 — 되돌리기 결과가 인상 표로 그려지는 부류의 사고를
     # 트랙 파일 하나가 일으키지 못하게(T-07-06).
-    from webapp.routes import coupang as _쿠팡트랙, thumb as _썸네일트랙
-    for 트랙표 in (_썸네일트랙.결과표, _쿠팡트랙.결과표):
+    from webapp.routes import coupang as _쿠팡트랙, prune as _삭제트랙, thumb as _썸네일트랙
+    for 트랙표 in (_썸네일트랙.결과표, _쿠팡트랙.결과표, _삭제트랙.결과표):
         for 키, 값 in 트랙표.items():
             결과표.setdefault(키, 값)
     조각, ctx = 결과표.get(kind, ("_preview_table.html", _미리보기표ctx))

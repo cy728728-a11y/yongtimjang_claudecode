@@ -316,6 +316,27 @@
     <input type="hidden" id="coupang-preview-job" value="">
   </section>
 
+  {# ── 꺼진 소재 정리 (Phase 2 / PRUNE-01~03 · 02-03) ───────────────────────
+     **회차가 있어야 한다** — 대상은 이 회차 스냅샷의 규칙⑥ 이다. 그래서 `if run_dir` 안.
+     계정 목록은 서버가 넘긴 `accounts` 로만 그린다(BOARD-02 — 계정 alias 를 박지 않는다).
+     삭제(커밋) 영역은 여기 두지 않는다 — 미리보기 조각 안의 접힌 details 가 품는다.
+     버튼은 disabled 로 그린다. `static/prune.js` 가 배선하면서 켠다. #}
+  {% if run_dir %}
+    <section id="prune">
+      <h2>꺼진 소재 정리</h2>
+      <p><small>규칙⑥ 중 연동끊김(AD_ABNORMAL_INTERLOCK)만 지운다. 검수중·거부는 남긴다.</small></p>
+      <fieldset id="prune-accounts-pick">
+        <legend><small>계정 (아무것도 안 고르면 전 계정)</small></legend>
+        {% for a in accounts %}
+          <label><input type="checkbox" name="prune-account" value="{{ a }}"> {{ a }}</label>
+        {% endfor %}
+      </fieldset>
+      <button type="button" id="prune-preview-btn" disabled>꺼진 소재 정리 미리보기 — 광고 쓰기 0</button>
+      <div id="prune-body"></div>
+      <input type="hidden" id="prune-preview-job" value="">
+    </section>
+  {% endif %}
+
   {# 실행 중인 작업 패널 + SSE 진행 로그 (Plan 01-05 / 01-06).
      `job` 은 라우트가 넣는 **도는 작업**이다. 탭을 닫았다 다시 열었을 때 이게
      비어 있으면 패널이 안 뜨고, 스트림도 안 열려 성공기준 3 이 성립하지 않는다. #}
@@ -651,5 +672,6 @@
 {# 트랙 JS 는 board.js **뒤**다 — board.js 가 노출한 window.관제탑 훅만 쓴다(D-19). #}
 <script src="/static/thumb.js"></script>
 <script src="/static/coupang.js"></script>
+<script src="/static/prune.js"></script>
 </body>
 </html>

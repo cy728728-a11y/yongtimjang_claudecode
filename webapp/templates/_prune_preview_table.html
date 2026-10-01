@@ -1,0 +1,72 @@
+{# 꺼진 소재 정리 미리보기 (광고 쓰기 0) — Plan 02-03 / PRUNE-01 · PRUNE-03 · D-01 · D-04.
+
+   **정본은 CLI(run_ads.py prune --preview-out) 산출물이다.** 라우트(`_삭제미리보기ctx`)가 값을
+   옮기기만 한다 — 삭제 대상(연동끊김만)을 여기서 다시 고르지 않는다(D-02).
+
+   뼈대: **running → error → 계정별 요약 → 전 행 표(Tabulator, prune.js 가 마운트) → 접힌 삭제 영역.**
+
+   삭제 영역의 4중 마찰(L-01 · L-05 · D-04): ① 표 맨 아래 ② 기본 접힘 details ③ 다른 색(contrast)
+   ④ 건수 타이핑 — 서버가 산출물에서 다시 세서 다르면 409.
+
+   자동 이스케이프에 기댄다 — 상품명·광고그룹명에 외부 원문이 섞여 들어온다. 이 파일에서
+   이스케이프를 끄는 필터를 쓰지 마라(T-02-23). 행 데이터는 tojson 데이터 블록으로만 넘긴다. #}
+
+{% if running %}
+  <p>꺼진 소재를 보는 중이다… 위 진행 로그를 봐라. (도는 중 — 광고 쓰기 0, 스냅샷 판정 + 백업만)</p>
+
+{% elif error %}
+  <p class="stale"><strong>{{ error }}</strong>
+    <br><small>빈 표를 '지울 것 0건' 으로 읽지 않게 표를 그리지 않는다.</small></p>
+
+{% else %}
+  <p id="prune-summary">
+    <strong>꺼진 소재(연동끊김) {{ 합계 }}건 삭제</strong> 대상 — 검수중·거부는 목록에 없다(남긴다).
+    <br><small>광고 쓰기 0 — 아직 아무것도 안 지웠다. 이번 삭제 상한 {{ 상한 }}건.</small>
+  </p>
+
+  <table id="prune-accounts">
+    <thead><tr><th>계정</th><th>삭제 대상</th><th>남김</th><th>백업 파일</th><th>중단/건너뜀</th></tr></thead>
+    <tbody>
+    {% for a in 계정요약 %}
+      <tr>
+        <td>{{ a.계정 }}</td>
+        <td>{{ a.삭제대상 }}</td>
+        <td>{% for k, v in a.남김.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</td>
+        <td>{{ a.백업 or "—" }}</td>
+        <td>{% if a.중단 %}<span class="stale">{{ a.중단 }}</span>{% endif %}{% if a.건너뜀 %}<span class="stale">건너뜀: {{ a.건너뜀 }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if 계정요약 | selectattr("건너뜀") | list %}
+    <p class="stale"><small>건너뛴 계정은 안 본 것이다 — 지울 게 없어서가 아니다.</small></p>
+  {% endif %}
+
+  {% if rows %}
+    <div id="prune-preview-grid"></div>
+    <script type="application/json" id="prune-preview-rows">{{ rows | tojson }}</script>
+  {% else %}
+    <p>지울 꺼진 소재(연동끊김) 0건.</p>
+  {% endif %}
+
+  {% if 이미삭제 %}
+    <p class="stale" id="prune-already"><strong>이 미리보기로 이미 삭제했다 — 실패분 재시도나 새 미리보기를 써라.</strong></p>
+  {% elif 삭제중 %}
+    <p id="prune-deleting">이 미리보기의 삭제가 도는 중이다 — 끝나고 결과를 봐라.</p>
+  {% elif 상한초과 %}
+    <p class="stale" id="prune-over-limit"><strong>상한 초과 — {{ 합계 }}건 &gt; 상한 {{ 상한 }}건.</strong>
+      계정을 골라 나눠 미리보기해라. 앞에서 잘라 지우지 않는다.</p>
+  {% elif 만료 and 삭제예정 %}
+    <p class="stale">미리보기가 24시간이 지났다 — 다시 미리보기해라.</p>
+  {% elif 삭제예정 %}
+    <details id="prune-commit-details">
+      <summary>꺼진 소재 삭제 실행 (되돌릴 수 없음 — 펼쳐서 확인)</summary>
+      <p><strong>되돌릴 수 없다.</strong> 이번 삭제 <strong>{{ 삭제예정 }}건</strong> — 위 표 전부.<br>
+        <small>실행 직전에 다시 조회해 그 사이 살아난 소재는 빼고 지운다 · 계정마다 백업을 먼저 쓰고
+          실패하면 그 계정은 지우지 않는다.</small></p>
+      <label for="prune-typed-count">지울 건수를 직접 입력해라 ({{ 삭제예정 }})</label>
+      <input type="number" id="prune-typed-count" inputmode="numeric" min="0" step="1" autocomplete="off">
+      <button type="button" class="contrast" id="prune-commit-btn" data-preview-job="{{ job.id }}">꺼진 소재 {{ 삭제예정 }}건 삭제 — 되돌릴 수 없음</button>
+    </details>
+  {% endif %}
+{% endif %}

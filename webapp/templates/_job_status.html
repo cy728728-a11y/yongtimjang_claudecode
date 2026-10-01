@@ -32,7 +32,9 @@
   "market_poll": "마켓 반영 이어서 확인",
   "thumb_estimate": "썸네일 견적",
   "coupang_preview": "쿠팡 후보 뽑기",
-  "coupang_commit": "쿠팡 복사"
+  "coupang_commit": "쿠팡 복사",
+  "prune_preview": "꺼진 소재 미리보기",
+  "prune_commit": "꺼진 소재 삭제"
 } %}
 {% set 상태이름 = {
   "starting": "띄우는 중",
@@ -78,6 +80,8 @@
       {% elif job.kind == "thumb_estimate" %}썸네일 견적은 크레딧 0 이다 — 기작업·현황판만 대조한다(현황판 백필은 쓴다).
       {% elif job.kind == "coupang_preview" %}쿠팡 후보 뽑기는 쓰기 0 이다 — 주문시트 실적과 쿠팡 그룹 중복만 조회한다.
       {% elif job.kind == "coupang_commit" %}쿠팡 복사는 되돌릴 수 없다 — 후보를 다시 조회해 늘어났으면 0건으로 멈춘다.
+      {% elif job.kind == "prune_preview" %}꺼진 소재 미리보기는 광고 쓰기 0 이다 — 스냅샷 판정과 백업만 한다.
+      {% elif job.kind == "prune_commit" %}꺼진 소재 삭제는 되돌릴 수 없다 — 계정마다 백업 → 재조회 → 삭제 순서다.
       {% endif %}
       브라우저를 닫아도 작업은 계속 돌고, 다시 열면 로그가 처음부터 이어서 보인다.
     </small></p>
@@ -124,6 +128,12 @@
         {% endif %}
         {% if job.kind in ("thumb_estimate", "coupang_preview") %}
           <br><small>주문시트/현황판은 gws 로 읽는다 — 403·만료면 재로그인 또는 token_cache.json 삭제.</small>
+        {% endif %}
+      {% elif job.kind in ("prune_preview", "prune_commit") %}
+        {# run_ads.py prune 종료코드 계약(02-01): 1 --only-ads 깨짐·산출물 쓰기 실패·태그 불량 ·
+           2 --max-items 초과(백업 전 중단). 계정 중단(aborted)은 0 이다 — 결과 표에서 본다. #}
+        {% if job.exit_code == 1 %}입력/산출물 파일 문제 — 삭제 0.
+        {% elif job.exit_code == 2 %}상한 초과 — 백업 전에 멈췄다, 삭제 0.
         {% endif %}
       {% else %}광고 설정이 바뀐 건 없다 — 실패한 항목은 건너뛴 것이다.{% endif %}
     </p>
