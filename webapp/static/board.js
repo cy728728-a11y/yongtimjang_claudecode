@@ -144,6 +144,48 @@
     return d.사유 || "";
   }
 
+  // ── 꺼진 소재 정지 표시 (Plan 02-04 / BOARD-05 · SC-4) ────────────────────
+  // 판정은 서버(`board.fold_products` 의 `광고정지` · `정지사유`)가 낸다. 여기는 그리기만.
+  //   광고정지 true  → "광고 정지" 배지 — 이 행의 과거 실적은 **현재 유입이 아니다**
+  //   광고정지 null  → "?" — 옛 result.json 이라 모른다. 추정해 배지를 붙이지 않는다(T-02-31)
+  //   광고정지 false → 배지 없음
+  // 🔴 문자열을 돌려주지 마라 — Tabulator 는 formatter 가 돌려준 문자열을 innerHTML 로 넣는다.
+  //    DOM 노드를 만들어 textContent 로만 채운다(T-02-28).
+  function 정지요약(d) {
+    var 사유 = d.정지사유 || {};
+    return Object.keys(사유).map(function (k) { return k + " " + 사유[k]; }).join(" · ");
+  }
+
+  function 정지(cell) {
+    var d = cell.getRow().getData();
+    var 칸 = document.createElement("span");
+    if (d.광고정지 === true) {
+      var 배지 = document.createElement("mark");
+      배지.textContent = "광고 정지";
+      배지.title = "소재가 전부 꺼져 있다 — 이 행의 과거 실적은 현재 유입이 아니다";
+      칸.appendChild(배지);
+    } else if (d.광고정지 === null) {
+      var 모름 = document.createElement("span");
+      모름.textContent = "?";
+      모름.title = "판정을 다시 돌려야(run) 보인다";
+      칸.appendChild(모름);
+    }
+    var 요약 = 정지요약(d);
+    if (요약) {
+      칸.appendChild(document.createTextNode((칸.childNodes.length ? " " : "") + 요약));
+    }
+    return 칸;
+  }
+
+  /** 정지 칸 hover 전문 — 잘린 사유 요약을 읽는다. */
+  function 정지전문(e, cell) {
+    var d = cell.getRow().getData();
+    var 말 = 정지요약(d);
+    if (d.광고정지 === true) { return "광고 정지 — 소재가 전부 꺼져 있다. " + 말; }
+    if (d.광고정지 === null) { return "판정을 다시 돌려야(run) 정지 여부가 보인다. " + 말; }
+    return 말;
+  }
+
   // 숫자 정렬에서 빈칸은 항상 아래로. 안 그러면 노출 내림차순 첫 페이지가
   // 통계 없는 ① 행으로 덮인다.
   var 빈칸아래 = { alignEmptyValues: "bottom" };
@@ -161,6 +203,8 @@
   //
   // 방법은 하나다: **고정폭 합 + 상품명 minWidth ≤ 컨테이너.**
   // 아래 폭은 그 예산(1,270 + 130 = 1,400 ≤ 1,448)에 맞춰 깎은 값이다.
+  // 02-04 가 "정지"·"오판정" 두 칸(64 + 56)을 더하면서 숫자 열을 다시 깎아 **합 1,270 을
+  // 그대로 지켰다.** 좁아진 머리글은 `columnDefaults.headerTooltip` 이 hover 로 전문을 띄운다.
   // 컬럼을 더 붙일 사람에게: 숫자를 눈대중으로 늘리지 말고 `board_cdp.sh` 의
   // V-BOARD-07 을 돌려라. 그 검사가 이 예산을 지키는 유일한 장치다.
 
@@ -190,36 +234,36 @@
       formatter: "rowSelection", titleFormatter: "rowSelection",
       titleFormatterParams: { rowRange: "visible" },
       cellClick: function (e, cell) { cell.getRow().toggleSelect(); } },
-    { title: "계정", field: "acct", width: 70 },
-    { title: "규칙", field: "rules", width: 58 },
+    { title: "계정", field: "acct", width: 62 },
+    { title: "규칙", field: "rules", width: 54 },
     { title: "상품명", field: "title", minWidth: 130, widthGrow: 5, tooltip: true },
-    { title: "노출", field: "imp", hozAlign: "right", width: 72,
+    { title: "노출", field: "imp", hozAlign: "right", width: 68,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "클릭", field: "clk", hozAlign: "right", width: 64,
+    { title: "클릭", field: "clk", hozAlign: "right", width: 58,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "CTR %", field: "ctr", hozAlign: "right", width: 64,
+    { title: "CTR %", field: "ctr", hozAlign: "right", width: 58,
       sorter: "number", sorterParams: 빈칸아래, formatter: 비율 },
-    { title: "구매완료", field: "purCnt", hozAlign: "right", width: 74,
+    { title: "구매완료", field: "purCnt", hozAlign: "right", width: 66,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "구매금액", field: "purAmt", hozAlign: "right", width: 80,
+    { title: "구매금액", field: "purAmt", hozAlign: "right", width: 72,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
     // `cost` 는 **광고비**다. 원본 필드가 salesAmt 라서 헷갈리기 쉬운데
     // 광고에 쓴 돈이지 벌어들인 돈이 아니다 (ads_rules._with_stat:50 주석).
-    { title: "광고비", field: "cost", hozAlign: "right", width: 76,
+    { title: "광고비", field: "cost", hozAlign: "right", width: 70,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "현재입찰", field: "bid", hozAlign: "right", width: 74,
+    { title: "현재입찰", field: "bid", hozAlign: "right", width: 68,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
-    { title: "그룹입찰따름", field: "useGroupBid", hozAlign: "center", width: 78,
+    { title: "그룹입찰따름", field: "useGroupBid", hozAlign: "center", width: 64,
       formatter: 예아니오 },
-    { title: "①소재수", field: "rule1_count", hozAlign: "right", width: 70,
+    { title: "①소재수", field: "rule1_count", hozAlign: "right", width: 58,
       sorter: "number", sorterParams: 빈칸아래, formatter: 정수 },
     // ── 조인 · 상세 상태 (Phase 3) ─────────────────────────────────────────
     // **상품ID 앞**에 둔다. 이 네 칸이 이 화면의 목적이라 오른쪽 끝에서 잘리면
     // 안 된다 — 🔴 를 골라내는 게 Core Value 다.
-    { title: "상세", field: "상세상태", width: 102, formatter: 상태 },
-    { title: "기작업", field: "기작업태그", width: 88, formatter: 태그,
+    { title: "상세", field: "상세상태", width: 94, formatter: 상태 },
+    { title: "기작업", field: "기작업태그", width: 80, formatter: 태그,
       tooltip: 팬아웃전문 },
-    { title: "사본", field: "사본N", hozAlign: "right", width: 54,
+    { title: "사본", field: "사본N", hozAlign: "right", width: 50,
       sorter: "number", sorterParams: 빈칸아래, formatter: 사본,
       tooltip: 팬아웃전문 },
     // ⚠️ field 가 `사유코드` 가 **아니라** `표시사유` 다. 판정 코드는 데이터에 그대로
@@ -227,9 +271,12 @@
     //    `사유코드` 의 `미스` 는 인덱스를 한 번도 안 훑은 행에도 붙어서, 그대로 띄우면
     //    시스템 사정이 광고 쪽 오류로 읽힌다(03-05 가 넘긴 숙제 / Pitfall 3).
     //    정렬도 표시 이름 기준이 맞다 — 사람이 보는 순서와 어긋나면 안 된다.
-    { title: "해소", field: "표시사유", width: 116,
+    { title: "해소", field: "표시사유", width: 104,
       formatter: 해소, tooltip: 사유전문 },
-    { title: "상품ID", field: "mallProductId", width: 90, tooltip: true }
+    // 꺼진 소재 정지 (BOARD-05). 정렬은 끈다 — true/null/false 3값 정렬은 사람이 못 읽는다.
+    { title: "정지", field: "광고정지", width: 64, headerSort: false,
+      formatter: 정지, tooltip: 정지전문 },
+    { title: "상품ID", field: "mallProductId", width: 84, tooltip: true }
   ];
 
   var table = new Tabulator("#board", {
@@ -237,6 +284,8 @@
     columns: columns,
     index: "key",
     layout: "fitColumns",
+    // 좁힌 머리글(예: "그룹입찰따름")이 잘려도 hover 로 전문을 읽는다.
+    columnDefaults: { headerTooltip: true },
     // 높이를 고정해야 가상 DOM 이 켜진다. 안 켜지면 2,637행을 전부 그리느라 멈춘다.
     height: "60vh",
     placeholder: "조건에 맞는 상품이 없다",

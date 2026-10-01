@@ -39,6 +39,16 @@ RULE_ORDER = "①②③④⑤⑥"
 # `rank` 도 없다 — 평균 순위는 노출 가중 없이 못 합치고, 보드가 쓰지 않는다.
 SUM_FIELDS = ("imp", "clk", "purCnt", "purAmt", "cost")
 
+# 규칙⑥(꺼진 소재)의 정지사유 코드 → 화면 라벨 (BOARD-05 · D-12).
+# 연동끊김은 물갈이 20일 사이클의 부산물이라 지워도 되는 쪽이고, 검수중·거부는
+# 사람이 볼 쪽이다 — 한 칸에 뭉치면 그 구분이 사라진다. 모르는 코드는 **원문 그대로**
+# 센다(지어낸 라벨로 덮지 않는다).
+정지사유_라벨 = {
+    "AD_ABNORMAL_INTERLOCK": "연동끊김",
+    "AD_UNDER_REVIEW": "검수중",
+    "AD_DISAPPROVED": "거부",
+}
+
 
 def _rule_key(name: str) -> tuple:
     """규칙 키를 `①②③④⑤⑥` 순서로 정렬하기 위한 정렬키."""
@@ -142,6 +152,10 @@ def fold_products(result: dict) -> list[dict]:
                     "_bid_from_rule1": False,
                     "imp": None, "clk": None, "ctr": None,
                     "purCnt": None, "purAmt": None, "cost": None,
+                    # 규칙⑥ 소재의 정지사유 {라벨: 건수} (BOARD-05). ⑥ 이 없으면 {}.
+                    "정지사유": {},
+                    # 내부용 — ⑥ 행의 productLive 값들. out 루프에서 광고정지로 접고 뺀다.
+                    "_live_flags": [],
                 }
             p["_rules"] |= slot["rules"]
             if not p["title"]:
@@ -162,6 +176,20 @@ def fold_products(result: dict) -> list[dict]:
                 if 첫_규칙1:
                     p["_bid_from_rule1"] = True
 
+            # 꺼진 소재(⑥) — 정지사유를 세고 productLive 를 모은다 (BOARD-05 · D-12/13).
+            # productLive 키가 없으면(옛 result.json) None 으로 담아 **추정하지 않는다**.
+            if "⑥" in slot["rules"]:
+                코드 = r.get("statusReason")
+                라벨 = 정지사유_라벨.get(코드, 코드 or "미상")
+                p["정지사유"][라벨] = p["정지사유"].get(라벨, 0) + 1
+                p["_live_flags"].append(r.get("productLive"))
+
+            # ⑥ 만 가진 소재는 지표를 **합산하지 않는다** (BOARD-05 · SC-4).
+            # 지금은 ⑥ 행에 지표 키가 아예 없어 더해도 0 이지만, 미래에 CLI 가 키를 실어도
+            # 꺼진 소재의 과거 실적이 "현재 유입" 으로 둔갑하지 않게 여기서 명시적으로 끊는다.
+            if slot["rules"] == {"⑥"}:
+                continue
+
             # ①·⑥ 행에는 이 키들이 **아예 없다**. `.get()` 으로만 만진다.
             for f in SUM_FIELDS:
                 v = r.get(f)
@@ -173,6 +201,16 @@ def fold_products(result: dict) -> list[dict]:
         p["rules"] = "".join(sorted(p.pop("_rules")))
         p["rule1_count"] = len(p["rule1_ads"])   # "이 버튼이 N건에 적용됩니다"
         p.pop("_bid_from_rule1", None)
+        # 광고정지 배지 (D-13): ⑥ 이 없으면 False. ⑥ 행 중 productLive 를 모르는 게
+        # 하나라도 있으면 None — 배지를 추정해 붙이지 않고 화면이 "판정 다시(run)" 를 안내한다.
+        # 전부 False(같은 상품에 게재중 소재 없음)일 때만 True.
+        flags = p.pop("_live_flags")
+        if not flags:
+            p["광고정지"] = False
+        elif any(f is None for f in flags):
+            p["광고정지"] = None
+        else:
+            p["광고정지"] = all(f is False for f in flags)
         # CTR 은 합산하지 않고 **다시 낸다**. 노출이 없으면 비율도 없다(0 이 아니라 None) —
         # 0.00% 로 찍으면 "클릭이 0 이었다" 는 판정처럼 보이는데, 실제로는 분모가 없다.
         p["ctr"] = round(p["clk"] / p["imp"] * 100, 2) if p["imp"] else None
