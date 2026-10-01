@@ -1,0 +1,71 @@
+{# 꺼진 소재 삭제 결과 — Plan 02-03 / SAFE-04 · SAFE-05 · PRUNE-02 · D-03 · D-06 · D-08.
+
+   **정본은 CLI(run_ads.py prune --commit --preview-out) 산출물이다.** 라우트(`_삭제결과ctx`)가
+   옮기기만 한다 — 종료코드로 성공을 추정하지 않는다(계정이 중단돼도 CLI 는 0 이다).
+
+   순서: running/error → 합계 줄 → 새로 꺼진 경고 → 계정 표(중단·실패 위) → 실패 표 → 제외 표
+   → 실패분 재시도(접힘). 되돌리기 버튼은 없다 — 재등록은 새 소재(새 adId)라 되돌리기가 아니다.
+
+   자동 이스케이프에 기댄다(오류 원문·adId) — 이스케이프를 끄는 필터 금지(T-02-23). #}
+
+{% if running %}
+  <p>꺼진 소재를 지우는 중이다… 위 진행 로그를 봐라. (도는 중 — 계정마다 백업 → 재조회 → 삭제)</p>
+
+{% elif error %}
+  <p class="stale"><strong>{{ error }}</strong></p>
+  <p><small>산출물이 없으면 결과를 지어내지 않는다 — 진행 로그와 광고 화면을 직접 봐라.</small></p>
+
+{% else %}
+  <p id="prune-totals">
+    <strong>성공 {{ 합.성공 }}</strong> · 이미없음 {{ 합.이미없음 }}
+    · {% if 합.실패 or 합.재시도소진 %}<strong class="stale">실패 {{ 합.실패 + 합.재시도소진 }}</strong>{% else %}실패 0{% endif %}
+    · 재조회 제외 {{ 합.제외 }}
+  </p>
+
+  {% if 새로꺼짐 > 0 %}
+    <p class="stale" id="prune-new-since"><strong>미리보기 이후 새로 꺼진 {{ 새로꺼짐 }}건 — 이번엔 안 지움.</strong>
+      <small>다음 미리보기에서 보인다.</small></p>
+  {% endif %}
+
+  <table id="prune-result-accounts">
+    <thead><tr><th>계정</th><th>성공</th><th>이미없음</th><th>실패</th><th>재조회 제외</th><th>새로 꺼짐</th><th>중단/건너뜀</th></tr></thead>
+    <tbody>
+    {% for a in 계정행 %}
+      <tr>
+        <td>{{ a.계정 }}</td>
+        <td>{{ a.성공 }}</td>
+        <td>{{ a.이미없음 }}</td>
+        <td>{% if a.실패 or a.재시도소진 %}<strong class="stale">{{ a.실패 + a.재시도소진 }}</strong>{% else %}0{% endif %}</td>
+        <td>{{ a.제외 }}</td>
+        <td>{{ a.새로꺼짐 }}</td>
+        <td>{% if a.중단 %}<strong class="stale">{{ a.중단 }}</strong>{% endif %}{% if a.건너뜀 %}<span class="stale">건너뜀: {{ a.건너뜀 }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if 실패행 %}
+    <p>실패 {{ 실패행 | length }}건:</p>
+    <table id="prune-failed">
+      <thead><tr><th>계정</th><th>소재id</th><th>결과</th><th>상태코드</th><th>오류</th></tr></thead>
+      <tbody>
+      {% for x in 실패행 %}
+        <tr><td>{{ x.계정 }}</td><td>{{ x.adId }}</td><td>{{ x.결과 }}</td><td>{{ x.status if x.status is not none else "" }}</td><td>{{ x.err }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if 제외행 %}
+    <p>실행 직전 재조회에서 빠진 것 ({{ 제외행 | length }}건 — 안 지움):</p>
+    <table id="prune-excluded">
+      <thead><tr><th>계정</th><th>소재id</th><th>사유</th></tr></thead>
+      <tbody>
+      {% for x in 제외행 %}<tr><td>{{ x.계정 }}</td><td>{{ x.adId }}</td><td>{{ x.사유 }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if 재시도가능 %}
+  {% endif %}
+{% endif %}

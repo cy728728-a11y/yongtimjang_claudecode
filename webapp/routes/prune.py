@@ -20,11 +20,11 @@ from pathlib import Path
 from typing import Callable
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from webapp import flow, jobs, paths, settings
 from webapp.argv import Alias
-from webapp.routes.jobs import _경과초, _미리보기유효시간, _상세잡만들기, _투영
+from webapp.routes.jobs import JobId, _경과초, _미리보기유효시간, _상세잡만들기, _투영
 
 router = APIRouter()
 
@@ -43,6 +43,18 @@ class PrunePreviewReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     run_dir: str
     accounts: list[Alias] = []
+
+
+class PruneCommitReq(BaseModel):
+    """삭제 요청 — 미리보기 잡 id + **사람이 타이핑한 건수** (L-01 · L-05 · D-04 · T-02-20).
+
+    대상·상한을 받지 않는다(T-02-16). `typed_count` 는 대상이 아니라 확인값이다 — 서버가
+    미리보기 산출물에서 다시 센 수와 다르면 409. StrictInt 라 문자열 "5"·true 는 422 다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    preview_job_id: JobId
+    typed_count: StrictInt = Field(ge=0)
 
 
 # ── 상한 — 결정은 이 한 곳 ──────────────────────────────────────────────────
@@ -138,6 +150,86 @@ def post_prune_preview(request: Request, req: PrunePreviewReq):
     return _상세잡만들기("prune_preview", run_dir=req.run_dir, accounts=list(req.accounts))
 
 
+# ── ② 삭제(커밋) ────────────────────────────────────────────────────────────
+
+def _미리보기검사(부모: dict | None) -> dict:
+    """부모 미리보기 → 그 산출물. 실패면 HTTPException. 커밋·재시도가 같은 검사를 쓴다.
+
+      ① 꺼진 소재 미리보기인가(400) · 도는 중이 아닌가(409) · done/0 인가(400)
+      ② 24시간 안인가(400 — FLOW-03 · T-02-18. CLI 가 커밋 직전 재조회하지만 사람이 본 것 자체가 낡았다)
+    """
+    if 부모 is None or 부모.get("kind") != "prune_preview":
+        raise HTTPException(status_code=400, detail="꺼진 소재 미리보기 작업이 아니다 — 미리보기부터 해라")
+    if 부모.get("status") in jobs.LIVE_STATUSES:
+        raise HTTPException(status_code=409, detail="미리보기가 아직 도는 중이다 — 끝나고 다시 눌러라")
+    if 부모.get("status") != "done" or 부모.get("exit_code") != 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"미리보기가 정상으로 안 끝났다({부모.get('status')}, 종료코드 "
+                   f"{부모.get('exit_code')}) — 다시 미리보기부터")
+    경과 = _경과초(부모.get("started_at"))
+    if 경과 is None or 경과 > _미리보기유효시간:
+        raise HTTPException(status_code=400, detail="미리보기가 24시간을 넘었다 — 다시 미리보기부터 해라")
+    문서 = _산출물(부모)
+    if 문서 is None or not isinstance(문서.get("adIds"), list):
+        raise HTTPException(status_code=400,
+                            detail="미리보기 산출물이 없거나 깨졌다 — 다시 미리보기부터")
+    # 최상위 adIds(= CLI 가 --only-ads 로 읽는 값)와 계정별 targets(= 사람이 본 표)가 다르면
+    # 본 것과 다른 게 지워진다 — 깨진 산출물로 본다.
+    본것 = {r["adId"] for v in _계정들(문서).values() for r in _대상(v)}
+    if set(map(str, 문서["adIds"])) != 본것:
+        raise HTTPException(status_code=400,
+                            detail="미리보기 산출물의 대상 목록과 표가 어긋난다 — 다시 미리보기부터")
+    return 문서
+
+
+def _자식검사(preview_job_id: str, *, 성공도_막기: bool) -> None:
+    """같은 미리보기의 삭제가 도는 중이면 409. 성공한 삭제가 있으면 409(D-09 — 쿠팡은 400)."""
+    자식들 = jobs.children_of(preview_job_id, "prune_commit")
+    if any(c.get("status") in jobs.LIVE_STATUSES for c in 자식들):
+        raise HTTPException(status_code=409, detail="이 미리보기의 삭제가 도는 중이다 — 끝나고 결과를 봐라")
+    if 성공도_막기 and _성공커밋(자식들):
+        raise HTTPException(status_code=409,
+                            detail="이 미리보기로 이미 삭제했다 — 실패분 재시도나 새 미리보기를 써라")
+
+
+@router.post("/jobs/prune/commit")
+def post_prune_commit(request: Request, req: PruneCommitReq):
+    """**꺼진 소재 삭제 — 되돌릴 수 없다.** 버튼 + 건수 타이핑이 승인이다 (PRUNE-01 · D-04).
+
+      ①② 부모 미리보기 검사(`_미리보기검사`) — 종류·상태·24시간·산출물
+      ③ 이 미리보기의 삭제가 도는 중(409) · 이미 성공(409 — ENG-04 · D-09)
+      ④ 합계 0 → 400 · 합계 > `_삭제상한()` → 400 (자르지 않고 전량 거부 — SAFE-07)
+      ⑤ typed_count ≠ 합계 → **409** (화면이 본 수와 서버가 지금 센 수가 다르다)
+      ⑥ create_job — `--only-ads` 는 **부모 산출물 파일 그대로**(SAFE-06 · D-02). 쓰기 잡 전역 가드는 그 안(409)
+
+    두 탭이 동시에 ③을 통과해도 엔진(02-02)이 트랜잭션 안에서 성공 자식을 다시 봐 최종 차단한다.
+    """
+    부모 = jobs.job_status(req.preview_job_id)
+    문서 = _미리보기검사(부모)
+    _자식검사(req.preview_job_id, 성공도_막기=True)
+
+    합계 = _합계(문서)
+    if 합계 == 0:
+        raise HTTPException(status_code=400, detail="지울 꺼진 소재가 0건이다")
+    상한 = _삭제상한()
+    if 합계 > 상한:
+        raise HTTPException(status_code=400,
+                            detail=f"삭제 대상 {합계:,}건 > 상한 {상한:,}건 — 계정을 골라 나눠 미리보기해라")
+    if req.typed_count != 합계:
+        raise HTTPException(
+            status_code=409,
+            detail=(f"화면이 본 건수({req.typed_count:,})와 지금 지울 건수"
+                    f"({합계:,})가 다르다 — 다시 확인해라"))
+
+    계정 = sorted(a for a, v in _계정들(문서).items() if _대상(v))
+    결과 = _상세잡만들기("prune_commit", run_dir=부모.get("run_dir"), accounts=계정,
+                        parent_job_id=req.preview_job_id,
+                        targets_path_override=부모.get("result_path"),
+                        prune_max_items=_삭제상한())
+    return {"job_id": 결과["job_id"], "건수": 합계, "상한": 상한}
+
+
 # ── 결과 조각 ctx (GET /jobs/{id}/result 가 결과표로 부른다) ────────────────
 
 def _표행(alias: str, r: dict) -> dict:
@@ -192,7 +284,88 @@ def _삭제미리보기ctx(상태: dict) -> dict:
     return 기본
 
 
+_제외라벨 = {"다시_켜짐": "다시 켜짐",
+            "재조회에_없음": "재조회에 없음(이미 삭제됐거나 조회 실패)"}
+_실패결과 = ("실패", "재시도소진")
+# prune 결과 화면의 backup_failed 는 flow 공용 문구(입찰가 기준 "광고비") 대신 이걸 쓴다.
+_백업실패문구 = "백업을 못 써서 이 계정은 한 건도 지우지 않았다"
+_종료코드문구 = {1: "입력/산출물 파일 문제 — 삭제 0", 2: "상한 초과 — 백업 전에 멈췄다, 삭제 0"}
+
+
+def _제외사유(사유) -> str:
+    사유 = str(사유 or "")
+    if 사유.startswith("사유_바뀜:"):
+        return f"사유 바뀜: {_라벨(사유.split(':', 1)[1])} (지금은 연동끊김이 아니다)"
+    return _제외라벨.get(사유, 사유)
+
+
+def _정수(v) -> int:
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _삭제결과ctx(상태: dict) -> dict:
+    """삭제 결과 표 값 — 커밋 산출물을 **읽기만** 한다 (SAFE-04 · SAFE-05 · PRUNE-02 · D-03 · D-06).
+
+    종료코드로 성공을 추정하지 않는다 — CLI 는 계정이 중단돼도 0 이다. 계정별 결과·제외 사유·
+    새로 꺼진 건수·중단 사유는 전부 산출물에서만 온다.
+    """
+    상태 = 상태 or {}
+    기본 = {"job": _투영(상태), "running": False, "error": None, "계정행": [], "제외행": [],
+            "실패행": [], "실패목록": [], "새로꺼짐": 0, "합": {}, "재시도가능": False}
+    if 상태.get("status") in jobs.LIVE_STATUSES:
+        return {**기본, "running": True}
+    문서 = _산출물(상태)
+    if 문서 is None:
+        코드 = 상태.get("exit_code")
+        사유 = _종료코드문구.get(코드) if isinstance(코드, int) else None
+        return {**기본, "error": (사유 or "삭제 산출물이 없거나 깨졌다 — 진행 로그를 봐라")
+                                 + f" (종료코드 {코드})"}
+    계정행, 제외행, 실패행 = [], [], []
+    합 = {"성공": 0, "이미없음": 0, "실패": 0, "재시도소진": 0, "제외": 0}
+    for alias, v in _계정들(문서).items():
+        항목 = [x for x in (v.get("items") or []) if isinstance(x, dict)]
+        셈 = {k: sum(1 for x in 항목 if x.get("결과") == k) for k in ("성공", "이미없음", "실패", "재시도소진")}
+        제외 = [x for x in (v.get("excluded") or []) if isinstance(x, dict)]
+        중단 = v.get("aborted")
+        중단말 = ""
+        if 중단 == "backup_failed":
+            중단말 = _백업실패문구
+        elif 중단:
+            중단말 = flow.중단사유.get(str(중단), str(중단))
+        새로 = _정수(v.get("new_since_preview"))
+        계정행.append({"계정": alias, **셈, "제외": len(제외), "새로꺼짐": 새로,
+                       "대상": len(_대상(v)), "중단": 중단말,
+                       "건너뜀": str(v.get("skipped") or ""), "백업": _파일명(v.get("backup"))})
+        for k in 셈:
+            합[k] += 셈[k]
+        합["제외"] += len(제외)
+        기본["새로꺼짐"] += 새로
+        제외행.extend({"계정": alias, "adId": str(x.get("adId") or ""),
+                       "사유": _제외사유(x.get("사유"))} for x in 제외)
+        실패행.extend({"계정": alias, "adId": str(x.get("adId") or ""), "결과": x.get("결과"),
+                       "status": x.get("status"), "err": str(x.get("err") or "")}
+                      for x in 항목 if x.get("결과") in _실패결과)
+    # 안 된 것이 위다(flow.result_rows 관례) — 잘리거나 스크롤 밖으로 밀리지 않게.
+    계정행.sort(key=lambda r: (0 if r["중단"] or r["건너뜀"] else
+                               1 if r["실패"] or r["재시도소진"] else 2, r["계정"]))
+    실패목록 = [r["adId"] for r in 실패행 if r["adId"]]
+    재시도가능 = False
+    if 실패목록 and 상태.get("status") == "done":
+        부모 = jobs.job_status(상태.get("parent_job_id") or "") if 상태.get("parent_job_id") else None
+        경과 = _경과초((부모 or {}).get("started_at"))
+        재시도가능 = bool(부모 and 경과 is not None and 경과 <= _미리보기유효시간
+                         and not any(c.get("status") in jobs.LIVE_STATUSES
+                                     for c in jobs.children_of(부모["id"], "prune_commit")))
+    기본.update({"계정행": 계정행, "제외행": 제외행, "실패행": 실패행, "실패목록": 실패목록,
+                "합": 합, "재시도가능": 재시도가능})
+    return 기본
+
+
 # kind → (템플릿 조각 이름, ctx 함수). routes/jobs.get_job_result 가 병합한다(기존 키 우선).
 결과표: dict[str, tuple[str, Callable[[dict], dict]]] = {
     "prune_preview": ("_prune_preview_table.html", _삭제미리보기ctx),
+    "prune_commit": ("_prune_result_table.html", _삭제결과ctx),
 }

@@ -9,6 +9,7 @@
  *
  * 부르는 라우트:
  *   POST /jobs/prune/preview  { run_dir, accounts }              — 광고 쓰기 0
+ *   POST /jobs/prune/commit   { preview_job_id, typed_count }    — 몸통엔 잡 id + 건수만
  *
  * 대상 소재 목록·상한을 요청에 싣지 마라 — 서버가 CLI 산출물에서 정한다(SAFE-06 · D-02).
  * board.js 가 노출한 window.관제탑 훅만 쓴다. board.js 를 고치지 마라.
@@ -123,6 +124,46 @@
     });
   }
 
-  // 아래 위임 핸들러는 Task 2·3 이 채운다(삭제 · 실패분 재시도).
-  void 결과자리; void 커밋한도;
+  // 조각 안 버튼(삭제·재시도)은 htmx 로 갈아끼워지므로 위임으로 받는다.
+  // 정수가 아니면 요청을 보내지 않는다 — 빈칸·소수·음수는 확인이 아니다.
+  // 요청 직후 입력을 비운다 — 다시 누르려면 다시 타이핑해야 한다(T-02-19).
+  function 타이핑실행(입력id, 버튼, url, 몸통키, 잡속성, 이름) {
+    var 입력 = document.getElementById(입력id);
+    var 글 = 입력 ? String(입력.value || "").trim() : "";
+    if (!/^[0-9]+$/.test(글)) {
+      훅.오류표시("지울 건수를 숫자로 직접 입력해라 — 입력 없이는 지우지 않는다");
+      return;
+    }
+    var 몸 = { typed_count: parseInt(글, 10) };
+    몸[몸통키] = 버튼.getAttribute(잡속성);
+    버튼.disabled = true;
+    if (입력) { 입력.value = ""; }
+    훅.요청(url, 몸).then(function (res) {
+      if (!res.ok) {
+        버튼.disabled = false;
+        // 409 = 건수 불일치 · 이미 삭제 · 도는 중 · 다른 쓰기 작업 / 400 = 24시간 · 상한 · 산출물 깨짐.
+        // detail 을 그대로 보인다 — 다시 누르라고 유도하지 않는다.
+        훅.오류표시(이름 + " 작업을 못 띄웠다 (" + res.code + ") — " + 사유뽑기(res));
+        return;
+      }
+      var job_id = JSON.parse(res.본문).job_id;
+      var 칸 = 결과자리();
+      if (칸) { 칸.textContent = ""; }
+      패널열기(job_id);
+      기다리기(job_id, 커밋한도, "prune-result");
+    }).catch(function (e) {
+      버튼.disabled = false;
+      훅.오류표시(이름 + " 요청이 실패했다: " + e);
+    });
+  }
+
+  if (자리) {
+    자리.addEventListener("click", function (ev) {
+      var 삭제 = ev.target.closest("#prune-commit-btn");
+      if (삭제) {
+        타이핑실행("prune-typed-count", 삭제, "/jobs/prune/commit",
+                   "preview_job_id", "data-preview-job", "꺼진 소재 삭제");
+      }
+    });
+  }
 })();
