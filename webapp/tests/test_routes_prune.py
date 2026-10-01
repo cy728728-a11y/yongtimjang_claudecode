@@ -554,3 +554,153 @@ def test_prune_js_요청에_대상목록이_없다():
     src = (Path(main.__file__).parent / "static" / "prune.js").read_text(encoding="utf-8")
     assert "typed_count" in src and "/jobs/prune/commit" in src
     assert "adIds" not in src
+
+
+# ── ③ 실패분만 재시도 ───────────────────────────────────────────────────────
+
+def _실패결과문서(실패: dict[str, list[tuple[str, str]]], 성공: dict[str, list[str]] | None = None) -> dict:
+    """계정 → [(adId, 결과)] 실패 목록으로 커밋 산출물을 만든다."""
+    계정 = {}
+    for alias in sorted(set(실패) | set(성공 or {})):
+        items = [{"adId": a, "status": 200, "결과": "성공", "err": None}
+                 for a in (성공 or {}).get(alias, [])]
+        items += [{"adId": a, "status": 500, "결과": r, "err": "boom"} for a, r in 실패.get(alias, [])]
+        계정[alias] = {"paused": len(items), "deletable": len(items), "keep": {}, "backup": "/x/b.json",
+                       "aborted": None, "skipped": None, "targets": [], "items": items,
+                       "excluded": [], "new_since_preview": 0}
+    ids = [x["adId"] for v in 계정.values() for x in v["items"]]
+    return {"generated": "2026-09-30T11:00:00", "mode": "commit", "limit": 8000,
+            "total": len(ids), "adIds": ids, "accounts": 계정}
+
+
+def _재시도대상(job_id: str) -> list[str]:
+    av = _argv(job_id)
+    return json.loads(Path(av[av.index(_대상플래그) + 1]).read_text(encoding="utf-8"))
+
+
+def test_재시도_정상_실패_교집합만_새_커밋으로(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서(
+        {"zza": [("nad-zza-001", "실패"), ("nad-zzz-999", "실패")],
+         "zzb": [("nad-zzb-000", "재시도소진")]},
+        성공={"zza": ["nad-zza-000", "nad-zza-002"]}))
+    응답 = 삭제판.post(재시도경로, json={"commit_job_id": cid, "typed_count": 2})
+    assert 응답.status_code == 200, 응답.text
+    rid = 응답.json()["job_id"]
+    상태 = jobs.job_status(rid)
+    assert 상태["kind"] == "prune_commit"
+    assert 상태["parent_job_id"] == pid, "재시도의 부모는 원 미리보기다"
+    assert sorted(_재시도대상(rid)) == ["nad-zza-001", "nad-zzb-000"]
+    assert "nad-zzz-999" not in _재시도대상(rid), "미리보기 밖 소재가 재시도 대상에 섞였다"
+    av = _argv(rid)
+    i = av.index("--account")
+    assert av[i + 1:i + 3] == ["zza", "zzb"]
+    assert av[av.index(_상한플래그) + 1] == str(settings.DEFAULTS["prune_max_items"])
+    assert _커밋플래그 in av
+
+
+def test_재시도_실패_계정만_돈다(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서(
+        {"zza": [("nad-zza-001", "실패")]}, 성공={"zzb": ["nad-zzb-000", "nad-zzb-001"]}))
+    응답 = 삭제판.post(재시도경로, json={"commit_job_id": cid, "typed_count": 1})
+    assert 응답.status_code == 200, 응답.text
+    av = _argv(응답.json()["job_id"])
+    i = av.index("--account")
+    assert av[i + 1] == "zza" and "zzb" not in av
+
+
+def test_재시도의_재시도도_된다(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({"zza": [("nad-zza-001", "실패"),
+                                                                ("nad-zza-002", "실패")]}))
+    rid1 = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({"zza": [("nad-zza-002", "재시도소진")]},
+                                                     성공={"zza": ["nad-zza-001"]}))
+    assert cid != rid1
+    응답 = 삭제판.post(재시도경로, json={"commit_job_id": rid1, "typed_count": 1})
+    assert 응답.status_code == 200, 응답.text
+    assert _재시도대상(응답.json()["job_id"]) == ["nad-zza-002"]
+
+
+def test_재시도_커밋잡이_아니면_400(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    for 잡 in (pid, str(uuid.uuid4())):
+        응답 = 삭제판.post(재시도경로, json={"commit_job_id": 잡, "typed_count": 1})
+        assert 응답.status_code == 400, 잡
+
+
+def test_재시도_커밋이_도는_중이면_409(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 상태="starting")
+    응답 = 삭제판.post(재시도경로, json={"commit_job_id": cid, "typed_count": 1})
+    assert 응답.status_code == 409
+
+
+def test_재시도_커밋_산출물이_깨졌으면_400(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 쓰기=False)
+    응답 = 삭제판.post(재시도경로, json={"commit_job_id": cid, "typed_count": 1})
+    assert 응답.status_code == 400
+
+
+def test_재시도_실패_0건이면_400(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({}, 성공={"zza": ["nad-zza-000"]}))
+    응답 = 삭제판.post(재시도경로, json={"commit_job_id": cid, "typed_count": 0})
+    assert 응답.status_code == 400
+    # 실패가 있어도 전부 미리보기 밖이면 0건 — 400
+    cid2 = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({"zza": [("nad-zzz-999", "실패")]}))
+    응답 = 삭제판.post(재시도경로, json={"commit_job_id": cid2, "typed_count": 1})
+    assert 응답.status_code == 400
+
+
+def test_재시도_원_미리보기가_24시간_넘었으면_400(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir, 시작=_지금(25))
+    cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({"zza": [("nad-zza-001", "실패")]}))
+    응답 = 삭제판.post(재시도경로, json={"commit_job_id": cid, "typed_count": 1})
+    assert 응답.status_code == 400
+    assert "24시간" in 응답.json()["detail"]
+
+
+def test_재시도_같은_미리보기의_삭제가_도는_중이면_409(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({"zza": [("nad-zza-001", "실패")]}))
+    _행박기("prune_commit", 상태="starting", parent=pid, run_dir=tmp_run_dir.name)
+    응답 = 삭제판.post(재시도경로, json={"commit_job_id": cid, "typed_count": 1})
+    assert 응답.status_code == 409
+
+
+def test_재시도_타이핑이_다르면_409_이고_잡을_안_만든다(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({"zza": [("nad-zza-001", "실패")]}))
+    전 = len(jobs.children_of(pid, "prune_commit"))
+    응답 = 삭제판.post(재시도경로, json={"commit_job_id": cid, "typed_count": 3})
+    assert 응답.status_code == 409
+    assert len(jobs.children_of(pid, "prune_commit")) == 전
+
+
+def test_재시도_요청에_대상을_실으면_422(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({"zza": [("nad-zza-001", "실패")]}))
+    for 몸통 in ({"commit_job_id": cid, "typed_count": 1, "adIds": ["nad-zza-002"]},
+                 {"commit_job_id": cid, "typed_count": "1"}):
+        응답 = 삭제판.post(재시도경로, json=몸통)
+        assert 응답.status_code == 422, 몸통
+
+
+def test_재시도_결과조각_실패가_있으면_접힌_재시도영역(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({"zza": [("nad-zza-001", "실패"),
+                                                                ("nad-zza-002", "실패")]}))
+    본문 = _조각(삭제판, cid)
+    assert 'id="prune-retry-details"' in 본문 and "실패분만 재시도 (2건)" in 본문
+    assert 'id="prune-retry-count"' in 본문
+    assert f'data-commit-job="{cid}"' in 본문
+    assert '<details id="prune-retry-details" open' not in 본문
+
+
+def test_재시도_결과조각_실패가_없으면_재시도영역_없음(삭제판, tmp_run_dir):
+    pid = _미리보기잡(tmp_run_dir)
+    cid = _커밋잡(tmp_run_dir, pid, 문서=_실패결과문서({}, 성공={"zza": ["nad-zza-000"]}))
+    본문 = _조각(삭제판, cid)
+    assert 'id="prune-retry-details"' not in 본문
