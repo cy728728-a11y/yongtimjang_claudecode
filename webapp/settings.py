@@ -113,6 +113,14 @@ DEFAULTS = {
     "thumb_max_items": 20,          # 썸네일 견적 1회 상한 — 스킬의 "상위 20" 관례(D-02)
     "coupang_copy_max_items": 20,   # 쿠팡 복사 1회 상한 — CLI 배치 1개 크기(D-13)
     "coupang_first_max_items": 10,  # 첫 쿠팡 복사는 더 작게 — 새 경로 첫 실탄(D-13 · PITFALLS 10-4)
+
+    # ── Phase 2 (꺼진 소재 정리) ──────────────────────────────────────────
+    # 같은 규율 — 읽기는 settings.cfg("키", settings.DEFAULTS["키"]) 로만. 모듈 상수로 올리지 마라.
+    # D-07 [auto — 용팀장 확인 필요] 전 계정 합. 물갈이 직후 한 계정 5,024건 실적 —
+    # 입찰가 1500 재사용하면 정상 정리가 막힌다
+    "prune_max_items": 8000,
+    # 빈 값 = <데이터루트>/control-tower/audit.jsonl (FLOW-07). CT_AUDIT_PATH 환경변수가 우선
+    "audit_path": "",
 }
 
 _cache = None

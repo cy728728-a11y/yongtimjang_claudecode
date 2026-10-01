@@ -45,6 +45,20 @@ BANNER_LABELS = FIXTURES / "banner_labels.json"
 RUN_NAME = "2026-08-30"
 
 
+@pytest.fixture(autouse=True)
+def _실데이터_격리(monkeypatch, tmp_path):
+    """모든 테스트에서 기동 reap 을 끄고 감사 경로를 tmp 로 돌린다 (Pitfall 3).
+
+    client 의 TestClient(app) 진입 시 lifespan 이 화면 픽스처의 DB 교체보다 먼저 돈다 —
+    실 webapp.db 를 reap 하고 실 데이터루트에 감사 줄을 쓰는 사고를 막는다(Pitfall 3).
+    autouse 라 같은 스코프의 `client` 보다 먼저 선다. 기동 reap 을 직접 시험하는 테스트만
+    `monkeypatch.delenv("CT_SKIP_STARTUP_REAP")` 로 끄고, 그때는 DB 경로도 tmp 로 돌린다.
+    """
+    monkeypatch.setenv("CT_SKIP_STARTUP_REAP", "1")
+    monkeypatch.setenv("CT_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    yield
+
+
 @pytest.fixture
 def fake_result_json() -> dict:
     """`result_min.json` 을 파싱한 dict.

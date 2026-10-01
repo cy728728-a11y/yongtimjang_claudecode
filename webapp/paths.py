@@ -11,6 +11,7 @@ CLI 쪽 정본은 `.claude/skills/naver-ads-weekly/scripts/run_ads.py:39-57` 이
 거기 주석대로 **절대경로를 박으면 다른 PC 에서 조용히 폴백해** workspace.toml 이 영영 안 읽힌다.
 """
 import json
+import os
 import tomllib
 from datetime import date
 from pathlib import Path
@@ -53,6 +54,10 @@ def data_root() -> Path:
     여기서는 실패를 **삼킨다**. 경로를 못 읽어도 돈이 나가지 않고, 폴백 경로가
     이 저장소 모든 스킬의 기본값이라 CLI 와 결과가 같기 때문이다(PATTERNS §S-2 기준).
     """
+    # UAT 격리 인스턴스 전용 — 운영은 쓰지 않는다. CLI 자식은 EROOM_WORKSPACE_TOML 로 따로 맞춘다
+    격리 = os.environ.get("CT_DATA_ROOT")
+    if 격리:
+        return Path(격리).expanduser()
     try:
         p = (read_workspace_toml().get("paths") or {}).get("data_root")
         if p:
