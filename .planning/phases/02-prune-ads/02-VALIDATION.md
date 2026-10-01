@@ -2,8 +2,8 @@
 phase: 2
 slug: prune-ads
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-10-01
 ---
 
@@ -86,4 +86,4 @@ created: 2026-10-01
 - [ ] Feedback latency < 20s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-10-01 (Wave 0 테스트 파일은 02-01·02-02 태스크가 인라인으로 만든다)

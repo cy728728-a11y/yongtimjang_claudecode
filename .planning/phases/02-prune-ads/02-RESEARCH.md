@@ -475,7 +475,7 @@ assert out["new_since_preview"] == 1
 | A4 | 캠페인 컬럼은 빼도 된다(광고그룹명으로 충분) | 패턴 2 | 용팀장이 캠페인을 원하면 `collect.fetch_ads` 확장 + 재수집 필요 |
 | A5 | 상한 8000(D-07, 용팀장 확인 필요) | SAFE-07 | 확인 전까지 설정값이라 바꾸기 쉬움 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **D-07 상한 8000 확정** — CONTEXT 가 이미 "용팀장 확인 필요" 표시. 설정 키라 플랜은 그대로 진행하고 L-01 실탄 checkpoint 에서 같이 묻는다.
 2. **캠페인 컬럼(D-01)** — 스냅샷에 없음. 권장: 빼고 광고그룹명 표시. 원하면 prep 확장(별도 소태스크).
