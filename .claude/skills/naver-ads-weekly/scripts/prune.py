@@ -7,6 +7,7 @@ AD_ABNORMAL_INTERLOCK(연동 비정상) — 사용자가 끈 게 아니라 시�
 원인은 미규명이고 지금도 발생 중이라, 신규 발생 건수를 매주 보고해야 한다.
 """
 import json
+import re
 import time
 from collections import Counter
 from datetime import date
@@ -23,6 +24,9 @@ BACKUP_KEYS = ("nccAdId", "nccAdgroupId", "referenceKey", "type", "adAttr",
 # 검수중은 곧 살아나고, 거부는 고쳐서 재검수할 수 있다. 지우면 둘 다 재등록 노동이 된다.
 # (2026-08-30 실측: ownway1 잔여 20건 = 검수중 17·거부 3, pogeunae 12건 = 거부 11·검수중 1)
 DELETE_REASONS = ("AD_ABNORMAL_INTERLOCK",)
+
+# 백업 태그 모양 — 파일명에 그대로 붙으므로 경로 문자(/ ..)를 막는다(T-02-04)
+TAG_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def deletable(ads):
@@ -43,12 +47,62 @@ def revived_filter(target_ads, fresh_ads):
     return keep, len(target_ads) - len(keep)
 
 
-def backup_paused(acct, ads, out_dir):
+def excluded_reasons(target_ads, fresh_ads):
+    """revived_filter 가 뺀 소재마다 사유를 단다. {adId: 사유} — 순수 함수.
+
+    revived_filter 반환형은 안 바꾼다(기존 테스트가 건수를 본다). 여전히 삭제 대상이면 키가 없다.
+    "재조회에_없음" 을 "이미 삭제됨" 으로 단정하지 않는다 — collect.fetch_ads 는 광고그룹
+    조회가 실패하면 그 그룹을 조용히 건너뛰므로, 조회 실패로도 이 사유가 나온다(Pitfall 6).
+    """
+    fresh = {a["nccAdId"]: a for a in fresh_ads}
+    out = {}
+    for a in target_ads:
+        f = fresh.get(a["nccAdId"])
+        if f is None:
+            out[a["nccAdId"]] = "재조회에_없음"
+        elif f.get("enable"):
+            out[a["nccAdId"]] = "다시_켜짐"
+        elif f.get("statusReason") not in DELETE_REASONS:
+            out[a["nccAdId"]] = f"사유_바뀜:{f.get('statusReason')}"
+    return out
+
+
+def count_targets(run_dir, alias, only_ads):
+    """--max-items 사전 집계용 — 그 계정의 삭제 대상 건수(only_ads 교집합). 읽기 실패면 0.
+
+    판정은 deletable 한 곳에만 둔다 — 여기서 조건을 다시 쓰지 않는다.
+    """
+    try:
+        ads = json.loads((run_dir / "accounts" / alias / "ads.json").read_text(encoding="utf-8"))["ads"]
+        tgt = deletable(ads)
+    except Exception:
+        return 0
+    if only_ads is not None:
+        tgt = [a for a in tgt if a.get("nccAdId") in only_ads]
+    return len(tgt)
+
+
+def _target_row(a, groups):
+    """미리보기 표 1행. 캠페인은 스냅샷에 없다 — 광고그룹명(NN-N 조인 키)으로 대신한다.
+    "정지일" 은 API 에 없어 editTm(마지막 변경 시각)을 그대로 싣는다."""
+    rd = a.get("referenceData") or {}
+    g = (groups or {}).get(a.get("nccAdgroupId")) or {}
+    return {"adId": a.get("nccAdId"), "adgroupId": a.get("nccAdgroupId"),
+            "adGroup": g.get("name") or "", "mallProductId": rd.get("mallProductId"),
+            "title": rd.get("productTitle") or "", "statusReason": a.get("statusReason"),
+            "editTm": a.get("editTm"), "regTm": a.get("regTm")}
+
+
+def backup_paused(acct, ads, out_dir, tag=None):
     """삭제 대상을 백업한다. referenceKey·mallProductId 가 있어야 재등록이 가능하다.
 
     실패하면 None 을 돌려준다 — 호출자가 그 계정의 삭제를 건너뛴다.
     되돌릴 수단 없이 지우지 않는다.
+    같은 날 재수집하면 지운 소재의 백업이 덮인다 — 잡별 태그로 막는다(Pitfall 1).
+    tag 가 모양이 틀리면 ValueError(경로 조작 차단).
     """
+    if tag is not None and not TAG_RE.match(str(tag)):
+        raise ValueError(f"백업 태그 모양 불량: {tag!r}")
     alias = acct.get("alias") or str(acct.get("customer_id"))
     rows = []
     for a in deletable(ads):
@@ -60,7 +114,8 @@ def backup_paused(acct, ads, out_dir):
             "referenceData": rd,
         })
         rows.append(row)
-    path = out_dir / f"paused_{alias}_{date.today().isoformat()}.json"
+    suffix = f"_{tag}" if tag else ""
+    path = out_dir / f"paused_{alias}_{date.today().isoformat()}{suffix}.json"
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"account": alias, "customer_id": acct.get("customer_id"),
@@ -72,9 +127,12 @@ def backup_paused(acct, ads, out_dir):
     return path
 
 
-def delete_ads(acct, ad_ids, progress_path, log=print):
-    """소재를 삭제한다. 진행 파일로 재개 가능하고, 404 는 이미 없는 것으로 성공 처리한다."""
-    done = set()
+def delete_ads(acct, ad_ids, progress_path, log=print, items=None):
+    """소재를 삭제한다. 진행 파일로 재개 가능하고, 404 는 이미 없는 것으로 성공 처리한다.
+
+    items 가 list 면 소재별 결과 {"adId","status","결과","err"} 를 append 한다(반환형은 그대로).
+    """
+    done = {}
     if progress_path.exists():
         try:
             for line in progress_path.read_text(encoding="utf-8").splitlines():
@@ -85,11 +143,16 @@ def delete_ads(acct, ad_ids, progress_path, log=print):
                 # **성공한 것만 건너뛴다.** 하드 에러(400·403 등)까지 done 에 넣으면
                 # 실제로는 안 지워졌는데 영영 재시도하지 않고 매주 조용히 스킵된다
                 if r.get("status") in (200, 204, 404):
-                    done.add(r.get("nccAdId"))
+                    done[r.get("nccAdId")] = r.get("status")
         except Exception as e:
             print(f"  진행 파일 읽기 실패(처음부터 진행한다): {type(e).__name__}: {e}")
-            done = set()
+            done = {}
     todo = [i for i in ad_ids if i not in done]
+    if items is not None:
+        # 재개로 건너뛴 소재는 이전 실행에서 이미 처리됐다 — "실패" 로 오독하지 않게 성공으로 싣는다
+        for i in ad_ids:
+            if i in done:
+                items.append({"adId": i, "status": done[i], "결과": "성공", "err": None})
     log(f"  삭제 대상 {len(todo)}건 (이미 처리 {len(done)})")
 
     stat = Counter()
@@ -101,6 +164,9 @@ def delete_ads(acct, ad_ids, progress_path, log=print):
                 if st in (200, 204, 404):
                     stat["ok" if st != 404 else "already"] += 1
                     fp.write(json.dumps({"nccAdId": aid, "status": st}) + "\n")
+                    if items is not None:
+                        items.append({"adId": aid, "status": st,
+                                      "결과": "성공" if st != 404 else "이미없음", "err": None})
                     break
                 if st in (429, 500, 502, 503, 0):
                     time.sleep(2 * (attempt + 1))
@@ -108,9 +174,14 @@ def delete_ads(acct, ad_ids, progress_path, log=print):
                 stat[f"err{st}"] += 1
                 fp.write(json.dumps({"nccAdId": aid, "status": st, "err": str(res)[:200]},
                                     ensure_ascii=False) + "\n")
+                if items is not None:
+                    items.append({"adId": aid, "status": st, "결과": "실패", "err": str(res)[:200]})
                 break
             else:
                 stat["retry_exhausted"] += 1
+                if items is not None:
+                    items.append({"adId": aid, "status": st, "결과": "재시도소진",
+                                  "err": str(res)[:200]})
             if n % 250 == 0:
                 fp.flush()
                 log(f"    {n}/{len(todo)} {dict(stat)}")
@@ -118,11 +189,23 @@ def delete_ads(acct, ad_ids, progress_path, log=print):
     return dict(stat)
 
 
-def run_prune(acct, run_dir, commit=False, log=print):
-    """계정 1개의 꺼진 소재를 백업하고 삭제한다."""
+def run_prune(acct, run_dir, commit=False, log=print, only_ads=None, tag=None, collect_items=False):
+    """계정 1개의 꺼진 소재를 백업하고 삭제한다.
+
+    키워드 인자는 웹이 감쌀 주입구다 — 기본값이면 기존 동작·반환 키 그대로(L-02).
+    only_ads   : 미리보기가 본 adId 집합. 대상 = deletable ∩ only_ads (본 것보다 많이 지우지 않는다)
+    tag        : 백업 파일명 태그(잡 id)
+    collect_items : True 면 반환에 keep·targets·backup·aborted (+ commit 이면 items·excluded·new_since_preview)
+
+    D-06 의 "재조회가 늘면 exit 5" 는 구현하지 않는다 — revived_filter 가 교집합이라 결과가
+    대상보다 커질 수 없어 구조적으로 발동 불가다(Pitfall 5). 대신 재조회에서 새로 꺼졌지만
+    목록에 없는 소재는 new_since_preview 로 보고만 하고 DELETE 는 0회다 — 이게 D-06 의도의 실제 보장이다.
+    """
     alias = acct.get("alias") or str(acct.get("customer_id"))
     try:
-        ads = json.loads((run_dir / "accounts" / alias / "ads.json").read_text(encoding="utf-8"))["ads"]
+        snap = json.loads((run_dir / "accounts" / alias / "ads.json").read_text(encoding="utf-8"))
+        ads = snap["ads"]
+        groups = snap.get("groups") or {}
     except Exception as e:
         log(f"[{alias}] 소재 읽기 실패: {type(e).__name__}: {e}")
         return {}
@@ -130,27 +213,41 @@ def run_prune(acct, run_dir, commit=False, log=print):
     off = [a for a in ads if not a.get("enable")]
     reasons = Counter(a.get("statusReason") or "?" for a in off)
     tgt = deletable(ads)
+    if only_ads is not None:
+        # 미리보기가 본 목록 밖은 대상에서 뺀다 — 그새 새로 꺼진 소재를 안 본 채 지우지 않는다
+        tgt = [a for a in tgt if a["nccAdId"] in only_ads]
     keep = Counter(a.get("statusReason") or "?" for a in off
                    if a.get("statusReason") not in DELETE_REASONS)
     log(f"[{alias}] 꺼진 소재 {len(off)}건 · 삭제대상 {len(tgt)} · 보존 {dict(keep)}")
     if tgt:
         log(f"  ⚠ 연동 비정상 {len(tgt)}건 — 원인 미규명. 매주 삭제만 하면 소재가 줄어들기만 한다")
 
+    preview_tgt = tgt   # 미리보기 표·커밋 결과 표가 같은 대상 행을 보도록 재조회 전 대상을 고정
+
+    def _extra(out, bk=None, aborted=None):
+        """collect_items 일 때만 산출물용 필드를 싣는다 — 무키워드 반환 키는 불변."""
+        if collect_items:
+            out.update({"keep": dict(keep),
+                        "targets": [_target_row(a, groups) for a in preview_tgt],
+                        "backup": str(bk) if bk else None, "aborted": aborted})
+        return out
+
     if not tgt:
-        return {"paused": len(off), "deletable": 0, "reasons": dict(reasons)}
+        return _extra({"paused": len(off), "deletable": 0, "reasons": dict(reasons)})
 
     backup_root = run_dir.parent.parent / "paused-backup"
-    bk = backup_paused(acct, ads, backup_root)
+    # 백업은 계정의 삭제 대상 전량(only_ads 상위집합)이다 — 백업이 넓은 쪽은 무해하다
+    bk = backup_paused(acct, ads, backup_root, tag=tag)
     if bk is None:
         # 백업이 없으면 되돌릴 수단이 없다 — 이 계정은 지우지 않고 넘어간다
-        return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
-                "aborted": "backup_failed"}
+        return _extra({"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
+                       "aborted": "backup_failed"}, aborted="backup_failed")
     log(f"  백업 {len(tgt)}건 → {bk}")
 
     if not commit:
         log("  (dry-run — --commit 을 주면 실제로 지운다)")
-        return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
-                "backup": str(bk), "deleted": 0}
+        return _extra({"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
+                       "backup": str(bk), "deleted": 0}, bk=bk)
 
     # Critical 3: prep → 사람 검토 → prune --commit 사이 몇 시간~며칠이 뜬다.
     # 그 사이 되살아난 소재(UI 에서 켰거나 연동이 스스로 복구됨)까지 스냅샷만 믿고
@@ -165,18 +262,34 @@ def run_prune(acct, run_dir, commit=False, log=print):
         fresh_ads, _ = collect.fetch_ads(acct)
     except Exception as e:
         log(f"  ✗ 재확인 조회 실패 — 이 계정은 삭제하지 않는다: {type(e).__name__}: {e}")
-        return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
-                "backup": str(bk), "aborted": "recheck_failed"}
+        return _extra({"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
+                       "backup": str(bk), "aborted": "recheck_failed"},
+                      bk=bk, aborted="recheck_failed")
     if not fresh_ads:
         log(f"  ✗ 재확인 조회 결과 0건 — 인증 만료·방화벽 차단 가능성. 이 계정은 삭제하지 않는다")
-        return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
-                "backup": str(bk), "aborted": "recheck_failed"}
+        return _extra({"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
+                       "backup": str(bk), "aborted": "recheck_failed"},
+                      bk=bk, aborted="recheck_failed")
+    excluded = excluded_reasons(tgt, fresh_ads)
+    new_since = 0
+    if only_ads is not None:
+        new_since = len({a["nccAdId"] for a in deletable(fresh_ads)} - set(only_ads))
+        if new_since:
+            log(f"  미리보기 이후 새로 꺼진 {new_since}건 — 이번엔 안 지운다(다음 미리보기에서)")
     tgt, revived = revived_filter(tgt, fresh_ads)
     if revived:
         log(f"  재확인 결과 {revived}건이 되살아나 제외")
 
+    items = [] if collect_items else None
     stat = delete_ads(acct, [a["nccAdId"] for a in tgt],
-                      backup_root / f"delete_progress_{alias}.jsonl", log=log)
+                      backup_root / f"delete_progress_{alias}.jsonl", log=log, items=items)
     log(f"  삭제 결과 {stat}")
-    return {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
-            "backup": str(bk), "result": stat, "revived": revived}
+    out = {"paused": len(off), "deletable": len(tgt), "reasons": dict(reasons),
+           "backup": str(bk), "result": stat, "revived": revived}
+    if collect_items:
+        # targets 는 재조회 전(미리보기와 맞춰 볼 수 있게), 실제 시도는 items 에 있다
+        _extra(out, bk=bk)
+        out.update({"items": items,
+                    "excluded": [{"adId": k, "사유": v} for k, v in excluded.items()],
+                    "new_since_preview": new_since})
+    return out
