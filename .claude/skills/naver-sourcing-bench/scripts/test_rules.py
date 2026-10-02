@@ -93,3 +93,81 @@ def test_norm_url_keeps_product_id_query_on_other_malls():
     assert a == "https://www.daisomall.co.kr/pd/pdr/SCR_PDR_0001?pdNo=1030782"
     assert rules.norm_url("https://search.shopping.naver.com/catalog/123?query=x") == \
         "https://search.shopping.naver.com/catalog/123"
+
+
+# ---- 옵션 파싱 (2026-10-02) ----
+
+def test_parse_option_item_number_and_extra():
+    r = rules.parse_option_item("5. 찝게형 바지걸이 - 화이트 (+200원)")
+    assert r == {"이름": "찝게형 바지걸이 - 화이트", "추가금": 200, "품절": False}
+
+
+def test_parse_option_item_plus_without_paren_is_not_extra():
+    assert rules.parse_option_item("블랙 10+10개") == {"이름": "블랙 10+10개", "추가금": 0, "품절": False}
+
+
+def test_parse_option_item_comma_minus_soldout():
+    assert rules.parse_option_item("대형 (+1,200원)")["추가금"] == 1200
+    assert rules.parse_option_item("소형 (-500원)")["추가금"] == -500
+    r = rules.parse_option_item("레드 (품절)")
+    assert r["품절"] is True and r["이름"] == "레드"
+
+
+def test_parse_option_item_strips_formula_lead():
+    # T-mbo-01: USER_ENTERED 로 들어가므로 수식 시작 문자를 뗀다
+    assert rules.parse_option_item("=HYPERLINK(1)")["이름"] == "HYPERLINK(1)"
+    assert rules.parse_option_item("@화이트")["이름"] == "화이트"
+
+
+def test_parse_base_price():
+    assert rules.parse_base_price("상품 가격\n할인가\n12,900원\n정가 18,000원") == 12900
+    assert rules.parse_base_price("가격 정보 없음") is None
+    assert rules.parse_base_price(None) is None
+
+
+def test_is_catalog():
+    assert rules.is_catalog("https://search.shopping.naver.com/catalog/123") is True
+    assert rules.is_catalog("https://smartstore.naver.com/s/products/1") is False
+
+
+def _probe(**kw):
+    d = {"kind": "options", "key": "u", "상태": "성공", "priceText": "상품 가격\n12,900원", "combos": []}
+    d.update(kw)
+    return d
+
+
+def test_build_options_single_item():
+    r = rules.build_options(_probe(상태="단품"), 15000)
+    assert r == {"판정": "성공", "options": [{"이름": "단품", "가격": 12900}]}
+    assert rules.options_text(r["options"]) == "단품:12,900" and len(r["options"]) == 1
+
+
+def test_build_options_multi_axis_join_and_sum():
+    r = rules.build_options(_probe(combos=[["화이트", "10개 (+3,000원)"], ["블랙 (+500원)", "20개 (+1,000원)"]]), None)
+    assert r["판정"] == "성공"
+    assert r["options"] == [{"이름": "화이트-10개", "가격": 15900}, {"이름": "블랙-20개", "가격": 14400}]
+
+
+def test_build_options_soldout_included_with_mark():
+    r = rules.build_options(_probe(combos=[["레드 (품절)"], ["블루"]]), None)
+    assert [o["이름"] for o in r["options"]] == ["레드(품절)", "블루"]
+
+
+def test_build_options_over_limit():
+    assert rules.build_options(_probe(상태="옵션초과"), 1) == {"판정": "옵션초과", "options": None}
+    many = [[f"o{i}"] for i in range(51)]
+    assert rules.build_options(_probe(combos=many), 1)["판정"] == "옵션초과"
+    assert rules.build_options(_probe(combos=many[:50]), 1)["판정"] == "성공"
+
+
+def test_build_options_fallback_price():
+    r = rules.build_options(_probe(priceText="", combos=[["a"]]), 11000)
+    assert r["options"] == [{"이름": "a", "가격": 11000}]
+    assert rules.build_options(_probe(priceText="", combos=[["a"]]), None)["판정"] == "실패"
+
+
+def test_build_options_failures():
+    assert rules.build_options(None, 1) == {"판정": "실패", "options": None}
+    assert rules.build_options(_probe(상태="읽기실패"), 1)["판정"] == "실패"
+    assert rules.build_options(_probe(combos=[]), 1)["판정"] == "실패"
+    assert rules.build_options(_probe(combos="garbage"), 1)["판정"] == "실패"

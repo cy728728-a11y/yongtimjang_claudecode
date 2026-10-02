@@ -63,3 +63,52 @@ def test_gws_nonzero_exit_raises(monkeypatch):
                         lambda *a, **k: subprocess.CompletedProcess(a, 1, stdout="", stderr="token expired"))
     with pytest.raises(G.GwsError):
         G._gws_runner(["sheets"])
+
+
+def _body(argv):
+    return json.loads(argv[argv.index("--json") + 1])
+
+
+def test_update_cells_batch():
+    f = Fake([{"totalUpdatedCells": 2}])
+    G.Sheet("SID", runner=f).update_cells("후보", [(3, 8, 2), (3, 9, "a:1 / b:2")])
+    assert len(f.calls) == 1
+    assert f.calls[0][:4] == ["sheets", "spreadsheets", "values", "batchUpdate"]
+    assert _params(f.calls[0]) == {"spreadsheetId": "SID"}
+    b = _body(f.calls[0])
+    assert b["valueInputOption"] == "USER_ENTERED"
+    assert b["data"] == [{"range": "후보!I5", "values": [[2]]}, {"range": "후보!J5", "values": [["a:1 / b:2"]]}]
+
+
+def test_update_cells_empty_no_call():
+    f = Fake([])
+    G.Sheet("SID", runner=f).update_cells("후보", [])
+    assert f.calls == []
+
+
+def test_delete_rows_descending():
+    f = Fake([{"sheets": [{"properties": {"sheetId": 0, "title": "카테고리스캔"}},
+                          {"properties": {"sheetId": 77, "title": "후보"}}]}, {"replies": []}])
+    G.Sheet("SID", runner=f).delete_rows("후보", [3, 7, 3])
+    assert f.calls[0][:3] == ["sheets", "spreadsheets", "get"]
+    assert _params(f.calls[0]) == {"spreadsheetId": "SID", "fields": "sheets.properties(sheetId,title)"}
+    assert f.calls[1][:3] == ["sheets", "spreadsheets", "batchUpdate"]
+    assert _params(f.calls[1]) == {"spreadsheetId": "SID"}
+    reqs = _body(f.calls[1])["requests"]
+    assert [r["deleteDimension"]["range"] for r in reqs] == [
+        {"sheetId": 77, "dimension": "ROWS", "startIndex": 8, "endIndex": 9},
+        {"sheetId": 77, "dimension": "ROWS", "startIndex": 4, "endIndex": 5},
+    ]
+
+
+def test_delete_rows_missing_tab_raises():
+    f = Fake([{"sheets": [{"properties": {"sheetId": 0, "title": "카테고리스캔"}}]}])
+    with pytest.raises(G.GwsError):
+        G.Sheet("SID", runner=f).delete_rows("후보", [1])
+    assert len(f.calls) == 1
+
+
+def test_delete_rows_empty_no_call():
+    f = Fake([])
+    G.Sheet("SID", runner=f).delete_rows("후보", [])
+    assert f.calls == []

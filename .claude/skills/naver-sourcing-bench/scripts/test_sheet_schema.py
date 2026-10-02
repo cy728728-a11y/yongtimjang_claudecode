@@ -44,3 +44,11 @@ def test_scan_row():
     cat = {"코드": "3", "경로": ["생활/건강", "수납/정리", "압축봉", ""]}
     r = S.scan_row("2026-10-02", cat, {"리뷰1000+": 4, "상위3": "a / b / c"})
     assert r == ["2026-10-02", "생활/건강", "수납/정리", "압축봉", "", "3", 4, "a / b / c", "", "", "", "", ""]
+
+
+def test_formulas_row_relative_only():
+    # 행 삭제 안전성: 모든 수식이 ROW() 기준이고 A1 고정 셀 참조가 없다
+    import re
+    for f in S.FORMULAS.values():
+        assert "ROW()" in f
+        assert not re.search(r"[A-Z]+\d+", f), f
