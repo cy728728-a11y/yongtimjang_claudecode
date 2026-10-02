@@ -93,3 +93,89 @@ def rep_price(options, fallback):
 def options_text(options):
     """'옵션명:가격 / …' 한 셀 문자열."""
     return " / ".join(f"{o.get('이름', '')}:{to_int(o.get('가격')) or 0:,}" for o in options or [])
+
+
+# ---- 상세페이지 옵션 판정 (2026-10-02 실측 기반) ----
+
+OPTION_JOIN = "-"          # 다단 조합명 구분자 (D-02, 예 '화이트-10개')
+MAX_COMBOS = 50            # 이 개수를 넘으면 소싱 대상 아님 (D-01). 정확히 50 은 통과
+_LEAD_NO = re.compile(r"^\s*\d+\.\s*")                       # '5. ' 같은 앞 번호
+_EXTRA = re.compile(r"\(\s*([+-])\s*([\d,]+)\s*원\s*\)")       # '(+1,200원)' / '(-500원)'
+_SOLDOUT = re.compile(r"\(\s*품절\s*\)|\s품절$")
+_FORMULA_LEAD = re.compile(r"^[\s=+@\-]+")                   # 시트가 수식으로 읽는 시작 문자 (T-mbo-01)
+
+
+def parse_option_item(text):
+    """옵션 목록 항목 텍스트 → {이름, 추가금, 품절}.
+    괄호로 감싼 (+N원)/(-N원) 만 추가금이다. '10+10개' 처럼 괄호 없는 + 는 이름의 일부."""
+    s = re.sub(r"\s+", " ", str(text or "")).strip()
+    s = _LEAD_NO.sub("", s)
+    extra = 0
+    m = _EXTRA.search(s)
+    if m:
+        extra = int(m.group(2).replace(",", "")) * (-1 if m.group(1) == "-" else 1)
+        s = _EXTRA.sub("", s)
+    soldout = bool(_SOLDOUT.search(s))
+    s = _SOLDOUT.sub("", s)
+    s = _FORMULA_LEAD.sub("", re.sub(r"\s+", " ", s).strip())
+    return {"이름": s, "추가금": extra, "품절": soldout}
+
+
+def parse_base_price(text):
+    """'상품 가격' 이후 텍스트에서 첫 'N원' (= 할인가가 있으면 할인가). 없으면 None."""
+    m = re.search(r"(\d[\d,]*)\s*원", str(text or ""))
+    return int(m.group(1).replace(",", "")) if m else None
+
+
+def is_catalog(url):
+    """가격비교(카탈로그) 상품 — 상세 옵션을 읽지 않는다 (D-03)."""
+    return "/catalog/" in str(url or "")
+
+
+_FAIL = {"판정": "실패", "options": None}
+
+
+def build_options(probe, fallback, max_combos=MAX_COMBOS):
+    """options 드라이버 원시 결과 → {판정: 성공|옵션초과|실패, options}.
+
+    - 가격 = 페이지 기본가 + 조합 각 부분 추가금의 합 (D-02).
+      네이버 조합형은 마지막 축에만 금액이 붙어 합 = 마지막 축 금액이고, 독립형은 합이 그대로 맞다.
+    - 품절 조합도 판매자가 운영하는 조합이라 개수에 넣고 이름 끝에 '(품절)' 을 붙인다(재량 결정).
+    - 페이지 기본가를 못 읽으면 검색 대표가(fallback)로 대신한다 — 사람 큐를 늘리지 않기 위한 재량 결정.
+    - 이상 입력은 예외 대신 '실패' 판정 → 호출부가 옵션수동으로 남긴다 (D-03).
+    """
+    try:
+        if not isinstance(probe, dict):
+            return dict(_FAIL)
+        st = probe.get("상태")
+        if st == "옵션초과":
+            return {"판정": "옵션초과", "options": None}
+        base = parse_base_price(probe.get("priceText"))
+        if base is None:
+            base = to_int(fallback)
+        if st == "단품":
+            if base is None:
+                return dict(_FAIL)
+            return {"판정": "성공", "options": [{"이름": "단품", "가격": base}]}    # D-04
+        combos = probe.get("combos")
+        if st != "성공" or not isinstance(combos, list) or not combos:
+            return dict(_FAIL)
+        if len(combos) > max_combos:
+            return {"판정": "옵션초과", "options": None}
+        if base is None:
+            return dict(_FAIL)
+        out = []
+        for combo in combos:
+            parts = [combo] if isinstance(combo, str) else combo
+            if not isinstance(parts, list) or not parts:
+                return dict(_FAIL)
+            items = [parse_option_item(p) for p in parts]
+            name = OPTION_JOIN.join(i["이름"] for i in items if i["이름"])
+            if not name:
+                return dict(_FAIL)
+            if any(i["품절"] for i in items):
+                name += "(품절)"
+            out.append({"이름": name, "가격": base + sum(i["추가금"] for i in items)})
+        return {"판정": "성공", "options": out}
+    except (TypeError, ValueError, AttributeError):
+        return dict(_FAIL)

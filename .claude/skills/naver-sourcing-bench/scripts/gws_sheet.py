@@ -89,3 +89,36 @@ class Sheet:
         self._call(["sheets", "spreadsheets", "values", "update",
                     "--params", json.dumps(p, ensure_ascii=False),
                     "--json", json.dumps({"values": [[value]]}, ensure_ascii=False)])
+
+    def update_cells(self, tab, cells):
+        """여러 칸을 한 번에 기록. cells = [(row_index, col_index, value), …] (row_index 0 = 시트 2행)."""
+        if not cells:
+            return
+        data = [{"range": f"{tab}!{_col(c)}{r + 2}", "values": [[v]]} for r, c, v in cells]
+        self._call(["sheets", "spreadsheets", "values", "batchUpdate",
+                    "--params", json.dumps({"spreadsheetId": self.sid}, ensure_ascii=False),
+                    "--json", json.dumps({"valueInputOption": "USER_ENTERED", "data": data},
+                                         ensure_ascii=False)])
+
+    def _sheet_id(self, tab):
+        """탭 제목 → 내부 sheetId. 없으면 GwsError."""
+        p = {"spreadsheetId": self.sid, "fields": "sheets.properties(sheetId,title)"}
+        out = self._call(["sheets", "spreadsheets", "get", "--params", json.dumps(p, ensure_ascii=False)])
+        for s in (out or {}).get("sheets") or []:
+            prop = s.get("properties") or {}
+            if prop.get("title") == tab:
+                return prop.get("sheetId", 0)
+        raise GwsError(f"탭을 찾지 못했다: {tab}")
+
+    def delete_rows(self, tab, row_indices):
+        """데이터 행(0 = 시트 2행)을 지운다. 위 행을 먼저 지우면 아래 인덱스가 밀리므로
+        중복 제거 후 내림차순으로 한 번의 batchUpdate 에 담는다."""
+        rows = sorted({int(r) for r in row_indices}, reverse=True)
+        if not rows:
+            return
+        sid = self._sheet_id(tab)
+        reqs = [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS",
+                                               "startIndex": r + 1, "endIndex": r + 2}}} for r in rows]
+        self._call(["sheets", "spreadsheets", "batchUpdate",
+                    "--params", json.dumps({"spreadsheetId": self.sid}, ensure_ascii=False),
+                    "--json", json.dumps({"requests": reqs}, ensure_ascii=False)])
