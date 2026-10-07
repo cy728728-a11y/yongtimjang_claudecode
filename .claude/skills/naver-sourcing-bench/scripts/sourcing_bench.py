@@ -210,7 +210,7 @@ def do_refill(sheet, keyword, ckpt_path, run, opts):
         j = rules.build_options(d, rules.to_int(r[S.COL_REP])) if d is not None else {"판정": "실패"}
         if j["판정"] == "성공":
             o = j["options"]
-            cells += [(i, 8, len(o)), (i, 9, rules.options_text(o)),
+            cells += [(i, 8, len(o)),
                       (i, S.COL_REP, rules.rep_price(o, rules.to_int(r[S.COL_REP]))), (i, S.COL_STATUS, "")]
         elif j["판정"] == "옵션초과":
             over_urls.add(rules.norm_url(url))
@@ -225,7 +225,7 @@ def do_refill(sheet, keyword, ckpt_path, run, opts):
                if len(r) > 6 and str(r[4]).strip() == keyword and rules.norm_url(r[6]) in over_urls]
         sheet.delete_rows(S.BENCH_TAB, idx)
         deleted = len(idx)
-    result = {"채움": len(cells) // 4, "삭제": deleted, "수동": manual, "건너뜀": skipped}
+    result = {"채움": len(cells) // 3, "삭제": deleted, "수동": manual, "건너뜀": skipped}
     if stopped:
         print(f"옵션 채움 {result['채움']} · 삭제 {deleted} 까지 반영하고 캡챠/차단으로 중단했다. "
               "Aside 창에서 확인 후 같은 명령을 다시 실행하면 이어서 한다.", flush=True)

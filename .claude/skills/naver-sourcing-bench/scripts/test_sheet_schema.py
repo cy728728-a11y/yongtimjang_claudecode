@@ -7,12 +7,13 @@ PROD = {"순위": 1, "상품명": "압축봉 120cm", "url": "https://smartstore.
 
 
 def test_headers():
-    assert len(S.BENCH_HEADER) == 26
+    assert len(S.BENCH_HEADER) == 25
     assert S.BENCH_HEADER[:5] == ["대카테고리", "중카테고리", "소카테고리", "세부카테고리", "키워드"]
-    assert S.BENCH_HEADER[10] == "180일 판매수량"
-    assert S.BENCH_HEADER[19:22] == ["월 예상마진", "쿠팡포함 월 예상마진(×2)", "월 투자금(국내원가×30일 판매량)"]
-    assert S.BENCH_HEADER[22:] == ["대표판매가", "수집일", "리뷰수", "상태"]
-    assert (S.COL_REP, S.COL_STATUS) == (22, 25)
+    assert S.BENCH_HEADER[8:10] == ["옵션 개수", "180일 판매수량"]
+    assert "각 옵션 가격" not in S.BENCH_HEADER
+    assert S.BENCH_HEADER[18:21] == ["월 예상마진", "쿠팡포함 월 예상마진(×2)", "월 투자금(국내원가×30일 판매량)"]
+    assert S.BENCH_HEADER[21:] == ["대표판매가", "수집일", "리뷰수", "상태"]
+    assert (S.COL_REP, S.COL_STATUS) == (21, 24)
     assert S.SCAN_HEADER[S.SCAN_COL["키워드"]] == "키워드"
     assert S.SCAN_HEADER[S.SCAN_COL["벤치완료"]] == "벤치완료"
 
@@ -20,26 +21,25 @@ def test_headers():
 def test_bench_row_with_options():
     opts = [{"이름": "흰", "가격": 13900}, {"이름": "검", "가격": 12900}]
     r = S.bench_row("2026-10-02", "압축봉", PROD, opts)
-    assert len(r) == 26
+    assert len(r) == 25
     assert r[:9] == ["생활/건강", "수납/정리", "압축봉", "", "압축봉", "가나상점",
                      "https://smartstore.naver.com/s/products/9", "압축봉 120cm", 2]
-    assert r[9] == "흰:13,900 / 검:12,900"
-    assert r[10] == "" and r[14] == "" and r[15] == ""        # 수동 칸
-    assert r[11] == '=IF(INDEX(K:K,ROW())="","",INDEX(K:K,ROW())/180)'
-    assert r[12] == '=IF(INDEX(L:L,ROW())="","",INDEX(L:L,ROW())*INDEX(W:W,ROW()))'
-    assert r[13] == '=IF(INDEX(M:M,ROW())="","",INDEX(M:M,ROW())*30)'
-    assert r[16] == '=IF(INDEX(P:P,ROW())="","",INDEX(P:P,ROW())*210)'
-    assert r[17] == '=IF(INDEX(Q:Q,ROW())="","",INDEX(Q:Q,ROW())*1.4)'
-    assert r[18] == '=IF(INDEX(R:R,ROW())="","",INDEX(W:W,ROW())-INDEX(R:R,ROW()))'
-    assert r[19] == '=IF(OR(INDEX(L:L,ROW())="",INDEX(S:S,ROW())=""),"",INDEX(L:L,ROW())*30*INDEX(S:S,ROW()))'
-    assert r[20] == '=IF(INDEX(T:T,ROW())="","",INDEX(T:T,ROW())*2)'
-    assert r[21] == '=IF(OR(INDEX(L:L,ROW())="",INDEX(R:R,ROW())=""),"",INDEX(R:R,ROW())*INDEX(L:L,ROW())*30)'
-    assert r[22:] == [12900, "2026-10-02", 812, ""]
+    assert r[9] == "" and r[13] == "" and r[14] == ""          # 수동 칸(180일·1688 링크·위안)
+    assert r[10] == '=IF(INDEX(J:J,ROW())="","",INDEX(J:J,ROW())/180)'
+    assert r[11] == '=IF(INDEX(K:K,ROW())="","",INDEX(K:K,ROW())*INDEX(V:V,ROW()))'
+    assert r[12] == '=IF(INDEX(L:L,ROW())="","",INDEX(L:L,ROW())*30)'
+    assert r[15] == '=IF(INDEX(O:O,ROW())="","",INDEX(O:O,ROW())*210)'
+    assert r[16] == '=IF(INDEX(P:P,ROW())="","",INDEX(P:P,ROW())*1.4)'
+    assert r[17] == '=IF(INDEX(Q:Q,ROW())="","",INDEX(V:V,ROW())-INDEX(Q:Q,ROW()))'
+    assert r[18] == '=IF(OR(INDEX(K:K,ROW())="",INDEX(R:R,ROW())=""),"",INDEX(K:K,ROW())*30*INDEX(R:R,ROW()))'
+    assert r[19] == '=IF(INDEX(S:S,ROW())="","",INDEX(S:S,ROW())*2)'
+    assert r[20] == '=IF(OR(INDEX(K:K,ROW())="",INDEX(Q:Q,ROW())=""),"",INDEX(Q:Q,ROW())*INDEX(K:K,ROW())*30)'
+    assert r[21:] == [12900, "2026-10-02", 812, ""]
 
 
 def test_bench_row_options_failed_marks_manual():
     r = S.bench_row("2026-10-02", "압축봉", PROD, None)
-    assert r[8] == "" and r[9] == ""
+    assert r[8] == ""
     assert r[S.COL_REP] == 15000          # 검색 가격으로 대체
     assert r[S.COL_STATUS] == "옵션수동"
 
