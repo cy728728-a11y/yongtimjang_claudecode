@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+import rules
 import sheet_schema as S
 import sourcing_bench as C
 
@@ -189,7 +190,7 @@ def _bench_run(products, by_url, calls=None):
         if name == "search":
             return [{"kind": "page", "key": "kw", "상태": "성공", "products": products}]
         assert name == "options"
-        assert opts.get("maxCombos") == 50
+        assert opts.get("maxCombos") == rules.MAX_COMBOS == 15
         if calls is not None:
             calls.append([i["url"] for i in items])
         out = []
@@ -203,7 +204,7 @@ def _bench_run(products, by_url, calls=None):
 
 
 def test_bench_over_limit_not_appended(tmp_path):
-    many = [[f"o{i}"] for i in range(51)]
+    many = [[f"o{i}"] for i in range(16)]
     run = _bench_run([prod(1, 900), prod(2, 900)],
                      lambda u: opt_probe(u, combos=many) if u.endswith("/1") else opt_probe(u, 상태="옵션초과"))
     sh = FakeSheet()

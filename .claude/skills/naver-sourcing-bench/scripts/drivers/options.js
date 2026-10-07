@@ -10,7 +10,7 @@
 //  - 캡챠 0회/6상품, 상품당 10~15초
 // 가격 계산은 Python(rules.build_options)이 priceText·combos 로 한다. 여기서는 원문만 모은다.
 
-const MAX_COMBOS = OPTS.maxCombos || 50;
+const MAX_COMBOS = OPTS.maxCombos || 15;
 const PER_ITEM_MS = 90000;                 // 상품당 상한 — 넘으면 읽기실패(시간초과)
 const WALL_MS = OPTS.wallMs || 105000;     // repl 120초 벽 아래. 넘기 전에 남은 상품은 다음 호출로 미룬다
 const T0 = Date.now();
@@ -86,7 +86,7 @@ async function readAxis(k) {
   return items;
 }
 
-// 축 k 를 펼쳐 combos 에 조합을 쌓는다. 50 초과가 확정되면 true(옵션초과)를 돌려 즉시 멈춘다.
+// 축 k 를 펼쳐 combos 에 조합을 쌓는다. 상한 초과가 확정되면 true(옵션초과)를 돌려 즉시 멈춘다.
 async function walk(k, prefix, nAxes, combos, deadline) {
   if (Date.now() > deadline) throw new Error("시간초과");
   const items = await readAxis(k);

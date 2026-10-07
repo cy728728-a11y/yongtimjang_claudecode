@@ -157,9 +157,9 @@ def test_build_options_soldout_included_with_mark():
 
 def test_build_options_over_limit():
     assert rules.build_options(_probe(상태="옵션초과"), 1) == {"판정": "옵션초과", "options": None}
-    many = [[f"o{i}"] for i in range(51)]
+    many = [[f"o{i}"] for i in range(16)]
     assert rules.build_options(_probe(combos=many), 1)["판정"] == "옵션초과"
-    assert rules.build_options(_probe(combos=many[:50]), 1)["판정"] == "성공"
+    assert rules.build_options(_probe(combos=many[:15]), 1)["판정"] == "성공"     # 정확히 15 는 통과
 
 
 def test_build_options_fallback_price():

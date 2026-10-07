@@ -6,7 +6,7 @@
     $PY $S login-check
     $PY $S scan --category "생활/건강>수납/정리용품"
     $PY $S bench --keyword "바지걸이"          # 또는 --from-scan. 옵션(9·10열) 자동 수집, --no-options 로 끔
-    $PY $S options --keyword "바지걸이"        # 기존 후보 행에 옵션 채우기, 50조합 초과 행 삭제
+    $PY $S options --keyword "바지걸이"        # 기존 후보 행에 옵션 채우기, 15조합 초과 행 삭제
     $PY $S annotate --row 3 --volume 12000 --competition 낮음
 """
 import argparse
@@ -27,7 +27,7 @@ CONFIG = RUNS / "config.json"
 MASTER = HERE.parents[3] / "30-knowledge" / "39-naver-category" / "naver-category-master.json"
 SEC_LIST = 6.0                      # 목록 페이지당 대략 소요(초) — 청크 계산용
 SEC_OPTIONS = 20.0                  # 상세 옵션 읽기 상품당(초). 다단 클릭을 감안 (2026-10-02 실측 10~15초)
-MAX_COMBOS = rules.MAX_COMBOS       # 50 초과 = 소싱 대상 아님 (D-01)
+MAX_COMBOS = rules.MAX_COMBOS       # 15 초과 = 소싱 대상 아님
 STOP = ("캡챠감지", "차단감지")
 LOGIN_MSG = ("네이버 로그인이 안 돼 있다. Aside 브라우저 창에서 네이버에 직접 로그인한 뒤 다시 실행해 줘.\n"
              "(아이디·비밀번호는 여기에 입력하지 않는다)")
@@ -187,7 +187,7 @@ def _read_options(urls, ck, run, opts, ckpt_path):
 
 
 def do_refill(sheet, keyword, ckpt_path, run, opts):
-    """기존 후보 행에 옵션(9·10열)을 다시 채운다. 50조합 초과 행은 삭제.
+    """기존 후보 행에 옵션(9·10열)을 다시 채운다. 15조합 초과 행은 삭제.
     대상 = 키워드 일치 + 9열 빈칸 + 카탈로그 아님. 반환 {채움, 삭제, 수동, 건너뜀}."""
     ck = _load(ckpt_path, {"details": {}})
     ck.setdefault("details", {})
@@ -274,7 +274,7 @@ def build_parser():
     g.add_argument("--from-scan", action="store_true")
     # 2026-10-02 실측: 상세페이지 DOM 에서 옵션을 펼쳐 읽을 수 있어 기본으로 켠다.
     p.add_argument("--no-options", action="store_true", help="상세 옵션 수집을 건너뛴다(9·10열 수동)")
-    p = sub.add_parser("options", help="기존 후보 행에 옵션(9·10열) 채우기, 50조합 초과 행 삭제")
+    p = sub.add_parser("options", help="기존 후보 행에 옵션(9·10열) 채우기, 15조합 초과 행 삭제")
     p.add_argument("--keyword", required=True)
     p = sub.add_parser("annotate")
     p.add_argument("--row", type=int, required=True, help="카테고리스캔 탭의 시트 행 번호(헤더=1)")
