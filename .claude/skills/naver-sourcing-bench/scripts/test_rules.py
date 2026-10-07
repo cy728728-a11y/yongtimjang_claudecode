@@ -173,3 +173,86 @@ def test_build_options_failures():
     assert rules.build_options(_probe(상태="읽기실패"), 1)["판정"] == "실패"
     assert rules.build_options(_probe(combos=[]), 1)["판정"] == "실패"
     assert rules.build_options(_probe(combos="garbage"), 1)["판정"] == "실패"
+
+
+# ---- 스토어 확장 · 원산지 (quick-261008-0qx) ----
+
+def test_store_base():
+    assert rules.store_base("https://smartstore.naver.com/piachang/products/123?NaPm=x") == \
+        "https://smartstore.naver.com/piachang"
+    assert rules.store_base("https://brand.naver.com/jinsimgamsung/products/9") == "https://brand.naver.com/jinsimgamsung"
+    assert rules.store_base("https://m.smartstore.naver.com/piachang/products/1") == "https://smartstore.naver.com/piachang"
+    assert rules.store_base("https://smartstore.naver.com/main/products/123") is None
+    assert rules.store_base("https://www.coupang.com/vp/products/1") is None
+    assert rules.store_base("") is None
+    assert rules.store_base(None) is None
+
+
+def test_product_key():
+    a = rules.product_key("https://smartstore.naver.com/main/products/123")
+    assert a == rules.product_key("https://smartstore.naver.com/piachang/products/123") == \
+        rules.product_key("https://m.smartstore.naver.com/x/products/123?a=1") == "nv:123"
+    assert rules.product_key("https://brand.naver.com/jin/products/77") == "nv:77"
+    assert rules.product_key("https://www.daisomall.co.kr/pd?pdNo=1&utm_source=x") == \
+        rules.norm_url("https://www.daisomall.co.kr/pd?pdNo=1&utm_source=x")
+    assert rules.product_key("https://search.shopping.naver.com/catalog/555") == \
+        "https://search.shopping.naver.com/catalog/555"
+
+
+SB = "https://smartstore.naver.com/piachang"
+
+
+def _sitem(i, review=800, price=12900, **kw):
+    d = {"id": i, "name": f"n{i}", "price": price, "review": review,
+         "category": "생활/건강>수납/정리용품>옷걸이>바지걸이", "display": "ON"}
+    d.update(kw)
+    return d
+
+
+def test_store_products_basic():
+    r = rules.store_products({"base": SB, "items": [_sitem(5, name="n")]}, mall="스토리행거")
+    assert r == [{"순위": 1, "상품명": "n", "url": SB + "/products/5", "마켓명": "스토리행거", "가격": 12900,
+                  "리뷰수": 800, "광고": False, "카테고리": ["생활/건강", "수납/정리용품", "옷걸이", "바지걸이"]}]
+
+
+def test_store_products_padding_saleprice_display_origin():
+    items = [_sitem(1, price=None, salePrice=15000, category="A>B"),
+             _sitem(2, display="SUSPENSION"),
+             _sitem(3, origin="중국")]
+    r = rules.store_products({"base": SB, "items": items}, mall="m")
+    assert [p["url"] for p in r] == [SB + "/products/1", SB + "/products/3"]
+    assert r[0]["가격"] == 15000 and r[0]["카테고리"] == ["A", "B", "", ""]
+    assert "원산지" not in r[0] and r[1]["원산지"] == "중국"
+    assert [p["순위"] for p in r] == [1, 2]
+
+
+def test_store_products_bad_input():
+    assert rules.store_products(None, "m") == []
+    assert rules.store_products({"base": SB, "items": "x"}, "m") == []
+    assert rules.store_products({"items": [_sitem(1)]}, "m") == []        # base 없음
+
+
+def _sp(i, review=800, price=12900, mall="m", url=None, **kw):
+    d = {"순위": i, "상품명": f"n{i}", "url": url or f"{SB}/products/{i}", "마켓명": mall, "가격": price,
+         "리뷰수": review, "광고": False, "카테고리": ["a", "b", "c", "d"]}
+    d.update(kw)
+    return d
+
+
+def test_store_filter():
+    ps = [_sp(1, review=3000), _sp(2, review=2000, price=9000), _sp(3, review=1500, price=None),
+          _sp(4, review=1200, mall="한샘몰"), _sp(5, review=1100, url="https://search.shopping.naver.com/catalog/9"),
+          _sp(6, review=1000), _sp(7, review=900), _sp(8, review=499),
+          _sp(9, review=800, url="https://m.smartstore.naver.com/x/products/7"),
+          _sp(10, review=700, 원산지="국산"), _sp(11, review=650, 원산지="중국"), _sp(12, review=600, 원산지="")]
+    out = rules.store_filter(ps, {"nv:6"})
+    assert [p["순위"] for p in out] == [1, 7, 11, 12]
+
+
+def test_origin_verdict():
+    for t in ("중국", "중국산", "China", "Made in CHINA", "CN", "수입산(중국)", "수입산 / 중국"):
+        assert rules.origin_verdict(t) == "중국", t
+    for t in ("국산", "대한민국", "베트남", "한국", "CNC가공"):
+        assert rules.origin_verdict(t) == "제외", t
+    for t in ("", None, "   ", "상세설명에 표시", "상품상세 참조", "기타", "상세설명참조"):
+        assert rules.origin_verdict(t) == "미확인", t

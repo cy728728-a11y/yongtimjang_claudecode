@@ -19,6 +19,22 @@ def test_headers():
     assert S.SCAN_HEADER[S.SCAN_COL["벤치완료"]] == "벤치완료"
 
 
+def test_bench_row_status_store_expand():
+    opts = [{"이름": "흰", "가격": 13900}]
+    assert S.bench_row("d", "k", PROD, opts, status="스토어확장")[S.COL_STATUS] == "스토어확장"
+    assert S.bench_row("d", "k", PROD, None, status="스토어확장")[S.COL_STATUS] == "스토어확장·옵션수동"
+    assert S.bench_row("d", "k", PROD, opts)[S.COL_STATUS] == ""
+    assert S.bench_row("d", "k", PROD, None)[S.COL_STATUS] == "옵션수동"
+
+
+def test_bench_row_origin_unknown():
+    opts = [{"이름": "흰", "가격": 13900}]
+    assert S.bench_row("d", "k", PROD, opts, origin_unknown=True)[S.COL_STATUS] == "원산지미확인"
+    assert S.bench_row("d", "k", PROD, None, origin_unknown=True)[S.COL_STATUS] == "옵션수동·원산지미확인"
+    assert S.bench_row("d", "k", PROD, None, status="스토어확장", origin_unknown=True)[S.COL_STATUS] == \
+        "스토어확장·옵션수동·원산지미확인"
+
+
 def test_bench_row_with_options():
     opts = [{"이름": "흰", "가격": 13900}, {"이름": "검", "가격": 12900}]
     r = S.bench_row("2026-10-02", "압축봉", PROD, opts)
