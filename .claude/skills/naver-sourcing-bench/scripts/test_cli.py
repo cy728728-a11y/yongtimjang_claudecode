@@ -254,9 +254,9 @@ def test_bench_captcha_exit4_then_resume(tmp_path):
 
 
 def _cand(n, kw="바지걸이", opt_cnt="", url=None, price=15000):
-    """후보 탭 행(25열)."""
+    """후보 탭 행(26열)."""
     r = ["a", "b", "c", "d", kw, "s", url or f"https://smartstore.naver.com/s/products/{n}", f"p{n}",
-         opt_cnt, "", "", "", "", "", "", "", "", "", "", "", "", price, "2026-10-01", 900, "" if opt_cnt else "옵션수동"]
+         opt_cnt, "", "", "", "", "", "", "", "", "", "", "", "", price, "2026-10-01", 900, "", "" if opt_cnt else "옵션수동"]
     return r
 
 
@@ -578,15 +578,16 @@ def test_origin_check_dry_run_no_sheet_calls(tmp_path, capsys):
 
 
 def test_origin_check_apply(tmp_path):
+    # 2026-10-08: 행은 지우지 않고 원산지 열에 원문만 기입한다
     rows = [_row(1), _row(2), _row(3, status="옵션수동"), _row(6, kw="other")]
     sh = FakeSheet(bench_rows=rows)
     w = World([], origin={1: "중국", 2: "베트남", 3: "", 6: "국산"})
     r = C.do_origin_check(sh, None, tmp_path / "o.json", w, OPTS, dry_run=False)
-    assert len(r["제외"]) == 2
-    urls = [x[6] for x in sh.tabs[S.BENCH_TAB]]
-    assert urls == [f"{MAIN}1", f"{MAIN}3"]
-    assert sh.tabs[S.BENCH_TAB][0][S.COL_STATUS] == ""
-    assert sh.tabs[S.BENCH_TAB][1][S.COL_STATUS] == "옵션수동·원산지미확인"
+    assert len(r["제외"]) == 2 and sh.deleted == []
+    tab = sh.tabs[S.BENCH_TAB]
+    assert [x[6] for x in tab] == [f"{MAIN}{n}" for n in (1, 2, 3, 6)]
+    assert [x[S.COL_ORIGIN] for x in tab] == ["중국", "베트남", "", "국산"]
+    assert tab[2][S.COL_STATUS] == "옵션수동"             # 상태는 안 건드린다
 
 
 def test_cli_expand_origin_parse():

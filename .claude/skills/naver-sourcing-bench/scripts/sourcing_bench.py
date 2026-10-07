@@ -9,7 +9,7 @@
                                               # 원산지 중국만 · 스토어 확장 기본, --no-expand 로 확장 끔
     $PY $S options --keyword "바지걸이"        # 기존 후보 행에 옵션 채우기, 15조합 초과 행 삭제
     $PY $S expand --keyword "바지걸이"         # 기존 후보 행에 스토어 확장 소급 (--all, --dry-run, --no-options)
-    $PY $S origin --all --dry-run             # 기존 후보 행 원산지 리포트(시트 불변). --dry-run 없으면 비중국 행 삭제
+    $PY $S origin --all --dry-run             # 기존 후보 행 원산지 리포트(시트 불변). --dry-run 없으면 원산지 열 기입(삭제 안 함)
     $PY $S annotate --row 3 --volume 12000 --competition 낮음
 """
 import argparse
@@ -164,7 +164,8 @@ def do_bench(sheet, keyword, ckpt_path, run, date, opts, with_options=True,
                 continue
             unknown = v == "미확인"
         # 카탈로그·실패·미수집 → options=None → bench_row 가 옵션수동 (D-03)
-        originals.append((p, S.bench_row(date, keyword, p, options, origin_unknown=unknown)))
+        originals.append((p, S.bench_row(date, keyword, p, options, origin_unknown=unknown,
+                                       origin=(d or {}).get("origin") or "")))
     if over:
         print(f"옵션 {MAX_COMBOS}조합 초과 {over}건은 후보에서 뺐다.", flush=True)
     if not_cn:
@@ -285,7 +286,8 @@ def _expand_rows(origins, ck, run, opts, ckpt_path, date, taken, expanded, with_
                 if j["판정"] == "성공":
                     options = j["options"]
             rows.append(S.bench_row(date, kw, c, options, status="스토어확장",
-                                    origin_unknown=check_origin and v == "미확인"))
+                                    origin_unknown=check_origin and v == "미확인",
+                                    origin=(d or {}).get("origin") or c.get("원산지") or ""))
         if rows:
             out[url] = rows
     return False, out
@@ -431,8 +433,8 @@ def _print_origin_report(res):
 
 def do_origin_check(sheet, keyword, ckpt_path, run, opts, dry_run=True):
     """기존 후보 행의 원산지를 상세에서 읽어 판정한다(D-ORIGIN). keyword=None 이면 전 키워드.
-    dry_run 이면 리포트만 출력(시트 호출 0회). 아니면 미확인 행에 '원산지미확인' 을 병기하고,
-    시트를 다시 읽어 상품번호로 현재 위치를 찾아 중국 아닌 행을 삭제한다(T-mbo-02).
+    dry_run 이면 리포트만 출력(시트 호출 0회). 아니면 각 행 '원산지' 열에 원문을 기입한다.
+    행은 지우지 않는다(2026-10-08 용팀장 — 삭제는 사용자가 원산지 열을 보고 판단).
     반환 {중국: n, 제외: [{행, 마켓명, 상품명, url, 원산지}], 미확인: [...]} — 행은 헤더=1 기준."""
     ck = _load(ckpt_path, {"details": {}})
     ck.setdefault("details", {})
@@ -457,18 +459,11 @@ def do_origin_check(sheet, keyword, ckpt_path, run, opts, dry_run=True):
         res[v].append({"행": i + 2, "마켓명": r[5], "상품명": r[7], "url": url, "원산지": d.get("origin") or "",
                        "_i": i, "_status": str(r[S.COL_STATUS])})
     if not dry_run:
-        # 1) 읽은 시점 인덱스가 유효할 때 미확인 병기부터 (중국 행은 bench 와 같은 규칙 — 상태를 안 바꾼다)
-        cells = [(x["_i"], S.COL_STATUS, "·".join(s for s in (x["_status"], "원산지미확인") if s))
-                 for x in res["미확인"] if "원산지미확인" not in x["_status"]]
+        # 2026-10-08 용팀장: 지우지 말고 원산지 열에 표시만 — 삭제 판단은 사용자가 한다
+        cells = [(i, S.COL_ORIGIN, (ck["details"].get(url) or {}).get("origin") or "")
+                 for i, url, _ in targets if ck["details"].get(url) is not None]
         if cells:
             sheet.update_cells(S.BENCH_TAB, cells)
-        # 2) 삭제는 시트를 다시 읽어 상품번호로 현재 위치를 찾는다 (T-mbo-02)
-        drop = {rules.product_key(x["url"]) for x in res["제외"]}
-        if drop:
-            idx = [i for i, r in enumerate(sheet.read(S.BENCH_TAB))
-                   if len(r) > 6 and (keyword is None or str(r[4]).strip() == keyword)
-                   and rules.product_key(r[6]) in drop]
-            sheet.delete_rows(S.BENCH_TAB, idx)
     for kind in ("제외", "미확인"):
         for x in res[kind]:
             x.pop("_i", None)
@@ -535,7 +530,7 @@ def build_parser():
     g.add_argument("--all", action="store_true")
     p.add_argument("--no-options", action="store_true", help="확장 상품의 상세 옵션 수집을 건너뛴다")
     p.add_argument("--dry-run", action="store_true", help="시트에 쓰지 않고 추가될 행 수만 출력")
-    p = sub.add_parser("origin", help="기존 후보 행 원산지 판정 — 중국 아닌 행 삭제(--dry-run 이면 리포트만)")
+    p = sub.add_parser("origin", help="기존 후보 행 원산지를 원산지 열에 기입(삭제 안 함). --dry-run 이면 리포트만")
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--keyword")
     g.add_argument("--all", action="store_true")

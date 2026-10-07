@@ -7,14 +7,14 @@ PROD = {"순위": 1, "상품명": "압축봉 120cm", "url": "https://smartstore.
 
 
 def test_headers():
-    assert len(S.BENCH_HEADER) == 25
+    assert len(S.BENCH_HEADER) == 26
     assert S.BENCH_HEADER[:5] == ["대카테고리", "중카테고리", "소카테고리", "세부카테고리", "키워드"]
     assert S.BENCH_HEADER[8:10] == ["옵션 개수", "180일 판매수량"]
     assert "각 옵션 가격" not in S.BENCH_HEADER and "1688 이미지검색 링크" not in S.BENCH_HEADER
     assert S.BENCH_HEADER[12:15] == ["월 예상매출", "1688 링크", "1688 위안가격"]
     assert S.BENCH_HEADER[18:21] == ["월 예상마진", "쿠팡포함 월 예상마진(×2)", "쿠팡포함 월 투자금"]
-    assert S.BENCH_HEADER[21:] == ["대표판매가", "수집일", "리뷰수", "상태"]
-    assert (S.COL_REP, S.COL_STATUS) == (21, 24)
+    assert S.BENCH_HEADER[21:] == ["대표판매가", "수집일", "리뷰수", "원산지", "상태"]
+    assert (S.COL_REP, S.COL_ORIGIN, S.COL_STATUS) == (21, 24, 25)
     assert S.SCAN_HEADER[S.SCAN_COL["키워드"]] == "키워드"
     assert S.SCAN_HEADER[S.SCAN_COL["벤치완료"]] == "벤치완료"
 
@@ -38,7 +38,7 @@ def test_bench_row_origin_unknown():
 def test_bench_row_with_options():
     opts = [{"이름": "흰", "가격": 13900}, {"이름": "검", "가격": 12900}]
     r = S.bench_row("2026-10-02", "압축봉", PROD, opts)
-    assert len(r) == 25
+    assert len(r) == 26
     assert r[:9] == ["생활/건강", "수납/정리", "압축봉", "", "압축봉", "가나상점",
                      "https://smartstore.naver.com/s/products/9", "압축봉 120cm", 2]
     assert r[9] == "" and r[13] == "" and r[14] == ""          # 수동 칸(180일·1688 링크·위안)
@@ -51,7 +51,7 @@ def test_bench_row_with_options():
     assert r[18] == '=IF(OR(INDEX(K:K,ROW())="",INDEX(R:R,ROW())=""),"",INDEX(K:K,ROW())*30*INDEX(R:R,ROW()))'
     assert r[19] == '=IF(INDEX(S:S,ROW())="","",INDEX(S:S,ROW())*2)'
     assert r[20] == '=IF(OR(INDEX(K:K,ROW())="",INDEX(Q:Q,ROW())=""),"",INDEX(Q:Q,ROW())*INDEX(K:K,ROW())*30*2)'
-    assert r[21:] == [12900, "2026-10-02", 812, ""]
+    assert r[21:] == [12900, "2026-10-02", 812, "", ""]
 
 
 def test_bench_row_options_failed_marks_manual():
