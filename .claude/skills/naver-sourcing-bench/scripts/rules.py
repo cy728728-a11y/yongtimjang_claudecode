@@ -66,6 +66,14 @@ def scan_summary(products, min_review=1000):
     return {"리뷰1000+": n, "상위3": top3}
 
 
+# 후보에서 빼는 마켓(마켓명 부분일치). 사용자가 지시할 때마다 추가한다.
+EXCLUDED_MALLS = ("한샘",)   # 2026-10-08 용팀장: 한샘몰은 리스트업 금지
+
+
+def is_excluded_mall(name):
+    return any(k in str(name or "") for k in EXCLUDED_MALLS)
+
+
 def bench_filter(products, top_n=40, min_review=500, min_price=10000):
     """광고 제외 → 순위 상위 top_n → 가격비교(카탈로그) 제외 → 리뷰·가격 필터 → URL 중복 제거.
     가격비교 묶음은 여러 몰 합산이라 한 판매자 실적이 아니다 — 2026-10-07 용팀장 지시로 패스."""
@@ -73,7 +81,8 @@ def bench_filter(products, top_n=40, min_review=500, min_price=10000):
                      key=lambda p: p.get("순위") or 0)[:top_n]
     seen, out = set(), []
     for p in organic:
-        if is_catalog(p.get("url")) or str(p.get("마켓명", "")).startswith("가격비교"):
+        if is_catalog(p.get("url")) or str(p.get("마켓명", "")).startswith("가격비교") \
+                or is_excluded_mall(p.get("마켓명")):
             continue
         price = to_int(p.get("가격"))
         if price is None or price < min_price or _review(p) < min_review:
