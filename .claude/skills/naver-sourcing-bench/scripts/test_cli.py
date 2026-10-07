@@ -109,7 +109,7 @@ def test_bench_appends_filtered_and_skips_existing_url(tmp_path):
     n = C.do_bench(sh, "kw", tmp_path / "b.json", run, "2026-10-02", OPTS)
     assert n == 1
     row = sh.tabs[S.BENCH_TAB][-1]
-    assert row[6] == "https://smartstore.naver.com/s/products/2" and row[20] == 14000
+    assert row[6] == "https://smartstore.naver.com/s/products/2" and row[S.COL_REP] == 14000
 
 
 def test_bench_detail_failure_marks_manual(tmp_path):
@@ -120,7 +120,7 @@ def test_bench_detail_failure_marks_manual(tmp_path):
 
     sh = FakeSheet()
     C.do_bench(sh, "kw", tmp_path / "b.json", run, "2026-10-02", OPTS)
-    assert sh.tabs[S.BENCH_TAB][-1][23] == "옵션수동"
+    assert sh.tabs[S.BENCH_TAB][-1][S.COL_STATUS] == "옵션수동"
 
 
 def test_bench_from_scan_marks_done(tmp_path):
@@ -144,7 +144,7 @@ def test_bench_detail_driver_missing_marks_manual(tmp_path):
 
     sh = FakeSheet()
     assert C.do_bench(sh, "kw", tmp_path / "b.json", run, "2026-10-02", OPTS) == 1
-    assert sh.tabs[S.BENCH_TAB][-1][23] == "옵션수동"
+    assert sh.tabs[S.BENCH_TAB][-1][S.COL_STATUS] == "옵션수동"
 
 
 def test_cli_bench_options_on_by_default():
@@ -216,7 +216,7 @@ def test_bench_single_item(tmp_path):
     sh = FakeSheet()
     C.do_bench(sh, "kw", tmp_path / "b.json", run, "2026-10-02", OPTS)
     row = sh.tabs[S.BENCH_TAB][-1]
-    assert row[8] == 1 and row[9] == "단품:12,900" and row[20] == 12900 and row[23] == ""
+    assert row[8] == 1 and row[9] == "단품:12,900" and row[S.COL_REP] == 12900 and row[S.COL_STATUS] == ""
 
 
 def test_bench_catalog_not_opened(tmp_path):
@@ -227,8 +227,8 @@ def test_bench_catalog_not_opened(tmp_path):
     assert C.do_bench(sh, "kw", tmp_path / "b.json", run, "2026-10-02", OPTS) == 2
     assert all(CAT_URL not in c for c in calls)
     cat_row, ok_row = sh.tabs[S.BENCH_TAB]
-    assert cat_row[8] == "" and cat_row[9] == "" and cat_row[23] == "옵션수동"
-    assert ok_row[8] == 1 and ok_row[9] == "화이트-10개:13,900" and ok_row[20] == 13900
+    assert cat_row[8] == "" and cat_row[9] == "" and cat_row[S.COL_STATUS] == "옵션수동"
+    assert ok_row[8] == 1 and ok_row[9] == "화이트-10개:13,900" and ok_row[S.COL_REP] == 13900
 
 
 def test_bench_captcha_exit4_then_resume(tmp_path):
@@ -254,9 +254,9 @@ def test_bench_captcha_exit4_then_resume(tmp_path):
 
 
 def _cand(n, kw="바지걸이", opt_cnt="", url=None, price=15000):
-    """후보 탭 행(24열)."""
+    """후보 탭 행(26열)."""
     r = ["a", "b", "c", "d", kw, "s", url or f"https://smartstore.naver.com/s/products/{n}", f"p{n}",
-         opt_cnt, "", "", "", "", "", "", "", "", "", "", "", price, "2026-10-01", 900, "" if opt_cnt else "옵션수동"]
+         opt_cnt, "", "", "", "", "", "", "", "", "", "", "", "", "", price, "2026-10-01", 900, "" if opt_cnt else "옵션수동"]
     return r
 
 
@@ -284,11 +284,11 @@ def test_refill_fill_delete_manual(tmp_path):
     assert calls == [[f"https://smartstore.naver.com/s/products/{n}" for n in (1, 2, 3)]]
     tab, cells = sh.updates[0]
     assert tab == S.BENCH_TAB
-    assert cells == [(0, 8, 2), (0, 9, "흰:13,400 / 검:12,900"), (0, 20, 12900), (0, 23, "")]
+    assert cells == [(0, 8, 2), (0, 9, "흰:13,400 / 검:12,900"), (0, S.COL_REP, 12900), (0, S.COL_STATUS, "")]
     assert sh.deleted == [(S.BENCH_TAB, [1])]
     urls = [x[6] for x in sh.tabs[S.BENCH_TAB]]
     assert "https://smartstore.naver.com/s/products/2" not in urls and len(urls) == 5
-    assert sh.tabs[S.BENCH_TAB][1][23] == "옵션수동"          # 실패 행은 그대로
+    assert sh.tabs[S.BENCH_TAB][1][S.COL_STATUS] == "옵션수동"          # 실패 행은 그대로
 
     # 재실행: 채운 행은 대상에서 빠지고, 체크포인트에 있는 URL 은 run 을 다시 안 부른다
     calls.clear()

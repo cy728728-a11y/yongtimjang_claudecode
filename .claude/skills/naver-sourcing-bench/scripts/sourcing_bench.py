@@ -207,11 +207,11 @@ def do_refill(sheet, keyword, ckpt_path, run, opts):
     cells, over_urls, manual = [], set(), 0
     for i, url, r in targets:
         d = ck["details"].get(url)
-        j = rules.build_options(d, rules.to_int(r[20])) if d is not None else {"판정": "실패"}
+        j = rules.build_options(d, rules.to_int(r[S.COL_REP])) if d is not None else {"판정": "실패"}
         if j["판정"] == "성공":
             o = j["options"]
             cells += [(i, 8, len(o)), (i, 9, rules.options_text(o)),
-                      (i, 20, rules.rep_price(o, rules.to_int(r[20]))), (i, 23, "")]
+                      (i, S.COL_REP, rules.rep_price(o, rules.to_int(r[S.COL_REP]))), (i, S.COL_STATUS, "")]
         elif j["판정"] == "옵션초과":
             over_urls.add(rules.norm_url(url))
         else:
