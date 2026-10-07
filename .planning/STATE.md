@@ -182,6 +182,7 @@ Recent decisions affecting current work:
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 261008-0qx | 사입 소싱 bench 스토어 확장 + 원산지 중국 필터 | 2026-10-08 | 226c79d | [261008-0qx-bench-store-expansion](./quick/261008-0qx-bench-store-expansion/) |
 | 261002-mbo | 사입 소싱 bench 옵션 자동수집(9·10열) · 50조합 초과 후보 제외 | 2026-10-02 | 08c1cf0 | [261002-mbo-bench-option-auto-fill](./quick/261002-mbo-bench-option-auto-fill/) |
 | 260925-2d8 | 배너 검수 화면 👁·↩ 표식 장만 보기 토글 (04-12 재검수용) | 2026-09-25 | 73eb8a2 | [260925-2d8-banner-review-mark-filter](./quick/260925-2d8-banner-review-mark-filter/) |
 | 260929-g1 | 게이트 정상 직후 반영 실행 버튼을 새로고침 없이 표시 (hx-swap-oob, 06 P2) | 2026-09-29 | 79d68d9 | [260929-g1-market-gate-next-button](./quick/260929-g1-market-gate-next-button/) |
