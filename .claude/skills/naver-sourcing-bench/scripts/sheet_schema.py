@@ -59,8 +59,9 @@ def scan_row(date, cat, summary):
     return [date, *cat["경로"], cat["코드"], summary["리뷰1000+"], summary["상위3"], "", "", "", "", ""]
 
 
-def bench_row(date, keyword, product, options):
-    """options=None 이면 옵션 수집 실패 → 9열 비우고 상태=옵션수동."""
+def bench_row(date, keyword, product, options, status="", origin_unknown=False):
+    """options=None 이면 옵션 수집 실패 → 9열 비우고 상태=옵션수동.
+    status='스토어확장' 이면 상태 앞에 붙고, origin_unknown 이면 '원산지미확인' 을 병기한다."""
     cats = (list(product.get("카테고리") or []) + ["", "", "", ""])[:4]
     fallback = rules.to_int(product.get("가격"))
     ok = options is not None
@@ -71,5 +72,6 @@ def bench_row(date, keyword, product, options):
     for idx, f in FORMULAS.items():
         row[idx] = f
     row += [rules.rep_price(options or [], fallback), date,
-            rules.to_int(product.get("리뷰수")) or 0, "" if ok else "옵션수동"]
+            rules.to_int(product.get("리뷰수")) or 0,
+            "·".join(x for x in (status, "" if ok else "옵션수동", "원산지미확인" if origin_unknown else "") if x)]
     return row

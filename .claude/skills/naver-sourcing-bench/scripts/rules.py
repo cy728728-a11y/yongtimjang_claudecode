@@ -191,3 +191,120 @@ def build_options(probe, fallback, max_combos=MAX_COMBOS):
         return {"판정": "성공", "options": out}
     except (TypeError, ValueError, AttributeError):
         return dict(_FAIL)
+
+
+# ---- 스토어 확장 (2026-10-08 실측 기반) ----
+
+STORE_HOSTS = ("smartstore.naver.com", "brand.naver.com")
+_PRODUCT_PATH = re.compile(r"^/[^/]+/products/(\d+)")
+
+
+def _store_split(url):
+    """URL → (호스트(m. 제거), 경로). 실패하면 (None, None)."""
+    try:
+        if not url:
+            return None, None
+        s = urlsplit(str(url).strip())
+        host = s.netloc.lower()
+        if host.startswith("m."):
+            host = host[2:]
+        return host, s.path
+    except (ValueError, TypeError):
+        return None, None
+
+
+def store_base(href):
+    """상품 상세 최종 주소 → 스토어 주소 'https://<host>/<slug>'. 슬러그를 모르면 None.
+    검색 결과 주소는 smartstore.naver.com/main/products/<id> 라 슬러그가 없다 — 상세를 열어 리다이렉트된 주소를 준다."""
+    host, path = _store_split(href)
+    if host not in STORE_HOSTS:
+        return None
+    parts = [p for p in (path or "").split("/") if p]
+    if not parts or parts[0] == "main":
+        return None
+    return f"https://{host}/{parts[0]}"
+
+
+def product_key(url):
+    """중복 판정 키. 네이버 스토어 상품이면 'nv:<상품번호>' — main/<slug> 주소 차이를 무시한다.
+    그 외는 norm_url 결과 그대로."""
+    host, path = _store_split(url)
+    if host in STORE_HOSTS:
+        m = _PRODUCT_PATH.match(path or "")
+        if m:
+            return f"nv:{m.group(1)}"
+    return norm_url(url or "")
+
+
+def store_products(store_result, mall):
+    """store.js 결과 {base, items:[{id, name, price, salePrice, review, category, display, origin}]}
+    → 공용 product dict 리스트. 진열(ON) 아닌 상품은 버린다. 이상 입력은 []."""
+    try:
+        if not isinstance(store_result, dict):
+            return []
+        base = str(store_result.get("base") or "").rstrip("/")
+        items = store_result.get("items")
+        if not base or not isinstance(items, list):
+            return []
+        out = []
+        for it in items:
+            if not isinstance(it, dict) or it.get("display") != "ON" or it.get("id") in (None, ""):
+                continue
+            price = to_int(it.get("price"))
+            if price is None:
+                price = to_int(it.get("salePrice"))
+            p = {"순위": len(out) + 1, "상품명": it.get("name") or "", "url": f"{base}/products/{it['id']}",
+                 "마켓명": mall, "가격": price, "리뷰수": to_int(it.get("review")) or 0, "광고": False,
+                 "카테고리": (_split(it.get("category") or "") + ["", "", "", ""])[:4]}
+            if str(it.get("origin") or "").strip():
+                p["원산지"] = str(it["origin"]).strip()
+            out.append(p)
+        return out
+    except (TypeError, ValueError, AttributeError):
+        return []
+
+
+def store_filter(products, exclude_keys, min_review=500, min_price=10000):
+    """스토어 목록 → 후보. 조건은 bench 와 같다(카탈로그·가격비교·제외마켓·가격·리뷰).
+    중복은 product_key 로 exclude_keys(시트·이번 실행·원 상품)와 목록 안을 함께 본다.
+    목록 단계에 원산지가 있고 '제외' 판정이면 상세를 열기 전에 뺀다. 옵션 조합 상한은 build_options 몫."""
+    seen, out = set(exclude_keys or ()), []
+    for p in products or []:
+        try:
+            if is_catalog(p.get("url")) or str(p.get("마켓명", "")).startswith("가격비교") \
+                    or is_excluded_mall(p.get("마켓명")):
+                continue
+            price = to_int(p.get("가격"))
+            if price is None or price < min_price or _review(p) < min_review:
+                continue
+            if p.get("원산지") and origin_verdict(p["원산지"]) == "제외":
+                continue
+            key = product_key(p.get("url", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(p)
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return out
+
+
+# ---- 원산지 판정 (D-ORIGIN, 2026-10-08 용팀장: 중국산만 리스트업) ----
+
+ORIGIN_CN = re.compile(r"중국|china|(?<![A-Za-z])CN(?![A-Za-z])", re.I)
+NO_COUNTRY = re.compile(r"상세|참조|표시|기타|별도|확인")
+
+
+def origin_verdict(text):
+    """원산지 원문 → 중국 | 제외 | 미확인. 국가를 특정 못 하면 제외하지 않는다(미확인)."""
+    try:
+        s = re.sub(r"\s+", " ", str(text or "")).strip()
+        if not s:
+            return "미확인"
+        if ORIGIN_CN.search(s):
+            return "중국"
+        if NO_COUNTRY.search(s):
+            return "미확인"
+        return "제외"
+    except (TypeError, ValueError):
+        return "미확인"
