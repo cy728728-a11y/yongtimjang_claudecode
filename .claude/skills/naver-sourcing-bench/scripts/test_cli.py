@@ -321,3 +321,285 @@ def test_read_options_requeues_missing_and_stops_on_empty(tmp_path):
     assert stop is False
     assert list(ck["details"]) == ["u1"]
     assert seen[1][0] == "u2" and len(seen) == 2       # 빈 응답이면 무한 반복하지 않고 멈춘다
+
+
+# ---- 스토어 확장 · 원산지 (quick-261008-0qx) ----
+
+MAIN = "https://smartstore.naver.com/main/products/"
+SA, SBB = "https://smartstore.naver.com/storeA", "https://smartstore.naver.com/storeB"
+
+
+def mprod(pid, review=900, mall="A몰"):
+    """검색 결과 모양 — 슬러그 없는 main/products/<id>."""
+    p = prod(pid, review, url=f"{MAIN}{pid}")
+    p["마켓명"] = mall
+    return p
+
+
+def sitem(pid, review=800, price=15000, **kw):
+    d = {"id": pid, "productNo": pid + 1000, "name": f"s{pid}", "price": price, "salePrice": price,
+         "review": review, "category": "가>나>다>라", "display": "ON", "origin": ""}
+    d.update(kw)
+    return d
+
+
+class World:
+    """search / options / store 를 이름으로 나눠 흉내 내는 fake run. 호출 기록을 남긴다."""
+
+    def __init__(self, products, href=None, stores=None, origin=None, combos=None, opt_state=None,
+                 store_state=None):
+        self.products = products
+        self.href = href or {}              # 상품번호 → 스토어 base
+        self.stores = stores or {}          # base → items
+        self.origin = origin or {}          # 상품번호 → 원산지 원문
+        self.combos = combos or {}          # 상품번호 → combos
+        self.opt_state = opt_state or {}    # 상품번호 → 상태
+        self.store_state = store_state or {}  # base → 상태
+        self.calls = {"search": [], "options": [], "store": []}
+
+    @staticmethod
+    def pid(url):
+        return int(url.rstrip("/").rsplit("/", 1)[1])
+
+    def __call__(self, name, items, opts, t):
+        self.calls[name].append(list(items))
+        if name == "search":
+            return [{"kind": "page", "key": "kw", "상태": "성공", "products": self.products}]
+        out = []
+        if name == "options":
+            for i in items:
+                n = self.pid(i["url"])
+                d = opt_probe(i["url"], 상태=self.opt_state.get(n, "성공"), combos=self.combos.get(n, [["x"]]))
+                base = self.href.get(n)
+                d["href"] = f"{base}/products/{n}" if base else i["url"]
+                d["origin"] = self.origin.get(n, "중국")
+                out.append(d)
+                if d["상태"] in C.STOP:
+                    break
+            return out
+        assert name == "store"
+        for i in items:
+            base = i["base"] or self.href.get(self.pid(i["url"]), "")
+            st = self.store_state.get(base, "성공")
+            out.append({"kind": "store", "key": i["url"], "base": base, "상태": st,
+                        "items": self.stores.get(base, []) if st == "성공" else []})
+            if st in C.STOP:
+                break
+        return out
+
+
+def _bench(sh, w, tmp_path, **kw):
+    return C.do_bench(sh, "kw", tmp_path / "b.json", w, "2026-10-08", OPTS, **kw)
+
+
+def test_bench_expand_order_and_status(tmp_path):
+    w = World([mprod(1, mall="A몰"), mprod(2, mall="B몰")], href={1: SA, 2: SBB},
+              stores={SA: [sitem(1, review=5000), sitem(11, review=3000), sitem(12, review=700)],
+                      SBB: [sitem(21, review=900)]})
+    sh = FakeSheet()
+    assert _bench(sh, w, tmp_path, expand=True) == 5
+    urls = [r[6] for r in sh.tabs[S.BENCH_TAB]]
+    assert urls == [f"{MAIN}1", f"{SA}/products/11", f"{SA}/products/12", f"{MAIN}2", f"{SBB}/products/21"]
+    ext = sh.tabs[S.BENCH_TAB][1]
+    assert ext[4] == "kw" and ext[5] == "A몰" and ext[S.COL_STATUS] == "스토어확장"
+    assert sh.tabs[S.BENCH_TAB][0][S.COL_STATUS] == ""
+
+
+def test_bench_expand_same_store_once(tmp_path):
+    w = World([mprod(1), mprod(2)], href={1: SA, 2: SA}, stores={SA: [sitem(11)]})
+    sh = FakeSheet()
+    _bench(sh, w, tmp_path, expand=True)
+    assert sum(len(c) for c in w.calls["store"]) == 1
+    assert [r[6] for r in sh.tabs[S.BENCH_TAB]] == [f"{MAIN}1", f"{SA}/products/11", f"{MAIN}2"]
+
+
+def test_bench_expand_dedupe_by_product_id(tmp_path):
+    existing = [["a", "b", "c", "d", "kw", "A몰", f"{MAIN}11"]]
+    w = World([mprod(1)], href={1: SA}, stores={SA: [sitem(1), sitem(11), sitem(12)]})
+    sh = FakeSheet(bench_rows=existing)
+    _bench(sh, w, tmp_path, expand=True)
+    assert [r[6] for r in sh.tabs[S.BENCH_TAB][1:]] == [f"{MAIN}1", f"{SA}/products/12"]
+
+
+def test_bench_expand_over_limit_and_manual(tmp_path):
+    many = [[f"o{i}"] for i in range(16)]
+    w = World([mprod(1)], href={1: SA}, stores={SA: [sitem(11), sitem(12)]},
+              combos={11: many}, opt_state={12: "읽기실패"})
+    sh = FakeSheet()
+    _bench(sh, w, tmp_path, expand=True)
+    rows = sh.tabs[S.BENCH_TAB]
+    assert [r[6] for r in rows] == [f"{MAIN}1", f"{SA}/products/12"]
+    assert rows[1][S.COL_STATUS] == "스토어확장·옵션수동"
+
+
+def test_bench_expand_unsupported_keeps_original(tmp_path):
+    w = World([mprod(1)], href={1: SA}, store_state={SA: "미지원"})
+    sh = FakeSheet()
+    assert _bench(sh, w, tmp_path, expand=True) == 1
+
+
+def test_bench_expand_driver_error_keeps_original(tmp_path):
+    w = World([mprod(1)], href={1: SA})
+
+    def run(name, items, opts, t):
+        if name == "store":
+            raise RuntimeError("aside 없음")
+        return w(name, items, opts, t)
+
+    sh = FakeSheet()
+    assert C.do_bench(sh, "kw", tmp_path / "b.json", run, "d", OPTS, expand=True) == 1
+
+
+def test_bench_expand_captcha_exit4_then_resume(tmp_path):
+    w = World([mprod(1), mprod(2)], href={1: SA, 2: SBB}, stores={SA: [sitem(11)], SBB: [sitem(21)]},
+              store_state={SBB: "캡챠감지"})
+    sh = FakeSheet()
+    ck = tmp_path / "b.json"
+    with pytest.raises(SystemExit) as e:
+        C.do_bench(sh, "kw", ck, w, "d", OPTS, expand=True)
+    assert e.value.code == 4 and sh.tabs[S.BENCH_TAB] == []
+    assert list(json.loads(ck.read_text(encoding="utf-8"))["stores"]) == [f"{MAIN}1"]
+    w.store_state = {}
+    w.calls["store"].clear()
+    assert C.do_bench(sh, "kw", ck, w, "d", OPTS, expand=True) == 4
+    assert [[i["url"] for i in c] for c in w.calls["store"]] == [[f"{MAIN}2"]]
+
+
+def test_bench_expand_off_by_default(tmp_path):
+    w = World([mprod(1)], href={1: SA}, stores={SA: [sitem(11)]})
+    sh = FakeSheet()
+    assert _bench(sh, w, tmp_path) == 1
+    assert w.calls["store"] == []
+
+
+def test_bench_origin_filter(tmp_path):
+    w = World([mprod(1), mprod(2), mprod(3), mprod(4)], href={1: SA, 2: SA, 3: SBB, 4: SBB},
+              origin={1: "대한민국", 2: "중국", 3: "", 4: ""}, opt_state={4: "읽기실패"},
+              stores={SA: [sitem(11), sitem(12), sitem(13)]}, )
+    w.origin.update({11: "베트남", 12: "", 13: "중국산"})
+    sh = FakeSheet()
+    _bench(sh, w, tmp_path, check_origin=True, expand=True)
+    got = [(r[6], r[S.COL_STATUS]) for r in sh.tabs[S.BENCH_TAB]]
+    assert got == [(f"{MAIN}2", ""),
+                   (f"{SA}/products/12", "스토어확장·원산지미확인"), (f"{SA}/products/13", "스토어확장"),
+                   (f"{MAIN}3", "원산지미확인"), (f"{MAIN}4", "옵션수동·원산지미확인")]
+    # 원산지 제외된 1번의 스토어(A)는 2번 덕분에 확장됐지만, 1번 기준으로 따로 요청되지는 않는다
+    assert [i["url"] for c in w.calls["store"] for i in c] == [f"{MAIN}2", f"{MAIN}3"]
+
+
+def test_bench_store_list_origin_prefilter(tmp_path):
+    w = World([mprod(1)], href={1: SA}, stores={SA: [sitem(11, origin="국산"), sitem(12, origin="중국")]})
+    sh = FakeSheet()
+    _bench(sh, w, tmp_path, check_origin=True, expand=True)
+    opened = [i["url"] for c in w.calls["options"] for i in c]
+    assert f"{SA}/products/11" not in opened and f"{SA}/products/12" in opened
+
+
+def test_bench_no_options_origin_unknown(tmp_path):
+    w = World([mprod(1)])
+    sh = FakeSheet()
+    _bench(sh, w, tmp_path, check_origin=True, with_options=False)
+    assert sh.tabs[S.BENCH_TAB][0][S.COL_STATUS] == "옵션수동·원산지미확인"
+
+
+def test_bench_from_scan_shares_expanded(tmp_path):
+    rows = [["d", "A", "B", "C1", "", "10", 3, "x", "k1", "", "", "", ""],
+            ["d", "A", "B", "C2", "", "11", 3, "x", "k2", "", "", "", ""]]
+    sh = FakeSheet(scan_rows=rows)
+    state = {"kw": None}
+    w = World([], href={1: SA, 2: SA}, stores={SA: [sitem(11)]})
+
+    def run(name, items, opts, t):
+        if name == "search":
+            kw = items[0]["키워드"]
+            return [{"kind": "page", "key": kw, "상태": "성공", "products": [mprod(1 if kw == "k1" else 2)]}]
+        return w(name, items, opts, t)
+
+    assert C.bench_from_scan(sh, tmp_path, run, "d", OPTS, expand=True) == 3
+    assert sum(len(c) for c in w.calls["store"]) == 1
+
+
+def _row(pid, kw="kw", mall="A몰", status="", url=None):
+    r = _cand(pid, kw=kw, opt_cnt=1, url=url or f"{MAIN}{pid}")
+    r[5] = mall
+    r[S.COL_STATUS] = status
+    return r
+
+
+def test_expand_backfill(tmp_path):
+    rows = [_row(1, mall="A몰"), _row(2, mall="A몰"), _row(3, mall="B몰"), _row(4, mall="C몰", kw="other"),
+            _row(5, url=CAT_URL, mall="D몰"), _row(6, mall="E몰"), _row(7, mall="E몰", status="스토어확장"),
+            _row(8, mall="F몰", url="https://www.coupang.com/vp/products/8")]
+    sh = FakeSheet(bench_rows=rows)
+    w = World([], href={1: SA, 3: SBB}, stores={SA: [sitem(2), sitem(11)], SBB: [sitem(31)]})
+    r = C.do_expand(sh, "kw", tmp_path / "e.json", w, "d", OPTS)
+    assert [i["url"] for c in w.calls["store"] for i in c] == [f"{MAIN}1", f"{MAIN}3"]
+    assert [x[6] for x in sh.tabs[S.BENCH_TAB][8:]] == [f"{SA}/products/11", f"{SBB}/products/31"]
+    assert all(x[S.COL_STATUS] == "스토어확장" for x in sh.tabs[S.BENCH_TAB][8:])
+    assert r["추가"] == 2 and r["스토어"] == 2
+
+
+def test_expand_all_and_dry_run(tmp_path):
+    rows = [_row(1, mall="A몰"), _row(4, mall="C몰", kw="other")]
+    sh = FakeSheet(bench_rows=rows)
+    w = World([], href={1: SA, 4: SBB}, stores={SA: [sitem(11)], SBB: [sitem(41)]})
+    appended = []
+    sh.append = lambda tab, rs: appended.append(rs) or len(rs)
+    r = C.do_expand(sh, None, tmp_path / "e.json", w, "d", OPTS, dry_run=True)
+    assert appended == [] and r["추가"] == 2
+
+
+def test_expand_origin_excluded(tmp_path):
+    sh = FakeSheet(bench_rows=[_row(1)])
+    w = World([], href={1: SA}, stores={SA: [sitem(11), sitem(12)]}, origin={11: "국산"})
+    r = C.do_expand(sh, "kw", tmp_path / "e.json", w, "d", OPTS)
+    assert r["추가"] == 1 and sh.tabs[S.BENCH_TAB][-1][6] == f"{SA}/products/12"
+
+
+def test_expand_captcha_exit4(tmp_path):
+    sh = FakeSheet(bench_rows=[_row(1)])
+    w = World([], href={1: SA}, store_state={SA: "캡챠감지"})
+    with pytest.raises(SystemExit) as e:
+        C.do_expand(sh, "kw", tmp_path / "e.json", w, "d", OPTS)
+    assert e.value.code == 4 and len(sh.tabs[S.BENCH_TAB]) == 1
+
+
+def test_origin_check_dry_run_no_sheet_calls(tmp_path, capsys):
+    rows = [_row(1), _row(2), _row(3), _row(4, url=CAT_URL), _row(5, kw="other")]
+    sh = FakeSheet(bench_rows=rows)
+    w = World([], origin={1: "중국", 2: "대한민국", 3: ""})
+    r = C.do_origin_check(sh, "kw", tmp_path / "o.json", w, OPTS, dry_run=True)
+    assert r["중국"] == 1
+    assert [x["행"] for x in r["제외"]] == [3] and r["제외"][0]["원산지"] == "대한민국"
+    assert [x["행"] for x in r["미확인"]] == [4]
+    assert sh.updates == [] and sh.deleted == []
+    out = capsys.readouterr().out
+    assert "중국 1 · 제외 1 · 미확인 1" in out and "3 | A몰 | p2 | 대한민국" in out
+
+
+def test_origin_check_apply(tmp_path):
+    rows = [_row(1), _row(2), _row(3, status="옵션수동"), _row(6, kw="other")]
+    sh = FakeSheet(bench_rows=rows)
+    w = World([], origin={1: "중국", 2: "베트남", 3: "", 6: "국산"})
+    r = C.do_origin_check(sh, None, tmp_path / "o.json", w, OPTS, dry_run=False)
+    assert len(r["제외"]) == 2
+    urls = [x[6] for x in sh.tabs[S.BENCH_TAB]]
+    assert urls == [f"{MAIN}1", f"{MAIN}3"]
+    assert sh.tabs[S.BENCH_TAB][0][S.COL_STATUS] == ""
+    assert sh.tabs[S.BENCH_TAB][1][S.COL_STATUS] == "옵션수동·원산지미확인"
+
+
+def test_cli_expand_origin_parse():
+    p = C.build_parser()
+    assert p.parse_args(["bench", "--keyword", "x"]).no_expand is False
+    assert p.parse_args(["bench", "--keyword", "x", "--no-expand"]).no_expand is True
+    a = p.parse_args(["expand", "--keyword", "바지걸이"])
+    assert a.cmd == "expand" and a.keyword == "바지걸이" and not a.all and not a.dry_run
+    a = p.parse_args(["expand", "--all", "--dry-run", "--no-options"])
+    assert a.all and a.dry_run and a.no_options
+    a = p.parse_args(["origin", "--all", "--dry-run"])
+    assert a.cmd == "origin" and a.all and a.dry_run
+    with pytest.raises(SystemExit):
+        p.parse_args(["expand"])
+    with pytest.raises(SystemExit):
+        p.parse_args(["origin", "--keyword", "x", "--all"])
