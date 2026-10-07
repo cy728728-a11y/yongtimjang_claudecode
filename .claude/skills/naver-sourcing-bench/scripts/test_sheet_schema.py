@@ -11,7 +11,7 @@ def test_headers():
     assert S.BENCH_HEADER[:5] == ["대카테고리", "중카테고리", "소카테고리", "세부카테고리", "키워드"]
     assert S.BENCH_HEADER[8:10] == ["옵션 개수", "180일 판매수량"]
     assert "각 옵션 가격" not in S.BENCH_HEADER and "1688 이미지검색 링크" not in S.BENCH_HEADER
-    assert S.BENCH_HEADER[17:20] == ["월 예상마진", "쿠팡포함 월 예상마진(×2)", "월 투자금(국내원가×30일 판매량)"]
+    assert S.BENCH_HEADER[17:20] == ["월 예상마진", "쿠팡포함 월 예상마진(×2)", "쿠팡포함 월 투자금"]
     assert S.BENCH_HEADER[20:] == ["대표판매가", "수집일", "리뷰수", "상태"]
     assert (S.COL_REP, S.COL_STATUS) == (20, 23)
     assert S.SCAN_HEADER[S.SCAN_COL["키워드"]] == "키워드"
@@ -33,7 +33,7 @@ def test_bench_row_with_options():
     assert r[16] == '=IF(INDEX(P:P,ROW())="","",INDEX(U:U,ROW())-INDEX(P:P,ROW()))'
     assert r[17] == '=IF(OR(INDEX(K:K,ROW())="",INDEX(Q:Q,ROW())=""),"",INDEX(K:K,ROW())*30*INDEX(Q:Q,ROW()))'
     assert r[18] == '=IF(INDEX(R:R,ROW())="","",INDEX(R:R,ROW())*2)'
-    assert r[19] == '=IF(OR(INDEX(K:K,ROW())="",INDEX(P:P,ROW())=""),"",INDEX(P:P,ROW())*INDEX(K:K,ROW())*30)'
+    assert r[19] == '=IF(OR(INDEX(K:K,ROW())="",INDEX(P:P,ROW())=""),"",INDEX(P:P,ROW())*INDEX(K:K,ROW())*30*2)'
     assert r[20:] == [12900, "2026-10-02", 812, ""]
 
 
