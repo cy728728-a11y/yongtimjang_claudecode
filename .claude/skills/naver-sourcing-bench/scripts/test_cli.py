@@ -253,9 +253,9 @@ def test_bench_captcha_exit4_then_resume(tmp_path):
 
 
 def _cand(n, kw="바지걸이", opt_cnt="", url=None, price=15000):
-    """후보 탭 행(24열)."""
+    """후보 탭 행(25열)."""
     r = ["a", "b", "c", "d", kw, "s", url or f"https://smartstore.naver.com/s/products/{n}", f"p{n}",
-         opt_cnt, "", "", "", "", "", "", "", "", "", "", "", price, "2026-10-01", 900, "" if opt_cnt else "옵션수동"]
+         opt_cnt, "", "", "", "", "", "", "", "", "", "", "", "", price, "2026-10-01", 900, "" if opt_cnt else "옵션수동"]
     return r
 
 
