@@ -68,6 +68,7 @@ def test_bench_filter_rules_and_dedup():
         P(5, "가격없음", 900, None),
         P(6, "중복", 700, "12000", url="https://smartstore.naver.com/s/products/2?NaPm=1"),
         P(7, "경계", 500, "10000"),
+        P(8, "카탈로그", 5000, "20000", url="https://search.shopping.naver.com/catalog/123"),
     ]
     got = [p["상품명"] for p in rules.bench_filter(ps)]
     assert got == ["통과", "경계"]

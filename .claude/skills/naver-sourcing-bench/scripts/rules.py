@@ -67,11 +67,14 @@ def scan_summary(products, min_review=1000):
 
 
 def bench_filter(products, top_n=40, min_review=500, min_price=10000):
-    """광고 제외 → 순위 상위 top_n → 리뷰·가격 필터 → URL 중복 제거."""
+    """광고 제외 → 순위 상위 top_n → 가격비교(카탈로그) 제외 → 리뷰·가격 필터 → URL 중복 제거.
+    가격비교 묶음은 여러 몰 합산이라 한 판매자 실적이 아니다 — 2026-10-07 용팀장 지시로 패스."""
     organic = sorted((p for p in products if not p.get("광고")),
                      key=lambda p: p.get("순위") or 0)[:top_n]
     seen, out = set(), []
     for p in organic:
+        if is_catalog(p.get("url")) or str(p.get("마켓명", "")).startswith("가격비교"):
+            continue
         price = to_int(p.get("가격"))
         if price is None or price < min_price or _review(p) < min_review:
             continue

@@ -224,10 +224,9 @@ def test_bench_catalog_not_opened(tmp_path):
     run = _bench_run([prod(1, 900, url=CAT_URL), prod(2, 900)],
                      lambda u: opt_probe(u, combos=[["화이트", "10개 (+1,000원)"]]), calls)
     sh = FakeSheet()
-    assert C.do_bench(sh, "kw", tmp_path / "b.json", run, "2026-10-02", OPTS) == 2
+    assert C.do_bench(sh, "kw", tmp_path / "b.json", run, "2026-10-02", OPTS) == 1   # 가격비교는 후보에서 패스
     assert all(CAT_URL not in c for c in calls)
-    cat_row, ok_row = sh.tabs[S.BENCH_TAB]
-    assert cat_row[8] == "" and cat_row[S.COL_STATUS] == "옵션수동"
+    (ok_row,) = sh.tabs[S.BENCH_TAB]
     assert ok_row[8] == 1 and ok_row[S.COL_REP] == 13900
 
 
