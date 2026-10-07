@@ -74,45 +74,29 @@ const H = `(op, k, j) => {
   return null;
 }`;
 
-// 원산지 원문 (D-ORIGIN, 2026-10-08). 옵션 판정과 독립 — 실패하면 "".
-//  ① __PRELOADED_STATE__ JSON 에서 "originArea…" 키를 찾아 그 값(문자열 또는 객체의 content·name 류)
-//  ② 없으면 상품정보제공고시 표에서 th/td 텍스트가 원산지·제조국인 칸의 옆 칸
+// 원산지 원문 (D-ORIGIN). 옵션 판정과 독립 — 실패하면 "".
+// 2026-10-08 실측(smartstore·brand 3건): __PRELOADED_STATE__.product.originAreaInfo 는 null 이고,
+//  상품 상단 '상품정보' 칸에 <li><div>원산지</div><div>중국산(태성산업(협력업체))</div></li> 로 렌더된다(클래스명은 해시라 안 쓴다).
+//  ① 라벨 리프가 원산지·제조국인 요소의 옆 칸  ② 본문 텍스트 '\n원산지\n값'  ③ PRELOADED product.originAreaInfo(있으면)
 const ORIGIN = () => {
   const clean = (t) => String(t == null ? "" : t).replace(/\s+/g, " ").trim();
-  const pick = (v) => {
-    if (v == null) return "";
-    if (typeof v === "string" || typeof v === "number") return clean(v);
-    if (typeof v === "object") {
-      for (const k of ["content", "originAreaContent", "name", "originAreaName", "value", "text"]) {
-        if (typeof v[k] === "string" && clean(v[k])) return clean(v[k]);
-      }
-    }
-    return "";
-  };
+  const LABEL = /^(원산지|제조국|원산지\s*[\/(]\s*제조국\)?|제조국\s*[\/(]\s*원산지\)?)$/;
   try {
-    const pre = window.__PRELOADED_STATE__;
-    if (pre) {
-      // 경로 의존을 줄이려고 전체를 훑어 originArea* 키를 찾는다(첫 비어있지 않은 값)
-      const stack = [pre]; let n = 0;
-      while (stack.length && n < 200000) {
-        const o = stack.pop(); n++;
-        if (!o || typeof o !== "object") continue;
-        for (const k of Object.keys(o)) {
-          const v = o[k];
-          if (/^originArea/i.test(k)) { const s = pick(v); if (s && !/^\d+$/.test(s)) return s; }
-          if (v && typeof v === "object") stack.push(v);
-        }
-      }
+    for (const c of document.querySelectorAll("div, th, dt, span, td")) {
+      if (c.children.length || !LABEL.test(clean(c.textContent))) continue;
+      const nx = c.nextElementSibling;
+      const s = nx ? clean(nx.innerText || nx.textContent) : "";
+      if (s) return s.slice(0, 100);
     }
   } catch (e) { /* 다음 방법으로 */ }
   try {
-    for (const c of document.querySelectorAll("th, td, dt")) {
-      if (/원산지|제조국/.test(clean(c.innerText || c.textContent)) && clean(c.innerText).length < 20) {
-        const nx = c.nextElementSibling;
-        const s = nx ? clean(nx.innerText || nx.textContent) : "";
-        if (s) return s.slice(0, 100);
-      }
-    }
+    const m = (document.body.innerText || "").match(/(?:^|\n)\s*(?:원산지|제조국)[^\n]{0,8}\n\s*([^\n]{1,100})/);
+    if (m && clean(m[1])) return clean(m[1]);
+  } catch (e) { /* 다음 방법으로 */ }
+  try {
+    const oa = ((window.__PRELOADED_STATE__ || {}).product || {}).originAreaInfo;
+    const s = typeof oa === "string" ? oa : (oa && (oa.content || oa.originAreaName || oa.name)) || "";
+    if (clean(s)) return clean(s);
   } catch (e) { /* 못 읽음 */ }
   return "";
 };
@@ -183,7 +167,12 @@ for (let i = 0; i < ITEMS.length; i++) {
       info = await q("info");
       r.axes = info.axes;
       r.priceText = info.priceText;
-      try { r.origin = await page.evaluate(ORIGIN); } catch (e) { r.origin = ""; }
+      // 상품정보 칸이 늦게 그려질 수 있어 비면 잠깐 더 기다린다(최대 ~2초)
+      for (let w = 0; w < 3; w++) {
+        try { r.origin = await page.evaluate(ORIGIN); } catch (e) { r.origin = ""; }
+        if (r.origin) break;
+        await sleep(700);
+      }
       if (info.gone) {
         r.상태 = "읽기실패"; r.error = "판매 종료/삭제 상품";
       } else if (!info.found) {

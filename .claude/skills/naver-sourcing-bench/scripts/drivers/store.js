@@ -5,7 +5,12 @@
 //  - <base>/category/ALL?st=REVIEW&dt=BIG_IMAGE&page=1&size=80 → 리뷰 많은순 전체상품
 //  - window.__PRELOADED_STATE__.categoryProducts.simpleProducts[] 에 상품 목록
 //  - base 를 모르면(검색 결과 main/products/<id>) 상품을 열어 리다이렉트된 주소에서 슬러그를 얻는다
-// 리뷰 내림차순이라 500 미만이 처음 나오는 곳에서 자른다. 판정·가격 계산은 Python(rules.store_*) 몫.
+//  - id = 채널상품번호 = 검색 결과 main/products/<id> 의 번호 (productNo 는 원상품번호라 다르다)
+//  - 가격 = benefitsView.discountedSalePrice (검색 결과 가격·화면 판매가와 일치, salePrice 는 정가)
+//  - 목록 원소에 원산지 필드가 없다 → origin 은 "" (원산지는 상세에서 options 드라이버가 읽는다)
+//  - smartstore 는 리뷰 많은순으로 오지만 brand.naver.com 은 같은 경로·같은 구조인데 순서가 리뷰순이 아니다
+//    → 첫 500 미만에서 자르지 않고, 리뷰 내림차순 정렬 후 500 이상만 남긴다(두 호스트 공통).
+// 판정·가격 계산은 Python(rules.store_*) 몫.
 
 const MIN_REVIEW = OPTS.minReview || 500;
 const WALL_MS = OPTS.wallMs || 105000;     // repl 120초 벽 아래. 넘기 전에 남은 스토어는 다음 호출로 미룬다
@@ -29,8 +34,9 @@ const LIST = () => {
   const sp = (pre.categoryProducts || {}).simpleProducts;
   if (!Array.isArray(sp)) return null;
   return sp.map((p) => {
-    const oa = p.originAreaInfo || p.originArea || null;
-    const origin = typeof oa === "string" ? oa : (oa && (oa.content || oa.originAreaName || oa.name)) || "";
+    // 2026-10-08 실측: simpleProducts 원소에 원산지 필드 없음. 혹시 생기면 쓰도록 originAreaInfo 만 본다.
+    const oa = p.originAreaInfo || null;
+    const origin = typeof oa === "string" ? oa : (oa && (oa.content || oa.originAreaName)) || "";
     return {
       id: p.id ?? null,
       productNo: p.productNo ?? null,
@@ -78,8 +84,7 @@ for (let i = 0; i < ITEMS.length; i++) {
           r.상태 = "미지원"; r.error = `목록 데이터 없음: ${meta.t} ${meta.h}`;
         } else {
           r.total = list.length;
-          const cut = list.findIndex((x) => (x.review || 0) < MIN_REVIEW);
-          r.items = cut < 0 ? list : list.slice(0, cut);
+          r.items = list.filter((x) => (x.review || 0) >= MIN_REVIEW).sort((a, b) => (b.review || 0) - (a.review || 0));
           r.상태 = "성공";
         }
       }

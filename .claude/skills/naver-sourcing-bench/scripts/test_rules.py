@@ -256,3 +256,11 @@ def test_origin_verdict():
         assert rules.origin_verdict(t) == "제외", t
     for t in ("", None, "   ", "상세설명에 표시", "상품상세 참조", "기타", "상세설명참조"):
         assert rules.origin_verdict(t) == "미확인", t
+
+
+def test_origin_verdict_live_samples():
+    # 2026-10-08 Aside 실측 원문 (evidence/probe-2026-10.md)
+    assert rules.origin_verdict("중국산(태성산업(협력업체))") == "중국"
+    assert rules.origin_verdict("중국산(네이쳐리빙)") == "중국"
+    assert rules.origin_verdict("국산(경기도 광주시)") == "제외"
+    assert rules.origin_verdict("상세설명에 표시") == "미확인"

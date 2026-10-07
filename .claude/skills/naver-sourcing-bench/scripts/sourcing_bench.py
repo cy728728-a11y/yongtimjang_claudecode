@@ -30,7 +30,7 @@ CONFIG = RUNS / "config.json"
 MASTER = HERE.parents[3] / "30-knowledge" / "39-naver-category" / "naver-category-master.json"
 SEC_LIST = 6.0                      # 목록 페이지당 대략 소요(초) — 청크 계산용
 SEC_OPTIONS = 20.0                  # 상세 옵션 읽기 상품당(초). 다단 클릭을 감안 (2026-10-02 실측 10~15초)
-SEC_STORE = 15.0                    # 스토어 목록 1페이지(상품 열기 포함) 대략 소요(초) — 청크 계산용
+SEC_STORE = 10.0                    # 스토어 목록 1페이지(상품 열기 포함) 소요(초) — 2026-10-08 실측 3~6초, 2배 여유
 MAX_COMBOS = rules.MAX_COMBOS       # 15 초과 = 소싱 대상 아님
 STOP = ("캡챠감지", "차단감지")
 LOGIN_MSG = ("네이버 로그인이 안 돼 있다. Aside 브라우저 창에서 네이버에 직접 로그인한 뒤 다시 실행해 줘.\n"
