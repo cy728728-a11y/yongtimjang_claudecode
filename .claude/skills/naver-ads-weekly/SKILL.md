@@ -65,8 +65,14 @@ $P $S bids --revert --commit    # 실제로 되돌린다
 
 ## 자격증명
 
-`~/.eroom/naver-ads.json` (권한 600, git 밖). 현재 4계정:
-`cy728`(4158478) · `cy7728`(3415467) · `ownway1`(3406540) · `pogeunae`(3307029).
+`~/.eroom/naver-ads.json` (권한 600, git 밖). 현재 8계정:
+`cy728`(4158478) · `cy7728`(3415467) · `ownway1`(3406540) · `pogeunae`(3307029) ·
+`dldmswl1986`(3399878) · `milky-way1992`(4377264) · `level_up_ad`(4141540) ·
+`minimoving`(4514484, 스토어 '소형이동식오피스' 전용 — 2026-10-12 추가).
+
+> 쇼핑 소재 등록은 API 로 못 한다 — `referenceKey` 에 네이버쇼핑 상품번호(nvMid)가 필요한데
+> 스마트스토어 상품번호→nvMid 변환 경로가 광고 API·커머스API 어디에도 없다(2026-10-12 실측).
+> 사람이 광고 UI 에서 넣고(1000개 한 번에는 에러, 500개씩), 넣은 뒤 중복·누락 검사만 API 로 한다.
 
 ```json
 {"accounts":[{"alias":"cy728","customer_id":"...","api_key":"...","secret_key":"..."}]}
