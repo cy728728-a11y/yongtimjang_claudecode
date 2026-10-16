@@ -13,6 +13,7 @@ import os
 import sys
 import tempfile
 import time
+from datetime import datetime, timedelta
 
 import sold_lock_rules as R
 
@@ -149,23 +150,36 @@ class CommerceClient:
         raise RuntimeError(f"재시도 초과: {last}")
 
     def fetch_paid_orders(self, token, market, date_str):
-        """그날(KST) 결제완료(PAYED)로 바뀐 상품주문 → 주문 행 dict 리스트 (sold_lock_rules 형식)."""
-        frm, to = R.day_range_kst(date_str)
-        ids, params = [], {"lastChangedFrom": frm, "lastChangedTo": to, "lastChangedType": "PAYED"}
-        for _ in range(1000):  # 페이지 상한(무한루프 방지)
-            d = self._request("GET", f"{BASE}/v1/pay-order/seller/product-orders/last-changed-statuses",
-                              token, params=params)
-            data = (d or {}).get("data") or {}
-            for s in data.get("lastChangeStatuses") or []:
-                poid = s.get("productOrderId")
-                if poid and poid not in ids:
-                    ids.append(poid)
-            more = data.get("more")
-            if not more or not more.get("moreFrom"):
-                break
-            params = dict(params, lastChangedFrom=more["moreFrom"])
-            if more.get("moreSequence"):
-                params["moreSequence"] = more["moreSequence"]
+        """그날(KST) 결제된 상품주문 → 주문 행 dict 리스트 (sold_lock_rules 형식).
+
+        ⚠️ lastChangedType=PAYED 필터는 쓰지 않는다 — '마지막 변경'이 결제인 주문만 오므로,
+        결제 뒤 발주확인·발송으로 넘어간 주문이 전부 빠진다(2026-10-16 실측: 52마켓 0건).
+        그래서 대상일 00:00 ~ 지금까지 변경된 주문을 24시간 창으로 전부 모은 뒤,
+        상세의 결제일(paymentDate)로 대상일 결제분만 고른다.
+        """
+        frm, _ = R.day_range_kst(date_str)
+        start = datetime.fromisoformat(frm)
+        end = datetime.now(start.tzinfo)
+        ids = []
+        while start < end:
+            w_end = min(start + timedelta(hours=24) - timedelta(milliseconds=1), end)
+            params = {"lastChangedFrom": start.isoformat(timespec="milliseconds"),
+                      "lastChangedTo": w_end.isoformat(timespec="milliseconds")}
+            for _ in range(1000):  # 페이지 상한(무한루프 방지)
+                d = self._request("GET", f"{BASE}/v1/pay-order/seller/product-orders/last-changed-statuses",
+                                  token, params=params)
+                data = (d or {}).get("data") or {}
+                for s in data.get("lastChangeStatuses") or []:
+                    poid = s.get("productOrderId")
+                    if poid and poid not in ids:
+                        ids.append(poid)
+                more = data.get("more")
+                if not more or not more.get("moreFrom"):
+                    break
+                params = dict(params, lastChangedFrom=more["moreFrom"])
+                if more.get("moreSequence"):
+                    params["moreSequence"] = more["moreSequence"]
+            start = w_end + timedelta(milliseconds=1)
 
         rows = []
         for i in range(0, len(ids), 300):

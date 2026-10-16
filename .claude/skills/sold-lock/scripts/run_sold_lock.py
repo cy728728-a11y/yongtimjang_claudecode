@@ -120,6 +120,8 @@ class _Bulsaja:
         self.mcp = mcp
         self.sleep = sleep
         self._last = 0.0
+        self.group_id_by_pid = {}
+        self._group_names = None
 
     def call(self, name, arguments):
         gap = time.monotonic() - self._last
@@ -167,7 +169,25 @@ class _Bulsaja:
         except Exception:
             return None
         v = (data.get("uploadedSuccessUrl") or {}).get("smartstore") if isinstance(data, dict) else None
+        # 목록 조회의 '그룹' 필드는 null 로 오는 일이 많아(실측) 업로드 마켓그룹ID를 따로 남긴다
+        if isinstance(data, dict) and data.get("uploadSelectedMarketGroupId"):
+            self.group_id_by_pid[pid] = data.get("uploadSelectedMarketGroupId")
         return R.extract_ss_no(v) or ""
+
+    def group_name_of(self, pid):
+        """업로드 마켓그룹ID → 그룹명(예 '13번_용쌤13-2'). 모르면 None."""
+        gid = self.group_id_by_pid.get(pid)
+        if gid is None:
+            return None
+        if self._group_names is None:
+            self._group_names = {}
+            try:
+                d = self.call("bulsaja_market_groups", {})
+                for g in (d or {}).get("그룹") or []:
+                    self._group_names[str(g.get("groupId"))] = g.get("그룹명")
+            except Exception:
+                pass
+        return self._group_names.get(str(gid))
 
     def hide_ids_key(self):
         """bulsaja_product_hide 의 상품ID 배열 인자명을 list_tools inputSchema 에서 확인."""
@@ -313,6 +333,10 @@ def run(args, commerce=None, mcp_factory=None, board_append=None, board_get=None
                     pid = items[0].get("productId")
                     if pid not in ss_cache:
                         ss_cache[pid] = b.ss_no(pid)
+                    # 마켓 대조는 업로드 마켓그룹(워크데이터) 기준 — 목록의 '그룹'은 null·폴더명일 수 있다
+                    gname = b.group_name_of(pid)
+                    if gname:
+                        items = [dict(items[0], 그룹=gname)]
                 verdict, reason = R.decide(o, items, ss_cache, o["market"])
             if len(items) == 1:
                 entry["bulsaja_id"] = items[0].get("productId")
