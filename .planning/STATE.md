@@ -182,6 +182,7 @@ Recent decisions affecting current work:
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 261016-lct | 판매상품 자동잠금 sold-lock (커머스API 주문 → 불사자 잠금, launchd 00:01) | 2026-10-16 | aa22c47 | [261016-lct-sold-lock](./quick/261016-lct-sold-lock/) |
 | 261008-0qx | 사입 소싱 bench 스토어 확장 + 원산지 중국 필터 | 2026-10-08 | 226c79d | [261008-0qx-bench-store-expansion](./quick/261008-0qx-bench-store-expansion/) |
 | 261002-mbo | 사입 소싱 bench 옵션 자동수집(9·10열) · 50조합 초과 후보 제외 | 2026-10-02 | 08c1cf0 | [261002-mbo-bench-option-auto-fill](./quick/261002-mbo-bench-option-auto-fill/) |
 | 260925-2d8 | 배너 검수 화면 👁·↩ 표식 장만 보기 토글 (04-12 재검수용) | 2026-09-25 | 73eb8a2 | [260925-2d8-banner-review-mark-filter](./quick/260925-2d8-banner-review-mark-filter/) |
