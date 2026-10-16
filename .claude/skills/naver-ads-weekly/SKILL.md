@@ -182,3 +182,7 @@ launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/com.eroom.ads-weekl
 > 남은 수작업: 물갈이 재업로드 뒤 **광고에 소재를 새로 넣는 일**은 아직 사람이 한다
 > (네이버 광고 UI 에서 미투입 상품을 전체 선택). 광고 API 에 "광고 미투입 상품 목록" 을
 > 주는 엔드포인트가 없어 자동화가 막혀 있다 — 2026-08-30 실측으로 확인.
+
+## 예약 실행 (2026-10-17 변경)
+
+> **예약 실행은 `.claude/lib/eroom_scheduler.py`(launchd `com.eroom.scheduler`, 1분 틱) 한 곳에서 한다.** 이 맥북에선 새로 등록한 StartCalendarInterval 이 안 터져서(2026-10-17 실측) 개별 plist 를 없앴다. 시각을 바꾸려면 그 파일의 `JOBS` 표를 고친다. 로그: `~/python_work/data/scheduler/logs/<작업>.log`

@@ -81,3 +81,7 @@ launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/com.eroom.sold-lock
 ## 반영은 기본 자동
 
 사용자 실제 잠금 승인 2026-10-16. [_shared/스킬-계약.md](../_shared/스킬-계약.md) §반영은 기본 자동이다 — 판정 가드를 통과한 것만 묻지 않고 잠근다. 잠금은 삭제만 막고 노출·업로드에는 영향이 없다.
+
+## 예약 실행 (2026-10-17 변경)
+
+> **예약 실행은 `.claude/lib/eroom_scheduler.py`(launchd `com.eroom.scheduler`, 1분 틱) 한 곳에서 한다.** 이 맥북에선 새로 등록한 StartCalendarInterval 이 안 터져서(2026-10-17 실측) 개별 plist 를 없앴다. 시각을 바꾸려면 그 파일의 `JOBS` 표를 고친다. 로그: `~/python_work/data/scheduler/logs/<작업>.log`

@@ -32,3 +32,7 @@ W=$PWD; for n in board-sync board-rollover; do
   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.eroom.$n.plist; done
 ```
 로그: `~/python_work/data/work-board/logs/`
+
+## 예약 실행 (2026-10-17 변경)
+
+> **예약 실행은 `.claude/lib/eroom_scheduler.py`(launchd `com.eroom.scheduler`, 1분 틱) 한 곳에서 한다.** 이 맥북에선 새로 등록한 StartCalendarInterval 이 안 터져서(2026-10-17 실측) 개별 plist 를 없앴다. 시각을 바꾸려면 그 파일의 `JOBS` 표를 고친다. 로그: `~/python_work/data/scheduler/logs/<작업>.log`

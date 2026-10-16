@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 맥북 자동작업 예약관리자. 1분 틱. 작업 표는 .claude/lib/eroom_scheduler.py JOBS. __WORKSPACE__/__HOME__ 은 설치 때 치환. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.eroom.scheduler</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__WORKSPACE__/.venv/bin/python3</string>
+    <string>__WORKSPACE__/.claude/lib/eroom_scheduler.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>__WORKSPACE__</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>__HOME__/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>StartInterval</key><integer>60</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/python_work/data/scheduler/logs/scheduler.out.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/python_work/data/scheduler/logs/scheduler.err.log</string>
+</dict>
+</plist>
