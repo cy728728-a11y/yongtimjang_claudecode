@@ -10,6 +10,7 @@
 """
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -60,13 +61,15 @@ def _atomic_write_private(path, text):
 
 
 def parse_key_rows(rows):
-    """시트 2차원 값 → {마켓번호: {name, client_id, client_secret}} (대상 52마켓만, 키 빈 행 제외)."""
-    allowed = set(R.target_markets())
+    """시트 2차원 값 → {마켓번호: {name, client_id, client_secret}} (NN-N 형식 전 마켓, 키 빈 행 제외).
+
+    대상 마켓 거르기는 load_stores(markets) 가 한다 — 광고 보강은 25-2·25-3 도 쓴다.
+    """
     out = {}
     for row in rows or []:
         cells = list(row) + [""] * (8 - len(row))
         no = str(cells[0] or "").strip()
-        if no not in allowed:
+        if not re.fullmatch(r"\d+-\d+", no):
             continue
         cid, sec = str(cells[6] or "").strip(), str(cells[7] or "").strip()
         if not cid or not sec:

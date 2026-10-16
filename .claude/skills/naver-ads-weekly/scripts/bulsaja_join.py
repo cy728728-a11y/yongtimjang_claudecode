@@ -376,7 +376,7 @@ class BulsajaLookup:
             return tok
         if self._stores is None:
             try:
-                self._stores, _src = self.commerce.load_stores(SL.target_markets())
+                self._stores, _src = self.commerce.load_stores(SL.target_markets() + ["25-2", "25-3"])  # 광고는 25-2·25-3 도 돈다(물갈이·잠금 대상만 아님)
             except Exception as e:
                 self.log(f"  [경고] 커머스 키 로드 실패: {type(e).__name__}")
                 self._stores = {}
