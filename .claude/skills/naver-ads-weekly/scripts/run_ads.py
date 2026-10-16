@@ -3,7 +3,8 @@
 """naver-ads-weekly 진입점.
 
     prep   전 계정 수집 → run-dir
-    run    수집분으로 6개 규칙 판정 → result.json
+    run    수집분으로 규칙 판정(①③⑤⑥ + ⑦b/⑦c 전 계정 1풀 + ⑦d) → result.json
+    enrich ⑦c 후보·⑦d 후보에만 커머스API·불사자 조회로 판매자상품코드·상세/옵션 상태 보강 (읽기 전용)
     apply  시트 기록 + 보고서
     bids   ① 입찰 인상. --revert 로 before_bids 백업에서 되돌린다
     prune  ⑥ 꺼진 소재 삭제
@@ -97,6 +98,9 @@ def cmd_run(args):
         print("수집 결과가 없다 — 먼저 prep 을 돌려라")
         return 1
     out = {"generated": date.today().isoformat(), "accounts": {}}
+    # ⑦b/⑦c 는 전 계정 합산 1풀이다 — 계정 루프에서 풀만 모아 두고 루프 뒤에 한 번 자른다.
+    # --account 로 일부만 돌리면 그 계정들만의 풀이 된다(전 계정 기준이 아니게 된다 — 주간 배치는 전 계정으로 돌린다)
+    pools = {}
     for d in sorted(acc_dir.iterdir()):
         if not d.is_dir():
             continue
@@ -109,11 +113,22 @@ def cmd_run(args):
             print(f"[{d.name}] 읽기 실패: {type(e).__name__}: {e}")
             continue
         rules = ads_rules.classify(adsdata["ads"], adsdata["groups"], s7, s30, pur)
+        pools[d.name] = ads_rules.pool_rows(adsdata["ads"], adsdata["groups"], s7)
         # 요약을 규칙과 형제로 분리한다 — 규칙 dict 안에 규칙 아닌 키가 섞여 있으면
         # 순회하는 쪽마다 밑줄 가드를 기억해야 하고, 한 번만 잊어도 조용히 틀린다
         summary = rules.pop("_summary", {})
         out["accounts"][d.name] = {"summary": summary, "rules": rules}
         print(f"[{d.name}] " + " · ".join(f"{k} {len(v)}" for k, v in rules.items()))
+    split = ads_rules.split_global(pools)
+    for alias, extra in split.items():
+        if alias in out["accounts"]:
+            out["accounts"][alias]["rules"].update(extra)
+    pool_size = sum(len(v) for v in pools.values())
+    out["pool7"] = {"size": pool_size, "imp_min": ads_rules.POP_IMP_MIN, "pct": ads_rules.CTR_TAIL_PCT}
+    n7b = sum(len(v["⑦b썸네일변형"]) for v in split.values())
+    n7c = sum(len(v["⑦c상세꾸미기후보"]) for v in split.values())
+    print(f"[⑦ 전 계정 1풀] 모집단 {pool_size}건(7일 노출 {ads_rules.POP_IMP_MIN}+) · "
+          f"⑦b {n7b} · ⑦c후보 {n7c}")
     (run_dir / "result.json").write_text(
         json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"\n판정 완료 → {run_dir / 'result.json'}")

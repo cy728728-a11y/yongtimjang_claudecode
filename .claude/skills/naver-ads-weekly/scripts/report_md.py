@@ -3,15 +3,24 @@
 """주간 총괄 보고서(마크다운).
 
 보고서에는 구매완료 기준 숫자만 싣는다(2026-08-28 용팀장).
-총전환·장바구니는 착시라 나란히 놓으면 헷갈리기만 한다.
+결제 완료 이전 단계의 전환 수치는 착시라 나란히 놓으면 헷갈리기만 한다.
 
-Important 5: ①②③④ 표는 모두 top_n 으로 잘린다 — 실측 ①만 1,195행이라 자르지 않으면
+2026-10-16 ⑦ 체계: 계정별 ②·④ 섹션은 뺐다(⑦b/⑦c 가 전 계정 1풀로 대체). ⑦ 은 계정별 섹션 뒤
+합산 섹션 하나로 싣는다.
+
+Important 5: ①③·⑦b 표는 top_n 으로 잘린다 — 실측 ①만 1,195행이라 자르지 않으면
 보고서가 298KB 로 불어나 아무도 안 읽는다. 실제 실행 대상 전량은 result.json·시트에
 그대로 있다(bids·prune 은 이 보고서가 아니라 result.json 을 읽는다). ⑤는 계정당 20건
 미만이라 그대로 둔다.
 """
 
-TOP_N = 20   # ①②③④ 는 주당 이만큼만 표에 싣는다(전량 처리·전량 시트 기록엔 영향 없음)
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ads_rules  # noqa: E402
+
+TOP_N = 20   # ①③·⑦b 는 주당 이만큼만 표에 싣는다(전량 처리·전량 시트 기록엔 영향 없음)
 
 
 def _table(rows, cols, limit=None):
@@ -51,8 +60,8 @@ def build_report(result, top_n=TOP_N):
 
     # 계정 총괄 — 구매완료 기준만
     lines.append("## 총괄\n")
-    lines.append("| 계정 | 게재중 | 광고비 | 구매완료 매출 | ROAS | 노출0 | 썸네일교체 | 구매0 | 효자 |")
-    lines.append("|---|---|---|---|---|---|---|---|---|")
+    lines.append("| 계정 | 게재중 | 광고비 | 구매완료 매출 | ROAS | 노출0 | ③구매0 | ⑤효자 |")
+    lines.append("|---|---|---|---|---|---|---|---|")
     tot_cost = tot_pur = 0
     for alias, v in result.get("accounts", {}).items():
         r = v["rules"]
@@ -64,9 +73,10 @@ def build_report(result, top_n=TOP_N):
         tot_pur += pur
         roas = f"{pur / cost * 100:.0f}%" if cost else "—"
         lines.append(f"| {alias} | {s.get('live', 0)} | {cost:,}원 | {pur:,}원 | {roas} | "
-                     f"{len(r['①노출0'])} | {len(r['②썸네일교체'])} | {len(r['③원인분석'])} | {len(r['⑤효자확정'])} |")
+                     f"{len(r.get('①노출0', []))} | {len(r.get('③원인분석', []))} | "
+                     f"{len(r.get('⑤효자확정', []))} |")
     roas_all = f"{tot_pur / tot_cost * 100:.0f}%" if tot_cost else "—"
-    lines.append(f"| **합계** | | **{tot_cost:,}원** | **{tot_pur:,}원** | **{roas_all}** | | | | |\n")
+    lines.append(f"| **합계** | | **{tot_cost:,}원** | **{tot_pur:,}원** | **{roas_all}** | | | |\n")
     # 주의: 여기서 금칙어 자체를 언급하면 안 된다 — Step 4 grep 이 이 문장까지 잡아낸다
     lines.append("> 매출은 **구매완료 기준**이다. 결제 완료 이전 단계는 세지 않는다.\n")
 
@@ -74,26 +84,16 @@ def build_report(result, top_n=TOP_N):
         r = v["rules"]
         lines.append(f"\n## {alias}\n")
 
-        lines.append(f"### ① 노출 0 — 입찰 인상 대상 {_count_label(len(r['①노출0']), top_n)}\n")
+        lines.append(f"### ① 노출 0 (⑦a) — 입찰 인상 대상 {_count_label(len(r['①노출0']), top_n)}\n")
         lines.append("`bids --commit` 으로 실행한다(전량 처리 — 이 표는 상위 미리보기일 뿐이다). "
                      "그룹입찰 상품은 개별 전환 후 `그룹기본가+10원`으로 시작한다.\n")
         lines.append(_table(r["①노출0"], [("상품", "title"), ("광고그룹", "adGroup"),
                                           ("현재입찰", "bid"), ("그룹입찰따름", "useGroupBid")],
                             limit=top_n))
 
-        lines.append(f"\n### ② 썸네일 교체 — {_count_label(len(r['②썸네일교체']), top_n)}\n")
-        lines.append("노출 100회 이상인데 CTR 1% 미만. 노출 많은 순.\n")
-        lines.append(_table(r["②썸네일교체"], [("상품", "title"), ("노출", "imp"), ("클릭", "clk"),
-                                              ("CTR %", "ctr"), ("순위", "rank"), ("상품ID", "mallProductId")],
-                            limit=top_n))
-
         lines.append(f"\n### ③ 클릭 20+ 인데 구매완료 0 — {_count_label(len(r['③원인분석']), top_n)}\n")
         lines.append(_table(r["③원인분석"], [("상품", "title"), ("클릭", "clk"), ("CTR %", "ctr"),
                                             ("광고비", "cost")], limit=top_n))
-
-        lines.append(f"\n### ④ CTR 2% 이상 — 효자 후보 {_count_label(len(r['④효자후보']), top_n)}\n")
-        lines.append(_table(r["④효자후보"], [("상품", "title"), ("노출", "imp"), ("CTR %", "ctr"),
-                                            ("순위", "rank")], limit=top_n))
 
         lines.append(f"\n### ⑤ 구매완료 발생 — 효자 확정 {len(r['⑤효자확정'])}건\n")
         lines.append(_table(r["⑤효자확정"], [("상품", "title"), ("구매", "purCnt"), ("매출", "purAmt"),
@@ -108,4 +108,59 @@ def build_report(result, top_n=TOP_N):
         else:
             lines.append("_해당 없음_\n")
 
+    lines.extend(_section7(result, top_n))
     return "\n".join(lines)
+
+
+def _gather(result, key):
+    """전 계정의 규칙 행을 acct 를 붙여 한 목록으로."""
+    out = []
+    for alias, v in (result.get("accounts") or {}).items():
+        for row in ((v or {}).get("rules") or {}).get(key, []) or []:
+            out.append(dict(row, acct=row.get("acct") or alias))
+    return out
+
+
+def _label(rows):
+    """표기용 사본 — 불사자매칭 미조회 표시, 판매자상품코드 빈칸."""
+    out = []
+    for r in rows:
+        x = dict(r)
+        x["불사자매칭"] = ads_rules.match_label(r)
+        if x.get("판매자상품코드") is None:
+            x["판매자상품코드"] = ""
+        out.append(x)
+    return out
+
+
+def _section7(result, top_n):
+    """⑦ 전 계정 합산 섹션 — ⑦b·⑦c(final_7c)·⑦d(정비판정)."""
+    pool = result.get("pool7") or {}
+    size = pool.get("size", "?")
+    lines = [f"\n## ⑦ 전 계정 합산 (7일 노출 {ads_rules.POP_IMP_MIN}+ 모집단 {size}건)\n"]
+
+    b = sorted(_gather(result, "⑦b썸네일변형"), key=lambda r: (r.get("ctr") or 0.0, -(r.get("imp") or 0)))
+    lines.append(f"### ⑦b 썸네일 변형 — CTR 하위 {int(ads_rules.CTR_TAIL_PCT * 100)}% "
+                 f"{_count_label(len(b), top_n)}\n")
+    lines.append(_table(b, [("상품", "title"), ("계정", "acct"), ("노출", "imp"), ("클릭", "clk"),
+                            ("CTR %", "ctr"), ("광고그룹", "adGroup"), ("스토어상품ID", "mallProductId")],
+                        limit=top_n))
+
+    c = _label(ads_rules.final_7c(_gather(result, "⑦c상세꾸미기후보")))
+    lines.append(f"\n### ⑦c 상세 꾸미기 — CTR 상위 {int(ads_rules.CTR_TAIL_PCT * 100)}% 중 상세 미가공 "
+                 f"{len(c)}건\n")
+    lines.append(_table(c, [("상품", "title"), ("판매자상품코드", "판매자상품코드"), ("상세상태", "상세상태"),
+                            ("CTR %", "ctr"), ("노출", "imp"), ("불사자매칭", "불사자매칭")]))
+
+    d_rows = _gather(result, "⑦d정비점검후보")
+    d = _label([dict(r, 정비판정=ads_rules.maintenance_verdict(r)) for r in d_rows])
+    counts = {}
+    for r in d:
+        counts[r["정비판정"]] = counts.get(r["정비판정"], 0) + 1
+    todo = [r for r in d if r["정비판정"] != "정비완료"]
+    lines.append(f"\n### ⑦d 정비 점검 — 30일 클릭 {ads_rules.MAINT_CLICK_MIN}+ {len(d)}건\n")
+    if counts:
+        lines.append(" · ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1])) + "\n")
+    lines.append(_table(todo, [("상품", "title"), ("판매자상품코드", "판매자상품코드"), ("클릭", "clk"),
+                               ("상세상태", "상세상태"), ("옵션상태", "옵션상태"), ("정비판정", "정비판정")]))
+    return lines

@@ -200,5 +200,157 @@ class TestPausedAdsRule6(unittest.TestCase):
         self.assertTrue(res["①노출0"] and res["⑤효자확정"])
 
 
+# ── ⑦ 체계 (2026-10-16) ─────────────────────────────────────────────────
+G = {"grp1": {"name": "판매상품_11-2_테스트", "bidAmt": 70}}
+
+
+def prow(ad_id, ctr, imp=100):
+    """풀 행 1건(ctr_tail/split_global 입력 모양)."""
+    return {"adId": ad_id, "ctr": ctr, "imp": imp}
+
+
+class TestPool7(unittest.TestCase):
+    def test_노출_49는_빠지고_50은_들어간다(self):
+        rows = R.pool_rows([ad("a"), ad("b")], G, {"a": stat(imp=49), "b": stat(imp=50)})
+        self.assertEqual([r["adId"] for r in rows], ["b"])
+
+    def test_꺼진_소재와_통계없는_소재는_제외(self):
+        rows = R.pool_rows([ad("a", enable=False), ad("b")], G, {"a": stat(imp=500)})
+        self.assertEqual(rows, [])
+
+    def test_7일_지표와_광고그룹이_붙는다(self):
+        r = R.pool_rows([ad("a")], G, {"a": stat(imp=60, clk=3, ctr=5.0)})[0]
+        self.assertEqual((r["imp"], r["clk"], r["ctr"], r["adGroup"]), (60, 3, 5.0, "판매상품_11-2_테스트"))
+
+    def test_상수는_50_10퍼센트_20(self):
+        self.assertEqual((R.POP_IMP_MIN, R.CTR_TAIL_PCT, R.MAINT_CLICK_MIN), (50, 0.10, 20))
+
+
+class TestCtrTail(unittest.TestCase):
+    def test_풀20건이면_2건(self):
+        rows = [prow(str(i), ctr=float(i)) for i in range(20)]
+        self.assertEqual(len(R.ctr_tail(rows)), 2)
+
+    def test_풀21건이면_올림해서_3건(self):
+        rows = [prow(str(i), ctr=float(i)) for i in range(21)]
+        self.assertEqual(len(R.ctr_tail(rows)), 3)
+
+    def test_빈_풀은_빈_결과(self):
+        self.assertEqual(R.ctr_tail([]), [])
+
+    def test_풀1건이면_1건(self):
+        self.assertEqual(len(R.ctr_tail([prow("a", 1.0)])), 1)
+
+    def test_하위는_CTR_오름차순_동률은_노출_많은_쪽(self):
+        rows = [prow("a", 0.5, imp=100), prow("b", 0.1, imp=100), prow("c", 0.1, imp=900)] + \
+               [prow(f"x{i}", 5.0) for i in range(17)]
+        got = R.ctr_tail(rows, pct=0.15)
+        self.assertEqual([r["adId"] for r in got], ["c", "b", "a"])
+
+    def test_상위는_CTR_내림차순_동률은_노출_많은_쪽(self):
+        rows = [prow("a", 3.0, imp=100), prow("b", 4.0, imp=100), prow("c", 4.0, imp=900)] + \
+               [prow(f"x{i}", 0.1) for i in range(17)]
+        got = R.ctr_tail(rows, pct=0.15, top=True)
+        self.assertEqual([r["adId"] for r in got], ["c", "b", "a"])
+
+    def test_원본을_바꾸지_않는다(self):
+        rows = [prow("a", 1.0)]
+        R.ctr_tail(rows)[0]["ctr"] = 99
+        self.assertEqual(rows[0]["ctr"], 1.0)
+
+
+class TestSplitGlobal(unittest.TestCase):
+    def test_계정별이_아니라_전_계정_1풀이다(self):
+        # A 의 CTR 0.1 1건 + B 의 CTR 0.5 19건 = 20건 → 하위 2건 = A 1 + B 1
+        pools = {"A": [prow("a1", 0.1)], "B": [prow(f"b{i}", 0.5) for i in range(19)]}
+        out = R.split_global(pools)
+        self.assertEqual([r["adId"] for r in out["A"]["⑦b썸네일변형"]], ["a1"])
+        self.assertEqual(len(out["B"]["⑦b썸네일변형"]), 1)
+        self.assertEqual(out["A"]["⑦b썸네일변형"][0]["acct"], "A")
+        self.assertEqual(out["B"]["⑦b썸네일변형"][0]["acct"], "B")
+
+    def test_상위는_7c후보로_간다(self):
+        pools = {"A": [prow("a1", 9.0)], "B": [prow(f"b{i}", 0.5) for i in range(9)]}
+        out = R.split_global(pools)
+        self.assertEqual([r["adId"] for r in out["A"]["⑦c상세꾸미기후보"]], ["a1"])
+        self.assertEqual(out["B"]["⑦c상세꾸미기후보"], [])
+
+    def test_풀이_빈_계정도_빈_리스트_두개(self):
+        out = R.split_global({"A": [], "B": [prow("b", 1.0)]})
+        self.assertEqual(out["A"], {"⑦b썸네일변형": [], "⑦c상세꾸미기후보": []})
+
+
+class TestRule7d(unittest.TestCase):
+    def _run(self, ads, s30=None, pur=None):
+        return R.classify(ads, G, {}, s30 or {}, pur or {})
+
+    def test_30일_클릭20_이상만_구매_있어도_포함(self):
+        res = self._run([ad("a"), ad("b"), ad("c")],
+                        s30={"a": stat(clk=20), "b": stat(clk=19), "c": stat(clk=50)},
+                        pur={"c": {"cnt": 3, "amt": 9000}})
+        got = res["⑦d정비점검후보"]
+        self.assertEqual([r["adId"] for r in got], ["c", "a"])   # 클릭 많은 순
+        self.assertEqual([r["purCnt"] for r in got], [3, 0])
+
+    def test_꺼진_소재는_제외(self):
+        res = self._run([ad("a", enable=False)], s30={"a": stat(clk=99)})
+        self.assertEqual(res["⑦d정비점검후보"], [])
+
+    def test_키_순서_6_다음_summary_앞(self):
+        keys = list(self._run([ad("a")]).keys())
+        self.assertEqual(keys.index("⑦d정비점검후보"), keys.index("⑥삭제대상") + 1)
+        self.assertEqual(keys[-1], "_summary")
+
+
+def er(match="히트", detail="중국어원본", **kw):
+    """보강(enrich) 을 거친 행."""
+    d = {"adId": "x", "불사자매칭": match, "상세상태": detail}
+    d.update(kw)
+    return d
+
+
+class TestFinal7c(unittest.TestCase):
+    def test_히트_미가공은_포함_AI가공완료는_제외(self):
+        rows = [er(detail="중국어원본", adId="a"), er(detail="단순번역만", adId="b"),
+                er(detail="AI가공완료", adId="c")]
+        self.assertEqual([r["adId"] for r in R.final_7c(rows)], ["a", "b"])
+
+    def test_미매칭은_라벨째_포함(self):
+        rows = [er(match="미매칭: 키없음", detail=None, adId="a")]
+        self.assertEqual([r["adId"] for r in R.final_7c(rows)], ["a"])
+
+    def test_보강키가_없으면_포함_라벨_불사자_미조회(self):
+        rows = [{"adId": "a"}]
+        self.assertEqual(len(R.final_7c(rows)), 1)
+        self.assertEqual(R.match_label(rows[0]), "불사자 미조회")
+
+
+class TestMaintenanceVerdict(unittest.TestCase):
+    def test_미매칭(self):
+        self.assertEqual(R.maintenance_verdict(er(match="미매칭: 다건")), "불사자 미매칭")
+
+    def test_둘다_OK면_정비완료(self):
+        self.assertEqual(R.maintenance_verdict(er(상세미가공=False, 옵션미정리=False)), "정비완료")
+
+    def test_상세_미가공(self):
+        self.assertIn("상세 미가공", R.maintenance_verdict(er(상세미가공=True, 옵션미정리=False)))
+
+    def test_옵션명_미정리(self):
+        self.assertIn("옵션명 미정리", R.maintenance_verdict(er(상세미가공=False, 옵션미정리=True)))
+
+    def test_둘다면_가운뎃점으로_연결(self):
+        self.assertEqual(R.maintenance_verdict(er(상세미가공=True, 옵션미정리=True)),
+                         "상세 미가공 · 옵션명 미정리")
+
+    def test_옵션_판정불가(self):
+        self.assertEqual(R.maintenance_verdict(er(상세미가공=False, 옵션미정리=None)), "판정 불가(옵션)")
+
+    def test_상세_판정불가(self):
+        self.assertEqual(R.maintenance_verdict(er(상세미가공=None, 옵션미정리=False)), "판정 불가(상세)")
+
+    def test_보강키_없음(self):
+        self.assertEqual(R.maintenance_verdict({"adId": "a"}), "불사자 미조회")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
