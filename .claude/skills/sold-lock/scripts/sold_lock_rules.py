@@ -40,6 +40,7 @@ REASONS = {
 _MARKET_FAIL_LABEL = {
     "token_failed": "정지/토큰실패",
     "orders_failed": "주문조회실패",
+    "no_credentials": "키없음",
 }
 
 
