@@ -30,6 +30,8 @@ JOBS = [
      "cmd": [PY, ".claude/skills/work-board/scripts/board_sync.py", "sync"]},
     {"name": "ads-weekly", "kind": "weekly", "weekday": 0, "at": "07:00",
      "cmd": [PY, ".claude/skills/naver-ads-weekly/scripts/weekly_monday.py"], "caffeinate": True},
+    {"name": "auto-watch", "kind": "daily", "at": "07:30",
+     "cmd": [PY, ".claude/skills/auto-watch/scripts/watch.py"]},
 ]
 
 
