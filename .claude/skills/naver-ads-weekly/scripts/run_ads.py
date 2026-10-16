@@ -135,6 +135,22 @@ def cmd_run(args):
     return 0
 
 
+def cmd_enrich(args):
+    """⑦c 후보·⑦d 후보에 판매자상품코드·상세/옵션 상태를 붙인다. 읽기 전용(광고·불사자 쓰기 0).
+
+    지연 import — enrich 를 안 쓰는 prep/run/bids/prune 이 webapp·eroomlib.snapshot·커머스
+    의존성 import 실패에 영향받지 않게 한다.
+    종료코드: 0 정상 · 3 불사자 계정 불일치 · 1 그 밖 실패(result.json 원본 유지)
+    """
+    run_dir = run_dir_of(args.run_dir)
+    try:
+        import bulsaja_join
+    except Exception as e:
+        print(f"enrich 모듈 import 실패: {type(e).__name__}: {e}")
+        return 1
+    return bulsaja_join.cmd_enrich(run_dir, expect_nick=args.expect_nick)
+
+
 def cmd_apply(args):
     run_dir = run_dir_of(args.run_dir)
     rp = run_dir / "result.json"
@@ -345,6 +361,9 @@ def main():
         s = sub.add_parser(name)
         s.add_argument("--run-dir", help="회차 이름(기본: 오늘 날짜)")
         s.add_argument("--account", nargs="*", help="특정 계정 alias 만")
+    s = sub.add_parser("enrich", help="⑦c/⑦d 후보 불사자 조인·상세/옵션 상태 보강(읽기 전용)")
+    s.add_argument("--run-dir", help="회차 이름(기본: 오늘 날짜)")
+    s.add_argument("--expect-nick", default="부킹", help="기대 불사자 계정 닉네임")
     ap_apply = sub.choices["apply"]
     ap_apply.add_argument("--sheet", help="구글시트 ID (없으면 마크다운만)")
     ap_apply.add_argument("--no-sheet", action="store_true", help="원장 탭 쓰기만 막는다")
@@ -366,7 +385,7 @@ def main():
     s.add_argument("--max-items", type=int, help="1회 삭제 상한 — 넘으면 전량 거부(자르지 않는다)")
     s.add_argument("--backup-tag", help="백업 파일명에 붙일 태그 — 웹은 잡 id 를 넘긴다")
     args = ap.parse_args()
-    return {"prep": cmd_prep, "run": cmd_run, "apply": cmd_apply, "bids": cmd_bids,
+    return {"prep": cmd_prep, "run": cmd_run, "enrich": cmd_enrich, "apply": cmd_apply, "bids": cmd_bids,
             "prune": cmd_prune, "accounts": cmd_accounts}[args.cmd](args)
 
 
