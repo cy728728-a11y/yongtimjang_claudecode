@@ -21,17 +21,8 @@ description: 용팀장 업무판(구글시트 '🖤 용팀장 업무판') '오�
   다른 스크립트의 append 가 300행 아래로 밀린다(2026-10-16 실측).
 - 열 J `연동키` 는 스크립트용이다. 손으로 고치지 않는다.
 
-## 자동 실행 (맥북 launchd)
-- `com.eroom.board-sync` — 1시간마다 sync
-- `com.eroom.board-rollover` — 매일 04:30 rollover (00:01 sold-lock 보다 뒤, 그날 행은 안 건드림)
-
-설치(템플릿 치환 후 로드):
-```bash
-W=$PWD; for n in board-sync board-rollover; do
-  sed -e "s|__WORKSPACE__|$W|g" -e "s|__HOME__|$HOME|g" .claude/skills/work-board/launchd/com.eroom.$n.plist > ~/Library/LaunchAgents/com.eroom.$n.plist
-  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.eroom.$n.plist; done
-```
-로그: `~/python_work/data/work-board/logs/`
+## 자동 실행
+- board-sync 매시 · board-rollover 04:30 (아래 예약관리자)
 
 ## 예약 실행 (2026-10-17 변경)
 
