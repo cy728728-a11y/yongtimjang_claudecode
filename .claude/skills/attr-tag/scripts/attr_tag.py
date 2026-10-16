@@ -159,11 +159,27 @@ class CommerceApi:
             return r.json() if body.strip() else {}
         raise RuntimeError(f"재시도 초과: {last}")
 
+    def _origin_no(self, market, no):
+        """채널상품번호 → 원상품번호. 최근 등록 상품은 channel-products 조회가 404 라서(2026-10-17 실측)
+        상품 검색으로 원상품번호를 찾아 origin-products 경로를 쓴다."""
+        cache = self.__dict__.setdefault("_origin_cache", {})
+        key = (market, str(no))
+        if key not in cache:
+            d = self._request(market, "POST", "/v1/products/search",
+                              json={"searchKeywordType": "CHANNEL_PRODUCT_NO",
+                                    "channelProductNos": [int(no)], "page": 1, "size": 5})
+            hit = [c for e in (d or {}).get("contents") or [] for c in e.get("channelProducts") or []
+                   if str(c.get("channelProductNo")) == str(no)]
+            if not hit:
+                raise RuntimeError(f"원상품번호를 찾지 못함 ({no})")
+            cache[key] = hit[0]["originProductNo"]
+        return cache[key]
+
     def get_product(self, market, no):
-        return self._request(market, "GET", f"/v2/products/channel-products/{no}")
+        return self._request(market, "GET", f"/v2/products/origin-products/{self._origin_no(market, no)}")
 
     def put_product(self, market, no, body):
-        return self._request(market, "PUT", f"/v2/products/channel-products/{no}", json=body)
+        return self._request(market, "PUT", f"/v2/products/origin-products/{self._origin_no(market, no)}", json=body)
 
     def category(self, market, cat_id):
         return self._request(market, "GET", f"/v1/categories/{cat_id}")
@@ -194,8 +210,14 @@ class _Cache:
 
     def table(self, market, cat):
         if cat not in self.tables:
-            self.tables[cat] = A.build_attr_table(self.api.attributes(market, cat),
-                                                  self.api.attribute_values(market, cat))
+            try:
+                self.tables[cat] = A.build_attr_table(self.api.attributes(market, cat),
+                                                      self.api.attribute_values(market, cat))
+            except RuntimeError as e:
+                # 속성이 없는 카테고리는 404 '데이터를 찾을 수 없습니다'(2026-10-17 실측) → 빈 표, 태그만 처리
+                if "HTTP 404" not in str(e):
+                    raise
+                self.tables[cat] = A.build_attr_table([], [])
         return self.tables[cat]
 
     def cat_name(self, market, cat):

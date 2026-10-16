@@ -412,7 +412,7 @@ class FlowTest(unittest.TestCase):
 
         slept = []
         api = T.CommerceApi(Client(), [], http=Http(), sleep=slept.append)
-        self.assertEqual(api.get_product("13-2", "1"), {"ok": 1})
+        self.assertEqual(api.category("13-2", "1"), {"ok": 1})
         self.assertEqual(calls["n"], 2)
         self.assertTrue(any(s >= 2.0 for s in slept))
 
