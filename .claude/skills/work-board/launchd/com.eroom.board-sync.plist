@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 업무판 sync. __WORKSPACE__ / __HOME__ 은 SKILL.md 설치 명령의 sed 가 치환한다. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.eroom.board-sync</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__WORKSPACE__/.venv/bin/python3</string>
+    <string>__WORKSPACE__/.claude/skills/work-board/scripts/board_sync.py</string>
+    <string>sync</string>
+  </array>
+  <key>WorkingDirectory</key><string>__WORKSPACE__</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>__HOME__/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>__HOME__/python_work/data/work-board/logs/board-sync.out.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/python_work/data/work-board/logs/board-sync.err.log</string>
+</dict>
+</plist>
