@@ -55,8 +55,11 @@ def check_mulgari(now):
     today = now.strftime("%Y-%m-%d")
     s = _json(ASIDE_STATE)
     ip = s.get("inProgress")
-    if ip and "blocked" in str(ip.get("stage")):
-        return [f"물갈이: {ip.get('marketNumber')} 막힘({ip.get('stage')})"]
+    # 막힘 판정: stage 이름에 blocked/required 가 있거나, 마지막 이력 결과가 blocked
+    last = (s.get("history") or [{}])[-1]
+    stage = str((ip or {}).get("stage") or "")
+    if ip and ("blocked" in stage or "required" in stage or last.get("result") == "blocked"):
+        return [f"물갈이: {ip.get('marketNumber')} 막힘({stage})"]
     if s.get("lastStartedLocalDate") != today and not ip:
         return [f"물갈이: 오늘 시작 안 함(마지막 시작 {s.get('lastStartedLocalDate')})"]
     return []
