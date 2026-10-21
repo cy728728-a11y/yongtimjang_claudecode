@@ -12,10 +12,66 @@
 
 ## Today
 
+<<<<<<< HEAD
+=======
+- [ ] 줌 오픈: [실전반 4기] 줌 2회차 (19:30 접속 → start_url로 열기)
+  - added: 2026-10-21 12:00
+  - priority: normal
+- [ ] 줌 오픈: 실전반4기 온라인1주차 (19:30 접속 → start_url로 열기)
+  - added: 2026-10-14 13:09
+  - priority: normal
+- [ ] 줌 오픈: 용감한용팀장 실전반4기 OT (13:30 접속 → start_url로 열기)
+  - added: 2026-10-09 11:00
+  - priority: normal
+
+- [ ] 할로윈파티 참여비 입금하기
+  - added: 2026-10-07 14:12
+  - priority: high
+
+>>>>>>> 4b718fc (sync: 2026-10-21 19:47 (WOORIPC))
 - [ ] 스쿠도제 숙제하기
   - added: 2026-10-07 14:12
   - priority: normal
 
+<<<<<<< HEAD
+=======
+- [ ] 통합스터디 4분기 일정 공지하고 신청 받기
+  - added: 2026-10-07 14:12
+  - priority: normal
+
+- [ ] 실전반 4기 카톡방 만들기
+  - added: 2026-10-07 14:12
+  - priority: normal
+
+- [ ] 스스 마켓별 업로드 수량 늘릴지 체크하기
+  - added: 2026-10-07 14:12
+  - priority: normal
+
+- [ ] 25-2 광고 투입시키기
+  - added: 2026-10-07 14:12
+  - priority: normal
+
+- [ ] 사쿠냥님 마켓점검 해주기
+  - added: 2026-10-07 14:15
+  - priority: normal
+
+- [ ] 최나래님 할일 알려주기
+  - added: 2026-10-07 14:15
+  - priority: normal
+
+- [ ] 원천세 3.3% 신고 (최소영·조미미) — 급여엑셀 작성 후 "원천세 신고" 라고 말하면 payroll-tax-filing 스킬 실행
+  - added: 2026-10-01
+  - due: 2026-10-10
+  - priority: high
+  - project: 원천세신고
+  - 귀속월 2026-08 / 지급월 2026-09 / 신고기한 2026-10-10
+
+- [x] 오정복 4기 챌린지시트 공유 (수업시간) — gws 재인증 먼저 → ohatom5555@gmail.com 편집권한 공유 → 파일목록 D8/E8 기록
+  - added: 2026-10-17 00:00
+  - priority: normal
+  - project: 실전반4기
+
+>>>>>>> 4b718fc (sync: 2026-10-21 19:47 (WOORIPC))
 ## This Week
 
 - [ ] 나래대표님 타오바오 88VIP 가입방법 보내주기
