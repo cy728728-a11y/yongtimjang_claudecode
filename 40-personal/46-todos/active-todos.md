@@ -12,8 +12,6 @@
 
 ## Today
 
-<<<<<<< HEAD
-=======
 - [ ] 줌 오픈: [실전반 4기] 줌 2회차 (19:30 접속 → start_url로 열기)
   - added: 2026-10-21 12:00
   - priority: normal
@@ -28,13 +26,10 @@
   - added: 2026-10-07 14:12
   - priority: high
 
->>>>>>> 4b718fc (sync: 2026-10-21 19:47 (WOORIPC))
 - [ ] 스쿠도제 숙제하기
   - added: 2026-10-07 14:12
   - priority: normal
 
-<<<<<<< HEAD
-=======
 - [ ] 통합스터디 4분기 일정 공지하고 신청 받기
   - added: 2026-10-07 14:12
   - priority: normal
@@ -71,7 +66,6 @@
   - priority: normal
   - project: 실전반4기
 
->>>>>>> 4b718fc (sync: 2026-10-21 19:47 (WOORIPC))
 ## This Week
 
 - [ ] 나래대표님 타오바오 88VIP 가입방법 보내주기
