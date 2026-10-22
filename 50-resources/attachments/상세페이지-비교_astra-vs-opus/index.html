@@ -1,0 +1,57 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>상세페이지 비교</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{--bg:#2b2a28;--card:#3a3835;--ink:#f3efe8;--sub:#bdb5a8;--accent:#c9a96e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Pretendard,sans-serif}
+header{position:sticky;top:0;z-index:2;background:var(--bg);padding:18px 24px 14px;border-bottom:1px solid #444}
+h1{margin:0 0 12px;font-size:22px;font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:6px 10px;border-bottom:1px solid #444;text-align:left;vertical-align:top}
+th{color:var(--sub);font-weight:600;width:110px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:20px 24px;max-width:1800px;margin:0 auto}
+.col h2{position:sticky;top:var(--hh,190px);background:var(--bg);margin:0 0 10px;padding:8px 0;font-size:18px}
+.col h2 span{color:var(--accent)}
+.col img{display:block;width:100%;margin:0 0 6px;background:#fff}
+@media (max-width:760px){.cols{grid-template-columns:1fr}}
+</style></head><body>
+<header><h1>같은 지시, 다른 모델 — GPT-6 아스트라 vs Claude Opus 5.5</h1>
+<table>
+<tr><th></th><td><b>왼쪽 · GPT-6 아스트라 v4.1 (피드백 3회 반영)</b></td><td><b>오른쪽 · Claude Opus 5.5 (같은 지시를 한 번에)</b></td></tr><tr><th>톤</th><td>아이보리·베이지 + 진갈색</td><td>아이보리·베이지 + 진갈색, 제목 얇은/굵은 2단 굵기</td></tr>
+<tr><th>장수</th><td>12장</td><td>12장</td></tr>
+<tr><th>원본 컷</th><td>52개 중 40개</td><td>38개 중 33개 (87%)</td></tr>
+<tr><th>걸린 시간</th><td>v3→v4→v4.1, 피드백 3회</td><td>한 번에 약 25분</td></tr><tr><th>제품</th><td>대표컷 2장 배경 교체</td><td>대표컷 1장 배경 교체(제품 픽셀 오차 0)</td></tr>
+<tr><th>카피</th><td>설명형에 가까운 판매 문구</td><td>고객 입장 판매 문구, 원본 도면 라벨까지 활용</td></tr>
+</table></header>
+<section class="cols">
+<div class="col"><h2><span>BEFORE</span> GPT-6 아스트라 v4.1</h2><img src="img/v2/01.png" alt="v2 01">
+<img src="img/v2/02.png" alt="v2 02">
+<img src="img/v2/03.png" alt="v2 03">
+<img src="img/v2/04.png" alt="v2 04">
+<img src="img/v2/05.png" alt="v2 05">
+<img src="img/v2/06.png" alt="v2 06">
+<img src="img/v2/07.png" alt="v2 07">
+<img src="img/v2/08.png" alt="v2 08">
+<img src="img/v2/09.png" alt="v2 09">
+<img src="img/v2/10.png" alt="v2 10">
+<img src="img/v2/11.png" alt="v2 11">
+<img src="img/v2/12.png" alt="v2 12"></div>
+<div class="col"><h2><span>AFTER</span> Claude Opus 5.5</h2><img src="img/v41/01.png" alt="v41 01">
+<img src="img/v41/02.png" alt="v41 02">
+<img src="img/v41/03.png" alt="v41 03">
+<img src="img/v41/04.png" alt="v41 04">
+<img src="img/v41/05.png" alt="v41 05">
+<img src="img/v41/06.png" alt="v41 06">
+<img src="img/v41/07.png" alt="v41 07">
+<img src="img/v41/08.png" alt="v41 08">
+<img src="img/v41/09.png" alt="v41 09">
+<img src="img/v41/10.png" alt="v41 10">
+<img src="img/v41/11.png" alt="v41 11">
+<img src="img/v41/12.png" alt="v41 12"></div>
+</section>
+<script>
+// 헤더 높이에 맞춰 열 제목 고정 위치 조정
+const h=document.querySelector('header').offsetHeight;document.documentElement.style.setProperty('--hh',h+'px');
+</script>
+</body></html>

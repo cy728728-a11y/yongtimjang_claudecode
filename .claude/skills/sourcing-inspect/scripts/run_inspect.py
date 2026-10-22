@@ -221,6 +221,18 @@ def cmd_prep(a):
     if items is None:
         sys.exit("snapshot.json 없음 — fetch 먼저")
     targets = select_targets(items, a.stage)
+    # 이미 다른 run-dir 에서 판정한 상품은 빼고 새로 매칭된 것만(2026-10-19)
+    for ex in (getattr(a, "exclude_run", None) or []):
+        try:
+            vp = _p(resolve_run_dir(ex), "verdicts.json")
+            if not os.path.exists(vp):
+                sys.exit(f"--exclude-run {ex}: {vp} 없음")
+            seen = set(_load(vp) or {})
+        except Exception as e:
+            sys.exit(f"--exclude-run {ex} 읽기 실패: {e}")
+        before = len(targets)
+        targets = [t for t in targets if t["id"] not in seen]
+        print(f"[prep] {ex} 판정분 {before - len(targets)}건 제외")
     if a.sample == "random":
         random.Random(a.seed).shuffle(targets)
     if a.limit:
@@ -468,6 +480,7 @@ def main():
     f = sub.add_parser("fetch"); f.add_argument("--campaign", required=True); f.add_argument("--from-file")
     p = sub.add_parser("prep"); p.add_argument("--stage", type=int, choices=[1, 2], required=True)
     p.add_argument("--limit", type=int); p.add_argument("--sample", choices=["random", "head"], default="head")
+    p.add_argument("--exclude-run", action="append", help="이 run-dir 에서 이미 판정한 상품 제외(반복 가능)")
     p.add_argument("--seed", type=int, default=20261018)
     b = sub.add_parser("batch"); b.add_argument("--size", type=int, default=40)
     sub.add_parser("pending"); sub.add_parser("merge"); sub.add_parser("remachine")

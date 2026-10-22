@@ -1,0 +1,243 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>AI 티 안 나는 상세페이지 지시서</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>:root {
+  --color-bg: #FFFFFF;
+  --color-bg-dark: #111111;
+  --color-bg-muted: #F5F5F5;
+  --color-text: #111111;
+  --color-text-light: #FFFFFF;
+  --color-text-muted: #666666;
+  --color-border: #E0E0E0;
+  --color-accent: #111111;
+  --font-sans: 'Helvetica Neue', 'Pretendard', -apple-system, sans-serif;
+  --font-mono: 'SF Mono', 'Menlo', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+@page { size: A4; margin: 0; }
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: #888;
+  line-height: 1.6;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.page {
+  width: 210mm; height: 297mm;
+  padding: 18mm 20mm 20mm 20mm;
+  margin: 10px auto;
+  background: var(--color-bg);
+  position: relative; overflow: hidden;
+  page-break-after: always; page-break-inside: avoid;
+}
+@media print {
+  body { background: white; }
+  .page { margin: 0; box-shadow: none; }
+}
+@media screen { .page { box-shadow: 0 4px 20px rgba(0,0,0,0.2); } }
+.cover {
+  width: 210mm; height: 297mm;
+  background: var(--color-bg-dark); color: var(--color-text-light);
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 24mm; margin: 10px auto;
+  position: relative; overflow: hidden;
+  page-break-after: always;
+}
+@media screen { .cover { box-shadow: 0 4px 20px rgba(0,0,0,0.2); } }
+@media print { .cover { margin: 0; box-shadow: none; } }
+.cover-label {
+  font-family: var(--font-mono); font-size: 8pt;
+  letter-spacing: 0.3em; text-transform: uppercase; opacity: 0.4; margin-bottom: 12mm;
+}
+.cover-title {
+  font-family: var(--font-sans); font-size: 28pt; font-weight: 700;
+  line-height: 1.15; margin-bottom: 5mm; letter-spacing: -0.02em;
+}
+.cover-title em { font-style: normal; font-weight: 300; }
+.cover-subtitle {
+  font-family: var(--font-sans); font-size: 12pt; font-weight: 300;
+  opacity: 0.7; margin-bottom: 18mm; line-height: 1.5;
+}
+.cover-meta {
+  display: grid; grid-template-columns: auto 1fr;
+  gap: 2mm 6mm; font-size: 8.5pt; opacity: 0.5;
+}
+.cover-meta dt { font-family: var(--font-mono); font-size: 7.5pt; letter-spacing: 0.05em; text-transform: uppercase; }
+.cover-meta dd { margin: 0; }
+.cover-brand { position: absolute; bottom: 18mm; left: 24mm; font-size: 10pt; font-weight: 600; letter-spacing: 0.05em; }
+.page-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10mm; padding-bottom: 3mm;
+  border-bottom: 1pt solid var(--color-border);
+}
+.page-brand { font-size: 8pt; font-weight: 600; opacity: 0.3; letter-spacing: 0.1em; }
+.page-number { font-family: var(--font-mono); font-size: 7pt; letter-spacing: 0.1em; opacity: 0.3; }
+.page-footer {
+  position: absolute; bottom: 12mm; left: 20mm; right: 20mm;
+  display: flex; justify-content: space-between;
+  font-size: 6.5pt; opacity: 0.25; font-family: var(--font-mono);
+}
+.section-number { font-family: var(--font-mono); font-size: 6.5pt; letter-spacing: 0.2em; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 1.5mm; }
+.section-title { font-family: var(--font-sans); font-size: 16pt; font-weight: 700; line-height: 1.25; margin-bottom: 6mm; color: var(--color-text); letter-spacing: -0.01em; }
+.section-title em { font-weight: 300; font-style: normal; }
+h3 { font-family: var(--font-sans); font-size: 8.5pt; font-weight: 700; margin-bottom: 2.5mm; margin-top: 5mm; color: var(--color-text); }
+h3:first-of-type { margin-top: 0; }
+p { font-size: 8pt; line-height: 1.65; margin-bottom: 2.5mm; color: var(--color-text-muted); }
+.quote {
+  background: var(--color-bg-dark); color: var(--color-text-light);
+  padding: 4.5mm 5.5mm 4.5mm 5.5mm; border-radius: 1pt; margin: 4mm 0;
+}
+.quote p { color: var(--color-text-light); margin: 0; font-size: 8pt; line-height: 1.6; }
+.quote strong { color: var(--color-text-light); }
+.quote code { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.1); padding: 0.5mm 1.5mm; border-radius: 1pt; }
+.quote-light { background: var(--color-bg-muted); color: var(--color-text); border-left: 2pt solid var(--color-text); padding: 3mm 4mm; margin: 3mm 0; font-size: 8pt; line-height: 1.6; }
+.quote-light p { color: var(--color-text-muted); margin: 0; }
+ul, ol { padding-left: 5mm; margin-bottom: 3mm; }
+li { font-size: 8pt; line-height: 1.65; margin-bottom: 1mm; color: var(--color-text-muted); }
+li strong { color: var(--color-text); font-weight: 600; }
+.flow { counter-reset: flow-counter; list-style: none; padding: 0; }
+.flow li { counter-increment: flow-counter; padding-left: 9mm; position: relative; margin-bottom: 2mm; }
+.flow li::before { content: counter(flow-counter); position: absolute; left: 0; top: 0.5mm; width: 5mm; height: 5mm; background: var(--color-bg-dark); color: var(--color-text-light); font-family: var(--font-mono); font-size: 6pt; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.principles { list-style: none; padding: 0; counter-reset: principle; }
+.principles li { counter-increment: principle; padding: 2.5mm 0; border-bottom: 0.5pt solid var(--color-border); display: flex; align-items: baseline; gap: 3mm; font-size: 8pt; }
+.principles li:last-child { border-bottom: none; }
+.principles li::before { content: '0' counter(principle); font-family: var(--font-mono); font-size: 7pt; color: var(--color-text-muted); flex-shrink: 0; width: 6mm; }
+.card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin: 4mm 0; }
+.card-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; margin: 4mm 0; }
+.card { background: var(--color-bg-muted); border: 0.5pt solid var(--color-border); padding: 4mm; border-radius: 1pt; }
+.card-number { font-family: var(--font-mono); font-size: 6pt; letter-spacing: 0.1em; color: var(--color-text-muted); margin-bottom: 1.5mm; }
+.card h4 { font-size: 8pt; font-weight: 600; margin-bottom: 1.5mm; }
+.card p { font-size: 7.5pt; line-height: 1.55; margin: 0; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin: 3mm 0; }
+.dark-inline { background: var(--color-bg-dark); color: var(--color-text-light); margin: 4mm 0; padding: 5mm; border-radius: 1pt; }
+.dark-inline h3, .dark-inline h4 { color: var(--color-text-light); }
+.dark-inline p { color: rgba(255,255,255,0.75); }
+.dark-inline li { color: rgba(255,255,255,0.75); }
+.dark-inline li strong { color: var(--color-text-light); }
+.dark-inline code { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.1); padding: 0.5mm 1.5mm; border-radius: 1pt; }
+.highlight-box { border: 1.5pt solid var(--color-text); padding: 4mm 5mm; margin: 4mm 0; border-radius: 1pt; }
+.highlight-box h4 { font-size: 9pt; font-weight: 700; margin-bottom: 2.5mm; }
+.steps { background: var(--color-bg-dark); color: var(--color-text-light); padding: 5mm 6mm; border-radius: 1pt; margin: 3mm 0; }
+.steps h4 { font-size: 9pt; font-weight: 600; margin-bottom: 3mm; color: var(--color-text-light); }
+.steps ol { counter-reset: step; list-style: none; padding: 0; }
+.steps ol li { counter-increment: step; padding: 1.5mm 0 1.5mm 8mm; position: relative; color: rgba(255,255,255,0.8); border-bottom: 0.5pt solid rgba(255,255,255,0.06); font-size: 7.5pt; }
+.steps ol li:last-child { border-bottom: none; }
+.steps ol li::before { content: counter(step); position: absolute; left: 0; font-family: var(--font-mono); font-size: 7pt; color: rgba(255,255,255,0.5); }
+.steps li strong { color: var(--color-text-light); }
+.steps li code, .steps code { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.1); padding: 0.5mm 1.5mm; border-radius: 1pt; }
+table { width: 100%; border-collapse: collapse; margin: 3mm 0; font-size: 7.5pt; }
+th { background: var(--color-bg-dark); color: var(--color-text-light); padding: 2.5mm 3mm; text-align: left; font-weight: 600; font-size: 7pt; letter-spacing: 0.05em; }
+td { padding: 2.5mm 3mm; border-bottom: 0.5pt solid var(--color-border); color: var(--color-text-muted); }
+tr:last-child td { border-bottom: none; }
+.divider { height: 0.5pt; background: var(--color-border); margin: 5mm 0; }
+code { font-family: var(--font-mono); font-size: 7.5pt; color: var(--color-text); background: var(--color-bg-muted); padding: 0.5mm 1.5mm; border-radius: 1pt; }
+.closing {
+  width: 210mm; height: 297mm;
+  background: var(--color-bg-dark); color: var(--color-text-light);
+  display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+  padding: 24mm; margin: 10px auto; page-break-after: avoid;
+}
+@media screen { .closing { box-shadow: 0 4px 20px rgba(0,0,0,0.2); } }
+@media print { .closing { margin: 0; box-shadow: none; } }
+.closing-title { font-size: 26pt; font-weight: 700; line-height: 1.2; margin-bottom: 6mm; letter-spacing: -0.02em; }
+.closing-title em { font-weight: 300; font-style: normal; }
+.closing-sub { font-size: 10pt; opacity: 0.4; margin-bottom: 16mm; }
+.closing-info { font-family: var(--font-mono); font-size: 7.5pt; letter-spacing: 0.1em; opacity: 0.3; line-height: 2.2; }
+
+.pb{margin:0 0 3mm}.pb-h{font-size:7.5pt;font-weight:700;color:#111;margin:0 0 1mm}
+.pb-l{font-size:7.2pt;line-height:1.55;color:#333;white-space:pre-wrap;padding-left:2mm;border-left:1pt solid #E0E0E0}
+.pb-gap{height:1.5mm;border-left:1pt solid #E0E0E0;margin-left:0}
+.small{font-size:7pt}
+table.check td{padding:1.8mm 2.5mm;vertical-align:top}td.cb{font-size:10pt;width:6mm;color:#111}
+</style></head><body><div class="cover"><div class="cover-label">Free Resource · Detail Page</div>
+<h1 class="cover-title">AI 티 안 나는<br>상세페이지 <em>지시서</em></h1>
+<p class="cover-subtitle">중국어 원본 상세페이지만 넣으면 되는 복붙용 지시서<br>+ 디자인 수치표 + 올리기 전 점검표 15</p>
+<dl class="cover-meta"><dt>Date</dt><dd>2026.10</dd><dt>Author</dt><dd>용팀장</dd><dt>For</dt><dd>구매대행·위탁판매 셀러</dd></dl>
+<div class="cover-brand">용팀장</div></div><div class="page"><div class="page-header"><div class="page-brand">용팀장 · 상세페이지 지시서</div><div class="page-number">01 / 06</div></div>
+
+<div class="section-number">Section 01</div>
+<h2 class="section-title">이 지시서, 이렇게 쓰세요</h2>
+<p>불사자에 올라가 있는 중국어 원본 상세페이지를, 원본 사진은 그대로 살리면서 한국 스마트스토어용 상세페이지로 바꾸는 지시서입니다. 상품만 바꿔서 그대로 쓰면 됩니다.</p>
+<div class="steps"><h4>5단계</h4><ol>
+<li><strong>원본 준비</strong> — 불사자 상품의 원본 상세 이미지(중국어 그대로)와 옵션 이미지를 내려받습니다. 따로 정리할 필요 없습니다.</li>
+<li><strong>AI 열기</strong> — ChatGPT는 일반 채팅이 아니라 상단에서 Work로 바꾼 뒤 모델을 GPT-6 Astra로 고릅니다(유료 플랜). 클로드는 Opus를 고릅니다.</li>
+<li><strong>지시서 붙여넣기</strong> — Section 03의 지시서를 통째로 붙여넣고, [스타일]에서 상품에 맞는 하나만 남기고 나머지 둘은 지웁니다.</li>
+<li><strong>첨부</strong> — 원본 이미지 전부 + 레퍼런스 캡처 1장(Section 02 링크에서 직접 캡처, 본인 작업 참고용으로만).</li>
+<li><strong>검수 후 수정</strong> — 결과가 나오면 Section 04 점검표로 확인하고, 고칠 곳은 Section 05 예시처럼 콕 집어서 말합니다.</li>
+</ol></div>
+<h3>스타일 고르는 법</h3>
+<table><tr><th>스타일</th><th>이런 상품에</th><th>느낌</th></tr>
+<tr><td><strong>A 갤러리형</strong></td><td>그릇, 인테리어 소품, 패브릭 — 생김새로 파는 상품</td><td>사진이 주인공, 글은 거의 없음</td></tr>
+<tr><td><strong>B 정보형</strong></td><td>기능, 소재, 안전성을 설명해야 하는 생활용품</td><td>흰 바탕, 왼쪽 정렬, 차분한 설명</td></tr>
+<tr><td><strong>C 세일즈형</strong></td><td>기능 비교가 필요한 공산품, 공구, 가전</td><td>아이보리 한 톤 + 진갈색 강조, 판매 장치가 많아도 정돈됨</td></tr></table>
+<div class="quote-light"><p><strong>왜 숫자로 주나요?</strong> AI에게 "예쁘게" "참고해서"라고만 하면 자기 기본 스타일(그라데이션, 진한 초록, 아이콘 카드)로 돌아갑니다. 글자 크기와 색을 숫자로 박아야 AI 티가 빠집니다.</p></div>
+<div class="highlight-box"><h4>꼭 지킬 것</h4><p>제품 사진은 새로 그리게 하지 마세요. 원본을 잘라 쓰게 해야 실제 상품과 다른 사진으로 인한 반품을 막을 수 있습니다. 지시서에 이미 들어 있으니 지우지 마세요.</p></div>
+
+<div class="page-footer"><span>AI 티 안 나는 상세페이지 지시서</span><span>무료 배포 자료 · 재판매 금지</span></div></div><div class="page"><div class="page-header"><div class="page-brand">용팀장 · 상세페이지 지시서</div><div class="page-number">02 / 06</div></div>
+
+<div class="section-number">Section 02</div>
+<h2 class="section-title">AI 티 안 나는 디자인 수치표</h2>
+<p>29CM 생활용품 상위 상세페이지 3곳을 실제로 재서 가로 860px 기준으로 환산한 값입니다. 지시서에 이미 들어 있고, 직접 고치고 싶을 때 참고하세요. 글자 크기는 ±10% 오차가 있습니다.</p>
+<table><tr><th>항목</th><th>A 갤러리형</th><th>B 정보형</th><th>C 세일즈형</th></tr>
+<tr><td>배경</td><td>글 #FFFFFF / 사진 #DCDCD4</td><td>글 #FFFFFF / 사진 #F0F0F0</td><td>#F8F6F2 ~ #E8E4DC 한 톤</td></tr>
+<tr><td>강조색</td><td>없음</td><td>없음 (굵기로만)</td><td>진갈색 #514733 하나</td></tr>
+<tr><td>제목</td><td>약 46px #111111</td><td>약 42~46px SemiBold #303030</td><td>약 56~60px Bold, 가운데</td></tr>
+<tr><td>본문</td><td>약 28px / 행간 44px #1E1E1E</td><td>약 27px / 행간 43px #4A4A4A</td><td>약 30~38px / 행간 1.6 #4F4838</td></tr>
+<tr><td>정렬</td><td>소개는 가운데, 정보는 왼쪽</td><td>전부 왼쪽, 여백 48px</td><td>제목 가운데</td></tr>
+<tr><td>특징</td><td>사진 85% : 글 15%</td><td>소제목 + 2~3줄 × 최대 3문단</td><td>진갈색 띠·알약 라벨, 지그재그 2열</td></tr></table>
+<div class="two-col">
+<div><h3>공통 규칙 5개</h3><ul class="principles">
+<li>배경은 한 톤, 강조색은 하나 이하</li>
+<li>글자색은 순검정 대신 진회색</li>
+<li>굵기는 두 단계만 (제목 / 본문)</li>
+<li>사진 위에 글자를 얹지 않기</li>
+<li>스펙·소재·주의사항은 맨 끝, 작게</li></ul></div>
+<div><h3>AI 티 나는 것 (금지)</h3><ul>
+<li>그라데이션, 보라·초록·파랑 배경</li>
+<li>이모지, 체크 표시 목록</li>
+<li>그림자 진 둥근 카드 반복, 아이콘 3열</li>
+<li>모든 장 가운데 정렬, 같은 틀 반복</li>
+<li>"혁신적인, 프리미엄, 완벽한" 같은 형용사</li>
+<li>번역투: "~하는 것이 가능합니다"</li></ul></div></div>
+<h3>레퍼런스 상세페이지 (직접 들어가서 보세요)</h3>
+<table><tr><th>스타일</th><th>상품</th><th>링크</th></tr>
+<tr><td>A</td><td>엔알세라믹스 힌 디저트 플레이트</td><td>29cm.co.kr/products/2330149</td></tr>
+<tr><td>B</td><td>알엠에스 세라믹 4구 플레이트</td><td>29cm.co.kr/products/3678037</td></tr>
+<tr><td>C</td><td>매직캔 히포2 휴지통</td><td>29cm.co.kr/products/3885059</td></tr></table>
+<p class="small">레퍼런스는 각 브랜드의 저작물입니다. AI에게 톤 참고용으로 캡처해 첨부하는 건 본인 작업에만 쓰고, 사진·문구를 가져다 쓰거나 다시 배포하지 마세요.</p>
+
+<div class="page-footer"><span>AI 티 안 나는 상세페이지 지시서</span><span>무료 배포 자료 · 재판매 금지</span></div></div><div class="page"><div class="page-header"><div class="page-brand">용팀장 · 상세페이지 지시서</div><div class="page-number">03 / 06</div></div>
+<div class="section-number">Section 03</div>
+<h2 class="section-title">상세페이지 지시서 (전문)</h2>
+<p>통째로 복사해서 첫 메시지로 넣으세요. 같이 드린 <strong>AI상세페이지_지시서_복사용.txt</strong> 파일에서 복사하면 더 편합니다. [스타일]은 하나만 남기세요.</p><div class="pb"><div class="pb-h">당신은 한국 스마트스토어용 상세페이지 제작자입니다. 질문하지 말고 결과물부터 만듭니다.</div><div class="pb-gap"></div></div><div class="pb"><div class="pb-h">[역할]</div><div class="pb-l">첨부한 타오바오/중국 원본 상세페이지 이미지와 옵션 이미지를 분석해, 한국 스마트스토어에 바로 올릴 수 있는 개별 PNG 상세페이지를 만듭니다.</div><div class="pb-l">함께 첨부한 &#x27;레퍼런스&#x27; 이미지는 톤(배경색, 글자 크기, 여백, 정렬) 참고용입니다. 레퍼런스의 사진과 문구는 절대 가져다 쓰지 않습니다.</div><div class="pb-gap"></div></div><div class="pb"><div class="pb-h">[핵심 원칙]</div><div class="pb-l">1. 결과물은 가로 860px 개별 PNG입니다. 높이는 내용에 맞게 1000~1500px.</div><div class="pb-l">2. 제품은 새로 그리지 않습니다. 원본 사진을 잘라서 씁니다.</div><div class="pb-l">3. 제품의 각도, 색상, 형태, 비율, 구조, 로고, 구성품을 바꾸지 않습니다.</div><div class="pb-l">4. 원본에 없는 기능, 구성품, 사이즈, 옵션, 소재, 효과, 인증, 수치를 쓰지 않습니다. 원본에서 한 군데에만 나와 확인이 안 되는 수치도 뺍니다.</div><div class="pb-l">5. 여러 장을 1장씩 순서대로 만들고, 1장 만든 뒤 멈추지 않습니다.</div><div class="pb-l">6. 최종 이미지에 중국어, 작업 설명, 겹친 글자, 잘린 글자가 남으면 실패입니다.</div><div class="pb-gap"></div></div><div class="pb"><div class="pb-h">[스타일 — 하나만 고르고 나머지는 지우세요]</div><div class="pb-l">공통: 배경은 한 톤, 강조색은 하나 이하, 글자색은 순검정 대신 진회색, 글자 굵기는 두 단계만, 사진 위에 글자를 얹지 않기.</div><div class="pb-gap"></div><div class="pb-l">A 갤러리형 (그릇, 소품, 패브릭처럼 생김새로 파는 상품)</div><div class="pb-l">- 글 영역 배경 #FFFFFF, 사진 배경 #DCDCD4</div><div class="pb-l">- 제목 #111111, 본문 #1E1E1E</div><div class="pb-l">- 글은 전체의 15% 이하. 사진은 가로 꽉 차게</div><div class="pb-gap"></div><div class="pb-l">B 정보형 (기능, 소재, 안전성을 설명해야 하는 생활용품)</div><div class="pb-l">- 글 영역 배경 #FFFFFF, 사진 받침 #F0F0F0</div><div class="pb-l">- 제목 #303030, 본문 #4A4A4A, 각주 #9E9E9E</div><div class="pb-l">- 전부 왼쪽 정렬. 소제목은 짧게, 설명은 2~3줄</div><div class="pb-gap"></div><div class="pb-l">C 세일즈형 (기능 비교가 필요한 공산품)</div><div class="pb-l">- 배경 아이보리 #F8F6F2, 보조 베이지 #EDE8E0. 순백 전면 배경 금지</div><div class="pb-l">- 강조색은 진갈색 #514733 하나: 큰 제목, 요약 띠 배경(흰 글씨), 작은 알약 라벨(#8A7F70)</div><div class="pb-l">- 본문 #4F4838. 큰 제목은 가운데 정렬, 한 줄 안에서 굵기만 바꿔 강조</div><div class="pb-l">- 톤 배경 장과 사진 꽉 채운 장을 번갈아</div><div class="pb-gap"></div></div><div class="pb"><div class="pb-h">[글자 — 가로 860px 기준]</div><div class="pb-l">폰트는 Pretendard 하나만 씁니다(없으면 SUIT, 그다음 Noto Sans KR). 명조체, 손글씨체, 장식체는 쓰지 않습니다.</div><div class="pb-l">- 큰 제목 46px (C형은 56~60px), Bold, 행간 1.2</div><div class="pb-l">- 부제목 30px, SemiBold</div><div class="pb-l">- 본문 27px (C형은 30~34px), Regular, 행간 1.6</div><div class="pb-l">- 카드 제목 28px, 카드 보조문구 22px, 각주 19px</div><div class="pb-l">- 좌우 여백 48px, 섹션 위아래 60~80px, 사진과 글 사이 32px</div><div class="pb-l">공간이 부족하면 글자를 줄이지 말고 문장을 줄입니다. 빈 공간이 화면의 40%를 넘는 장은 만들지 않습니다.</div><div class="pb-gap"></div></div>
+<div class="page-footer"><span>AI 티 안 나는 상세페이지 지시서</span><span>무료 배포 자료 · 재판매 금지</span></div></div><div class="page"><div class="page-header"><div class="page-brand">용팀장 · 상세페이지 지시서</div><div class="page-number">04 / 06</div></div>
+<div class="section-number">Section 03 · 이어서</div><div class="pb"><div class="pb-h">[AI 티 금지]</div><div class="pb-l">그라데이션, 보라·초록·파랑 계열 배경, 이모지, 체크 표시 목록, 그림자 진 둥근 카드 반복, 아이콘 3열 카드, 모든 장 가운데 정렬, 밑줄·형광펜·장식선, &quot;혁신적인·프리미엄·완벽한·최고의&quot; 같은 형용사, 번역투(&quot;~하는 것이 가능합니다&quot;, &quot;~를 통해&quot;).</div><div class="pb-l">같은 레이아웃을 두 장 연속으로 쓰지 않습니다.</div><div class="pb-gap"></div></div><div class="pb"><div class="pb-h">[원본 사진 활용]</div><div class="pb-l">1. 먼저 모든 원본 이미지 안의 사진 영역을 칸 단위로 하나하나 잘라 목록을 만듭니다. 원본 카피 띠(글자가 박힌 띠)는 잘라내고, 못 잘라내면 쓰지 않습니다.</div><div class="pb-l">2. 쓸 수 있는 사진의 70% 이상을 씁니다. 같은 사진은 한 번만(대표 제품 사진만 최대 2번).</div><div class="pb-l">3. 장마다 그 장의 메시지에 맞는 종류의 사진을 씁니다. 예: 휴대성 = 들고 가는 장면, 노즐 종류 = 부속 사진 모음, 설치 = 순서 사진.</div><div class="pb-l">4. 대표 제품 사진 1~2장만 배경 교체를 허용합니다. 제품 부분은 원본 픽셀 그대로 두고, 배경만 단색 스튜디오 톤으로 바꿉니다. 그림자는 사각 받침 없이 제품 윤곽을 따라 옅게. 제품이 조금이라도 바뀌면 원본 배경 그대로 씁니다.</div><div class="pb-gap"></div></div><div class="pb"><div class="pb-h">[구성]</div><div class="pb-l">장수는 정해져 있지 않습니다. 원본으로 확인된 메시지 수와 쓸 수 있는 서로 다른 사진 수 중 작은 쪽에 맞춥니다. 같은 사진, 비슷한 문구로 장수를 늘리지 않습니다.</div><div class="pb-l">만들기 전에 &quot;구성 N장: 1 ○○ / 2 ○○ …&quot;와 장마다 쓸 사진 번호를 먼저 적고 바로 제작합니다.</div><div class="pb-l">순서 예시(해당 없는 건 빼기): 메인 후킹 → 후기형 후킹 → 핵심 장점 → 사용 장면 → 구조·디테일 → 활용 예시 → 부속·설치 → 옵션 구성 → 구매 전 확인</div><div class="pb-gap"></div></div><div class="pb"><div class="pb-h">[카피]</div><div class="pb-l">- 1장은 가장 강한 사용 장면 + 사진과 맞는, 고객이 얻는 결과 중심 제목.</div><div class="pb-l">- 장마다 불편 → 해결 → 기대효과 흐름의 판매 문구. &quot;살펴보세요&quot;, &quot;확인해 주세요&quot; 반복 금지.</div><div class="pb-l">- 후기형 후킹은 큰 따옴표 문장 하나와 보조 한 줄. 별점, 후기 수, 닉네임, 날짜, &quot;실구매&quot;, &quot;내돈내산&quot; 금지. 원본에서 확인된 특징 안에서만.</div><div class="pb-l">- 옵션은 한 장에 정리: 옵션마다 번호 라벨 + 구성 사진 + 두 줄 설명. 옵션에만 들어 있는 부속을 기본형에 포함된 것처럼 쓰지 않습니다.</div><div class="pb-l">- 마지막 장 &quot;구매 전 확인&quot;은 2~3개만. 확인된 스펙은 큰 숫자로.</div><div class="pb-l">- 금지: 무조건, 완벽, 최고, 100%, 특가, 선착순 같은 과장·긴급성 표현.</div><div class="pb-gap"></div></div><div class="pb"><div class="pb-h">[이미지 안 금지어]</div><div class="pb-l">고객용 판매 문구만 넣습니다. 원본, 원본 이미지, 타오바오, 공급처, 업로드, 파일, 해상도, 합성, 연출, 생성, AI, 판매자에게 확인 같은 말은 넣지 않습니다.</div><div class="pb-gap"></div></div><div class="pb"><div class="pb-h">[장마다 저장 전 검수]</div><div class="pb-l">1. 고객에게 자연스러운 판매 문구인가</div><div class="pb-l">2. 작업 설명이나 내부 용어가 없는가</div><div class="pb-l">3. 중국어가 남지 않았는가 (제품 본체에 인쇄된 표기는 그대로 둠)</div><div class="pb-l">4. 원본에 없는 말이 없는가</div><div class="pb-l">5. 글자가 잘리거나 겹치거나 제품을 가리지 않는가</div><div class="pb-l">6. 글자 크기와 색이 위 기준 그대로인가</div><div class="pb-l">7. 바로 앞 장과 레이아웃이 똑같지 않은가</div><div class="pb-l">8. 레퍼런스 옆에 놓았을 때 톤이 어긋나지 않는가</div><div class="pb-gap"></div></div><div class="pb"><div class="pb-h">[마무리]</div><div class="pb-l">마지막 장까지 개별 PNG(01.png, 02.png …)로 주고, 채팅으로 &quot;원본에서 확인 못 해서 뺀 정보&quot; 목록을 알려줍니다(이미지엔 넣지 않음).</div></div>
+<div class="page-footer"><span>AI 티 안 나는 상세페이지 지시서</span><span>무료 배포 자료 · 재판매 금지</span></div></div><div class="page"><div class="page-header"><div class="page-brand">용팀장 · 상세페이지 지시서</div><div class="page-number">05 / 06</div></div>
+
+<div class="section-number">Section 04</div>
+<h2 class="section-title">올리기 전 점검표 15</h2>
+<p>AI가 아무리 잘 만들어도 원본에 없는 말이 한두 개씩 섞여 있는 경우가 많습니다. 올리기 전에 한 번만 훑으세요. 하나라도 걸리면 고치고 올립니다.</p>
+<table class="check"><tr><th></th><th>항목</th><th>어떻게 보나</th></tr><tr><td class='cb'>☐</td><td><strong>01. 중국어가 남았나</strong></td><td>사진 위 캡션, 모서리, 배경에 비친 글자까지. 제품 본체에 인쇄된 표기는 그대로 둡니다</td></tr><tr><td class='cb'>☐</td><td><strong>02. 원본에 없는 말이 있나</strong></td><td>기능, 효과, 소재, 인증, 사용법. 문장마다 원본 어디에 근거가 있는지 짚어봅니다</td></tr><tr><td class='cb'>☐</td><td><strong>03. 한 군데에만 나온 숫자인가</strong></td><td>출력, 유량, 거리처럼 원본에 딱 한 번 나온 수치는 빼는 게 안전합니다</td></tr><tr><td class='cb'>☐</td><td><strong>04. 가짜 후기처럼 보이나</strong></td><td>별점, 후기 수, 닉네임, 날짜, &#x27;재구매&#x27;, 실제 구매자처럼 쓴 1인칭 문장</td></tr><tr><td class='cb'>☐</td><td><strong>05. 과장 표현이 있나</strong></td><td>무조건, 완벽, 최고, 100%, 특가, 선착순</td></tr><tr><td class='cb'>☐</td><td><strong>06. 내부 용어가 손님 화면에 있나</strong></td><td>원본, 공급처, 합성, 연출, AI, &#x27;판매자에게 확인하세요&#x27;</td></tr><tr><td class='cb'>☐</td><td><strong>07. 제품이 바뀌었나</strong></td><td>원본 사진과 나란히 놓고 색, 모양, 로고, 비율, 부속을 비교</td></tr><tr><td class='cb'>☐</td><td><strong>08. 구성품이 섞였나</strong></td><td>옵션에만 있는 부속을 기본형에 포함된 것처럼 쓰지 않았는지</td></tr><tr><td class='cb'>☐</td><td><strong>09. 옵션명과 구성이 맞나</strong></td><td>상세페이지 옵션 설명과 실제 판매 옵션 이름, 개수, 구성이 같은지</td></tr><tr><td class='cb'>☐</td><td><strong>10. 글자가 잘리거나 겹쳤나</strong></td><td>카드 밖으로 나간 글자, 사진을 가린 글자, 끝에 붙은 마지막 줄</td></tr><tr><td class='cb'>☐</td><td><strong>11. 폰에서 읽히나</strong></td><td>휴대폰으로 직접 열어서 첫 문구와 숫자가 읽히는지</td></tr><tr><td class='cb'>☐</td><td><strong>12. 규격이 맞나</strong></td><td>가로 860px, 낱장 순서(01, 02 …)가 맞는지</td></tr><tr><td class='cb'>☐</td><td><strong>13. 같은 사진이 반복되나</strong></td><td>대표 사진 말고 같은 컷이 두 번 이상 나오지 않는지</td></tr><tr><td class='cb'>☐</td><td><strong>14. 원본의 주의 문구를 반영했나</strong></td><td>&#x27;색상 랜덤&#x27;, &#x27;배터리 별도&#x27;처럼 원본에 있던 안내가 빠지지 않았는지</td></tr><tr><td class='cb'>☐</td><td><strong>15. 인증·표시 문구가 실제와 같나</strong></td><td>KC 등 인증·표시는 실제로 갖춘 것만. 애매하면 넣지 않습니다</td></tr></table>
+<div class="quote-light"><p>표시광고·상표·인증 관련 최종 판단은 판매자 본인 몫입니다. 애매한 문구는 빼는 쪽이 안전합니다.</p></div>
+
+<div class="page-footer"><span>AI 티 안 나는 상세페이지 지시서</span><span>무료 배포 자료 · 재판매 금지</span></div></div><div class="page"><div class="page-header"><div class="page-brand">용팀장 · 상세페이지 지시서</div><div class="page-number">06 / 06</div></div>
+
+<div class="section-number">Section 05</div>
+<h2 class="section-title">고칠 때는 콕 집어서</h2>
+<p>"더 예쁘게 해줘"는 전체가 다시 바뀌어서 이미 괜찮던 장까지 망가집니다. <strong>몇 장의 어디를, 어떻게</strong>만 말하고, 나머지는 그대로 두라고 붙이세요.</p>
+<table><tr><th>이렇게 말하지 말고</th><th>이렇게 말하세요</th></tr>
+<tr><td>너무 밋밋해</td><td>전체 배경을 C 세일즈형 톤(#F8F6F2)으로 바꾸고, 순백 배경은 쓰지 마. 레이아웃과 문구는 그대로.</td></tr>
+<tr><td>첫 장이 별로야</td><td>1장 제목이 사진이랑 안 맞아. 사진은 잔디밭에 뿌리는 장면이니까 그에 맞는 결과 중심 제목으로 바꿔줘. 1장 제목만.</td></tr>
+<tr><td>그림자가 이상해</td><td>2장 제품 아래 네모난 회색 받침을 없애고, 제품 바닥을 따라 옅은 타원 그림자로. 제품 픽셀은 건드리지 마.</td></tr>
+<tr><td>사진이 너무 작아</td><td>6장 노즐 사진 칸을 최소 190px로 키우고 4열 유지.</td></tr>
+<tr><td>문구가 설명서 같아</td><td>각 장 제목을 고객이 얻는 결과 중심으로 바꿔줘. 원본에 있는 사실 안에서만. 사진과 배치는 그대로.</td></tr>
+<tr><td>이거 빼</td><td>6장 하단 경고 박스를 통째로 빼고, 빈자리는 여백을 줄여서 메워줘.</td></tr></table>
+<div class="card-grid-3">
+<div class="card"><div class="card-number">TIP 01</div><h4>한 번에 3~4개까지</h4><p>고칠 게 많아도 한 번에 너무 많이 말하면 놓칩니다. 중요한 것부터 3~4개씩.</p></div>
+<div class="card"><div class="card-number">TIP 02</div><h4>"나머지는 그대로"</h4><p>이 한 마디가 없으면 고치라고 안 한 장까지 바뀌는 경우가 많습니다.</p></div>
+<div class="card"><div class="card-number">TIP 03</div><h4>고친 건 지시서에</h4><p>두 번 이상 말한 건 지시서에 한 줄 추가하세요. 다음 상품부터는 처음부터 맞게 나옵니다.</p></div></div>
+<div class="dark-inline"><h4>같은 AI도 지시서가 바꿉니다</h4><p>영상에서 같은 모델로 기본 지시와 이 지시서를 비교했을 때, 모델을 바꾼 것보다 지시서를 바꾼 차이가 더 컸습니다. 모델보다 지시서를 먼저 다듬으세요.</p></div>
+
+<div class="page-footer"><span>AI 티 안 나는 상세페이지 지시서</span><span>무료 배포 자료 · 재판매 금지</span></div></div><div class="closing"><div class="closing-title">모델보다<br><em>지시서</em></div>
+<div class="closing-sub">상품 하나로 시작하세요. 만들고, 점검표로 확인하고, 거기까지만.</div>
+<div class="closing-info">유튜브 용팀장<br>2026.10</div></div></body></html>
