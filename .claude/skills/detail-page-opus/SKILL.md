@@ -15,7 +15,7 @@ description: 판매자상품코드를 받아 Aside 에서 Claude Opus 5.5 로 �
 ## 흐름
 
 1. **상품 확인** — `mcp__bulsaja__bulsaja_product_find_by_code` 로 내부 ID·마켓그룹·상품명을 찾는다. 0건·다건이면 멈추고 보고한다.
-   마켓번호는 그룹명(예 `용쌤4-1` → `4-1`)에서 뽑는다. 마켓명 매핑은 Aside 가 `smartstore-market-number-map.md` 에서 직접 찾는다.
+   마켓번호는 그룹명(예 `용쌤4-1` → `4-1`)에서 뽑는다. 판매 후 `구매_가공완료` 같은 그룹으로 옮겨져 번호가 없으면 `~/.aside/u/0/detail-pages/*/<내부ID>/` 기존 폴더의 마켓번호를 쓰고, 그것도 없으면 사용자에게 묻는다. 마켓명 매핑은 Aside 가 `smartstore-market-number-map.md` 에서 직접 찾는다.
 2. **지시서 작성** — `~/.aside/u/0/detail-pages/_brief/작업지시서-<판매자상품코드>-<YYYY-MM-DD>.md` 에 짧게 쓴다.
    ```
    계정 스킬 smartstore-detail-page(2026-10-23-opus-v1)를 그대로 따른다.
