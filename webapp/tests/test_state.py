@@ -206,3 +206,12 @@ def test_픽스처_함정_전수(join_traps):
             f"함정: {행.get('_함정')}"
         )
     assert 본_행 == 4, f"상태 판정 대상 행이 {본_행}개다 (함정 4종이어야 한다)"
+
+
+def test_상세상태_직접업로드_흔적은_가공완료():
+    """detail-page-opus 반영분은 aiImageGenerated 가 없어도 mcp-assets 주소로 ⚪ 다."""
+    html = '<img src="https://cdn.bulsaja.com/mcp-assets/11154/U01X/detail/abc.jpg">'
+    assert state.상세상태({"imageTranslated": "1", "renderContent": html}) == state.AI가공완료
+    assert state.상세상태({"imageTranslated": "1",
+                         "renderContent": '<img src="https://cdn.bulsaja.com/products/x.jpg">'}) == state.단순번역만
+    assert state.상세상태({"renderContent": None}) == state.중국어원본

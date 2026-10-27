@@ -111,6 +111,10 @@ cd .claude/skills/bulsaja-detail-remix/scripts
 PYTHONIOENCODING=utf-8 PYTHONUTF8=1 python run.py --code <판매자상품코드> --zip <GPTs(스마트스토어) 결과 zip 경로>
 ```
 
+- `--dry-run`: 조회·이어붙이기까지만 하고 업로드·반영은 안 한다. 반영 전에 먼저 돌린다.
+- 실제 반영 때는 교체 전 상세를 `<out>/before_apply.html` 에 백업(workdata full 의 상세 HTML — product_detail 은 요약만 줘서 못 쓴다)하고, 백업 실패 시 반영하지 않는다.
+- 의존성: 워크스페이스 `.venv`(python-dotenv·Pillow). `detail-page-opus` 도 이 스크립트로 반영한다.
+
 `--zip`은 항상 GPTs(스마트스토어) 결과물 zip이다 — 타오바오 원본 zip은 검수에만
 쓰이고 이 스크립트에는 넘기지 않는다. 출력 폴더 기본값은 `<zip파일명>_remix/`
 (zip과 같은 폴더). `--out`으로 지정 가능.

@@ -57,6 +57,14 @@ class DetailRemixMCP(_Transport):
             raise RuntimeError(f"productId 없음: {str(first)[:300]}")
         return pid
 
+    def get_detail_html(self, product_id):
+        """교체 전 백업용 — 현재 상세 HTML(workdata full 의 renderContent)을 반환.
+        product_detail 은 요약만 줘서 HTML 이 없다(2026-10-27 실측)."""
+        r = self.call_tool("bulsaja_product_workdata",
+                           {"productId": product_id, "mode": "full"})
+        data = r.get("data") or {}
+        return (data.get("uploadDetailContents") or {}).get("renderContent") or ""
+
     def request_upload_ticket(self, product_id, files):
         """files: [{clientId, sha256, sizeBytes}, ...]. purpose="detail" 고정."""
         return self.call_tool("bulsaja_image_upload_prepare", {

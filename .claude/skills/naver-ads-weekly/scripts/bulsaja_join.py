@@ -313,6 +313,10 @@ class BulsajaLookup:
         dc = keep.get("uploadDetailContents")
         if isinstance(dc, dict):
             keep["uploadDetailContents"] = {k: dc.get(k) for k in ("aiImageGenerated", "imageTranslated")}
+            # 직접 업로드(detail-page-opus) 흔적만 표시로 남긴다 — HTML 통째로는 캐시를 불린다
+            rc = dc.get("renderContent")
+            if isinstance(rc, str) and "/mcp-assets/" in rc:
+                keep["uploadDetailContents"]["renderContent"] = "/mcp-assets/"
         _atomic_json(p, keep)
         return keep
 

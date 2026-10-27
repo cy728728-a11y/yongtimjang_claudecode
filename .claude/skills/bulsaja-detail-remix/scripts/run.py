@@ -76,6 +76,8 @@ def main():
     ap.add_argument("--code", required=True, help="불사자 판매자상품코드")
     ap.add_argument("--zip", required=True, help="GPTs 결과(스마트스토어용) zip 파일 경로")
     ap.add_argument("--out", help="출력 폴더 (기본: zip과 같은 폴더의 _remix)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="조회·이어붙이기까지만 하고 업로드·반영은 하지 않는다")
     args = ap.parse_args()
 
     zip_path = Path(args.zip)
@@ -92,6 +94,21 @@ def main():
         print("[조회 완료] productId 확보")
 
         final_paths = build_final_images(zip_path, out_dir)
+
+        if args.dry_run:
+            print(f"\n[dry-run] 업로드·반영 안 함. 조각 {len(final_paths)}개 확인: {out_dir}")
+            return
+
+        # 교체 전 현재 상세를 백업한다(되돌리기용)
+        try:
+            before_html = mcp.get_detail_html(product_id)
+            if "<img" not in before_html:
+                raise RuntimeError("현재 상세 HTML 에 이미지가 없다(조회 실패로 간주)")
+            (out_dir / "before_apply.html").write_text(before_html, encoding="utf-8")
+            print(f"[백업] {out_dir / 'before_apply.html'} (img {before_html.count('<img')}개)")
+        except Exception as e:
+            print(f"[오류] 교체 전 백업 실패 — 반영 중단: {e}")
+            sys.exit(1)
 
         files_req = []
         for i, p in enumerate(final_paths, 1):

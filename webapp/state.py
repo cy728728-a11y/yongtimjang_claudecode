@@ -91,6 +91,11 @@ def 상세상태(uploadDetailContents) -> str:
     dc = uploadDetailContents if isinstance(uploadDetailContents, dict) else {}
     if 불리언정규화(dc.get("aiImageGenerated")):
         return AI가공완료          # ⚪
+    # 직접 업로드 경로(detail-page-opus · bulsaja-detail-remix)는 aiImageGenerated 를 켜지 않는다.
+    # 업로드 주소의 mcp-assets 흔적으로 가공완료를 판정해 같은 상품을 다시 만들지 않게 한다(2026-10-27).
+    rc = dc.get("renderContent")
+    if isinstance(rc, str) and "/mcp-assets/" in rc:
+        return AI가공완료          # ⚪
     if 불리언정규화(dc.get("imageTranslated")):
         return 단순번역만          # 🟡
     return 중국어원본              # 🔴
