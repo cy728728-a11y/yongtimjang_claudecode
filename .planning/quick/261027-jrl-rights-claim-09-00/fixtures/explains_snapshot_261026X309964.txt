@@ -1,0 +1,62 @@
+https://right.naver.com/explains/261026X309964?type=PAY
+@@ -13,3 +13,26 @@
+-- text: "인증번호 입력 이메일 내용에 기재된  6자리 인증번호를 입력해 주세요"
+-- textbox "인증번호를 입력하세요." [ref=e11] [placeholder="인증번호를 입력하세요."]
+-- button "확인" [ref=e12]
++- text: "상표권 261026-X309964 신고 대상(6 개)"
++- button "물음표" [ref=e11]
++- text: "1. 소형이동식오피스 원형회전식 물레방아커터기 산업용 자동테이프커터기 칼날"
++- link "https://smartstore.naver.com/main/products/13738816405" [ref=e12]
++- text: "2. 소형이동식오피스 양면 테이프물레방아커터기 오토 자동테이프컷팅기"
++- link "https://smartstore.naver.com/main/products/13768713084" [ref=e13]
++- text: "3. 소형이동식오피스 고온 테이프자동컷팅기 수입 물레방아커터기"
++- link "https://smartstore.naver.com/main/products/13768716294" [ref=e14]
++- text: "4. 소형이동식오피스 자동 물레방아테이프커터기 회전원판 고온 ZCUT5"
++- link "https://smartstore.naver.com/main/products/13774827166" [ref=e15]
++- text: "5. 소형이동식오피스 자동 물레방아테이프커터기 양면 테이프컷팅기 고온"
++- link "https://smartstore.naver.com/main/products/13794578944" [ref=e16]
++- text: "6. 소형이동식오피스 회전형 양면테이프기계 업소용 테이프물레방아커터기"
++- link "https://smartstore.naver.com/main/products/13801357968" [ref=e17]
++- text: "소명 내용 및 의견"
++- button "물음표" [ref=e18]
++- textbox "재게시를 요청하는 이유와 재게시 요청 의사가 있음에 대한 이유 등을 상세하게 기재해 주세요." [ref=e19] [placeholder="재게시를 요청하는 이유와 재게시 요청 의사가 있음에 대한 이유 등을 상세하게 기재해 주세요."]
++- text: "0 / 500 관련 파일 (선택)(최대  5 개)"
++- button "물음표" [ref=e20]
++- button "파일 첨부" [ref=e21]
++- label "파일 첨부" [ref=e22]
++- text: "파일 첨부: jpg, jpeg, png, bmp, tif, html, txt, hwp, doc, docx, xls, xlsx, ppt, pptx, pdf, mp3, mp4, aac, 10MB 이하 소명 내용과 첨부파일이 권리침해 신고 접수자에게 전달될 수 있어요.개인정보 등 노출되어선 안되는 정보는 반드시 제외하거나 가린 후 등록해 주세요.이용약관"
++- checkbox "서약 및 동의" [ref=e23]
++- label "서약 및 동의" [ref=e24]
++- text: "본 신청의 내용과 이를 증명하는 내용이 모두 허위가 아님을 확인하며, 만일 상기 내용이 허위인 경우에는 이로 인해 발생하는 모든 법적 책임을 부담하겠습니다."
++- button "소명 접수하기" [ref=e25] [disabled]
+@@ -18,6 +41,6 @@
+-  - link "네이버 고객센터" [ref=e13]
+-  - link "권리보호센터 고객센터" [ref=e14]
+-  - link "게시물 신고센터" [ref=e15]
+-  - link "그린인터넷" [ref=e16]
+-  - link "내 데이터 관리" [ref=e17]
+-  - link "관련 링크" [ref=e18]
++  - link "네이버 고객센터" [ref=e26]
++  - link "권리보호센터 고객센터" [ref=e27]
++  - link "게시물 신고센터" [ref=e28]
++  - link "그린인터넷" [ref=e29]
++  - link "내 데이터 관리" [ref=e30]
++  - link "관련 링크" [ref=e31]
+@@ -25,7 +48,7 @@
+-  - link "사업자정보확인" [ref=e19]
+-  - link "이용약관" [ref=e20]
+-  - link "안전거래 가이드" [ref=e21]
+-  - link "스마트스토어 이용약관" [ref=e22]
+-  - link "개인정보처리방침" [ref=e23]
+-  - link "네이버 페이 책임의 한계와 법적고지" [ref=e24]
+-  - link "Business Partner 개인정보 처리방침" [ref=e25]
++  - link "사업자정보확인" [ref=e32]
++  - link "이용약관" [ref=e33]
++  - link "안전거래 가이드" [ref=e34]
++  - link "스마트스토어 이용약관" [ref=e35]
++  - link "개인정보처리방침" [ref=e36]
++  - link "네이버 페이 책임의 한계와 법적고지" [ref=e37]
++  - link "Business Partner 개인정보 처리방침" [ref=e38]
+@@ -33 +56 @@
+-  - link "NAVER" [ref=e26]
++  - link "NAVER" [ref=e39]
