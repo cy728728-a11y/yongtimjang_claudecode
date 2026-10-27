@@ -284,6 +284,9 @@ class FakeAside:
         self.closed = False
 
     def repl(self, title, code):
+        if title == "rc-cleanup":
+            self.cleaned = True
+            return RC.SENTINEL + '{"ok":true}'
         self.calls.append(title)
         if title == "rc-lookup":
             return self.lookup_text if self.lookup_text is not None else lookup_output()
@@ -437,14 +440,28 @@ class OrchestrationTest(unittest.TestCase):
         self.assertNotIn("otp?code", json.dumps(r))                 # 대장엔 링크 저장 안 함
         self.assertNotIn("463355", json.dumps(r))
         self.assertTrue(self.aside.closed and self.bulsaja.closed)
+        self.assertTrue(getattr(self.aside, "cleaned", False))       # 남은 소명 탭 정리
 
     def test_소명실패(self):
+        import base64
         self.aside = FakeAside(appeal_ok=False)
+        png = base64.b64encode(b"\x89PNG fake").decode()
+        orig = self.aside.repl
+
+        def repl(title, code):
+            if title == "rc-appeal":
+                self.aside.calls.append(title)
+                return RC.SENTINEL + json.dumps({"ok": False, "error": "성공 문구 없음", "shot": png})
+            return orig(title, code)
+        self.aside.repl = repl
         code = self.run_cli(["--apply"])
         self.assertEqual(code, 1)
         r = self.ledger()[-1]
         self.assertEqual(r["status"], "failed")
         self.assertEqual(r["fail_stage"], "appeal")
+        self.assertTrue(r["shot"].endswith(".png"))
+        with open(r["shot"], "rb") as f:
+            self.assertEqual(f.read(), b"\x89PNG fake")                # 스크린샷은 파이썬이 저장
         text, link = self.kakao.sent[0]
         self.assertIn("수동 처리 필요", text)
         self.assertIn("463355", text)
@@ -555,6 +572,8 @@ class OrchestrationTest(unittest.TestCase):
         self.assertIn(json.dumps('줄1\n"따옴표"', ensure_ascii=False), js)
         self.assertIn("###RC###", js)
         self.assertNotIn("ref=", js)
+        self.assertNotIn("getByPlaceholder", js)                      # Aside Playwright 판에 없음
+        self.assertIn("globalThis.rcLink === LINK", js)               # 다른 건 페이지 재사용 금지
         self.assertIn(json.dumps(LINK), RC.js_lookup(LINK, "463355"))
 
 

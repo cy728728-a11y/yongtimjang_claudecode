@@ -350,15 +350,26 @@ LEDGER_FIELDS = ("receipt", "explain_no", "reporter", "right_name", "right_no", 
 # ===========================================================================
 # Aside 소명페이지 JS — ref 하드코딩 금지, 셀렉터만. 값은 json.dumps 로 주입
 # ===========================================================================
+# Aside 의 Playwright 판엔 getByPlaceholder 가 없다(2026-10-27 실측 "not a function") → 속성 셀렉터로
 _JS_OPEN = r"""
+  const OTP_SEL = 'input[placeholder="인증번호를 입력하세요."]';
+  const APPEAL_SEL = 'textarea[placeholder^="재게시를 요청하는 이유"]';
   const __sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const PRODUCT_SEL = 'a[href*="smartstore.naver.com/main/products/"]';
+  const __arrived = async (p) => {
+    if (p.url().includes('/explains/')) return true;
+    try {
+      return (await p.locator(PRODUCT_SEL).count()) > 0 || (await p.locator(APPEAL_SEL).count()) > 0;
+    } catch (e) { return false; }
+  };
   const __open = async (link, otp) => {
     const p = await openTab(link);
     globalThis.rcPage = p;
-    await p.getByPlaceholder('인증번호를 입력하세요.').fill(otp);
+    globalThis.rcLink = link;
+    await p.locator(OTP_SEL).first().fill(otp);
     await p.getByRole('button', { name: '확인', exact: true }).click();
-    for (let i = 0; i < 30 && !p.url().includes('/explains/'); i++) await __sleep(500);
-    if (!p.url().includes('/explains/')) throw new Error('explains 페이지로 이동 안 됨: ' + p.url());
+    for (let i = 0; i < 30 && !(await __arrived(p)); i++) await __sleep(500);
+    if (!(await __arrived(p))) throw new Error('소명 페이지로 이동 안 됨 (OTP 단계)');
     return p;
   };
 """
@@ -370,7 +381,7 @@ def js_lookup(link, otp):
   const LINK = __LINK__, OTP = __OTP__;
   try {
     const p = await __open(LINK, OTP);
-    const targets = await p.locator('a[href*="smartstore.naver.com/main/products/"]').evaluateAll((as) => as.map((a) => {
+    const targets = await p.locator(PRODUCT_SEL).evaluateAll((as) => as.map((a) => {
       const m = (a.href || '').match(/products\/(\d+)/);
       const no = m ? m[1] : '';
       let text = '';
@@ -381,7 +392,8 @@ def js_lookup(link, otp):
       }
       return { no, text };
     }));
-    const em = p.url().match(/explains\/([0-9A-Z]+)/);
+    let em = p.url().match(/explains\/([0-9A-Z]+)/);
+    if (!em) { const bm = (await p.locator('body').innerText()).match(/(\d{6})-([A-Z]\d{6})/); if (bm) em = [0, bm[1] + bm[2]]; }
     console.log('###RC###' + JSON.stringify({ ok: true, url: p.url(), explainNo: em ? em[1] : '', targets }));
   } catch (e) {
     console.log('###RC###' + JSON.stringify({ ok: false, error: String(e && e.message || e) }));
@@ -394,15 +406,22 @@ def js_appeal(link, otp, text, shot_path):
     """소명란 입력 → 서약 체크 → 소명 접수하기 → 성공 문구 확인. 실패 시 스크린샷."""
     return ("await (async () => {\n" + _JS_OPEN + r"""
   const LINK = __LINK__, OTP = __OTP__, TEXT = __TEXT__, SHOT = __SHOT__, OKTXT = __OKTXT__;
+  // Aside 의 fs 는 세션 폴더 밖에 못 쓴다 → base64 로 돌려주고 파이썬이 저장한다
+  const __shot = async (pg) => {
+    if (!SHOT) return '';
+    try { const buf = await pg.screenshot({ fullPage: true, type: 'png' }); return Buffer.from(buf).toString('base64'); }
+    catch (e) { return ''; }
+  };
   let p = globalThis.rcPage;
   try {
     let alive = false;
     try {
-      alive = !!p && !(p.isClosed && p.isClosed()) &&
-        await p.getByPlaceholder('재게시를 요청하는 이유').isVisible();
+      // 같은 소명링크로 연 페이지일 때만 재사용 (다른 건의 페이지에 제출하는 사고 방지)
+      alive = !!p && globalThis.rcLink === LINK && !(p.isClosed && p.isClosed()) &&
+        (await p.locator(APPEAL_SEL).count()) > 0;
     } catch (e) { alive = false; }
     if (!alive) p = await __open(LINK, OTP);
-    await p.getByPlaceholder('재게시를 요청하는 이유').fill(TEXT);
+    await p.locator(APPEAL_SEL).first().fill(TEXT);
     const cb = p.getByRole('checkbox', { name: '서약 및 동의' });
     try { if (!(await cb.isChecked())) await p.locator('label', { hasText: '서약 및 동의' }).first().click(); } catch (e) {}
     if (!(await cb.isChecked())) await cb.check({ force: true });
@@ -416,18 +435,22 @@ def js_appeal(link, otp, text, shot_path):
       if (!ok) await __sleep(500);
     }
     let shot = '';
-    if (!ok && SHOT) { try { await p.screenshot({ path: SHOT, fullPage: true }); shot = SHOT; } catch (e) {} }
+    if (!ok) shot = await __shot(p);
     console.log('###RC###' + JSON.stringify({ ok, url: p.url(), shot }));
-    if (ok) { try { await closeTab(p); } catch (e) {} globalThis.rcPage = null; }
+    if (ok) { try { await closeTab(p); } catch (e) {} globalThis.rcPage = null; globalThis.rcLink = null; }
   } catch (e) {
     let shot = '';
-    if (p && SHOT) { try { await p.screenshot({ path: SHOT, fullPage: true }); shot = SHOT; } catch (e2) {} }
+    if (p) shot = await __shot(p);
     console.log('###RC###' + JSON.stringify({ ok: false, error: String(e && e.message || e), shot }));
   }
 })();
 """).replace("__LINK__", json.dumps(link)).replace("__OTP__", json.dumps(otp)) \
         .replace("__TEXT__", json.dumps(text, ensure_ascii=False)).replace("__SHOT__", json.dumps(shot_path or "")) \
         .replace("__OKTXT__", json.dumps(SUCCESS_TEXT_NOSPACE, ensure_ascii=False))
+
+
+JS_CLEANUP = ("await (async () => { const p = globalThis.rcPage; if (p) { try { await closeTab(p); } catch (e) {} } "
+              "globalThis.rcPage = null; globalThis.rcLink = null; console.log('###RC###{\"ok\":true}'); })();")
 
 
 # ===========================================================================
@@ -665,6 +688,10 @@ class _Ctx:
     def close(self):
         if self._aside is not None:
             try:
+                self._aside.repl("rc-cleanup", JS_CLEANUP)      # 남은 소명 탭 닫기
+            except Exception:
+                pass
+            try:
                 self._aside.close()
             except Exception:
                 pass
@@ -881,6 +908,22 @@ def _confirm_market(ctx, confirm_targets, log):
     return False
 
 
+def save_shot(b64, path, log=print):
+    """repl 이 돌려준 base64 PNG 를 저장 → 경로. 없거나 실패면 ''."""
+    if not b64 or not isinstance(b64, str):
+        return ""
+    try:
+        import base64
+        data = base64.b64decode(b64, validate=False)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+        return path
+    except Exception as e:
+        log(f"[aside] 스크린샷 저장 실패: {type(e).__name__}: {e}")
+        return ""
+
+
 def process_claim(ctx, args, m, rows, log):
     """소명요청 1건 처리 → 종료코드(0/1/3)."""
     deps = ctx.deps
@@ -900,7 +943,8 @@ def process_claim(ctx, args, m, rows, log):
            "otp": otp, "link": link}
     log(f"[소명요청] 대표접수번호 {res['receipt'] or '?'} · 신고자 {res['reporter']} · "
         f"권리 {res['right_name']}({res['right_no']}) · To {res['to']} · 메일 {res['mail_date']}")
-    log(f"  링크 {link or '-'} · OTP {otp or '-'}")
+    link_disp = (LINK_PREFIX + "***") if link.startswith(LINK_PREFIX) else "-"
+    log(f"  링크 {link_disp} · OTP {('***(' + str(len(otp)) + '자리)') if otp else '-'}")
 
     hard, nick_bad, issues = "", False, []
     targets = []
@@ -969,7 +1013,7 @@ def process_claim(ctx, args, m, rows, log):
                     p = {"ok": False, "error": f"{type(e).__name__}: {e}"}
                 p = p if isinstance(p, dict) else {"ok": False, "error": "센티널 없음"}
                 res["appeal_ok"] = bool(p.get("ok"))
-                res["shot"] = str(p.get("shot") or "")
+                res["shot"] = save_shot(p.get("shot"), shot, log)
                 if res["appeal_ok"]:
                     log("[aside] 소명 접수 완료 (성공 문구 확인)")
                 else:
