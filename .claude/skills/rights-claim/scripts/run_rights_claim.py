@@ -1150,7 +1150,13 @@ def _real_deps():
         if ATTR_TAG_DIR not in sys.path:
             sys.path.insert(0, ATTR_TAG_DIR)
         import attr_tag
-        return attr_tag._default_api(secrets)
+        api = attr_tag._default_api(secrets)
+        # 전 마켓 키를 한 번에 올린다. 안 그러면 첫 조회 마켓만 로드돼 두 번째 스토어부터 '커머스 키 없음'
+        try:
+            api.load(list(stores().keys()))
+        except Exception as e:
+            log(f"[commerce] 키 일괄 로드 실패: {type(e).__name__}")
+        return api
 
     def bulsaja_factory():
         from eroomlib.bulsaja import BulsajaMCP
