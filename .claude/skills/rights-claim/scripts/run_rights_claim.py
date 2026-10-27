@@ -1169,8 +1169,8 @@ def _real_deps():
         return category_gate.delete_batch(mcp, pids, log_)
 
     def kakao(text, link=None):
-        from eroomlib import kakao as K
-        return K.send_me(text, link=link) if link else K.send_me(text)
+        # 카톡 발송 끔 (2026-10-27 용팀장 지시 "도움 안 되니 보내지 마") — 보고문은 로그에만 남긴다
+        log(f"[보고] {text}")
 
     return Deps(mail=MailSource(secrets, log), aside_factory=AsideMCP, commerce_factory=commerce_factory,
                 bulsaja_factory=bulsaja_factory, delete_batch=delete_batch, kakao=kakao, stores=stores(),
