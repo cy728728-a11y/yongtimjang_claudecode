@@ -651,7 +651,7 @@ class Deps:
 
     def __init__(self, mail=None, aside_factory=None, commerce_factory=None, bulsaja_factory=None,
                  delete_batch=None, kakao=None, stores=None, data_root=None, sleep=time.sleep,
-                 appeal_text=None, confirm_rounds=20, confirm_interval=30, secrets=None):
+                 appeal_text=None, confirm_rounds=40, confirm_interval=30, secrets=None):
         self.mail = mail
         self.aside_factory = aside_factory
         self.commerce_factory = commerce_factory

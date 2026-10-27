@@ -15,7 +15,7 @@ description: 네이버 권리보호센터 소명요청 메일을 감지해 신�
 2. **신고대상 조회** — Aside 브라우저로 소명링크 열기 → OTP 입력 → `/explains/<개별접수번호>` 의 신고 상품번호·스토어명
 3. **판매자상품코드** — 스토어명 → `~/.eroom/naver-commerce-stores.json` 마켓번호(불일치 시 전 마켓 폴백) → 커머스API `sellerManagementCode`. "원상품번호를 찾지 못함" = 이미 삭제됨
 4. **불사자 삭제** — 계정 `부킹` 확인 → `find_by_code`(판매자코드) 원본 + `find_by_code`(불사자코드) 중 **상품명에 상표명이 들어간 복사본만** → `market_delete` MARKET_AND_SOURCE · scope ALL (확인키 2단계). 잠금 상품은 제외
-5. **마켓삭제 확인** — 30초 간격 최대 20회 커머스 재조회 (미확인이어도 소명은 진행 → partial)
+5. **마켓삭제 확인** — 30초 간격 최대 40회(20분) 커머스 재조회 (미확인이어도 소명은 진행 → partial)
 6. **소명 제출** — 고정 문구(`references/소명문구.txt`, 424자) 입력 → '서약 및 동의' 체크 → '소명 접수하기' → "권리 소명이 접수되었어요" 확인. 실패 시 스크린샷
 7. **보고** — 카톡 나와의 채팅 + 대장 1행
 
@@ -75,4 +75,4 @@ append-only. 키는 **대표접수번호**(`261022S…`), 개별접수번호(`26
 
 ## 예약
 
-`.claude/lib/eroom_scheduler.py` JOBS 의 `rights-claim` (daily 09:00, `--apply`, caffeinate — 마켓삭제 확인 폴링 최대 10분).
+`.claude/lib/eroom_scheduler.py` JOBS 의 `rights-claim` (daily 09:00, `--apply`, caffeinate — 마켓삭제 확인 폴링 최대 20분).
