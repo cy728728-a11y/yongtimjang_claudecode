@@ -182,6 +182,7 @@ Recent decisions affecting current work:
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 261027-jrl | 권리보호센터 소명요청 자동처리 rights-claim (신고상품 삭제 + Aside 소명 접수, 매일 09:00) | 2026-10-27 | 411ab13 | [261027-jrl-rights-claim-09-00](./quick/261027-jrl-rights-claim-09-00/) |
 | 261016-wbc | 광고 주간 ⑦ 체계(노출0·CTR하위/상위10%·클릭20+ 정비점검) + 월요일 07:00 자동 | 2026-10-17 | 93e9dd5 | [261016-wbc-ads-weekly-v2](./quick/261016-wbc-ads-weekly-v2/) |
 | 261016-wb2 | 업무판 연동·이월 (이룸 판 → 내 판, 04:30 rollover) | 2026-10-16 | - | [261016-wb2-work-board-sync](./quick/261016-wb2-work-board-sync/) |
 | 261016-lct | 판매상품 자동잠금 sold-lock (커머스API 주문 → 불사자 잠금, launchd 00:01) | 2026-10-16 | aa22c47 | [261016-lct-sold-lock](./quick/261016-lct-sold-lock/) |
