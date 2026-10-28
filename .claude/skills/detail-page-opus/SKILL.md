@@ -55,6 +55,14 @@ description: 판매자상품코드를 받아 Aside 에서 Claude Opus 5.5 로 �
    - 반영 후 `bulsaja_product_workdata(full)` 로 상세 HTML 의 `<img>` 개수가 조각 수와 같은지 다시 확인한다.
    - 이미 상세가 반영된 상품을 다시 돌리면 그대로 덮어쓴다. 되돌릴 때는 `before_apply.html` 을 `bulsaja_detail_apply` 로 다시 넣는다.
    - 마켓(스마트스토어) 업데이트 전송은 하지 않는다. 불사자 상품 상세만 바꾼다.
+5-1. **대표 썸네일 워터마크(2026-10-29~)** — 상세를 반영한 뒤 대표(첫 번째) 썸네일에만 같은 펜체 마켓명을 18도 대각선으로 얹는다. 추가 썸네일은 건드리지 않는다.
+   ```bash
+   $PY thumb_wm.py --code <코드> --outdir $D --dry-run   # thumb/thumb0_orig.jpg · thumb0_wm.jpg 생성, 눈으로 확인
+   $PY thumb_wm.py --code <코드> --outdir $D [--send]    # 업로드 → 대표만 교체 → 재조회 확인(--send 면 스마트스토어 수정 전송)
+   ```
+   - 이미 있으면 건너뛴다: 우리가 넣은 기록(`thumb/thumb_wm.json`의 주소 = 현재 대표) 또는 Aside `verification.json` 의 `thumbnailWatermark: true`.
+   - 글자 크기는 사진 폭의 15% 상한, 불투명도 24%(무늬 많으면 30%), 반대색 테두리를 옅게 깔아 어떤 배경에서도 읽히게 한다.
+   - 교체 전 목록은 `thumb/before_thumbs.json`. 되돌릴 때는 그 목록을 `bulsaja_thumbnail_update` 로 다시 넣는다.
 6. **보고** — 판매자상품코드로 보고한다.
    - 장수, 컷 활용률, 걸린 시간, 결과 폴더 경로, 원본에서 뺀 정보 요약, 아쉬운 점
    - 불사자 반영 여부(조각 수, 백업 경로). 반영 안 했으면 이유.
@@ -68,7 +76,7 @@ PYTHONIOENCODING=utf-8 $PY -u targets.py --limit 5            # 대상 뽑기(�
 caffeinate -i env PYTHONIOENCODING=utf-8 $PY -u batch.py --batch <오늘> > <배치폴더>/batch.log 2>&1   # 백그라운드 + 감시 필수
 ```
 - **대상**: 최신 광고 주간보고 ⑦c·⑦d 중 상세 미가공 + 불사자 히트. 순서 = 판매(잠금) → 구매수 → 클릭수. 실시간 재조회로 이미 가공된 것(AI 생성 표시 · `mcp-assets` 업로드 흔적 · 로컬 `_opus` 결과)과 마켓번호 불일치는 뺀다.
-- **상품마다**: 지시서 → Aside 제작(로그 5분 무응답이면 1회 재시작, 60분 상한) → 자동 검수(장수·860px·verification) → 보고서에 "확인 필요" 절이 있으면 **보류**(반영 안 함) → 반영(dry-run→실제→재조회) → 스마트스토어 수정 전송.
+- **상품마다**: 지시서 → Aside 제작(로그 5분 무응답이면 1회 재시작, 60분 상한) → 자동 검수(장수·860px·verification) → 보고서에 "확인 필요" 절이 있으면 **보류**(반영 안 함) → 반영(dry-run→실제→재조회) → 대표 썸네일 워터마크(실패해도 진행) → 스마트스토어 수정 전송(상세·썸네일 한 번에).
 - 결과: 배치 폴더(`~/python_work/data/detail-opus/batches/<날짜>/`)의 `state.json`(재실행 시 이어서) · `summary.md`(아침 요약: 완료/보류/실패·시간·토큰). 보류 건은 사람이 보고 판단한 뒤 단건 흐름으로 처리한다.
 - 아침 보고 때 Claude 가 완료 건 `preview.jpg` 를 눈으로 훑는다(배치는 자동 검수만 한다).
 - 토큰은 Aside `state.db` 의 회차 시간대 합(API 환산). 다른 Aside 작업이 겹치면 과대 계상된다.

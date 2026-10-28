@@ -21,6 +21,7 @@ from pathlib import Path
 from PIL import Image
 
 import common
+import thumb_wm
 
 STALL_SEC = 300        # Aside 로그가 이 시간 동안 0바이트면 멈춘 것으로 보고 한 번 다시 띄운다
 MAKE_TIMEOUT = 3600    # 제작 상한
@@ -48,6 +49,7 @@ def write_brief(t, outdir):
         f"- 원본: 같은 상품 폴더에 originals/ 가 있으면 재사용, 없으면 불사자 현재 상세 이미지·옵션 이미지를 내려받아 originals/ 에 저장\n"
         f"- 스타일 C, 보호 표시 넣음\n"
         f"- verification.json 에 모델명 {common.MODEL} 기록\n"
+        f"- 대표 썸네일(첫 번째)에 마켓명 워터마크가 이미 있는지 눈으로 보고 verification.json 에 thumbnailWatermark: true/false 로 남긴다(썸네일은 고치지 않는다)\n"
         f"- 불사자 저장·교체·업로드 금지(반영은 Claude Code 가 한다)\n",
         encoding="utf-8")
     return p
@@ -264,6 +266,14 @@ def main():
                 if not ok:
                     s.update(stage="failed", note=msg); log(f"  반영 실패: {msg}"); continue
                 s.update(stage="applied", note=msg); log(f"  {msg}")
+            if not s.get("thumb"):
+                # 대표 썸네일 워터마크 — 실패해도 상세 전송은 그대로 한다
+                tr, tn = thumb_wm.run(t["code"], t["productId"], t["market"], outdir)
+                if tr == "failed" and "429" in tn:
+                    tr = None
+                else:
+                    s["thumb"] = tr
+                s["thumbNote"] = tn; log(f"  썸네일: {tn}")
             if not args.no_market:
                 tid, res = market_send(t)
                 if not tid:
