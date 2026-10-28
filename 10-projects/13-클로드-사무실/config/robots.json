@@ -1,0 +1,19 @@
+{
+  "_note": "로봇 직원 — 로그 파일 mtime 만 본다(내용은 안 읽음). log_path 에 * 가 있으면 맞는 파일 중 가장 최근 것. 예약 작업의 정본은 .claude/lib/eroom_scheduler.py 의 JOBS 표(launchd com.eroom.scheduler, 1분 틱)",
+  "robots": [
+    {"key": "mulgari", "name": "물갈이(Aside)", "team": "ops", "schedule": null, "log_path": null,
+     "note": "경로 미확인 — 2단계 전 확인. Aside 루틴이라 로컬 로그 파일을 찾지 못했다"},
+    {"key": "sold-lock", "name": "판매상품 잠금", "team": "ops", "schedule": "00:01",
+     "log_path": "~/python_work/data/scheduler/logs/sold-lock.log",
+     "note": "eroom_scheduler JOBS sold-lock (daily 00:01)"},
+    {"key": "auto-watch", "name": "auto-watch", "team": "it", "schedule": "07:30",
+     "log_path": "~/python_work/data/scheduler/logs/auto-watch.log",
+     "note": "eroom_scheduler JOBS auto-watch (daily 07:30)"},
+    {"key": "detail-opus", "name": "고퀄 상세 밤 배치", "team": "plan", "schedule": null,
+     "log_path": "~/python_work/data/detail-opus/batches/*/batch.log",
+     "note": "detail-page-opus 배치 모드. 예약 시각 없음(수동 밤 실행) — 가장 최근 배치 폴더의 batch.log"},
+    {"key": "rights-claim", "name": "권리침해 소명", "team": "cs", "schedule": "09:00",
+     "log_path": "~/python_work/data/scheduler/logs/rights-claim.log",
+     "note": "eroom_scheduler JOBS rights-claim (daily 09:00)"}
+  ]
+}

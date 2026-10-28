@@ -1,0 +1,26 @@
+{
+  "_note": "Python 표준 라이브러리에 YAML 파서가 없어 의존성 0 을 지키려고 JSON 으로 둔다(구조는 구현계획서 §4 YAML 과 동일)",
+  "teams": [
+    {"key": "sec",  "name": "비서실",        "color": "#8a6bb8"},
+    {"key": "it",   "name": "IT개발팀",      "color": "#3f7fb5"},
+    {"key": "plan", "name": "상품기획팀",    "color": "#c2793a"},
+    {"key": "ops",  "name": "상품운영팀",    "color": "#2f8f6a"},
+    {"key": "src",  "name": "소싱팀",        "color": "#a0913a"},
+    {"key": "cs",   "name": "CS·권리팀",     "color": "#b5566a"},
+    {"key": "edu",  "name": "콘텐츠·강의팀", "color": "#d0628f"},
+    {"key": "ads",  "name": "광고팀",        "color": "#7b8a83", "closed": true}
+  ],
+  "sessions": {
+    "to-do-list": {"team": "sec", "role": "업무관리"}
+  },
+  "rules": [
+    {"match": "업무|todo|메일|카톡|주소지|잔금", "team": "sec"},
+    {"match": "스킬|uat|세션관리|오피스|MCP|자동화 패키징", "team": "it"},
+    {"match": "상세페이지|오푸스|효자|가로러너|쿠팡|스쿠도제", "team": "plan"},
+    {"match": "옵션|썸네일|상품명|카테고리|태그|잠금|배송비", "team": "ops"},
+    {"match": "소싱|검수|키워드|벤치마크", "team": "src"},
+    {"match": "CS|권리|소명", "team": "cs"},
+    {"match": "숏폼|유튜브|하입덕|스레드|강의|라이브|실전반", "team": "edu"},
+    {"match": "광고|입찰", "team": "ads"}
+  ]
+}
