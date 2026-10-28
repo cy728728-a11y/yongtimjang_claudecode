@@ -27,6 +27,15 @@
   - added: 2026-10-27 23:43
   - priority: normal
 
+- [ ] 무료강의 준비 — 커리큘럼 · PPT 초안 · 참석 혜택 자료
+  - added: 2026-10-28 14:51
+  - priority: normal
+  - project: 무료강의
+
+- [ ] 비솝님 — 단톡방 D-day 알림 내용 정하기
+  - added: 2026-10-28 14:51
+  - priority: normal
+
 ## Backlog
 
 ## Done (주기적으로 정리)
