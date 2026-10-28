@@ -58,6 +58,9 @@ def _person(s, now, cfg, mapping):
     name = sessions.session_name(path, sid)
     status = sessions.session_status(info["last"], mtime, now, cfg.get("workingSeconds", 90))
     subs = activity.running_subagents(path, now)
+    # 주인은 턴을 끝내고 기다려도 서브에이전트가 일하는 중이면 그 세션은 일하는 중으로 본다
+    if subs and status == "rest" and not (info["last"] or {}).get("interrupted"):
+        status = "working"
     team = teams.assign_team(sid, name, mapping)
     p = {
         "id": sid,

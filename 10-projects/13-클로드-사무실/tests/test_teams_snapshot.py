@@ -197,6 +197,16 @@ def test_snapshot_subagents(claude_home):
     assert person["subCount"] == 14 and len(person["subs"]) == 12
 
 
+def test_snapshot_parent_waiting_but_subagent_running_is_working(claude_home):
+    # 주인은 10분 전에 턴을 끝냈지만 서브에이전트가 일하는 중 → working
+    p = claude_home.write("abcd1234-aaaa", [_title("옵션"), assistant([{"type": "text", "text": "x"}], stop_reason="end_turn")], ago=600)
+    claude_home.sub(p, "s01", [assistant([tool_use("a", "Read")])], meta={"agentType": "gsd-executor"}, ago=5)
+    claude_home.write("efgh5678-bbbb", [_title("쉬는세션"), assistant([{"type": "text", "text": "x"}], stop_reason="end_turn")], ago=600)
+    by = {p["name"]: p for p in snapshot.build_snapshot(cfg=_cfg())["people"]}
+    assert by["옵션"]["status"] == "working" and by["옵션"]["subCount"] == 1
+    assert by["쉬는세션"]["status"] == "rest"
+
+
 def test_snapshot_one_broken_session_does_not_kill(claude_home, monkeypatch):
     claude_home.write("good0000-aaaa", [_title("좋음"), user("x")], ago=10)
     claude_home.write("bad00000-bbbb", [_title("나쁨"), user("x")], ago=10)
