@@ -23,10 +23,21 @@ MODEL = "claude-code/claude-opus-5-5"
 
 
 def mcp():
-    """열린 불사자 MCP 클라이언트. 호출부가 close 한다."""
-    m = bulsaja_client.DetailRemixMCP()
-    m.open()
-    return m
+    """열린 불사자 MCP 클라이언트. 호출부가 close 한다. 연결 단계 429 도 길게 쉬고 다시."""
+    last = None
+    for wait in (0, 60, 180, 360, 720):
+        if wait:
+            print(f"  [429] 연결 {wait}초 쉬고 다시", flush=True)
+            time.sleep(wait)
+        try:
+            m = bulsaja_client.DetailRemixMCP()
+            m.open()
+            return m
+        except RuntimeError as e:
+            last = e
+            if "429" not in str(e):
+                raise
+    raise last
 
 
 def call(m, tool, args, gap=2.0):

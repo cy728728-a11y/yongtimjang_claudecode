@@ -28,8 +28,9 @@ JOBS = [
      "cmd": [PY, ".claude/skills/work-board/scripts/board_sync.py", "rollover"]},
     {"name": "board-sync", "kind": "hourly",
      "cmd": [PY, ".claude/skills/work-board/scripts/board_sync.py", "sync"]},
-    {"name": "ads-weekly", "kind": "weekly", "weekday": 0, "at": "07:00",
-     "cmd": [PY, ".claude/skills/naver-ads-weekly/scripts/weekly_monday.py"], "caffeinate": True},
+    # 2026-10-27 용팀장 지시로 일시정지 — 와이프 PC 와 광고 작업 중복. 재개 지시 전까지 켜지 마라.
+    # {"name": "ads-weekly", "kind": "weekly", "weekday": 0, "at": "07:00",
+    #  "cmd": [PY, ".claude/skills/naver-ads-weekly/scripts/weekly_monday.py"], "caffeinate": True},
     {"name": "auto-watch", "kind": "daily", "at": "07:30",
      "cmd": [PY, ".claude/skills/auto-watch/scripts/watch.py"]},
     {"name": "rights-claim", "kind": "daily", "at": "09:00",

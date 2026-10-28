@@ -13,6 +13,8 @@ export const meta = {
 // catfix-fanout 실측 하네스 특성: args 가 JSON 문자열로 올 수 있고, 스키마 key 는 ASCII 만.
 const args_ = (typeof args === 'string') ? JSON.parse(args) : args
 const BUDGET = (args_.budgetImgs || 20)
+// 판정 모델 — 기본 sonnet. A/B 비교 때만 args.model 로 바꾼다
+const MODEL = args_.model || 'sonnet'
 // 대량 run 은 args 를 줄이려고 batches 대신 compact [[n,count,imgs],...] 로 줄 수 있다(경로는 runDir 에서 만든다).
 // range = {from,to,count,imgs} 균일 배치 축약(마지막 배치는 lastCount/lastImgs 로 덮는다).
 if (!args_.batches && !args_.compact && args_.range) {
@@ -72,7 +74,7 @@ phase('판정')
 const first = await parallel(bins.map(bin => () =>
   agent(prompt(bin), {
     label: `판정:${bin.items.map(b => b.n).join(',')}`,
-    phase: '판정', schema: SCHEMA, model: 'sonnet', agentType: 'fanout-worker',
+    phase: '판정', schema: SCHEMA, model: MODEL, agentType: 'fanout-worker',
   })))
 
 const rows = first.filter(Boolean).flatMap(r => r.results || [])
@@ -90,7 +92,7 @@ if (missing.length && !args_.retried) {
   const again = await parallel(missing.map(b => () =>
     agent(prompt({ imgs: b.imgs || 0, items: [b] }), {
       label: `재판정:${b.n}`,
-      phase: '오디트', schema: SCHEMA, model: 'sonnet', agentType: 'fanout-worker',
+      phase: '오디트', schema: SCHEMA, model: MODEL, agentType: 'fanout-worker',
     })))
   retryRows = again.filter(Boolean).flatMap(r => r.results || [])
 } else if (missing.length) {

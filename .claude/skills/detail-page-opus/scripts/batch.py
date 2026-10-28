@@ -43,7 +43,7 @@ def write_brief(t, outdir):
         f"- 업로드 마켓그룹 {t.get('marketGroupName')} → 마켓 {t['market']} 로 매핑한다.\n"
         f"- 판매 옵션: {sell}\n"
         f"- 판매 제외 옵션(상세에 넣지 않는다): {excl}\n"
-        f"- 원본 옵션 이미지가 없거나 옵션명과 모양의 짝이 불확실하면 report.md 에 '## 확인 필요' 절로 적는다.\n"
+        f"- 반영하면 안 될 만큼 불확실한 것(옵션명과 모양의 짝을 모름, 판매 구성과 원본이 다름 등)만 report.md 에 '## 반영 보류 사유' 절로 적는다. 참고 메모는 다른 절에 쓰고 이 제목을 쓰지 않는다.\n"
         f"- 저장: {outdir}/\n"
         f"- 원본: 같은 상품 폴더에 originals/ 가 있으면 재사용, 없으면 불사자 현재 상세 이미지·옵션 이미지를 내려받아 originals/ 에 저장\n"
         f"- 스타일 C, 보호 표시 넣음\n"
@@ -100,11 +100,27 @@ def auto_check(outdir):
     if not (outdir / "verification.json").exists():
         probs.append("verification.json 없음")
     rep = (outdir / "report.md").read_text(encoding="utf-8") if (outdir / "report.md").exists() else ""
-    need = re.search(r"^#{2,3} [^\n]*확인 필요[^\n]*\n(.*?)(?=^#{1,3} |\Z)", rep, re.S | re.M)
+    need = re.search(r"^#{2,3} 반영 보류 사유[^\n]*\n(.*?)(?=^#{1,3} |\Z)", rep, re.S | re.M)
     return probs, (need.group(0).strip()[:1500] if need else None), len(finals)
 
 
-def apply(t, outdir):
+QUICK = (0, 120)                          # 1차 시도: 짧게만 기다리고 미룬다
+PATIENT = (0, 180, 360, 720, 1200, 1800)  # 미룬 반영 몰아서: 길게 기다린다
+
+
+def run_429(cmd, env, waits=QUICK):
+    """run.py 실행 — 불사자 429 면 waits 대로 쉬고 다시."""
+    for wait in waits:
+        if wait:
+            log(f"  [429] {wait}초 쉬고 반영 재시도")
+            time.sleep(wait)
+        r = subprocess.run(cmd, cwd=common.REMIX, capture_output=True, text=True, env=env)
+        if "429" not in (r.stdout + r.stderr):
+            return r
+    return r
+
+
+def apply(t, outdir, waits=QUICK):
     """bulsaja-detail-remix run.py 로 dry-run → 실제 반영 → 재조회 확인."""
     a = outdir / "_apply"
     a.mkdir(exist_ok=True)
@@ -114,12 +130,16 @@ def apply(t, outdir):
     subprocess.run(f"cd '{outdir}' && zip -q '{z}' [0-9][0-9].png", shell=True, check=True)
     base = [str(common.PY), "run.py", "--code", t["code"], "--zip", str(z), "--out", str(a)]
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-    dry = subprocess.run(base + ["--dry-run"], cwd=common.REMIX, capture_output=True, text=True, env=env)
+    dry = run_429(base + ["--dry-run"], env, waits)
     chunks = re.findall(r"\[조각 \d+/(\d+)\] .*\((?:png|jpg|jpeg), 860x(\d+)\)", dry.stdout)
+    if "429" in (dry.stdout + dry.stderr):
+        return None, "불사자 429 — 반영 미룸"
     if dry.returncode != 0 or not chunks or any(int(h) > 2300 for _, h in chunks):
         return False, f"dry-run 이상: {dry.stdout[-400:]} {dry.stderr[-300:]}"
     n = int(chunks[0][0])
-    real = subprocess.run(base, cwd=common.REMIX, capture_output=True, text=True, env=env)
+    real = run_429(base, env, waits)
+    if "429" in (real.stdout + real.stderr) and "[반영 완료]" not in real.stdout:
+        return None, "불사자 429 — 반영 미룸"
     if real.returncode != 0 or "[반영 완료]" not in real.stdout:
         return False, f"반영 실패: {real.stdout[-400:]} {real.stderr[-300:]}"
     m = common.mcp()
@@ -154,13 +174,14 @@ def wait_tasks(state):
     t0 = time.time()
     while pending and time.time() - t0 < TASK_TIMEOUT:
         time.sleep(30)
-        m = common.mcp()
         try:
-            r = common.call(m, "bulsaja_upload_tasks", {"mode": "list"})
+            m = common.mcp()
+            try:
+                r = common.call(m, "bulsaja_upload_tasks", {"mode": "list"})
+            finally:
+                m.close()
         except Exception as e:
             log(f"  전송 상태 조회 실패 {e}"); continue
-        finally:
-            m.close()
         for job in r.get("마켓작업") or []:
             tid = str(job.get("taskId"))
             if tid in pending and job.get("상태") not in ("진행중", "대기", "대기중"):
@@ -183,7 +204,7 @@ def summary(bdir, targets, state):
     for t in targets:
         s = state.get(t["code"], {})
         u = s.get("usage") or {}
-        res = {"sent": f"✅ 전송 {s.get('taskStatus', '')}", "held": "🟡 보류", "applied": "반영만"}.get(
+        res = {"sent": f"✅ 전송 {s.get('taskStatus', '')}", "held": "🟡 보류", "applied": "반영만", "made": "⏸ 제작완료·반영 미룸"}.get(
             s.get("stage"), f"❌ {s.get('stage', '미실행')}")
         lines.append(f"| {t['code']} | {t['market']} | {t['name']} | {res} | {s.get('pages', '')} | "
                      f"{s.get('minutes', '')} | {u.get('tokens', ''):,} | {s.get('note', '')[:120]} |"
@@ -209,13 +230,18 @@ def main():
     state = json.loads(sp.read_text(encoding="utf-8")) if sp.exists() else {}
     log(f"배치 {args.batch} 시작 — {len(targets)}건")
 
-    for i, t in enumerate(targets, 1):
+    for deferred_pass, i, t in [(False, i, t) for i, t in enumerate(targets, 1)] + \
+                               [(True, i, t) for i, t in enumerate(targets, 1)]:
         s = state.setdefault(t["code"], {})
         if s.get("stage") in ("sent", "held") or (args.no_market and s.get("stage") == "applied"):
             continue
-        outdir = common.PAGES / t["market"] / t["productId"] / f"{date.today().isoformat()}_opus"
+        if deferred_pass and s.get("stage") not in ("made", "applied"):
+            continue   # 2회차는 반영이 미뤄진 상품만
+        # 재실행·자정 넘김에도 같은 폴더를 쓴다(날짜가 바뀌면 새 폴더로 다시 만드는 버그, 2026-10-28)
+        outdir = Path(s["outdir"]) if s.get("outdir") else \
+            common.PAGES / t["market"] / t["productId"] / f"{date.today().isoformat()}_opus"
         s["outdir"] = str(outdir)
-        log(f"({i}/{len(targets)}) {t['code']} {t['market']} {t['name']}")
+        log(f"{'[미룬 반영] ' if deferred_pass else ''}({i}/{len(targets)}) {t['code']} {t['market']} {t['name']}")
         try:
             if not (outdir / "report.md").exists():
                 outdir.mkdir(parents=True, exist_ok=True)
@@ -232,7 +258,9 @@ def main():
                 s.update(stage="held", need=need, note="; ".join(probs) or "보고서 확인 필요")
                 log(f"  보류: {s['note']}"); continue
             if s.get("stage") != "applied":
-                ok, msg = apply(t, outdir)
+                ok, msg = apply(t, outdir, PATIENT if deferred_pass else QUICK)
+                if ok is None:
+                    s.update(stage="made", note=msg); log(f"  {msg}"); continue
                 if not ok:
                     s.update(stage="failed", note=msg); log(f"  반영 실패: {msg}"); continue
                 s.update(stage="applied", note=msg); log(f"  {msg}")
