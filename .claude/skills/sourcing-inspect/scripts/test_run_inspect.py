@@ -8,7 +8,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from run_inspect import abs_url, select_targets, to_view, make_batches, merge_judged, pending_batches  # noqa: E402
+from run_inspect import abs_url, select_targets, to_view, make_batches, merge_judged, pending_batches, dedupe_views, spread_dups  # noqa: E402
 
 FAILED = []
 
@@ -53,6 +53,16 @@ with tempfile.TemporaryDirectory() as d:
         json.dump([{"n": 1}, {"n": 2}], f)
     open(os.path.join(d, "judged", "judged_001.json"), "w").write("[]")
     check("pending 은 judged 있는 배치 제외", [b["n"] for b in pending_batches(d)] == [2])
+
+# 2차 같은 타오바오 상품 1회 판정 (2026-10-30)
+vs = [{"id": "p1", "tb_item_id": "9"}, {"id": "p2", "tb_item_id": "9"}, {"id": "p3", "tb_item_id": "", "tb_thumb_url": "u"},
+      {"id": "p4", "tb_item_id": "", "tb_thumb_url": "u"}, {"id": "p5"}, {"id": "p6"}]
+reps, dm = dedupe_views(vs)
+check("중복 묶기: itemId·썸네일 키", [v["id"] for v in reps] == ["p1", "p3", "p5", "p6"] and dm == {"p1": ["p2"], "p3": ["p4"]}, (reps, dm))
+fin = {"p1": {"verdict": "drop", "reason": "IP", "note": "로고"}}
+n = spread_dups(fin, dm)
+check("대표 판정 복사(대표 없으면 건너뜀)", n == 1 and fin["p2"]["verdict"] == "drop" and fin["p2"]["dup_of"] == "p1" and "p4" not in fin, fin)
+check("to_view 2차에 tb_item_id", to_view({"id": "x", "taobaoResult": [{"item": {"itemId": 123, "image": "//i"}}]}, 2)["tb_item_id"] == "123")
 
 print("\nFAILED:", FAILED if FAILED else "없음")
 sys.exit(1 if FAILED else 0)

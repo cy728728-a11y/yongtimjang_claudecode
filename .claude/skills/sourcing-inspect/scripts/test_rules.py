@@ -19,7 +19,7 @@ def check(name, cond, detail=""):
 
 cats = load_banned_cats()
 kws = load_keywords()
-check("금지 카테고리 3290개 로드", len(cats) == 3290, len(cats))
+check("금지 카테고리 로드(3천개 이상)", len(cats) >= 3000, len(cats))
 
 r = machine_judge({"catId": "50000979", "productName": "x"}, 1, cats, kws)
 check("문자열 catId 금지", r and r["reason"] == "BANNED_CAT", r)

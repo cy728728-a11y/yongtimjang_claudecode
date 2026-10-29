@@ -136,8 +136,38 @@ def to_view(item, stage, cat_paths=None):
     if stage == 2:
         v.update({"tb_title": tb.get("title"), "tb_price_cny": tb_price,
                   "tb_thumb_url": abs_url(tb.get("image")), "tb_url": abs_url(tb.get("itemUrl")),
-                  "fee": item.get("overseaDeliveryFee")})
+                  "tb_item_id": str(tb.get("itemId") or ""), "fee": item.get("overseaDeliveryFee")})
     return v
+
+
+def dedupe_views(views):
+    """2차: 같은 타오바오 상품은 대표 1건만 AI 판정(2026-10-30).
+    키 = 타오바오 itemId, 없으면 타오바오 썸네일 URL. 키가 없으면 묶지 않는다.
+    반환 (대표 views, {대표id: [나머지 id]})."""
+    reps, dup_map, first = [], {}, {}
+    for v in views:
+        key = v.get("tb_item_id") or v.get("tb_thumb_url")
+        if key and key in first:
+            dup_map.setdefault(first[key], []).append(v["id"])
+            continue
+        if key:
+            first[key] = v["id"]
+        reps.append(v)
+    return reps, dup_map
+
+
+def spread_dups(final, dup_map):
+    """대표 판정을 같은 타오바오 상품 나머지에 복사. 대표 판정이 없으면 건너뛴다(누락은 merge 가 보고)."""
+    n = 0
+    for rep, others in (dup_map or {}).items():
+        r = final.get(rep)
+        if not r:
+            continue
+        for o in others:
+            final[o] = {**r, "note": f"{r.get('note') or ''} (같은 타오바오 — 대표 {rep} 판정 복사)".strip(),
+                        "dup_of": rep}
+            n += 1
+    return n
 
 
 def make_batches(views, size=40):
@@ -246,6 +276,20 @@ def cmd_prep(a):
             machine[it["id"]] = {**r, "by": "machine"}
         else:
             views.append(to_view(it, a.stage, cat_paths))
+    # 1차 AI 생략(2026-10-30 실험: 1차 AI 탈락의 91% 를 2차가 다시 잡음) — 기계 통과분은 바로 pass
+    auto, dup_map = {}, {}
+    if getattr(a, "machine_only", False):
+        if a.stage != 1:
+            sys.exit("--machine-only 는 --stage 1 에서만 쓴다")
+        auto = {v["id"]: {"verdict": "pass", "reason": "OK", "note": "1차 AI 생략(기계 규칙 통과)", "by": "auto"}
+                for v in views}
+        views = []
+    elif a.stage == 2:
+        n0 = len(views)
+        views, dup_map = dedupe_views(views)
+        print(f"[prep] 같은 타오바오 상품 {n0 - len(views)}건은 대표 판정 복사")
+    _save(_p(a.run_dir, "auto.json"), auto)
+    _save(_p(a.run_dir, "dup_map.json"), dup_map)
     # 썸네일 병렬 다운로드 (1차=네이버, 2차=타오바오+네이버)
     tdir = _p(a.run_dir, "thumbs")
     os.makedirs(tdir, exist_ok=True)
@@ -313,7 +357,11 @@ def cmd_merge(a):
         rv, _, _ = merge_judged(list(verdicts), [d])
         verdicts.update(rv)
     machine = _load(_p(a.run_dir, "machine.json"), {}) or {}
-    final = {**verdicts, **machine}
+    auto = _load(_p(a.run_dir, "auto.json"), {}) or {}  # --machine-only 자동 통과
+    final = {**auto, **verdicts, **machine}
+    dups = spread_dups(final, _load(_p(a.run_dir, "dup_map.json"), {}) or {})
+    if dups:
+        print(f"[merge] 같은 타오바오 상품 {dups}건에 대표 판정 복사")
     # 사용자가 직접 정해 준 판정(rules/feedback_*.json)이 최우선 — AI·기계 판정을 덮는다
     user = 0
     for fn in sorted(os.listdir(os.path.join(SKILL_DIR, "rules"))):
@@ -482,6 +530,8 @@ def main():
     p.add_argument("--limit", type=int); p.add_argument("--sample", choices=["random", "head"], default="head")
     p.add_argument("--exclude-run", action="append", help="이 run-dir 에서 이미 판정한 상품 제외(반복 가능)")
     p.add_argument("--seed", type=int, default=20261018)
+    p.add_argument("--machine-only", action="store_true",
+                   help="1차를 기계 규칙만으로 끝낸다(AI 생략). 기계 통과분은 바로 pass → merge → match")
     b = sub.add_parser("batch"); b.add_argument("--size", type=int, default=40)
     sub.add_parser("pending"); sub.add_parser("merge"); sub.add_parser("remachine")
     rp = sub.add_parser("report"); rp.add_argument("--only", choices=["drop", "pass"])

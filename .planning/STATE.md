@@ -182,6 +182,7 @@ Recent decisions affecting current work:
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 261030-0uk | 소싱검수 1차 AI 생략(--machine-only, 실험 91% 재포착) + 2차 같은 타오바오 1회 판정 | 2026-10-30 | (this) | [261030-0uk-sourcing-inspect-1-ai-2-1](./quick/261030-0uk-sourcing-inspect-1-ai-2-1/) |
 | 261028-un0 | 클로드 사무실 1단계 — 세션별 직원 데이터 서버(Python stdlib, 팀 매핑·로봇, UAT PASS) | 2026-10-28 | 5161436 | [261028-un0-claude-office-phase1-data-server](./quick/261028-un0-claude-office-phase1-data-server/) |
 | 261027-jrl | 권리보호센터 소명요청 자동처리 rights-claim (신고상품 삭제 + Aside 소명 접수, 매일 09:00) | 2026-10-27 | 411ab13 | [261027-jrl-rights-claim-09-00](./quick/261027-jrl-rights-claim-09-00/) |
 | 261016-wbc | 광고 주간 ⑦ 체계(노출0·CTR하위/상위10%·클릭20+ 정비점검) + 월요일 07:00 자동 | 2026-10-17 | 93e9dd5 | [261016-wbc-ads-weekly-v2](./quick/261016-wbc-ads-weekly-v2/) |

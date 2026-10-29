@@ -27,6 +27,7 @@ PY=.venv/bin/python3; S=.claude/skills/sourcing-inspect/scripts
 $PY $S/web_token.py                                   # 크롬 프로필 → ~/.eroom/bulsaja-web.json (토큰 값 비출력)
 $PY $S/run_inspect.py fetch  --run-dir <R> --campaign <ID>
 $PY $S/run_inspect.py prep   --run-dir <R> --stage 1|2 [--limit N --sample random]
+$PY $S/run_inspect.py prep   --run-dir <R> --stage 1 --machine-only   # 1차 AI 생략: 기계 통과분 바로 pass → merge
 $PY $S/run_inspect.py batch  --run-dir <R> --size 40
 $PY $S/run_inspect.py pending --run-dir <R>           # 출력 JSON 을 그대로 Workflow 'inspect-fanout' args 로
 #   → Workflow({name: "inspect-fanout", args: <pending 출력>})   (judged/judged_NNN.json 생성)
@@ -66,6 +67,8 @@ $PY $A match   --run-dir R1 [--limit N] [--workers 4]   # verdict pass·매칭�
 $PY $A collect --run-dir R1 [--run-dir R2] [--group 1007620] [--size 100] [--dry-run]  # pass → 상품수집
 ```
 - **순서**: 1차 판정 → `trash`(1차 drop) → `match`(1차 pass) → 실패분 휴지통 → 2차 판정(`prep --stage 2 --exclude-run <이전 2차 run>`) → `trash`(2차 drop) → `collect`(2차 pass).
+- **대량(수만 건 이상)은 1차 AI 를 생략한다** (2026-10-30 실험 `1030_skip1st_exp`: 1차 AI 탈락 270건 중 246건(91%)을 2차가 다시 잡음, 나머지 대부분은 매칭된 타오바오 물건이 실제로 팔 만한 것): `prep --stage 1 --machine-only` → `merge` → `trash` → `match` → 2차 AI. 기계 규칙(금지 카테고리·금지어)만 1차에서 돌고 AI 판정은 2차 한 번뿐이다.
+- 2차 `prep` 은 같은 타오바오 상품(itemId, 없으면 썸네일 URL)을 대표 1건만 AI 판정하고 `merge` 가 나머지에 복사한다(`dup_map.json`, 판정 note 에 대표 id).
 - 휴지통: `POST /api/sourcing/bulk-workflow-transition {productIds, toStatus:"delete"}`.
 - 매칭: `taobao/officialimage` → `/opensearch/proxy/sourcing/match-status/apply` → `user/use/limit`. 평균가·배송비 공식은 웹 그대로. 웹은 '매칭대기'에서 실패한 상품을 휴지통으로 보낸다 → 실패분(`apply_match.jsonl` status=match_failed)은 `trash` 와 같은 요청으로 직접 보낸다.
 - 수집: `POST /api/scrape {data:{options:[...], batchId, excluded_mall_keys}}`. 옵션은 사용자가 수집창에서 고른 값(`COLLECT_OPTIONS`). 기본 그룹 = 신규소싱상품(1007620). 접수 후 실제 수집은 불사자 큐에서 비동기로 돈다(그룹에서 '수집 중'). 같은 타오바오 상품이 이미 그룹에 있으면 중복방지로 접수 안 됨 — 정상.
