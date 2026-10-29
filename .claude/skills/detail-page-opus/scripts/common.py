@@ -20,6 +20,21 @@ BRIEF_DIR = PAGES / "_brief"
 ADS_RUNS = Path.home() / "python_work/data/naver-ads/runs"
 BATCH_ROOT = Path.home() / "python_work/data/detail-opus/batches"
 MODEL = "claude-code/claude-opus-5-5"
+INSPECT = ROOT / ".claude/skills/sourcing-inspect"               # 상품검수 스킬 — 상세는 검수 통과 상품만(2026-10-30 용팀장 지시)
+INSPECT_PROMPT = INSPECT / "rules/worker-prompt.md"
+
+
+def inspect_machine(wd):
+    """검수 스킬 기계 규칙(금지어·와트)을 타오바오 제목에 2차 기준으로 적용. 탈락이면 dict, 아니면 None."""
+    try:
+        sys.path.insert(0, str(INSPECT / "scripts"))
+        import rules
+        item = {"catId": "", "productName": wd.get("uploadCommonProductName"),
+                "taobaoResult": [{"item": {"title": wd.get("originalProductName") or ""}}]}
+        return rules.machine_judge(item, 2, rules.load_banned_cats(), rules.load_keywords())
+    except Exception as e:
+        print(f"  [경고] 검수 기계 규칙 실패 {e} — AI 검수로 넘김", flush=True)
+        return None
 
 
 def mcp():

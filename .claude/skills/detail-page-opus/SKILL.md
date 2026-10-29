@@ -16,6 +16,7 @@ description: 판매자상품코드를 받아 Aside 에서 Claude Opus 5.5 로 �
 
 1. **상품 확인** — `mcp__bulsaja__bulsaja_product_find_by_code` 로 내부 ID·마켓그룹·상품명을 찾는다. 0건·다건이면 멈추고 보고한다.
    마켓번호는 그룹명(예 `용쌤4-1` → `4-1`)에서 뽑는다. 판매 후 `구매_가공완료` 같은 그룹으로 옮겨져 번호가 없으면 `~/.aside/u/0/detail-pages/*/<내부ID>/` 기존 폴더의 마켓번호를 쓰고, 그것도 없으면 `bulsaja_product_workdata(full)` 의 업로드 마켓그룹 ID(`uploadSelectedMarketGroupId`) → `bulsaja_market_groups(groupId)` 그룹명(예 `5번_용쌤25-2`)에서 뽑는다. 그래도 없으면 사용자에게 묻는다. 마켓명 매핑은 Aside 가 `smartstore-market-number-map.md` 에서 직접 찾는다.
+1-1. **상품검수 먼저(2026-10-30 용팀장 지시)** — 상세는 **상품검수 스킬(sourcing-inspect) 기준을 통과한 상품만** 만든다. 지시서에 기준표(`sourcing-inspect/rules/worker-prompt.md`, 지시서 폴더에 `상품검수-기준표.md` 로 복사) stage 2 판정을 제작 전에 하라고 적고, Aside 가 `inspect.json`(verdict/reason/note)을 쓴다. drop 이면 상세를 만들지 않는다. 대상 뽑기(targets.py)는 기계 규칙(타오바오 제목 금지어·와트)으로 먼저 거른다.
 2. **지시서 작성** — `~/.aside/u/0/detail-pages/_brief/작업지시서-<판매자상품코드>-<YYYY-MM-DD>.md` 에 짧게 쓴다.
    ```
    계정 스킬 smartstore-detail-page(2026-10-23-opus-v1)를 그대로 따른다.
@@ -76,7 +77,7 @@ PYTHONIOENCODING=utf-8 $PY -u targets.py --limit 5            # 대상 뽑기(�
 caffeinate -i env PYTHONIOENCODING=utf-8 $PY -u batch.py --batch <오늘> > <배치폴더>/batch.log 2>&1   # 백그라운드 + 감시 필수
 ```
 - **대상**: 최신 광고 주간보고 ⑦c·⑦d 중 상세 미가공 + 불사자 히트. 순서 = 판매(잠금) → 구매수 → 클릭수. 실시간 재조회로 이미 가공된 것(AI 생성 표시 · `mcp-assets` 업로드 흔적 · 로컬 `_opus` 결과)과 마켓번호 불일치는 뺀다.
-- **상품마다**: 지시서 → Aside 제작(로그 5분 무응답이면 1회 재시작, 60분 상한) → 자동 검수(장수·860px·verification) → 보고서에 "확인 필요" 절이 있으면 **보류**(반영 안 함) → 반영(dry-run→실제→재조회) → 대표 썸네일 워터마크(실패해도 진행) → 스마트스토어 수정 전송(상세·썸네일 한 번에).
+- **상품마다**: 지시서 → Aside **상품검수(탈락이면 제작 안 함 → `inspect_drop`)** → 제작(로그 5분 무응답이면 1회 재시작, 60분 상한) → 자동 검수(장수·860px·verification) → 보고서에 "확인 필요" 절이 있으면 **보류**(반영 안 함) → 반영(dry-run→실제→재조회) → 대표 썸네일 워터마크(실패해도 진행) → 스마트스토어 수정 전송(상세·썸네일 한 번에).
 - 결과: 배치 폴더(`~/python_work/data/detail-opus/batches/<날짜>/`)의 `state.json`(재실행 시 이어서) · `summary.md`(아침 요약: 완료/보류/실패·시간·토큰). 보류 건은 사람이 보고 판단한 뒤 단건 흐름으로 처리한다.
 - 아침 보고 때 Claude 가 완료 건 `preview.jpg` 를 눈으로 훑는다(배치는 자동 검수만 한다).
 - 토큰은 Aside `state.db` 의 회차 시간대 합(API 환산). 다른 Aside 작업이 겹치면 과대 계상된다.
@@ -84,6 +85,7 @@ caffeinate -i env PYTHONIOENCODING=utf-8 $PY -u batch.py --batch <오늘> > <배
 
 ## 하지 않을 것
 - 검수 미통과 상태로 불사자 반영
+- 상품검수(sourcing-inspect 기준) 탈락·미확인(`inspect.json` 없음) 상품의 상세 제작·반영
 - 백업 없이 상세 교체
 - 단건 흐름에서 지시 없는 마켓 전송(배치 모드는 위임받아 전송한다)
 - Aside 를 거치지 않고 Claude Code 가 직접 PNG 를 만드는 것(규칙·폰트·검수가 Aside 스킬에 묶여 있다)

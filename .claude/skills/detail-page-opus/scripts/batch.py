@@ -2,6 +2,7 @@
 """고퀄 상세 밤 배치 — targets.json 상품을 한 개씩: Aside 제작 → 자동 검수 → 불사자 반영 → 스마트스토어 수정 전송.
 
 - 한 상품이 실패·보류돼도 다음 상품으로 넘어간다. 진행 상태는 state.json 에 남아 재실행하면 이어서 한다.
+- Aside 가 제작 전에 상품검수(sourcing-inspect 기준표)부터 하고, 탈락이면 상세를 만들지 않는다(inspect_drop).
 - Aside 보고서에 "확인 필요" 절이 있거나 자동 검수에 걸리면 반영하지 않고 보류한다(아침에 사람이 본다).
 - 끝나면 summary.md(아침 요약)를 쓴다.
 
@@ -38,6 +39,12 @@ def write_brief(t, outdir):
     p = common.BRIEF_DIR / f"작업지시서-{t['code']}-{today}.md"
     excl = ", ".join(t.get("excludedOptions") or []) or "없음"
     sell = ", ".join(t.get("sellOptions") or []) or "불사자에서 확인"
+    # 검수 기준표는 Aside 가 읽을 수 있게 지시서 폴더로 매번 새로 복사(정본은 sourcing-inspect/rules)
+    crit = common.BRIEF_DIR / "상품검수-기준표.md"
+    try:
+        crit.write_text(common.INSPECT_PROMPT.read_text(encoding="utf-8"), encoding="utf-8")
+    except Exception as e:
+        log(f"  [경고] 검수 기준표 복사 실패 {e}")
     p.write_text(
         f"계정 스킬 smartstore-detail-page(2026-10-23-opus-v1, 10/27 규칙 2줄 추가본)를 그대로 따른다.\n"
         f"- 판매자상품코드 {t['code']}, 불사자 내부 ID {t['productId']}, 마켓 {t['market']}, 상품명 {t['name']}\n"
@@ -47,6 +54,11 @@ def write_brief(t, outdir):
         f"- 반영하면 안 될 만큼 불확실한 것(옵션명과 모양의 짝을 모름, 판매 구성과 원본이 다름 등)만 report.md 에 '## 반영 보류 사유' 절로 적는다. 참고 메모는 다른 절에 쓰고 이 제목을 쓰지 않는다.\n"
         f"- 저장: {outdir}/\n"
         f"- 원본: 같은 상품 폴더에 originals/ 가 있으면 재사용, 없으면 불사자 현재 상세 이미지·옵션 이미지를 내려받아 originals/ 에 저장\n"
+        f"- **제작 전에 상품검수부터 한다**(용팀장 지시: 상세는 검수 통과 상품만). 기준표 {crit} 를 읽고 "
+        f"stage 2 기준(실제로 팔 타오바오 상품 — 원본 썸네일·옵션 사진·타오바오 제목을 직접 보고)으로 판정해 "
+        f"{outdir}/inspect.json 에 {{\"verdict\":\"pass|drop\",\"reason\":\"OK|LAW|DANGER|TARGET|IP|FASHION|SHIP|OTHER|SMALL|NOSELL|CATEGORY\",\"note\":\"한 줄\"}} 로 쓴다. "
+        f"판매 옵션 구성에 금지 항목이 들어 있으면(예: 수전 포함 세트) 그것도 drop 이다. 애매하면 drop. "
+        f"drop 이면 상세 PNG 를 만들지 말고 report.md 에 '## 검수 탈락' 절(사유·근거)만 쓰고 끝낸다\n"
         f"- 스타일 C, 보호 표시 넣음\n"
         f"- verification.json 에 모델명 {common.MODEL} 기록\n"
         f"- 대표 썸네일(첫 번째)에 마켓명 워터마크가 이미 있는지 눈으로 보고 verification.json 에 thumbnailWatermark: true/false 로 남긴다(썸네일은 고치지 않는다)\n"
@@ -82,6 +94,15 @@ def run_aside(brief, report, logfile):
                 # CLI 가 먼저 끊겨도(Replay buffer 등) 앱 세션은 돈다 — report 를 계속 기다린다
                 pass
     return "stalled"
+
+
+def inspect_result(outdir):
+    """Aside 가 쓴 검수 판정. 파일이 없거나 깨지면 통과로 보지 않는다(애매하면 drop)."""
+    try:
+        r = json.loads((outdir / "inspect.json").read_text(encoding="utf-8"))
+        return r if isinstance(r, dict) else {"verdict": "drop", "reason": "OTHER", "note": "inspect.json 형식 이상"}
+    except Exception:
+        return {"verdict": "drop", "reason": "OTHER", "note": "inspect.json 없음 — 검수 미확인"}
 
 
 def auto_check(outdir):
@@ -196,17 +217,18 @@ def summary(bdir, targets, state):
     lines = [f"# 고퀄 상세 배치 요약 — {bdir.name}", ""]
     done = [c for c, s in state.items() if s.get("stage") == "sent"]
     held = [c for c, s in state.items() if s.get("stage") == "held"]
+    drop = [c for c, s in state.items() if s.get("stage") == "inspect_drop"]
     fail = [c for c, s in state.items() if s.get("stage") in ("failed", "timeout", "stalled")]
     tok = sum((s.get("usage") or {}).get("tokens", 0) for s in state.values())
     cost = sum((s.get("usage") or {}).get("cost_usd", 0) for s in state.values())
     mins = [s.get("minutes") for s in state.values() if s.get("minutes")]
-    lines += [f"- 완료(스마트스토어 전송) {len(done)} · 보류(확인 필요) {len(held)} · 실패 {len(fail)} / 대상 {len(targets)}",
+    lines += [f"- 완료(스마트스토어 전송) {len(done)} · 검수 탈락 {len(drop)} · 보류(확인 필요) {len(held)} · 실패 {len(fail)} / 대상 {len(targets)}",
               f"- 제작 시간 평균 {round(sum(mins)/len(mins)) if mins else '-'}분 · 토큰 합 {tok:,} · API 환산 ${cost:.2f}",
               "", "| 판매자상품코드 | 마켓 | 상품명 | 결과 | 장수 | 분 | 토큰 | 메모 |", "|---|---|---|---|---|---|---|---|"]
     for t in targets:
         s = state.get(t["code"], {})
         u = s.get("usage") or {}
-        res = {"sent": f"✅ 전송 {s.get('taskStatus', '')}", "held": "🟡 보류", "applied": "반영만", "made": "⏸ 제작완료·반영 미룸"}.get(
+        res = {"sent": f"✅ 전송 {s.get('taskStatus', '')}", "held": "🟡 보류", "inspect_drop": "⛔ 검수 탈락", "applied": "반영만", "made": "⏸ 제작완료·반영 미룸"}.get(
             s.get("stage"), f"❌ {s.get('stage', '미실행')}")
         lines.append(f"| {t['code']} | {t['market']} | {t['name']} | {res} | {s.get('pages', '')} | "
                      f"{s.get('minutes', '')} | {u.get('tokens', ''):,} | {s.get('note', '')[:120]} |"
@@ -235,7 +257,7 @@ def main():
     for deferred_pass, i, t in [(False, i, t) for i, t in enumerate(targets, 1)] + \
                                [(True, i, t) for i, t in enumerate(targets, 1)]:
         s = state.setdefault(t["code"], {})
-        if s.get("stage") in ("sent", "held") or (args.no_market and s.get("stage") == "applied"):
+        if s.get("stage") in ("sent", "held", "inspect_drop") or (args.no_market and s.get("stage") == "applied"):
             continue
         if deferred_pass and s.get("stage") not in ("made", "applied"):
             continue   # 2회차는 반영이 미뤄진 상품만
@@ -254,6 +276,10 @@ def main():
                 s["usage"] = common.aside_usage(t0, time.time())
                 if r != "ok":
                     s.update(stage=r, note=f"Aside 제작 {r}"); log(f"  제작 실패: {r}"); continue
+            ins = inspect_result(outdir)
+            if ins.get("verdict") != "pass":
+                s.update(stage="inspect_drop", inspect=ins, note=f"검수 탈락 {ins.get('reason')} {ins.get('note', '')}")
+                log(f"  {s['note']}"); continue
             probs, need, pages = auto_check(outdir)
             s["pages"] = pages
             if probs or need:

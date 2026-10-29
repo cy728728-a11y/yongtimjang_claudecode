@@ -3,6 +3,7 @@
 
 순서: 판매된 상품(잠금) → 구매수 → 클릭수. 실시간으로 불사자를 다시 조회해
 이미 가공된 상품(AI 생성 표시 · mcp-assets 직접 업로드 흔적 · 로컬 _opus 결과)은 뺀다.
+상품검수 스킬 기계 규칙(타오바오 제목 금지어·와트)에 걸리면 뺀다 — 나머지 기준은 Aside 가 제작 전에 본다.
 
 사용법:
   python targets.py [--run-dir 2026-10-26] [--limit 5]
@@ -102,6 +103,9 @@ def main():
                 skipped.append({**x, "skip": "이미 가공됨(불사자 기록)"}); continue
             if "<img" not in rc:
                 skipped.append({**x, "skip": "상세 이미지 없음"}); continue
+            mj = common.inspect_machine(wd)
+            if mj:
+                skipped.append({**x, "skip": f"검수 탈락(기계) {mj['reason']} {mj['note']}"}); continue
             gid = wd.get("uploadSelectedMarketGroupId")
             gname = None
             if gid:
