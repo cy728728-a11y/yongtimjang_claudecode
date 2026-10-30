@@ -371,7 +371,8 @@ def cmd_collect(a):
             for x in chunk:
                 i = x["selectedItem"]["bulsaSourcingId"]
                 # 중복 = 서버 메시지 '이미 같은 마켓 그룹에 등록된 중복 상품입니다.'
-                msg = skip_msg.get(str(x["selectedItem"]["itemId"]), "") if i in skips else ""
+                # 같은 itemId 가 묶음에 둘이면 하나는 접수·하나는 중복 — 접수된 쪽은 중복 아님
+                msg = skip_msg.get(str(x["selectedItem"]["itemId"]), "") if i in skips and i not in regs else ""
                 f.write(json.dumps({"id": i, "ok": i in regs, "skipped": i in skips, "msg": msg,
                                     "dup": "중복" in msg}, ensure_ascii=False) + "\n")
             reg += len(regs)
@@ -388,7 +389,7 @@ def write_dup_list(ck, by_id, out):
     """중복으로 수집 안 된 상품 목록(수집하지 않고 목록만 — 2026-10-30 사용자 지정)."""
     rows = []
     for i, r in load_jsonl(ck).items():
-        if r.get("dup"):
+        if r.get("dup") and not r.get("ok"):
             s = (by_id.get(i) or {}).get("selectedItem") or {}
             rows.append([i, s.get("productName") or "", s.get("url") or "", s.get("ref_product_url") or ""])
     try:
