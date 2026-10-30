@@ -127,6 +127,14 @@ def auto_check(outdir):
     return probs, (need.group(0).strip()[:1500] if need else None), len(finals)
 
 
+# 429 판정 — 조각 높이(860x1429)·파일명 같은 숫자 속 '429' 를 오류로 읽지 않게 앞뒤가 숫자·x 가 아닐 때만
+RATE = re.compile(r"(?<![\dx])429(?!\d)|Rate limit|Too Many Requests", re.I)
+
+
+def is_429(r):
+    return bool(RATE.search(r.stdout + r.stderr))
+
+
 QUICK = (0, 120)                          # 1차 시도: 짧게만 기다리고 미룬다
 PATIENT = (0, 180, 360, 720, 1200, 1800)  # 미룬 반영 몰아서: 길게 기다린다
 
@@ -138,7 +146,7 @@ def run_429(cmd, env, waits=QUICK):
             log(f"  [429] {wait}초 쉬고 반영 재시도")
             time.sleep(wait)
         r = subprocess.run(cmd, cwd=common.REMIX, capture_output=True, text=True, env=env)
-        if "429" not in (r.stdout + r.stderr):
+        if not is_429(r):
             return r
     return r
 
@@ -155,13 +163,13 @@ def apply(t, outdir, waits=QUICK):
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     dry = run_429(base + ["--dry-run"], env, waits)
     chunks = re.findall(r"\[조각 \d+/(\d+)\] .*\((?:png|jpg|jpeg), 860x(\d+)\)", dry.stdout)
-    if "429" in (dry.stdout + dry.stderr):
+    if is_429(dry):
         return None, "불사자 429 — 반영 미룸"
     if dry.returncode != 0 or not chunks or any(int(h) > 2300 for _, h in chunks):
         return False, f"dry-run 이상: {dry.stdout[-400:]} {dry.stderr[-300:]}"
     n = int(chunks[0][0])
     real = run_429(base, env, waits)
-    if "429" in (real.stdout + real.stderr) and "[반영 완료]" not in real.stdout:
+    if is_429(real) and "[반영 완료]" not in real.stdout:
         return None, "불사자 429 — 반영 미룸"
     if real.returncode != 0 or "[반영 완료]" not in real.stdout:
         return False, f"반영 실패: {real.stdout[-400:]} {real.stderr[-300:]}"

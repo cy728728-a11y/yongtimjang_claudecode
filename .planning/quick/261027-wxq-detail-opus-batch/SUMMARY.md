@@ -17,3 +17,8 @@ status: complete
 - `targets.py`: 기계 규칙(타오바오 제목 금지어·와트, `common.inspect_machine`)에 걸리면 대상에서 뺀다.
 - `batch.py`: 지시서에 제작 전 stage 2 검수를 넣고(기준표는 `_brief/상품검수-기준표.md` 로 매번 복사), Aside 가 쓴 `inspect.json` 이 pass 가 아니면(없음 포함) `inspect_drop` 으로 제작·반영하지 않는다. summary 에 "검수 탈락" 칸 추가.
 - 검증: 지시서 생성·기준표 복사·inspect.json 없음 → drop 판정 로컬 확인. 실제 Aside 판정은 다음 배치에서 확인.
+
+## 후속 2026-10-31 — 429 오탐 수정
+- 증상: 코너책장(F2aJ…)·장보기카트(7zpBSQ…) 반영이 며칠째 "불사자 429 — 반영 미룸".
+- 원인: `batch.py` 가 run.py 출력에 문자열 "429" 가 있으면 요청과다로 봤는데, 조각 크기 `860x1429` 가 걸렸다.
+- 수정: `is_429()` — 앞뒤가 숫자·x 가 아닌 429 또는 "Rate limit"/"Too Many Requests" 만 요청과다로 본다.
