@@ -222,6 +222,8 @@ def cmd_match(a):
     ck = os.path.join(R, "apply_match.jsonl")
     done = load_jsonl(ck)
     todo = [p for p in targets if p["id"] not in done]
+    # 판매수 많은 순 — 대량일 때 좋은 상품부터 매칭돼 2차 판정을 앞 구간부터 붙일 수 있다(2026-10-30)
+    todo.sort(key=lambda p: -(p.get("salesCount") or 0))
     if a.limit:
         todo = todo[:a.limit]
     print(f"[match] 판정 pass·매칭대기 {len(targets)}건, 이번 {len(todo)}건 (이미 처리 {len(done)})", flush=True)
