@@ -356,8 +356,11 @@ def cmd_collect(a):
                 continue
             d = (res or {}).get("data") or {}
             regs = {o["selectedItem"]["bulsaSourcingId"] for o in d.get("registeredOptions") or []}
-            skips = {(o.get("selectedItem") or {}).get("bulsaSourcingId") or o.get("bulsaSourcingId")
-                     for o in d.get("skippedOptions") or []}
+            # skippedOptions 는 {itemId, url, errorMessage} 로 온다(2026-10-30 실측) — 타오바오 itemId 로 되짚는다
+            skip_msg = {str(o.get("itemId") or (o.get("selectedItem") or {}).get("itemId") or ""): o.get("errorMessage") or ""
+                        for o in d.get("skippedOptions") or []}
+            skips = {x["selectedItem"]["bulsaSourcingId"] for x in chunk
+                     if str(x["selectedItem"]["itemId"]) in skip_msg}
             # 응답 원형 기록 — 중복방지로 빠진 상품이 어디에 어떻게 찍히는지 근거로 남긴다(2026-10-30)
             raw = {"chunk": k // a.size + 1, "keys": sorted(d.keys()),
                    "lists": {kk: len(vv) for kk, vv in d.items() if isinstance(vv, list)},
@@ -367,9 +370,10 @@ def cmd_collect(a):
                 rf.write(json.dumps(raw, ensure_ascii=False)[:20000] + "\n")
             for x in chunk:
                 i = x["selectedItem"]["bulsaSourcingId"]
-                # 접수도 실패도 아님 = 그룹 안 중복방지로 빠진 것(추정 — 근거는 apply_collect_raw.jsonl)
-                f.write(json.dumps({"id": i, "ok": i in regs, "skipped": i in skips,
-                                    "dup": i not in regs and i not in skips}, ensure_ascii=False) + "\n")
+                # 중복 = 서버 메시지 '이미 같은 마켓 그룹에 등록된 중복 상품입니다.'
+                msg = skip_msg.get(str(x["selectedItem"]["itemId"]), "") if i in skips else ""
+                f.write(json.dumps({"id": i, "ok": i in regs, "skipped": i in skips, "msg": msg,
+                                    "dup": "중복" in msg}, ensure_ascii=False) + "\n")
             reg += len(regs)
             skip += len(d.get("skippedOptions") or [])
             print(f"[collect] {min(k + a.size, len(todo))}/{len(todo)}  예약 {reg} 실패 {skip}  "
@@ -384,7 +388,7 @@ def write_dup_list(ck, by_id, out):
     """중복으로 수집 안 된 상품 목록(수집하지 않고 목록만 — 2026-10-30 사용자 지정)."""
     rows = []
     for i, r in load_jsonl(ck).items():
-        if r.get("dup") or (not r.get("ok") and not r.get("skipped")):
+        if r.get("dup"):
             s = (by_id.get(i) or {}).get("selectedItem") or {}
             rows.append([i, s.get("productName") or "", s.get("url") or "", s.get("ref_product_url") or ""])
     try:
