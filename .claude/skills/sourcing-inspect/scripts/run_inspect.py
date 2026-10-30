@@ -389,7 +389,7 @@ REASON_KO = {
     "IP": "브랜드·캐릭터", "KEYWORD_IP": "브랜드(상품명 키워드)", "SMALL": "작은 부품·소품",
     "CATEGORY": "금지 분야", "NOSELL": "안 파는 품목", "SHIP": "대형·파손 위험", "FASHION": "패션",
     "LAW": "법규 금지품", "KEYWORD_LAW": "법규 금지품(키워드)", "DANGER": "위험물",
-    "KEYWORD_DANGER": "위험물(키워드)", "TARGET": "아이·유아·성인 대상", "WATT": "3000W 이상",
+    "KEYWORD_DANGER": "위험물(키워드)", "KEYWORD_OTHER": "기타 금지품(키워드)", "TARGET": "아이·유아·성인 대상", "WATT": "3000W 이상",
     "NO_MATCH": "매칭 없음", "BANNED_CAT": "금지 카테고리 번호", "USER": "사용자 지정 삭제",
     "OTHER": "기타", "OK": "통과",
 }

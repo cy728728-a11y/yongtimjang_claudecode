@@ -71,6 +71,6 @@ $PY $A collect --run-dir R1 [--run-dir R2] [--group 1007620] [--size 100] [--dry
 - 2차 `prep` 은 같은 타오바오 상품(itemId, 없으면 썸네일 URL)을 대표 1건만 AI 판정하고 `merge` 가 나머지에 복사한다(`dup_map.json`, 판정 note 에 대표 id).
 - 휴지통: `POST /api/sourcing/bulk-workflow-transition {productIds, toStatus:"delete"}`.
 - 매칭: `taobao/officialimage` → `/opensearch/proxy/sourcing/match-status/apply` → `user/use/limit`. 평균가·배송비 공식은 웹 그대로. 웹은 '매칭대기'에서 실패한 상품을 휴지통으로 보낸다 → 실패분(`apply_match.jsonl` status=match_failed)은 `trash` 와 같은 요청으로 직접 보낸다.
-- 수집: `POST /api/scrape {data:{options:[...], batchId, excluded_mall_keys}}`. 옵션은 사용자가 수집창에서 고른 값(`COLLECT_OPTIONS`). 기본 그룹 = 신규소싱상품(1007620). 접수 후 실제 수집은 불사자 큐에서 비동기로 돈다(그룹에서 '수집 중'). 같은 타오바오 상품이 이미 그룹에 있으면 중복방지로 접수 안 됨 — 정상.
+- 수집: `POST /api/scrape {data:{options:[...], batchId, excluded_mall_keys}}`. 옵션은 사용자가 수집창에서 고른 값(`COLLECT_OPTIONS`). 기본 그룹 = 신규소싱상품(1007620). 접수 후 실제 수집은 불사자 큐에서 비동기로 돈다(그룹에서 '수집 중'). 같은 타오바오 상품이 이미 그룹에 있으면 중복방지로 접수 안 됨 — 정상. 이렇게 빠진 상품은 **다른 그룹으로 수집하지 않고 목록만** `<R>/collect_dups.csv` 로 남긴다(2026-10-30 사용자 지정). 판별 = 응답에서 접수(registered)도 실패(skipped)도 아닌 것 — 근거 응답은 `apply_collect_raw.jsonl`. 첫 실수집 때 raw 로 이 판별이 맞는지 확인할 것.
 - 체크포인트: `apply_trash.jsonl`·`apply_match.jsonl`·`apply_collect.jsonl`(재실행 시 처리분 건너뜀). 장시간 작업은 `caffeinate -i` + `run_in_background` + 완료 감시.
 - 수집 옵션을 바꾸고 싶으면: 사용자가 **Claude 탭 그룹의 불사자 탭**에서 1건 수집 → `read_console_messages` 패턴 `폼 데이터` 로 새 옵션을 받아 `COLLECT_OPTIONS` 갱신.

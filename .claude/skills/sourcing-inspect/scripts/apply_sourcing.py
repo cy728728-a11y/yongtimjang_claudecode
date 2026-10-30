@@ -16,6 +16,7 @@
 체크포인트: <첫 run-dir>/apply_trash.jsonl, <run-dir>/apply_match.jsonl (재실행 시 이미 처리한 건 건너뜀)
 """
 import argparse
+import csv
 import json
 import math
 import os
@@ -326,6 +327,7 @@ def cmd_collect(a):
     items = [collect_item(live[i], a.group) for i in sorted(ok_ids) if i in live]
     items = [x for x in items if x]
     ck = os.path.join(run_path(a.run_dir[-1]), "apply_collect.jsonl")
+    raw_ck = os.path.join(run_path(a.run_dir[-1]), "apply_collect_raw.jsonl")
     done = load_jsonl(ck)
     todo = [x for x in items if x["selectedItem"]["bulsaSourcingId"] not in done]
     if a.limit:
@@ -354,15 +356,43 @@ def cmd_collect(a):
             regs = {o["selectedItem"]["bulsaSourcingId"] for o in d.get("registeredOptions") or []}
             skips = {(o.get("selectedItem") or {}).get("bulsaSourcingId") or o.get("bulsaSourcingId")
                      for o in d.get("skippedOptions") or []}
+            # 응답 원형 기록 — 중복방지로 빠진 상품이 어디에 어떻게 찍히는지 근거로 남긴다(2026-10-30)
+            raw = {"chunk": k // a.size + 1, "keys": sorted(d.keys()),
+                   "lists": {kk: len(vv) for kk, vv in d.items() if isinstance(vv, list)},
+                   "sample": {kk: vv[:2] for kk, vv in d.items()
+                              if isinstance(vv, list) and kk != "registeredOptions"}}
+            with open(raw_ck, "a", encoding="utf-8") as rf:
+                rf.write(json.dumps(raw, ensure_ascii=False)[:20000] + "\n")
             for x in chunk:
                 i = x["selectedItem"]["bulsaSourcingId"]
-                f.write(json.dumps({"id": i, "ok": i in regs, "skipped": i in skips}, ensure_ascii=False) + "\n")
+                # 접수도 실패도 아님 = 그룹 안 중복방지로 빠진 것(추정 — 근거는 apply_collect_raw.jsonl)
+                f.write(json.dumps({"id": i, "ok": i in regs, "skipped": i in skips,
+                                    "dup": i not in regs and i not in skips}, ensure_ascii=False) + "\n")
             reg += len(regs)
             skip += len(d.get("skippedOptions") or [])
             print(f"[collect] {min(k + a.size, len(todo))}/{len(todo)}  예약 {reg} 실패 {skip}  "
                   f"남은한도 {(d.get('remainingLimit') or {}).get('taobao')}", flush=True)
             time.sleep(1)
     print(f"[collect] 완료 예약 {reg} / 실패 {skip}", flush=True)
+    write_dup_list(ck, {x["selectedItem"]["bulsaSourcingId"]: x for x in items},
+                   os.path.join(run_path(a.run_dir[-1]), "collect_dups.csv"))
+
+
+def write_dup_list(ck, by_id, out):
+    """중복으로 수집 안 된 상품 목록(수집하지 않고 목록만 — 2026-10-30 사용자 지정)."""
+    rows = []
+    for i, r in load_jsonl(ck).items():
+        if r.get("dup") or (not r.get("ok") and not r.get("skipped")):
+            s = (by_id.get(i) or {}).get("selectedItem") or {}
+            rows.append([i, s.get("productName") or "", s.get("url") or "", s.get("ref_product_url") or ""])
+    try:
+        with open(out, "w", encoding="utf-8-sig", newline="") as fo:
+            w = csv.writer(fo)
+            w.writerow(["소싱ID", "상품명", "타오바오", "네이버 원본"])
+            w.writerows(rows)
+        print(f"[collect] 중복으로 빠진 상품 {len(rows)}건 → {out}", flush=True)
+    except OSError as e:
+        print(f"[collect] 중복 목록 저장 실패: {e}", flush=True)
 
 
 def main():
