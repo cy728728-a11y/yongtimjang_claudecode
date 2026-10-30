@@ -179,6 +179,9 @@ def match_one(tok, p, enforce_from="pending"):
         msg = str(e)
         if "401" in msg:
             raise
+        # 매칭 업체 호출 제한(429)은 DATA_EMPTY 로 감싸져 온다 — 결과 없음으로 서버에 실패 반영하면 안 된다(2026-10-31)
+        if "429" in msg:
+            return {"id": p["id"], "status": "rate_limited", "reason": "rate_limited", "n": 0}
         reason = "no_result" if ("DATA_EMPTY" in msg or "404" in msg) else (
             "limit_exhausted" if ("LIMIT_EXHAUSTED" in msg or "PAID_PLEASE" in msg) else "api_error")
     avg = fee = None
@@ -250,6 +253,12 @@ def cmd_match(a):
                     r = fu.result()
                 except RuntimeError as e:
                     print(f"[match] 중단: {e}", flush=True)
+                    stop.set()
+                    continue
+                if r["status"] == "rate_limited":
+                    # 체크포인트에 안 남긴다 — 제한이 풀린 뒤 재실행하면 다시 매칭된다
+                    if not stop.is_set():
+                        print("[match] 중단: 매칭 호출 제한(429) — 풀린 뒤 재실행", flush=True)
                     stop.set()
                     continue
                 with lock:
