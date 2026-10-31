@@ -169,7 +169,15 @@ def match_one(tok, p, enforce_from="pending"):
     """상품 1건 매칭 → {'id','status','reason','n'}."""
     status, reason, lst = "match_failed", None, None
     try:
-        res = post(tok, "/api/sourcing/taobao/officialimage", {"imageUrl": p["productImageUrl"]}, timeout=90)
+        # 429 는 잠깐씩 끼므로 30초 쉬고 재시도(최대 10분), 그래도 막히면 rate_limited
+        for attempt in range(21):
+            try:
+                res = post(tok, "/api/sourcing/taobao/officialimage", {"imageUrl": p["productImageUrl"]}, timeout=90)
+                break
+            except RuntimeError as e:
+                if "429" not in str(e) or attempt == 20:
+                    raise
+                time.sleep(30)
         lst = ((res or {}).get("result") or {}).get("resultList")
         if isinstance(lst, list) and lst:
             status = "completed"
