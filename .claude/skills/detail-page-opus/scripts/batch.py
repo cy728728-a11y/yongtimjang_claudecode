@@ -159,7 +159,7 @@ def apply(t, outdir, waits=QUICK):
     if z.exists():
         z.unlink()
     subprocess.run(f"cd '{outdir}' && zip -q '{z}' [0-9][0-9].png", shell=True, check=True)
-    base = [str(common.PY), "run.py", "--code", t["code"], "--zip", str(z), "--out", str(a)]
+    base = [str(common.PY), "run.py", f"--code={t['code']}", "--zip", str(z), "--out", str(a)]
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     dry = run_429(base + ["--dry-run"], env, waits)
     chunks = re.findall(r"\[조각 \d+/(\d+)\] .*\((?:png|jpg|jpeg), 860x(\d+)\)", dry.stdout)
