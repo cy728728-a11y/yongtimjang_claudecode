@@ -19,7 +19,7 @@
   - added: 2026-10-18 09:40
   - priority: normal
 
-- [ ] 건강보험 잘 바뀌었는지 확인하기
+- [x] 건강보험 잘 바뀌었는지 확인하기
   - added: 2026-10-27 23:43
   - priority: normal
 
@@ -35,6 +35,17 @@
 - [ ] 비솝님 — 단톡방 D-day 알림 내용 정하기
   - added: 2026-10-28 14:51
   - priority: normal
+
+- [ ] 쿠팡 정지 관련 진행사항 확인하기
+  - added: 2026-10-29 00:31
+  - priority: normal
+  - project: 쿠팡
+
+- [ ] 안산아파트 양도세 신고
+  - added: 2026-10-30 00:05
+  - priority: high
+  - project: 안산아파트
+  - 기한: 양도일(잔금일·등기접수일 중 빠른 날)이 속한 달 말일부터 2개월 이내 예정신고
 
 ## Backlog
 

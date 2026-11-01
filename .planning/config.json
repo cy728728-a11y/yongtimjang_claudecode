@@ -65,5 +65,6 @@
   "agent_skills": {},
   "features": {},
   "mode": "yolo",
-  "granularity": "standard"
+  "granularity": "standard",
+  "claude_md_path": ".planning/GSD-CLAUDE.md"
 }
