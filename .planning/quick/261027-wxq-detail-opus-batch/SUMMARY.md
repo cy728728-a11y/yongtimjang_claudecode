@@ -26,3 +26,7 @@ status: complete
 ## 후속 2026-11-01 — 대체 후보·'-' 코드
 - 광고 ⑦c/⑦d 후보 80건 소진 → 판매 잠금 상품(sold-lock new_locks, 최근 판매 순)으로 10건 배치.
 - 판매자상품코드가 '-' 로 시작하면 run.py argparse 가 옵션으로 읽어 반영 실패 → `--code=<코드>` 형태로 넘긴다.
+
+## 후속 2026-11-01 — 주간 광고 최신화·판매 잠금 후보 정식 편입
+- `targets.py`: 일요일 0시 이후 첫 실행 때 최신 광고 회차가 그 일요일보다 오래됐으면 `run_ads.py prep → run → enrich`(조회 전용) 실행. bids/prune/apply 는 호출하지 않음.
+- 광고 후보가 모자라면 sold-lock `new_locks.json`(최근 잠금일 순)으로 채움. '비즈 ' 접두 상품명 제외.
