@@ -169,15 +169,15 @@ def match_one(tok, p, enforce_from="pending"):
     """상품 1건 매칭 → {'id','status','reason','n'}."""
     status, reason, lst = "match_failed", None, None
     try:
-        # 429 는 잠깐씩 끼므로 30초 쉬고 재시도(최대 10분), 그래도 막히면 rate_limited
-        for attempt in range(21):
+        # 429 는 이미지마다 끈질기게 막히는 경우가 있다 — 20초 간격 2번만 재시도하고 넘긴다(2026-11-01)
+        for attempt in range(3):
             try:
                 res = post(tok, "/api/sourcing/taobao/officialimage", {"imageUrl": p["productImageUrl"]}, timeout=90)
                 break
             except RuntimeError as e:
-                if "429" not in str(e) or attempt == 20:
+                if "429" not in str(e) or attempt == 2:
                     raise
-                time.sleep(30)
+                time.sleep(20)
         lst = ((res or {}).get("result") or {}).get("resultList")
         if isinstance(lst, list) and lst:
             status = "completed"
@@ -232,6 +232,8 @@ def cmd_match(a):
     enforce = None if a.from_status == "first_review" else "pending"
     ck = os.path.join(R, "apply_match.jsonl")
     done = load_jsonl(ck)
+    if a.retry_429:
+        done = {i: r for i, r in done.items() if r.get("status") != "rate_limited"}
     todo = [p for p in targets if p["id"] not in done]
     # 판매수 많은 순 — 대량일 때 좋은 상품부터 매칭돼 2차 판정을 앞 구간부터 붙일 수 있다(2026-10-30)
     todo.sort(key=lambda p: -(p.get("salesCount") or 0))
@@ -241,6 +243,7 @@ def cmd_match(a):
     lock = threading.Lock()
     cnt = {"completed": 0, "match_failed": 0, "skipped": 0}
     stop = threading.Event()
+    streak = {"n": 0}
     t0 = time.time()
     with open(ck, "a", encoding="utf-8") as f, ThreadPoolExecutor(a.workers) as ex:
         futs = {}
@@ -263,12 +266,12 @@ def cmd_match(a):
                     print(f"[match] 중단: {e}", flush=True)
                     stop.set()
                     continue
-                if r["status"] == "rate_limited":
-                    # 체크포인트에 안 남긴다 — 제한이 풀린 뒤 재실행하면 다시 매칭된다
-                    if not stop.is_set():
-                        print("[match] 중단: 매칭 호출 제한(429) — 풀린 뒤 재실행", flush=True)
+                # 429 상품은 서버에 반영 없이 체크포인트에만 rate_limited 로 남기고 넘어간다.
+                # 연속 30건이면 전체 차단으로 보고 중단(재실행 시 rate_limited 는 --retry-429 로만 다시 시도)
+                streak["n"] = streak["n"] + 1 if r["status"] == "rate_limited" else 0
+                if streak["n"] >= 30 and not stop.is_set():
+                    print("[match] 중단: 429 연속 30건 — 전체 차단으로 보임", flush=True)
                     stop.set()
-                    continue
                 with lock:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")
                     f.flush()
@@ -429,6 +432,7 @@ def main():
     m.add_argument("--run-dir", required=True)
     m.add_argument("--limit", type=int, default=0)
     m.add_argument("--workers", type=int, default=3)
+    m.add_argument("--retry-429", action="store_true", help="429 로 넘긴 상품도 다시 시도")
     m.add_argument("--from-status", choices=["pending", "first_review"], default="pending",
                    help="first_review = 1차검토 탭 상품(웹처럼 실패해도 1차검토에 남음)")
     c = sp.add_parser("collect")
