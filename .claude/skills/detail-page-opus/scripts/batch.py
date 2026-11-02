@@ -212,11 +212,13 @@ def market_send(t):
         m.close()
 
 
-def wait_tasks(state):
-    """접수한 전송 작업들의 최종 상태를 모은다."""
+def wait_tasks(state, timeout=TASK_TIMEOUT, final=True):
+    """접수한 전송 작업들의 최종 상태를 모은다.
+    작업 목록 조회는 최근 30건만 준다 — 배치 끝에 몰아서 보면 몇 시간 전 접수분은 이미 밀려나
+    '시간 초과'로 남는다(2026-11-03 13건 중 8건). 그래서 전송 직후마다 짧게 확인하고, 끝에 한 번 더 본다."""
     pending = {s["taskId"]: code for code, s in state.items() if s.get("taskId") and not s.get("taskStatus")}
     t0 = time.time()
-    while pending and time.time() - t0 < TASK_TIMEOUT:
+    while pending and time.time() - t0 < timeout:
         time.sleep(30)
         try:
             m = common.mcp()
@@ -230,8 +232,9 @@ def wait_tasks(state):
             tid = str(job.get("taskId"))
             if tid in pending and job.get("상태") not in ("진행중", "대기", "대기중"):
                 state[pending.pop(tid)]["taskStatus"] = job.get("상태")
-    for tid, code in pending.items():
-        state[code]["taskStatus"] = "확인 안 됨(시간 초과)"
+    if final:
+        for tid, code in pending.items():
+            state[code]["taskStatus"] = "확인 안 됨(시간 초과)"
 
 
 def summary(bdir, targets, state):
@@ -328,6 +331,7 @@ def main():
                     s.update(stage="failed", note=f"전송 접수 실패 {res}"); log(f"  전송 접수 실패 {res}"); continue
                 s.update(stage="sent", taskId=str(tid)); log(f"  스마트스토어 전송 접수 {res}")
                 mark_priority_done(t)
+                wait_tasks(state, timeout=300, final=False)   # 최근 30건에서 밀려나기 전에 결과 확인
         except Exception as e:
             s.update(stage="failed", note=f"예외 {e}"); log(f"  예외: {e}")
         finally:

@@ -35,3 +35,10 @@ status: complete
 - 11-01 의 맥북 조회 전용 광고 최신화(`ensure_weekly_ads`) 제거 — 광고 API 는 맥미니 전담(README-용팀장-맥북.md).
 - `fetch_ad_priority.py`(이룸님 제공) 설치 — `GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file` 강제 줄 제거(맥북에서 gws 로그인 삭제 사고), 저장 위치 `~/python_work/data/detail-opus/ad-priority/`.
 - `targets.py`: 우선순위 파일 순위 → 판매 잠금 순. `batch.py`: 전송·검수 탈락 시 완료 기록. 과거 배치 136건 완료 기록 백필(남은 우선순위 65건).
+
+## 후속 2026-11-03 — 전송 결과 '시간 초과' 오판(초과 배치 직전 차단)
+- 증상: 2026-11-02 배치 전송 13건 중 8건이 "확인 안 됨(시간 초과)". 실패 목록엔 없음 = 실제론 성공.
+- 원인: `wait_tasks` 가 배치 끝에 몰아서 `bulsaja_upload_tasks list` 를 보는데, 이 목록은 최근 30건만 준다. 몇 시간 전 접수분은 밀려나 영영 못 찾는다.
+- 피해(막음): "성공 20건까지 반복" 스크립트가 '성공' 문자열만 세서 5건으로 보고 3라운드(최대 30건, 수십 달러)를 더 띄우려 했다. 사람이 실패 목록을 대조해 루프를 끊었다.
+- 수정: 전송 직후마다 `wait_tasks(state, timeout=300, final=False)` 로 바로 확인, 끝에 한 번 더.
+- 규칙: 성공 N건 목표 반복은 '시간 초과'를 실패로 세지 않는다 — 라운드 전에 FAILED 목록 대조로 재집계하고, 누적은 쉘 변수가 아니라 state.json 들에서 다시 센다.
