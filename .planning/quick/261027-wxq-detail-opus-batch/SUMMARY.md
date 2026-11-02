@@ -30,3 +30,8 @@ status: complete
 ## 후속 2026-11-01 — 주간 광고 최신화·판매 잠금 후보 정식 편입
 - `targets.py`: 일요일 0시 이후 첫 실행 때 최신 광고 회차가 그 일요일보다 오래됐으면 `run_ads.py prep → run → enrich`(조회 전용) 실행. bids/prune/apply 는 호출하지 않음.
 - 광고 후보가 모자라면 sold-lock `new_locks.json`(최근 잠금일 순)으로 채움. '비즈 ' 접두 상품명 제외.
+
+## 후속 2026-11-02 — 광고 우선순위를 맥미니 드라이브 파일로 교체
+- 11-01 의 맥북 조회 전용 광고 최신화(`ensure_weekly_ads`) 제거 — 광고 API 는 맥미니 전담(README-용팀장-맥북.md).
+- `fetch_ad_priority.py`(이룸님 제공) 설치 — `GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file` 강제 줄 제거(맥북에서 gws 로그인 삭제 사고), 저장 위치 `~/python_work/data/detail-opus/ad-priority/`.
+- `targets.py`: 우선순위 파일 순위 → 판매 잠금 순. `batch.py`: 전송·검수 탈락 시 완료 기록. 과거 배치 136건 완료 기록 백필(남은 우선순위 65건).

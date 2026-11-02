@@ -131,6 +131,19 @@ def auto_check(outdir):
 RATE = re.compile(r"(?<![\dx])429(?!\d)|Rate limit|Too Many Requests", re.I)
 
 
+def mark_priority_done(t):
+    """광고 우선순위 목록에 '작업 끝'으로 기록 — 다음 주 목록에 다시 나와도 건너뛴다(전송·검수 탈락 모두)."""
+    try:
+        import fetch_ad_priority as fap
+        d = fap._load(fap.DONE, {})
+        for k in (t.get("productId"), t.get("storeNo")):
+            if k:
+                d[str(k)] = datetime.now().isoformat(timespec="seconds")
+        fap._save(fap.DONE, d)
+    except Exception as e:
+        log(f"  [경고] 우선순위 완료 기록 실패 {e}")
+
+
 def is_429(r):
     return bool(RATE.search(r.stdout + r.stderr))
 
@@ -287,6 +300,7 @@ def main():
             ins = inspect_result(outdir)
             if ins.get("verdict") != "pass":
                 s.update(stage="inspect_drop", inspect=ins, note=f"검수 탈락 {ins.get('reason')} {ins.get('note', '')}")
+                mark_priority_done(t)
                 log(f"  {s['note']}"); continue
             probs, need, pages = auto_check(outdir)
             s["pages"] = pages
@@ -313,6 +327,7 @@ def main():
                 if not tid:
                     s.update(stage="failed", note=f"전송 접수 실패 {res}"); log(f"  전송 접수 실패 {res}"); continue
                 s.update(stage="sent", taskId=str(tid)); log(f"  스마트스토어 전송 접수 {res}")
+                mark_priority_done(t)
         except Exception as e:
             s.update(stage="failed", note=f"예외 {e}"); log(f"  예외: {e}")
         finally:
