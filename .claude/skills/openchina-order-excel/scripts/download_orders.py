@@ -27,7 +27,7 @@ try:
 except Exception:
     pass
 
-BASE = "https://www.openchina.co.kr"
+BASE = "https://openchina.co.kr"
 LOGIN_URL = BASE + "/Front/Join/Login_Ajax.asp"
 EXCEL_URL = BASE + "/Front/Member/Acting_X17.asp"  # 마이페이지 '주문 엑셀다운로드' 버튼과 동일
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"

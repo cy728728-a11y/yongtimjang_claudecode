@@ -1,0 +1,962 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]: 탈락 상품 재검토
+    - generic [ref=e4]: 1 ~ 50 / 199,995 (2차 AI 탈락 · 셀러 안 파는 품목)
+    - button "◀ 이전 50" [ref=e5] [cursor=pointer]
+    - button "다음 50 ▶" [ref=e6] [cursor=pointer]
+    - spinbutton "번호" [ref=e7]
+    - button "이동" [ref=e8] [cursor=pointer]
+    - combobox [ref=e9] [cursor=pointer]:
+      - option "구간 바로가기" [selected]
+      - option "■ 2차 AI 탈락 (1~74367)"
+      - option "셀러 안 파는 품목 (1~5210)"
+      - option "작고 싼 부품·소모품 (5211~18050)"
+      - option "배송 위험(파손·초중량) (18051~22146)"
+      - option "기타 부적절 (22147~23103)"
+      - option "어린이·임산부·성인 (23104~25592)"
+      - option "금지 분야 (25593~33071)"
+      - option "패션 (33072~40787)"
+      - option "위험물 (40788~41323)"
+      - option "법규(식품·화장품·의료 등) (41324~46386)"
+      - option "브랜드·캐릭터·호환 (46387~74367)"
+      - option "■ 2차 기계 탈락 (74368~74593)"
+      - option "금지어(분야) (74368~74372)"
+      - option "금지어(위험) (74373~74465)"
+      - option "금지어(기타) (74466~74495)"
+      - option "매칭 없음 (74496~74496)"
+      - option "전력 기준 (74497~74593)"
+      - option "■ 1차 금지어 탈락 (74594~79054)"
+      - option "금지어(분야) (74594~74604)"
+      - option "금지어(위험) (74605~74624)"
+      - option "금지어(브랜드) (74625~78530)"
+      - option "금지어(법규) (78531~78671)"
+      - option "금지어(기타) (78672~78738)"
+      - option "전력 기준 (78739~79054)"
+      - option "■ 1차 금지 카테고리 탈락 (79055~199995)"
+      - option "도서 (79055~79092)"
+      - option "디지털/가전 (79093~101790)"
+      - option "생활/건강 (101791~144375)"
+      - option "스포츠/레저 (144376~161748)"
+      - option "식품 (161749~167308)"
+      - option "여가/생활편의 (167309~167331)"
+      - option "출산/육아 (167332~171736)"
+      - option "패션의류 (171737~180785)"
+      - option "패션잡화 (180786~195867)"
+      - option "화장품/미용 (195868~199995)"
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: "1"
+        - generic [ref=e14]: 셀러 안 파는 품목
+        - button "살리기" [ref=e15] [cursor=pointer]
+      - generic [ref=e16]: 폼 분무 압축 분무병에 세차액 500ml 증정, 액체 포함·CS 로고
+      - generic [ref=e17]:
+        - generic [ref=e18]: 네이버
+        - generic [ref=e21]: 타오바오
+      - generic [ref=e24]: 마 에르고000 압축분무기 세차 원예 소독 방역 농약 물분사기
+      - generic [ref=e25]: 생활/건강>공구>원예공구>압축분무기
+      - generic [ref=e26]: 판매 0 · 리뷰 4258 · 32,000원 · 2차 AI 탈락
+      - generic [ref=e27]: 洗车泡沫喷壶手动手持家用洗车液打泡神器高压pa壶擦车工具全套 · ¥15.72
+      - generic [ref=e28]:
+        - link "네이버" [ref=e29] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/hansung09/products/391932710
+        - text: ·
+        - link "타오바오" [ref=e30] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=938123830724
+    - generic [ref=e31]:
+      - generic [ref=e32]:
+        - generic [ref=e33]: "2"
+        - generic [ref=e34]: 셀러 안 파는 품목
+        - button "살리기" [ref=e35] [cursor=pointer]
+      - generic [ref=e36]: 수비드 저온조리기, 음식 조리 가전
+      - generic [ref=e37]:
+        - generic [ref=e38]: 네이버
+        - generic [ref=e41]: 타오바오
+      - generic [ref=e44]: 바이오로믹스 머신 2.55세대 기계
+      - generic [ref=e45]: 디지털/가전>주방가전>기타주방가전
+      - generic [ref=e46]: 판매 0 · 리뷰 1155 · 79,900원 · 2차 AI 탈락
+      - generic [ref=e47]: 低温慢煮机棒美国厨房烹饪机真空烹饪用具浴盆恒温早餐牛扒其他 · ¥263.00
+      - generic [ref=e48]:
+        - link "네이버" [ref=e49] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/jjglobal07/products/5144569717
+        - text: ·
+        - link "타오바오" [ref=e50] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=558271480277
+    - generic [ref=e51]:
+      - generic [ref=e52]:
+        - generic [ref=e53]: "3"
+        - generic [ref=e54]: 셀러 안 파는 품목
+        - button "살리기" [ref=e55] [cursor=pointer]
+      - generic [ref=e56]: 전해수 다용도 청소액(스프레이), 액체
+      - generic [ref=e57]:
+        - generic [ref=e58]: 네이버
+        - generic [ref=e61]: 타오바오
+      - generic [ref=e64]: 비오텀 클렌징밀크 500ml, 개
+      - generic [ref=e65]: 화장품/미용>클렌징>클렌징밀크
+      - generic [ref=e66]: 판매 0 · 리뷰 968 · 38,350원 · 2차 AI 탈락
+      - generic [ref=e67]: Pasion电解水油污冰箱浴室玻璃酒店空调餐具茶壶杯具除甲醛除菌 · ¥59.90
+      - generic [ref=e68]:
+        - link "네이버" [ref=e69] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/eurobeauty/products/498568377
+        - text: ·
+        - link "타오바오" [ref=e70] [cursor=pointer]:
+          - /url: https://detail.tmall.com/item.htm?id=728533570429
+    - generic [ref=e71]:
+      - generic [ref=e72]:
+        - generic [ref=e73]: "4"
+        - generic [ref=e74]: 셀러 안 파는 품목
+        - button "살리기" [ref=e75] [cursor=pointer]
+      - generic [ref=e76]: KONKA 헤어드라이어, 흔한 생활가전
+      - generic [ref=e77]:
+        - generic [ref=e78]: 네이버
+        - generic [ref=e81]: 타오바오
+      - generic [ref=e84]: 헤어 드라이기 BDC 저소음 음이온 전문가 여행용 미용실
+      - generic [ref=e85]: 디지털/가전>이미용가전>헤어기기>드라이어
+      - generic [ref=e86]: 판매 0 · 리뷰 892 · 40,800원 · 2차 AI 탈락
+      - generic [ref=e87]: 康佳吹风机家用负离子护发恒温大风力风筒不伤发电吹风机生日礼物 · ¥203.32
+      - generic [ref=e88]:
+        - link "네이버" [ref=e89] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/100sae/products/10376447976
+        - text: ·
+        - link "타오바오" [ref=e90] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=741737864553
+    - generic [ref=e91]:
+      - generic [ref=e92]:
+        - generic [ref=e93]: "5"
+        - generic [ref=e94]: 셀러 안 파는 품목
+        - button "살리기" [ref=e95] [cursor=pointer]
+      - generic [ref=e96]: 벽면 질감 도료(액체 페인트), 액체류
+      - generic [ref=e97]:
+        - generic [ref=e98]: 네이버
+        - generic [ref=e101]: 타오바오
+      - generic [ref=e104]: 빌레로이앤보흐 매뉴팩처 락 사각 서빙 35cm (228)
+      - generic [ref=e105]: 생활/건강>주방용품>식기>접시
+      - generic [ref=e106]: 판매 0 · 리뷰 836 · 55,700원 · 2차 AI 탈락
+      - generic [ref=e107]: 拉毛漆艺术漆室内家用墙面漆肌理漆颗粒质感涂料外墙纹理漆背景墙 · ¥32.77
+      - generic [ref=e108]:
+        - link "네이버" [ref=e109] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/missycafe/products/5754339142
+        - text: ·
+        - link "타오바오" [ref=e110] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=678400740751
+    - generic [ref=e111]:
+      - generic [ref=e112]:
+        - generic [ref=e113]: "6"
+        - generic [ref=e114]: 셀러 안 파는 품목
+        - button "살리기" [ref=e115] [cursor=pointer]
+      - generic [ref=e116]: 가정용 소형 의류 건조기, 흔한 생활가전
+      - generic [ref=e117]:
+        - generic [ref=e118]: 네이버
+        - generic [ref=e121]: 타오바오
+      - generic [ref=e124]: 탈수기 스텐 7KG 수영장 빨래 D-T77H 미니탈수기 업소용
+      - generic [ref=e125]: 디지털/가전>생활가전>세탁/건조기>탈수기
+      - generic [ref=e126]: 판매 0 · 리뷰 388 · 168,990원 · 2차 AI 탈락
+      - generic [ref=e127]: 贝贝康烘干机家用干衣机烘衣服小型烘衣机全自动婴儿风干机柜杀菌 · ¥660.73
+      - generic [ref=e128]:
+        - link "네이버" [ref=e129] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/boiler/products/6902267119
+        - text: ·
+        - link "타오바오" [ref=e130] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=634167567491
+    - generic [ref=e131]:
+      - generic [ref=e132]:
+        - generic [ref=e133]: "7"
+        - generic [ref=e134]: 셀러 안 파는 품목
+        - button "살리기" [ref=e135] [cursor=pointer]
+      - generic [ref=e136]: 변기 세정제 900ml 액체류(Kakoo)
+      - generic [ref=e137]:
+        - generic [ref=e138]: 네이버
+        - generic [ref=e141]: 타오바오
+      - generic [ref=e144]: 슬라임재료 만들기 스쿨 글루 ( 글루) 갤런 4팩
+      - generic [ref=e145]: 생활/건강>문구/사무용품>문구용품>풀/접착제
+      - generic [ref=e146]: 판매 0 · 리뷰 260 · 147,900원 · 2차 AI 탈락
+      - generic [ref=e147]: KAKOO 可卡 卫宝洁厕剂900ML 浓缩液 去尿垢 去屎垢 单瓶价 包邮 · ¥30.62
+      - generic [ref=e148]:
+        - link "네이버" [ref=e149] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/wholesalestore/products/5031028110
+        - text: ·
+        - link "타오바오" [ref=e150] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=14445979290
+    - generic [ref=e151]:
+      - generic [ref=e152]:
+        - generic [ref=e153]: "8"
+        - generic [ref=e154]: 셀러 안 파는 품목
+        - button "살리기" [ref=e155] [cursor=pointer]
+      - generic [ref=e156]: CHOKO LAB 대용량 빨대 텀블러(보온컵)
+      - generic [ref=e157]:
+        - generic [ref=e158]: 네이버
+        - generic [ref=e161]: 타오바오
+      - generic [ref=e164]: 차코랩 바왕 텀블러 .05 차량용 대용량 CHAKO AB A 크
+      - generic [ref=e165]: 생활/건강>주방용품>잔/컵>텀블러
+      - generic [ref=e166]: 판매 0 · 리뷰 255 · 36,200원 · 2차 AI 탈락
+      - generic [ref=e167]: chakolab和序巨无霸吸管保温杯高颜值大容量水杯车载冰霸杯霸王杯 · ¥133.38
+      - generic [ref=e168]:
+        - link "네이버" [ref=e169] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/bunny87/products/12022706862
+        - text: ·
+        - link "타오바오" [ref=e170] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=978418357916
+    - generic [ref=e171]:
+      - generic [ref=e172]:
+        - generic [ref=e173]: "9"
+        - generic [ref=e174]: 셀러 안 파는 품목
+        - button "살리기" [ref=e175] [cursor=pointer]
+      - generic [ref=e176]: COUSS 반죽 발효기(음식 데우는 업소/가정용 기계) (같은 타오바오 — 대표 11154-kwy9jllI5NICgPo-12873816682 판정 복사)
+      - generic [ref=e177]: 네이버
+      - generic [ref=e182]: 제빵발효기 빵발효기 제빵기계 가정용 반죽 식빵 발효 40
+      - generic [ref=e183]: 디지털/가전>주방가전>제빵기
+      - generic [ref=e184]: 판매 0 · 리뷰 234 · 268,000원 · 2차 AI 탈락
+      - link "네이버" [ref=e186] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/markettouch/products/8262770701
+    - generic [ref=e187]:
+      - generic [ref=e188]:
+        - generic [ref=e189]: "10"
+        - generic [ref=e190]: 셀러 안 파는 품목
+        - button "살리기" [ref=e191] [cursor=pointer]
+      - generic [ref=e192]: 손전등·UV 라이트·레이저 포인터 세트
+      - generic [ref=e193]:
+        - generic [ref=e194]: 네이버
+        - generic [ref=e197]: 타오바오
+      - generic [ref=e200]: 제스트 하이빔 져 ED 후레쉬 Z-XP00
+      - generic [ref=e201]: 스포츠/레저>캠핑>랜턴>손전등
+      - generic [ref=e202]: 판매 0 · 리뷰 232 · 47,300원 · 2차 AI 탈락
+      - generic [ref=e203]: 飞钓紫光灯UV手电多款出口品质麦凯诗电池款正品绑钩飞蝇固化笔灯 · ¥35.00
+      - generic [ref=e204]:
+        - link "네이버" [ref=e205] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/ulsanhome/products/10504294882
+        - text: ·
+        - link "타오바오" [ref=e206] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=757161637670
+    - generic [ref=e207]:
+      - generic [ref=e208]:
+        - generic [ref=e209]: "11"
+        - generic [ref=e210]: 셀러 안 파는 품목
+        - button "살리기" [ref=e211] [cursor=pointer]
+      - generic [ref=e212]: 무선 스탠드형 청소기(흔한 생활가전)
+      - generic [ref=e213]:
+        - generic [ref=e214]: 네이버
+        - generic [ref=e217]: 타오바오
+      - generic [ref=e220]: 옴니팩 우산 OP3 우산자동 구 비닐200매
+      - generic [ref=e221]: 가구/인테리어>수납가구>우산꽂이
+      - generic [ref=e222]: 판매 0 · 리뷰 227 · 83,700원 · 2차 AI 탈락
+      - generic [ref=e223]: 小狗自集尘吸尘器家用无线大吸力除螨基站自清洁绿光防缠绕吸尘机 · ¥1792.47
+      - generic [ref=e224]:
+        - link "네이버" [ref=e225] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/micromro/products/6411179445
+        - text: ·
+        - link "타오바오" [ref=e226] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=988384188114
+    - generic [ref=e227]:
+      - generic [ref=e228]:
+        - generic [ref=e229]: "12"
+        - generic [ref=e230]: 셀러 안 파는 품목
+        - button "살리기" [ref=e231] [cursor=pointer]
+      - generic [ref=e232]: 110v 핸디 스팀청소기, 흔한 생활가전·전압 불일치
+      - generic [ref=e233]:
+        - generic [ref=e234]: 네이버
+        - generic [ref=e237]: 타오바오
+      - generic [ref=e240]: 올피노 수증기 스팀청소기 묵은때 기름때 간편제거 핸디형
+      - generic [ref=e241]: 디지털/가전>청소기>스팀청소기
+      - generic [ref=e242]: 판매 0 · 리뷰 200 · 31,600원 · 2차 AI 탈락
+      - generic [ref=e243]: 110v美规台湾手持一体机便捷蒸汽清洗机高温蒸汽清洁厨房英规香港 · ¥68.85
+      - generic [ref=e244]:
+        - link "네이버" [ref=e245] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/olpino/products/11700688341
+        - text: ·
+        - link "타오바오" [ref=e246] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=1021458644576
+    - generic [ref=e247]:
+      - generic [ref=e248]:
+        - generic [ref=e249]: "13"
+        - generic [ref=e250]: 셀러 안 파는 품목
+        - button "살리기" [ref=e251] [cursor=pointer]
+      - generic [ref=e252]: 검정 플러그형 일반 책상 스탠드, 흔한 생활조명 가전 (같은 타오바오 — 대표 11154-kwy9jllI5NICgPo-4678242878 판정 복사)
+      - generic [ref=e253]: 네이버
+      - generic [ref=e258]: 대경전자 개 적외선조사기 / 개인 온열기 램프 기 아닌 기기
+      - generic [ref=e259]: 생활/건강>물리치료/저주파용품>적외선조사기
+      - generic [ref=e260]: 판매 0 · 리뷰 197 · 74,000원 · 2차 AI 탈락
+      - link "네이버" [ref=e262] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/21/products/5253799541
+    - generic [ref=e263]:
+      - generic [ref=e264]:
+        - generic [ref=e265]: "14"
+        - generic [ref=e266]: 셀러 안 파는 품목
+        - button "살리기" [ref=e267] [cursor=pointer]
+      - generic [ref=e268]: RAF 로고 스팀다리미, 흔한 생활가전
+      - generic [ref=e269]:
+        - generic [ref=e270]: 네이버
+        - generic [ref=e273]: 타오바오
+      - generic [ref=e276]: 공구왕황부장 코 스팀 세척기 분사기 VFT40 하이드로 업소용 다목적 유리창 바닥
+      - generic [ref=e277]: 디지털/가전>청소기>스팀청소기
+      - generic [ref=e278]: 판매 0 · 리뷰 183 · 136,000원 · 2차 AI 탈락
+      - generic [ref=e279]: 2026出口德国蒸汽电熨斗家用烫衣服熨烫机电子调温平烫大功率烫斗 · ¥300.00
+      - generic [ref=e280]:
+        - link "네이버" [ref=e281] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/jasan/products/9707125879
+        - text: ·
+        - link "타오바오" [ref=e282] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=708870630084
+    - generic [ref=e283]:
+      - generic [ref=e284]:
+        - generic [ref=e285]: "15"
+        - generic [ref=e286]: 셀러 안 파는 품목
+        - button "살리기" [ref=e287] [cursor=pointer]
+      - generic [ref=e288]: NITECORE 충전식 헤드랜턴(손전등류), 브랜드 로고 노출
+      - generic [ref=e289]:
+        - generic [ref=e290]: 네이버
+        - generic [ref=e293]: 타오바오
+      - generic [ref=e296]: 코어 Nitecore NU25 CT U 충전식 전조등 400 ms 경량 방수 헤드 라이트 야외 캠 하이킹
+      - generic [ref=e297]: 스포츠/레저>캠핑>랜턴>헤드랜턴
+      - generic [ref=e298]: 판매 0 · 리뷰 173 · 45,000원 · 2차 AI 탈락
+      - generic [ref=e299]: NITECORE奈特科尔NU25MCT UL多色温头灯户外夜跑徒步登山轻量级 · ¥214.93
+      - generic [ref=e300]:
+        - link "네이버" [ref=e301] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/moonshmmm1/products/7492440544
+        - text: ·
+        - link "타오바오" [ref=e302] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=687618456836
+    - generic [ref=e303]:
+      - generic [ref=e304]:
+        - generic [ref=e305]: "16"
+        - generic [ref=e306]: 셀러 안 파는 품목
+        - button "살리기" [ref=e307] [cursor=pointer]
+      - generic [ref=e308]: 보라색 헤어드라이어, 흔한 생활가전
+      - generic [ref=e309]:
+        - generic [ref=e310]: 네이버
+        - generic [ref=e313]: 타오바오
+      - generic [ref=e316]: 로이드미 드라이기 미로 프로 음이온 항공모터 BDC 여행용 휴대용 헤어 드라이어
+      - generic [ref=e317]: 디지털/가전>이미용가전>헤어기기>드라이어
+      - generic [ref=e318]: 판매 0 · 리뷰 166 · 169,000원 · 2차 AI 탈락
+      - generic [ref=e319]: 季为智能高速电吹风机大功率家用静音速干等离子吹风机护发JV02 · ¥773.89
+      - generic [ref=e320]:
+        - link "네이버" [ref=e321] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/ml/products/11989101543
+        - text: ·
+        - link "타오바오" [ref=e322] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=740587751932
+    - generic [ref=e323]:
+      - generic [ref=e324]:
+        - generic [ref=e325]: "17"
+        - generic [ref=e326]: 셀러 안 파는 품목
+        - button "살리기" [ref=e327] [cursor=pointer]
+      - generic [ref=e328]: BESITA 휴대용 LED 작업등(손전등류) (같은 타오바오 — 대표 11154-kwy9jllI5NICgPo-7601821859 판정 복사)
+      - generic [ref=e329]: 네이버
+      - generic [ref=e334]: ED 충전식 작업등 정비소 공구 캠용 램프 랜턴 후레시
+      - generic [ref=e335]: 스포츠/레저>캠핑>랜턴>손전등
+      - generic [ref=e336]: 판매 0 · 리뷰 156 · 37,000원 · 2차 AI 탈락
+      - link "네이버" [ref=e338] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/ttcar09/products/4705649760
+    - generic [ref=e339]:
+      - generic [ref=e340]:
+        - generic [ref=e341]: "18"
+        - generic [ref=e342]: 셀러 안 파는 품목
+        - button "살리기" [ref=e343] [cursor=pointer]
+      - generic [ref=e344]: 200L 절삭유(액체류) 철드럼 제품
+      - generic [ref=e345]:
+        - generic [ref=e346]: 네이버
+        - generic [ref=e349]: 타오바오
+      - generic [ref=e352]: "[] 드럼통 드럼통 공드럼통 폐드럼통 200리터 철드럼통 난타통 오일통 폐드럼 주차금지"
+      - generic [ref=e353]: 생활/건강>공구>수작업공구>공구함
+      - generic [ref=e354]: 판매 0 · 리뷰 156 · 48,490원 · 2차 AI 탈락
+      - generic [ref=e355]: 切削液乳化油防锈冷却磨削皂化全合成加工中心铝合金不锈钢微车床 · ¥57.48
+      - generic [ref=e356]:
+        - link "네이버" [ref=e357] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/sangol/products/292785528
+        - text: ·
+        - link "타오바오" [ref=e358] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=600638604345
+    - generic [ref=e359]:
+      - generic [ref=e360]:
+        - generic [ref=e361]: "19"
+        - generic [ref=e362]: 셀러 안 파는 품목
+        - button "살리기" [ref=e363] [cursor=pointer]
+      - generic [ref=e364]: 방폭 충전식 LED 손전등
+      - generic [ref=e365]:
+        - generic [ref=e366]: 네이버
+        - generic [ref=e369]: 타오바오
+      - generic [ref=e372]: "스티로폼절단기 열선컷팅기 스티로폼커팅기 열선칼 프리커터 #JFC-6OOO"
+      - generic [ref=e373]: 생활/건강>공구>용접공구>절단기
+      - generic [ref=e374]: 판매 0 · 리뷰 152 · 52,500원 · 2차 AI 탈락
+      - generic [ref=e375]: 华升黑豹721充电防水防爆LED手电筒加油站加气站化工厂防爆探照灯 · ¥60.99
+      - generic [ref=e376]:
+        - link "네이버" [ref=e377] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/wonners/products/6479966203
+        - text: ·
+        - link "타오바오" [ref=e378] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=801008517948
+    - generic [ref=e379]:
+      - generic [ref=e380]:
+        - generic [ref=e381]: "20"
+        - generic [ref=e382]: 셀러 안 파는 품목
+        - button "살리기" [ref=e383] [cursor=pointer]
+      - generic [ref=e384]: deli 공구용 배터리 2종 단품(배터리가 상품의 주인)
+      - generic [ref=e385]:
+        - generic [ref=e386]: 네이버
+        - generic [ref=e389]: 타오바오
+      - generic [ref=e392]: DIY 수공구 가정용공구 집들이 선물 THT80960 장갑포함
+      - generic [ref=e393]: 생활/건강>공구>수작업공구>공구세트
+      - generic [ref=e394]: 판매 0 · 리뷰 150 · 46,500원 · 2차 AI 탈락
+      - generic [ref=e395]: 得力水平仪高精度强光细线新型红外线太阳光下专用水平仪十大品牌 · ¥318.92
+      - generic [ref=e396]:
+        - link "네이버" [ref=e397] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/jangan09/products/7227009228
+        - text: ·
+        - link "타오바오" [ref=e398] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=802407817559
+    - generic [ref=e399]:
+      - generic [ref=e400]:
+        - generic [ref=e401]: "21"
+        - generic [ref=e402]: 셀러 안 파는 품목
+        - button "살리기" [ref=e403] [cursor=pointer]
+      - generic [ref=e404]: 어항용 UV 살균 램프 9W, UV 라이트류이며 몇천 원짜리 소형이라 애매하면 drop
+      - generic [ref=e405]:
+        - generic [ref=e406]: 네이버
+        - generic [ref=e409]: 타오바오
+      - generic [ref=e412]: 어항 수조 UV램프 등 자외선 타이머 UVED 녹조이끼 해수 섬프 3W 반광판
+      - generic [ref=e413]: 생활/건강>관상어용품>조명
+      - generic [ref=e414]: 판매 0 · 리뷰 150 · 37,900원 · 2차 AI 탈락
+      - generic [ref=e415]: 鱼缸UV杀菌灯紫外线鱼池净水除藻除绿水潜水灭菌灯水族消毒鱼缸灯 · ¥10.33
+      - generic [ref=e416]:
+        - link "네이버" [ref=e417] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/bbleshop/products/5516266177
+        - text: ·
+        - link "타오바오" [ref=e418] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=679111792513
+    - generic [ref=e419]:
+      - generic [ref=e420]:
+        - generic [ref=e421]: "22"
+        - generic [ref=e422]: 셀러 안 파는 품목
+        - button "살리기" [ref=e423] [cursor=pointer]
+      - generic [ref=e424]: 무선 휴대 고압세척기, 쿠팡에서 흔한 범용 생활가전
+      - generic [ref=e425]:
+        - generic [ref=e426]: 네이버
+        - generic [ref=e429]: 타오바오
+      - generic [ref=e432]: 무선 고압세차기 휴대용 고압세척기 분사기 충전식 무선세차건
+      - generic [ref=e433]: 디지털/가전>청소기>고압세척기
+      - generic [ref=e434]: 판매 0 · 리뷰 147 · 48,700원 · 2차 AI 탈락
+      - generic [ref=e435]: 无线电动洗车机家用高压水枪锂电池家用便携式充电清洗神器多功能 · ¥258.40
+      - generic [ref=e436]:
+        - link "네이버" [ref=e437] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/booboo99/products/6471628641
+        - text: ·
+        - link "타오바오" [ref=e438] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=665588739289
+    - generic [ref=e439]:
+      - generic [ref=e440]:
+        - generic [ref=e441]: "23"
+        - generic [ref=e442]: 셀러 안 파는 품목
+        - button "살리기" [ref=e443] [cursor=pointer]
+      - generic [ref=e444]: 차량용 점프스타터 배터리팩 본체(배터리 주인 상품)
+      - generic [ref=e445]:
+        - generic [ref=e446]: 네이버
+        - generic [ref=e449]: 타오바오
+      - generic [ref=e452]: 부동액 교환기 냉각수 주입기 RT-99HA
+      - generic [ref=e453]: 생활/건강>자동차용품>오일/소모품>부동액
+      - generic [ref=e454]: 판매 0 · 리뷰 146 · 92,000원 · 2차 AI 탈락
+      - generic [ref=e455]: 潘硕12V汽车应急启动电源搭电宝锂电打火车载大容量救援汽修强启 · ¥346.98
+      - generic [ref=e456]:
+        - link "네이버" [ref=e457] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/09line/products/4665923100
+        - text: ·
+        - link "타오바오" [ref=e458] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=625216167289
+    - generic [ref=e459]:
+      - generic [ref=e460]:
+        - generic [ref=e461]: "24"
+        - generic [ref=e462]: 셀러 안 파는 품목
+        - button "살리기" [ref=e463] [cursor=pointer]
+      - generic [ref=e464]: F10SC 5L 살균 세정액(액체, 브랜드 표기)
+      - generic [ref=e465]:
+        - generic [ref=e466]: 네이버
+        - generic [ref=e469]: 타오바오
+      - generic [ref=e472]: F0C 200ml 000ml 5일 직송 반려동물 앵무새 파충류 거북이 악취
+      - generic [ref=e473]: 생활/건강>반려동물>소동물용품>파충류/곤충용품
+      - generic [ref=e474]: 판매 0 · 리뷰 143 · 67,590원 · 2차 AI 탈락
+      - generic [ref=e475]: F10SC宠物环境多用途浓缩清洁液猫咪狗鹦鹉鸟龟蛇林蛙蜥蜴兔爬宠 · ¥62.06
+      - generic [ref=e476]:
+        - link "네이버" [ref=e477] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/roum/products/5038609017
+        - text: ·
+        - link "타오바오" [ref=e478] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=598991364499
+    - generic [ref=e479]:
+      - generic [ref=e480]:
+        - generic [ref=e481]: "25"
+        - generic [ref=e482]: 셀러 안 파는 품목
+        - button "살리기" [ref=e483] [cursor=pointer]
+      - generic [ref=e484]: 아크릴 접착 실리콘 코킹 카트리지, 액체 접착제
+      - generic [ref=e485]:
+        - generic [ref=e486]: 네이버
+        - generic [ref=e489]: 타오바오
+      - generic [ref=e492]: 방수시트 부직포형 방수포 아스팔트 슁글 지붕 방수공사 스코닝 X0
+      - generic [ref=e493]: 생활/건강>공구>페인트용품>방수제
+      - generic [ref=e494]: 판매 0 · 리뷰 129 · 31,900원 · 2차 AI 탈락
+      - generic [ref=e495]: 亚克力粘结透明玻璃胶金属水晶标识标牌粘接胶灯箱广告安装玻璃胶 · ¥59.31
+      - generic [ref=e496]:
+        - link "네이버" [ref=e497] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/allbarunhardware/products/6319204777
+        - text: ·
+        - link "타오바오" [ref=e498] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=1003001918486
+    - generic [ref=e499]:
+      - generic [ref=e500]:
+        - generic [ref=e501]: "26"
+        - generic [ref=e502]: 셀러 안 파는 품목
+        - button "살리기" [ref=e503] [cursor=pointer]
+      - generic [ref=e504]: 5L 스탠드 믹서(반죽기), 쿠팡에서 흔한 생활가전
+      - generic [ref=e505]:
+        - generic [ref=e506]: 네이버
+        - generic [ref=e509]: 타오바오
+      - generic [ref=e512]: 가정용반죽기 제빵 빵 밀가루 반죽기 휘기 거품기 스탠드 믹서 5 200W
+      - generic [ref=e513]: 디지털/가전>주방가전>거품/반죽기
+      - generic [ref=e514]: 판매 0 · 리뷰 122 · 115,000원 · 2차 AI 탈락
+      - generic [ref=e515]: 台式打蛋器电动家用迷小型烘焙大功率奶油打发器搅拌和面机厨师机 · ¥242.63
+      - generic [ref=e516]:
+        - link "네이버" [ref=e517] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/markettouch/products/9571078134
+        - text: ·
+        - link "타오바오" [ref=e518] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=609653703835
+    - generic [ref=e519]:
+      - generic [ref=e520]:
+        - generic [ref=e521]: "27"
+        - generic [ref=e522]: 셀러 안 파는 품목
+        - button "살리기" [ref=e523] [cursor=pointer]
+      - generic [ref=e524]: 어묵·꼬치 데우는 업소용 기계
+      - generic [ref=e525]:
+        - generic [ref=e526]: 네이버
+        - generic [ref=e529]: 타오바오
+      - generic [ref=e532]: 명보 스텐 전기 오뎅통 6구(내통분리형) 분식집 오뎅탕 어묵기계 오뎅기계
+      - generic [ref=e533]: 디지털/가전>주방가전>기타주방가전
+      - generic [ref=e534]: 판매 0 · 리뷰 122 · 227,000원 · 2차 AI 탈락
+      - generic [ref=e535]: AnyST韩国进口年糕机鱼饼机电加热铁板机韩式机关东煮鱼丸机 · ¥3514.69
+      - generic [ref=e536]:
+        - link "네이버" [ref=e537] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/redfennec/products/5513687782
+        - text: ·
+        - link "타오바오" [ref=e538] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=706885633389
+    - generic [ref=e539]:
+      - generic [ref=e540]:
+        - generic [ref=e541]: "28"
+        - generic [ref=e542]: 셀러 안 파는 품목
+        - button "살리기" [ref=e543] [cursor=pointer]
+      - generic [ref=e544]: 6구 업소용 전기 붕어빵 굽는 기계, 음식 굽는 업소용 기계
+      - generic [ref=e545]:
+        - generic [ref=e546]: 네이버
+        - generic [ref=e549]: 타오바오
+      - generic [ref=e552]: 전기붕어빵기계 업소용 가정용 장사 6구
+      - generic [ref=e553]: 디지털/가전>주방가전>기타주방가전
+      - generic [ref=e554]: 판매 0 · 리뷰 121 · 129,030원 · 2차 AI 탈락
+      - generic [ref=e555]: 鼎晟6六孔电热鲷鱼烧机商用燃气小鱼饼鱼形机器摆摊小吃设备 · ¥513.73
+      - generic [ref=e556]:
+        - link "네이버" [ref=e557] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/nice10000000000/products/9357092615
+        - text: ·
+        - link "타오바오" [ref=e558] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=611817444373
+    - generic [ref=e559]:
+      - generic [ref=e560]:
+        - generic [ref=e561]: "29"
+        - generic [ref=e562]: 셀러 안 파는 품목
+        - button "살리기" [ref=e563] [cursor=pointer]
+      - generic [ref=e564]: 보쉬 호환 12V 배터리 단품, 호환 표기
+      - generic [ref=e565]:
+        - generic [ref=e566]: 네이버
+        - generic [ref=e569]: 타오바오
+      - generic [ref=e572]: 배터리 GBA 0.8V 6.0Ah 이온 밧데리 BOCH
+      - generic [ref=e573]: 생활/건강>공구>전동공구>전동공구액세서리
+      - generic [ref=e574]: 판매 0 · 리뷰 119 · 72,000원 · 2차 AI 탈락
+      - generic [ref=e575]: 适配博世手电钻电池12V充电器锂电钻GSR120li博士TSR1080锂电电池 · ¥58.00
+      - generic [ref=e576]:
+        - link "네이버" [ref=e577] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/boschpartner/products/9347369463
+        - text: ·
+        - link "타오바오" [ref=e578] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=998067769545
+    - generic [ref=e579]:
+      - generic [ref=e580]:
+        - generic [ref=e581]: "30"
+        - generic [ref=e582]: 셀러 안 파는 품목
+        - button "살리기" [ref=e583] [cursor=pointer]
+      - generic [ref=e584]: BOSCH 12V 배터리 단품, 브랜드
+      - generic [ref=e585]:
+        - generic [ref=e586]: 네이버
+        - generic [ref=e589]: 타오바오
+      - generic [ref=e592]: 배터리 GBA 0.8V 3.0Ah 이온 밧데리 BOCH
+      - generic [ref=e593]: 생활/건강>공구>전동공구>전동공구액세서리
+      - generic [ref=e594]: 판매 0 · 리뷰 118 · 49,400원 · 2차 AI 탈락
+      - generic [ref=e595]: 博世原装10.8V/12V通用锂电池TSR1080-2/GSR120/10.8锂电钻充电器 · ¥95.00
+      - generic [ref=e596]:
+        - link "네이버" [ref=e597] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/boschpartner/products/9205026471
+        - text: ·
+        - link "타오바오" [ref=e598] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=540645803781
+    - generic [ref=e599]:
+      - generic [ref=e600]:
+        - generic [ref=e601]: "31"
+        - generic [ref=e602]: 셀러 안 파는 품목
+        - button "살리기" [ref=e603] [cursor=pointer]
+      - generic [ref=e604]: 전동 쉐이커 텀블러
+      - generic [ref=e605]:
+        - generic [ref=e606]: 네이버
+        - generic [ref=e609]: 타오바오
+      - generic [ref=e612]: 유 3세대 자동 쉐이커 전동 텀블러 650ml 보충제 분말 선식 믹서 쉐이크통
+      - generic [ref=e613]: 생활/건강>주방용품>잔/컵>텀블러
+      - generic [ref=e614]: 판매 0 · 리뷰 115 · 38,000원 · 2차 AI 탈락
+      - generic [ref=e615]: 少数派自动搅拌杯便携电动摇摇杯健身水杯大容量奶昔杯带刻度充电 · ¥75.53
+      - generic [ref=e616]:
+        - link "네이버" [ref=e617] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/ggulshopping/products/574458153
+        - text: ·
+        - link "타오바오" [ref=e618] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=522789177937
+    - generic [ref=e619]:
+      - generic [ref=e620]:
+        - generic [ref=e621]: "32"
+        - generic [ref=e622]: 셀러 안 파는 품목
+        - button "살리기" [ref=e623] [cursor=pointer]
+      - generic [ref=e624]: 보쉬 호환 18V 배터리 단품, 호환 표기
+      - generic [ref=e625]:
+        - generic [ref=e626]: 네이버
+        - generic [ref=e629]: 타오바오
+      - generic [ref=e632]: 배터리 proCORE 8V 4.0Ah 이온 밧데리 BOCH
+      - generic [ref=e633]: 생활/건강>공구>전동공구>전동공구액세서리
+      - generic [ref=e634]: 판매 0 · 리뷰 112 · 50,000원 · 2차 AI 탈락
+      - generic [ref=e635]: 18V电动工具充电锂电池通用博士世GSR/GSB185冲击钻GBH180-Li电锤 · ¥60.00
+      - generic [ref=e636]:
+        - link "네이버" [ref=e637] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/boschpartner/products/9217844046
+        - text: ·
+        - link "타오바오" [ref=e638] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=945807067451
+    - generic [ref=e639]:
+      - generic [ref=e640]:
+        - generic [ref=e641]: "33"
+        - generic [ref=e642]: 셀러 안 파는 품목
+        - button "살리기" [ref=e643] [cursor=pointer]
+      - generic [ref=e644]: 재스민 마사지 오일 갤런, 액체 오일류(화장품성)
+      - generic [ref=e645]:
+        - generic [ref=e646]: 네이버
+        - generic [ref=e649]: 타오바오
+      - generic [ref=e652]: 루카스 인젝터 갤런 3.78리터 UCA UC003 / 루카스 오일 UC03 순수 합성 오일 스태빌라이져
+      - generic [ref=e653]: 생활/건강>자동차용품>오일/소모품>기타 오일/소모품
+      - generic [ref=e654]: 판매 0 · 리뷰 112 · 72,900원 · 2차 AI 탈락
+      - generic [ref=e655]: 泰国3600ml身体按摩精油薰衣草玫瑰白茶刮痧开背按摩院SPA会所用 · ¥202.52
+      - generic [ref=e656]:
+        - link "네이버" [ref=e657] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/wholesalestore/products/4710188384
+        - text: ·
+        - link "타오바오" [ref=e658] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=1008273688143
+    - generic [ref=e659]:
+      - generic [ref=e660]:
+        - generic [ref=e661]: "34"
+        - generic [ref=e662]: 셀러 안 파는 품목
+        - button "살리기" [ref=e663] [cursor=pointer]
+      - generic [ref=e664]: Solarez 에폭시 서프보드 수리 접착제(액체류), 브랜드
+      - generic [ref=e665]:
+        - generic [ref=e666]: 네이버
+        - generic [ref=e669]: 타오바오
+      - generic [ref=e672]: 울트라라이프 슬라임 인 리무버 Ultralife Red / Blue Green lime tein Remover
+      - generic [ref=e673]: 생활/건강>관상어용품>수조청소용품
+      - generic [ref=e674]: 판매 0 · 리뷰 110 · 30,800원 · 2차 AI 탈락
+      - generic [ref=e675]: 进口冲浪板胶水补板修复套件太阳胶 Solarez EPOXY DING REPAIR · ¥121.15
+      - generic [ref=e676]:
+        - link "네이버" [ref=e677] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/wholesalestore/products/6969124662
+        - text: ·
+        - link "타오바오" [ref=e678] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=586597721526
+    - generic [ref=e679]:
+      - generic [ref=e680]:
+        - generic [ref=e681]: "35"
+        - generic [ref=e682]: 셀러 안 파는 품목
+        - button "살리기" [ref=e683] [cursor=pointer]
+      - generic [ref=e684]: 가정용 전동 고기분쇄기, 흔한 생활가전
+      - generic [ref=e685]:
+        - generic [ref=e686]: 네이버
+        - generic [ref=e689]: 타오바오
+      - generic [ref=e692]: 픽범 착즙기 당근 녹즙기 원액기
+      - generic [ref=e693]: 디지털/가전>주방가전>쥬서기/녹즙기
+      - generic [ref=e694]: 판매 0 · 리뷰 109 · 159,000원 · 2차 AI 탈락
+      - generic [ref=e695]: 家用绞肉机小型绞馅机多功能新型碎肉打肉机电动灌肠机装香肠工具 · ¥210.49
+      - generic [ref=e696]:
+        - link "네이버" [ref=e697] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/ttt200408/products/7791647391
+        - text: ·
+        - link "타오바오" [ref=e698] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=1094820832486
+    - generic [ref=e699]:
+      - generic [ref=e700]:
+        - generic [ref=e701]: "36"
+        - generic [ref=e702]: 셀러 안 파는 품목
+        - button "살리기" [ref=e703] [cursor=pointer]
+      - generic [ref=e704]: 업소용 스텐 전기 보온 물끓이기 통, 음식 데우는 업소용 기계·보온통
+      - generic [ref=e705]:
+        - generic [ref=e706]: 네이버
+        - generic [ref=e709]: 타오바오
+      - generic [ref=e712]: 우성금속 슈퍼라인 업소용 스텐 자동전기물끓이기 보온 보냉 물통 장국 절전
+      - generic [ref=e713]: 생활/건강>주방용품>보관/밀폐용기>보온/보냉병
+      - generic [ref=e714]: 판매 0 · 리뷰 102 · 66,000원 · 2차 AI 탈락
+      - generic [ref=e715]: 韩国进口大麦茶烧茶桶快速烧茶水机韩餐茶水桶自动保温烧水桶 · ¥1929.92
+      - generic [ref=e716]:
+        - link "네이버" [ref=e717] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/mallkorea/products/286155508
+        - text: ·
+        - link "타오바오" [ref=e718] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=564317055250
+    - generic [ref=e719]:
+      - generic [ref=e720]:
+        - generic [ref=e721]: "37"
+        - generic [ref=e722]: 셀러 안 파는 품목
+        - button "살리기" [ref=e723] [cursor=pointer]
+      - generic [ref=e724]: 업소용 전기 중탕 보온 팬(음식 데우는 기계)
+      - generic [ref=e725]:
+        - generic [ref=e726]: 네이버
+        - generic [ref=e729]: 타오바오
+      - generic [ref=e732]: 사각 업소 중탕기 전기 워머기 중국집 짜장 소스 식당 2소형
+      - generic [ref=e733]: 디지털/가전>주방가전>기타주방가전
+      - generic [ref=e734]: 판매 0 · 리뷰 101 · 129,000원 · 2차 AI 탈락
+      - generic [ref=e735]: 珍珠奶茶店黑糖珍珠保温锅西米芋圆芋泥粉圆电热保温汤池省电恒温 · ¥274.73
+      - generic [ref=e736]:
+        - link "네이버" [ref=e737] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/libero24/products/8606398606
+        - text: ·
+        - link "타오바오" [ref=e738] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=630570263343
+    - generic [ref=e739]:
+      - generic [ref=e740]:
+        - generic [ref=e741]: "38"
+        - generic [ref=e742]: 셀러 안 파는 품목
+        - button "살리기" [ref=e743] [cursor=pointer]
+      - generic [ref=e744]: 거꾸리형 물구나무 운동기구 (같은 타오바오 — 대표 11154-kwy9jllI5NICgPo-13624583122 판정 복사)
+      - generic [ref=e745]: 네이버
+      - generic [ref=e750]: 물구나무서기 의자 요가체어 요가운동기구
+      - generic [ref=e751]: 스포츠/레저>헬스>거꾸리
+      - generic [ref=e752]: 판매 0 · 리뷰 95 · 37,820원 · 2차 AI 탈락
+      - link "네이버" [ref=e754] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/kongpupanda2017/products/5229118231
+    - generic [ref=e755]:
+      - generic [ref=e756]:
+        - generic [ref=e757]: "39"
+        - generic [ref=e758]: 셀러 안 파는 품목
+        - button "살리기" [ref=e759] [cursor=pointer]
+      - generic [ref=e760]: Kixx 엔진오일(액체)·브랜드
+      - generic [ref=e761]:
+        - generic [ref=e762]: 네이버
+        - generic [ref=e765]: 타오바오
+      - generic [ref=e768]: G칼텍스 KIXX 킥스 G 5W-30 4행정 예초기 엔진오일 , 개
+      - generic [ref=e769]: 생활/건강>자동차용품>오일/소모품>엔진오일
+      - generic [ref=e770]: 판매 0 · 리뷰 93 · 43,000원 · 2차 AI 탈락
+      - generic [ref=e771]: 韩国进口加德士凯升GS KIXX GX 5W30全合成汽油机油SQ/GF-7新包装 · ¥183.66
+      - generic [ref=e772]:
+        - link "네이버" [ref=e773] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/toollinker/products/9897539174
+        - text: ·
+        - link "타오바오" [ref=e774] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=770284231841
+    - generic [ref=e775]:
+      - generic [ref=e776]:
+        - generic [ref=e777]: "40"
+        - generic [ref=e778]: 셀러 안 파는 품목
+        - button "살리기" [ref=e779] [cursor=pointer]
+      - generic [ref=e780]: CHAKO LAB 보온 텀블러(1000ml), 텀블러류+브랜드 로고
+      - generic [ref=e781]:
+        - generic [ref=e782]: 네이버
+        - generic [ref=e785]: 타오바오
+      - generic [ref=e788]: 차코랩 린린 텀블러 CHAKO AB 캐틀벨 손잡이 보온 보냉 대용량 텀블러
+      - generic [ref=e789]: 생활/건강>주방용품>잔/컵>텀블러
+      - generic [ref=e790]: 판매 0 · 리뷰 93 · 38,600원 · 2차 AI 탈락
+      - generic [ref=e791]: chakolab和序大肚保温杯女生大容量水杯2025新款便携杯子拎拎水壶 · ¥153.20
+      - generic [ref=e792]:
+        - link "네이버" [ref=e793] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/bunny87/products/12038845981
+        - text: ·
+        - link "타오바오" [ref=e794] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=846343353379
+    - generic [ref=e795]:
+      - generic [ref=e796]:
+        - generic [ref=e797]: "41"
+        - generic [ref=e798]: 셀러 안 파는 품목
+        - button "살리기" [ref=e799] [cursor=pointer]
+      - generic [ref=e800]: 20V 4.0Ah 공구 교체용 배터리 단품
+      - generic [ref=e801]:
+        - generic [ref=e802]: 네이버
+        - generic [ref=e805]: 타오바오
+      - generic [ref=e808]: 5.0Ah 배터리 밧데리 B8065P B8053 8V 20V 벌크상품
+      - generic [ref=e809]: 생활/건강>공구>전동공구>기타전동공구
+      - generic [ref=e810]: 판매 0 · 리뷰 92 · 56,900원 · 2차 AI 탈락
+      - generic [ref=e811]: 比利得7350无刷冲击板手大扭力充电扳手20V多功能锂电木工架子工 · ¥49.89
+      - generic [ref=e812]:
+        - link "네이버" [ref=e813] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/jj09/products/5555297726
+        - text: ·
+        - link "타오바오" [ref=e814] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=760821127414
+    - generic [ref=e815]:
+      - generic [ref=e816]:
+        - generic [ref=e817]: "42"
+        - generic [ref=e818]: 셀러 안 파는 품목
+        - button "살리기" [ref=e819] [cursor=pointer]
+      - generic [ref=e820]: 毛毛姐 세탁 페이스트(액체·세정제류)
+      - generic [ref=e821]:
+        - generic [ref=e822]: 네이버
+        - generic [ref=e825]: 타오바오
+      - generic [ref=e828]: 탄탄 방수 원탄 방수제 T-0 8Kg 하도+중도+상도 원스탑 옥상 시공
+      - generic [ref=e829]: 생활/건강>공구>페인트용품>방수제
+      - generic [ref=e830]: 판매 0 · 리뷰 88 · 185,000원 · 2차 AI 탈락
+      - generic [ref=e831]: 毛毛姐多用途洗衣膏毛毛姐洗衣膏多功能洗衣膏洗衣洗衣洗鞋帮手 · ¥20.40
+      - generic [ref=e832]:
+        - link "네이버" [ref=e833] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/tough09/products/6445372861
+        - text: ·
+        - link "타오바오" [ref=e834] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=1037757449336
+    - generic [ref=e835]:
+      - generic [ref=e836]:
+        - generic [ref=e837]: "43"
+        - generic [ref=e838]: 셀러 안 파는 품목
+        - button "살리기" [ref=e839] [cursor=pointer]
+      - generic [ref=e840]: 헤어드라이어 - 쿠팡에서 흔히 사는 생활가전
+      - generic [ref=e841]:
+        - generic [ref=e842]: 네이버
+        - generic [ref=e845]: 타오바오
+      - generic [ref=e848]: 드라이기 bldc cs2025 업드 형 헤어 드라이어
+      - generic [ref=e849]: 디지털/가전>이미용가전>헤어기기>드라이어
+      - generic [ref=e850]: 판매 0 · 리뷰 87 · 39,900원 · 2차 AI 탈락
+      - generic [ref=e851]: 富泰鸿高速吹风机家用大功率护发静音速干冷热恒温负离子电吹风筒 · ¥194.65
+      - generic [ref=e852]:
+        - link "네이버" [ref=e853] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/jsfstore/products/10621080708
+        - text: ·
+        - link "타오바오" [ref=e854] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=876221858525
+    - generic [ref=e855]:
+      - generic [ref=e856]:
+        - generic [ref=e857]: "44"
+        - generic [ref=e858]: 셀러 안 파는 품목
+        - button "살리기" [ref=e859] [cursor=pointer]
+      - generic [ref=e860]: 반려동물 털 흡입 그루밍 청소기·클리퍼 세트, 전기 생활가전 (같은 타오바오 — 대표 11154-kwy9jllI5NICgPo-13809250313 판정 복사)
+      - generic [ref=e861]: 네이버
+      - generic [ref=e866]: 펫케어 그루밍 강아지털 청소기 강아지 고양이 애견 털 바리깡 포집기 빗 미용기
+      - generic [ref=e867]: 생활/건강>반려동물>미용/목욕>이발기
+      - generic [ref=e868]: 판매 0 · 리뷰 87 · 122,800원 · 2차 AI 탈락
+      - link "네이버" [ref=e870] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/charmhan/products/11183379575
+    - generic [ref=e871]:
+      - generic [ref=e872]:
+        - generic [ref=e873]: "45"
+        - generic [ref=e874]: 셀러 안 파는 품목
+        - button "살리기" [ref=e875] [cursor=pointer]
+      - generic [ref=e876]: NexTool 로고 다기능 손전등, 손전등류이며 브랜드 (같은 타오바오 — 대표 11154-kwy9jllI5NICgPo-5195142498 판정 복사)
+      - generic [ref=e877]: 네이버
+      - generic [ref=e882]: NexTool 380m 롱래스팅 원거리 야외 손전등 ED 후레쉬 후레시 랜턴
+      - generic [ref=e883]: 스포츠/레저>캠핑>랜턴>손전등
+      - generic [ref=e884]: 판매 0 · 리뷰 85 · 37,500원 · 2차 AI 탈락
+      - link "네이버" [ref=e886] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/xiaomiya/products/5029325055
+    - generic [ref=e887]:
+      - generic [ref=e888]:
+        - generic [ref=e889]: "46"
+        - generic [ref=e890]: 셀러 안 파는 품목
+        - button "살리기" [ref=e891] [cursor=pointer]
+      - generic [ref=e892]: 보온 빨대 텀블러(차코랩 대용량)
+      - generic [ref=e893]:
+        - generic [ref=e894]: 네이버
+        - generic [ref=e897]: 타오바오
+      - generic [ref=e900]: 차코랩 대용량 텀블러 인레스 코팅 보온 보냉 손잡이 빨대컵 050ml
+      - generic [ref=e901]: 생활/건강>주방용품>잔/컵>텀블러
+      - generic [ref=e902]: 판매 0 · 리뷰 83 · 49,500원 · 2차 AI 탈락
+      - generic [ref=e903]: CHaKOLAB和序巨无霸陶瓷内胆吸管保温杯大容量水杯生日礼物霸王杯 · ¥999.00
+      - generic [ref=e904]:
+        - link "네이버" [ref=e905] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/resellcrew/products/11772495140
+        - text: ·
+        - link "타오바오" [ref=e906] [cursor=pointer]:
+          - /url: https://detail.tmall.com/item.htm?id=995025188271
+    - generic [ref=e907]:
+      - generic [ref=e908]:
+        - generic [ref=e909]: "47"
+        - generic [ref=e910]: 셀러 안 파는 품목
+        - button "살리기" [ref=e911] [cursor=pointer]
+      - generic [ref=e912]: 헤어드라이어, 쿠팡에서 흔한 생활가전
+      - generic [ref=e913]:
+        - generic [ref=e914]: 네이버
+        - generic [ref=e917]: 타오바오
+      - generic [ref=e920]: 로이드미 드라이기 미로 음이온 항공모터 BDC 여행용 휴대용 헤어 드라이어
+      - generic [ref=e921]: 디지털/가전>이미용가전>헤어기기>드라이어
+      - generic [ref=e922]: 판매 0 · 리뷰 75 · 149,000원 · 2차 AI 탈락
+      - generic [ref=e923]: 恒迅酒店客房壁挂式吹风机三档控制高速家用暖风恒温调节自动断电 · ¥233.94
+      - generic [ref=e924]:
+        - link "네이버" [ref=e925] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/ml/products/11988147491
+        - text: ·
+        - link "타오바오" [ref=e926] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=964159471225
+    - generic [ref=e927]:
+      - generic [ref=e928]:
+        - generic [ref=e929]: "48"
+        - generic [ref=e930]: 셀러 안 파는 품목
+        - button "살리기" [ref=e931] [cursor=pointer]
+      - generic [ref=e932]: 검정 플러그형 일반 책상 스탠드, 흔한 생활조명 가전
+      - generic [ref=e933]:
+        - generic [ref=e934]: 네이버
+        - generic [ref=e937]: 타오바오
+      - generic [ref=e940]: 대경 개 적외선 조사기 용도 램프 250W 기 아닌 기기 온열 물리
+      - generic [ref=e941]: 생활/건강>물리치료/저주파용품>적외선조사기
+      - generic [ref=e942]: 판매 0 · 리뷰 72 · 74,000원 · 2차 AI 탈락
+      - generic [ref=e943]: 寝室夜灯家用办公学习220v中学生普通台灯老式插电超长插座 · ¥11.42
+      - generic [ref=e944]:
+        - link "네이버" [ref=e945] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/21/products/4678242878
+        - text: ·
+        - link "타오바오" [ref=e946] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=1046617032404
+    - generic [ref=e947]:
+      - generic [ref=e948]:
+        - generic [ref=e949]: "49"
+        - generic [ref=e950]: 셀러 안 파는 품목
+        - button "살리기" [ref=e951] [cursor=pointer]
+      - generic [ref=e952]: 스테인리스 텀블러
+      - generic [ref=e953]:
+        - generic [ref=e954]: 네이버
+        - generic [ref=e957]: 타오바오
+      - generic [ref=e960]: 텀블러 인레스 스틸 (59ml)
+      - generic [ref=e961]: 생활/건강>주방용품>잔/컵>텀블러
+      - generic [ref=e962]: 판매 0 · 리뷰 71 · 56,000원 · 2차 AI 탈락
+      - generic [ref=e963]: 出口德国 316不锈钢啤酒杯 大容量随手杯 双层隔热防烫杯家用水杯 · ¥54.87
+      - generic [ref=e964]:
+        - link "네이버" [ref=e965] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/newzealandshop/products/12083565833
+        - text: ·
+        - link "타오바오" [ref=e966] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=692976474783
+    - generic [ref=e967]:
+      - generic [ref=e968]:
+        - generic [ref=e969]: "50"
+        - generic [ref=e970]: 셀러 안 파는 품목
+        - button "살리기" [ref=e971] [cursor=pointer]
+      - generic [ref=e972]: 보온 텀블러 컵
+      - generic [ref=e973]:
+        - generic [ref=e974]: 네이버
+        - generic [ref=e977]: 타오바오
+      - generic [ref=e980]: 레 무선 배낭형 청소기 BV-4 공업용 업소용 산업용 멜빵형 백팩형
+      - generic [ref=e981]: 디지털/가전>청소기>업소용청소기
+      - generic [ref=e982]: 판매 0 · 리뷰 70 · 280,000원 · 2차 AI 탈락
+      - generic [ref=e983]: 2026潮酷风316不锈钢保温杯男带挂绳户外日常出行车载便携咖啡杯 · ¥44.68
+      - generic [ref=e984]:
+        - link "네이버" [ref=e985] [cursor=pointer]:
+          - /url: https://smartstore.naver.com/ryutech/products/11635879092
+        - text: ·
+        - link "타오바오" [ref=e986] [cursor=pointer]:
+          - /url: https://item.taobao.com/item.htm?id=1088079445614
+  - generic [ref=e987]:
+    - button "◀ 이전 50" [ref=e988] [cursor=pointer]
+    - button "다음 50 ▶" [ref=e989] [cursor=pointer]
+  - contentinfo [ref=e990]:
+    - generic [ref=e991]: 살리기
+    - generic [ref=e992]: 0개
+    - button "번호 복사" [ref=e993] [cursor=pointer]
+    - button "비우기" [ref=e994] [cursor=pointer]

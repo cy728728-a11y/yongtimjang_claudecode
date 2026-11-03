@@ -1,0 +1,654 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]: 탈락 상품 재검토
+    - generic [ref=e4]: 79,055 ~ 79,104 / 199,995 (1차 금지 카테고리 탈락 · 도서)
+    - button "◀ 이전 50" [ref=e5] [cursor=pointer]
+    - button "다음 50 ▶" [ref=e6] [cursor=pointer]
+    - spinbutton "번호" [ref=e7]
+    - button "이동" [ref=e8] [cursor=pointer]
+    - combobox [ref=e9] [cursor=pointer]:
+      - option "구간 바로가기" [selected]
+      - option "■ 2차 AI 탈락 (1~74367)"
+      - option "셀러 안 파는 품목 (1~5210)"
+      - option "작고 싼 부품·소모품 (5211~18050)"
+      - option "배송 위험(파손·초중량) (18051~22146)"
+      - option "기타 부적절 (22147~23103)"
+      - option "어린이·임산부·성인 (23104~25592)"
+      - option "금지 분야 (25593~33071)"
+      - option "패션 (33072~40787)"
+      - option "위험물 (40788~41323)"
+      - option "법규(식품·화장품·의료 등) (41324~46386)"
+      - option "브랜드·캐릭터·호환 (46387~74367)"
+      - option "■ 2차 기계 탈락 (74368~74593)"
+      - option "금지어(분야) (74368~74372)"
+      - option "금지어(위험) (74373~74465)"
+      - option "금지어(기타) (74466~74495)"
+      - option "매칭 없음 (74496~74496)"
+      - option "전력 기준 (74497~74593)"
+      - option "■ 1차 금지어 탈락 (74594~79054)"
+      - option "금지어(분야) (74594~74604)"
+      - option "금지어(위험) (74605~74624)"
+      - option "금지어(브랜드) (74625~78530)"
+      - option "금지어(법규) (78531~78671)"
+      - option "금지어(기타) (78672~78738)"
+      - option "전력 기준 (78739~79054)"
+      - option "■ 1차 금지 카테고리 탈락 (79055~199995)"
+      - option "도서 (79055~79092)"
+      - option "디지털/가전 (79093~101790)"
+      - option "생활/건강 (101791~144375)"
+      - option "스포츠/레저 (144376~161748)"
+      - option "식품 (161749~167308)"
+      - option "여가/생활편의 (167309~167331)"
+      - option "출산/육아 (167332~171736)"
+      - option "패션의류 (171737~180785)"
+      - option "패션잡화 (180786~195867)"
+      - option "화장품/미용 (195868~199995)"
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: "79055"
+        - generic [ref=e14]: 금지 카테고리
+        - button "살리기" [ref=e15] [cursor=pointer]
+      - generic [ref=e16]: 금지 카테고리 50010062
+      - generic [ref=e17]: 네이버
+      - generic [ref=e22]: 브리지 포 즈 기본
+      - generic [ref=e23]: 도서>건강/취미>취미/레저>레저/스포츠기타
+      - generic [ref=e24]: 판매 0 · 리뷰 0 · 33,030원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e26] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/re_veon/products/13394100967
+    - generic [ref=e27]:
+      - generic [ref=e28]:
+        - generic [ref=e29]: "79056"
+        - generic [ref=e30]: 금지 카테고리
+        - button "살리기" [ref=e31] [cursor=pointer]
+      - generic [ref=e32]: 금지 카테고리 50009962
+      - generic [ref=e33]: 네이버
+      - generic [ref=e38]: 쥐에게 쿠키를 주면 쥐에 우스꽝스러운 이야기와 늦은 밤 쿠 갈망 양장본
+      - generic [ref=e39]: 도서>건강/취미>취미/레저>반려동물
+      - generic [ref=e40]: 판매 0 · 리뷰 0 · 36,630원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e42] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/cozy_bay/products/13462341320
+    - generic [ref=e43]:
+      - generic [ref=e44]:
+        - generic [ref=e45]: "79057"
+        - generic [ref=e46]: 금지 카테고리
+        - button "살리기" [ref=e47] [cursor=pointer]
+      - generic [ref=e48]: 금지 카테고리 50010021
+      - generic [ref=e49]: 네이버
+      - generic [ref=e54]: "색상 변경 종이접기 : 원 시트 그래픽 디자인: 대담한 동물과 상징적인 종이 리온을 접을 수 6단계 전체 다이어 - 가위 사용 금지 기본"
+      - generic [ref=e55]: 도서>건강/취미>취미/레저>선물포장/리본공예
+      - generic [ref=e56]: 판매 0 · 리뷰 0 · 62,730원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e58] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/gosignaturezone/products/13500152510
+    - generic [ref=e59]:
+      - generic [ref=e60]:
+        - generic [ref=e61]: "79058"
+        - generic [ref=e62]: 금지 카테고리
+        - button "살리기" [ref=e63] [cursor=pointer]
+      - generic [ref=e64]: 금지 카테고리 50010040
+      - generic [ref=e65]: 네이버
+      - generic [ref=e70]: 오래된 시계와 시계 수리하기 양장본
+      - generic [ref=e71]: 도서>건강/취미>취미/레저>옷만들기
+      - generic [ref=e72]: 판매 0 · 리뷰 0 · 91,350원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e74] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/trumall/products/13356574289
+    - generic [ref=e75]:
+      - generic [ref=e76]:
+        - generic [ref=e77]: "79059"
+        - generic [ref=e78]: 금지 카테고리
+        - button "살리기" [ref=e79] [cursor=pointer]
+      - generic [ref=e80]: 금지 카테고리 50005950
+      - generic [ref=e81]: 네이버
+      - generic [ref=e86]: 전권 Vocabulary Workshop 영어교재
+      - generic [ref=e87]: 도서>국어/외국어>영어>회화/청취
+      - generic [ref=e88]: 판매 0 · 리뷰 2 · 60,700원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e90] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/simplemole/products/10924064868
+    - generic [ref=e91]:
+      - generic [ref=e92]:
+        - generic [ref=e93]: "79060"
+        - generic [ref=e94]: 금지 카테고리
+        - button "살리기" [ref=e95] [cursor=pointer]
+      - generic [ref=e96]: 금지 카테고리 50005734
+      - generic [ref=e97]: 네이버
+      - generic [ref=e102]: 냥코대전쟁 책 게임 스 북 제권 일본어
+      - generic [ref=e103]: 도서>만화>일본어판 만화
+      - generic [ref=e104]: 판매 0 · 리뷰 0 · 34,300원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e106] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/11247740062
+    - generic [ref=e107]:
+      - generic [ref=e108]:
+        - generic [ref=e109]: "79061"
+        - generic [ref=e110]: 금지 카테고리
+        - button "살리기" [ref=e111] [cursor=pointer]
+      - generic [ref=e112]: 금지 카테고리 50005734
+      - generic [ref=e113]: 네이버
+      - generic [ref=e118]: 냥코대전쟁 코믹스 스북 책 제7권 일본어
+      - generic [ref=e119]: 도서>만화>일본어판 만화
+      - generic [ref=e120]: 판매 0 · 리뷰 0 · 34,300원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e122] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/11247735030
+    - generic [ref=e123]:
+      - generic [ref=e124]:
+        - generic [ref=e125]: "79062"
+        - generic [ref=e126]: 금지 카테고리
+        - button "살리기" [ref=e127] [cursor=pointer]
+      - generic [ref=e128]: 금지 카테고리 50005756
+      - generic [ref=e129]: 네이버
+      - generic [ref=e134]: 창궁산기 2권 원작소설 중국어 원서 묵향동후 인사반파자구계통 굿즈
+      - generic [ref=e135]: 도서>소설>세계 각국 소설>중국소설
+      - generic [ref=e136]: 판매 0 · 리뷰 3 · 35,910원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e138] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/trendkorea0611/products/13105052249
+    - generic [ref=e139]:
+      - generic [ref=e140]:
+        - generic [ref=e141]: "79063"
+        - generic [ref=e142]: 금지 카테고리
+        - button "살리기" [ref=e143] [cursor=pointer]
+      - generic [ref=e144]: 금지 카테고리 50005756
+      - generic [ref=e145]: 네이버
+      - generic [ref=e150]: 축옥 전2편 총4권 원작소설 중국어 원서 굿즈 단자내습 작가 중드 중국드라마 장릉혁 전희미
+      - generic [ref=e151]: 도서>소설>세계 각국 소설>중국소설
+      - generic [ref=e152]: 판매 0 · 리뷰 1 · 34,110원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e154] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/trendkorea0611/products/13353429163
+    - generic [ref=e155]:
+      - generic [ref=e156]:
+        - generic [ref=e157]: "79064"
+        - generic [ref=e158]: 금지 카테고리
+        - button "살리기" [ref=e159] [cursor=pointer]
+      - generic [ref=e160]: 금지 카테고리 50005756
+      - generic [ref=e161]: 네이버
+      - generic [ref=e166]: 아화개후백화살 원작소설 3부 전7권 중국어 원서 중국소설 중드 동풍신 원작 맹자의 하여
+      - generic [ref=e167]: 도서>소설>세계 각국 소설>중국소설
+      - generic [ref=e168]: 판매 0 · 리뷰 1 · 45,000원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e170] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/trendkorea0611/products/13635255095
+    - generic [ref=e171]:
+      - generic [ref=e172]:
+        - generic [ref=e173]: "79065"
+        - generic [ref=e174]: 금지 카테고리
+        - button "살리기" [ref=e175] [cursor=pointer]
+      - generic [ref=e176]: 금지 카테고리 50005902
+      - generic [ref=e177]: 네이버
+      - generic [ref=e182]: 요제프 코델카 망명자 양장본
+      - generic [ref=e183]: 도서>예술/대중문화>사진>사진일반
+      - generic [ref=e184]: 판매 0 · 리뷰 0 · 91,800원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e186] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/pickngotrade/products/13453951807
+    - generic [ref=e187]:
+      - generic [ref=e188]:
+        - generic [ref=e189]: "79066"
+        - generic [ref=e190]: 금지 카테고리
+        - button "살리기" [ref=e191] [cursor=pointer]
+      - generic [ref=e192]: 금지 카테고리 50005902
+      - generic [ref=e193]: 네이버
+      - generic [ref=e198]: 레오으로 보는 이미지 3D 눈 놀라운 착시 60개 이상의 동물 사진 훈련으로 (3D 이미지) 기본
+      - generic [ref=e199]: 도서>예술/대중문화>사진>사진일반
+      - generic [ref=e200]: 판매 0 · 리뷰 0 · 32,220원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e202] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/pickngotrade/products/13453643766
+    - generic [ref=e203]:
+      - generic [ref=e204]:
+        - generic [ref=e205]: "79067"
+        - generic [ref=e206]: 금지 카테고리
+        - button "살리기" [ref=e207] [cursor=pointer]
+      - generic [ref=e208]: 금지 카테고리 50005895
+      - generic [ref=e209]: 네이버
+      - generic [ref=e214]: 류이치 사카모토 피아노 곡집 대전집 악보 굿즈 256pages
+      - generic [ref=e215]: 도서>예술/대중문화>음악>악기/악보집
+      - generic [ref=e216]: 판매 0 · 리뷰 1 · 44,800원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e218] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/shopbus/products/8752507477
+    - generic [ref=e219]:
+      - generic [ref=e220]:
+        - generic [ref=e221]: "79068"
+        - generic [ref=e222]: 금지 카테고리
+        - button "살리기" [ref=e223] [cursor=pointer]
+      - generic [ref=e224]: 금지 카테고리 50005737
+      - generic [ref=e225]: 네이버
+      - generic [ref=e230]: 멜론 씽 투게더 영어 읽기 노래 부르기 버튼 책 사운드북
+      - generic [ref=e231]: 도서>외국도서>유아청소년/교육
+      - generic [ref=e232]: 판매 0 · 리뷰 0 · 47,580원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e234] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/hongkildong/products/6611448007
+    - generic [ref=e235]:
+      - generic [ref=e236]:
+        - generic [ref=e237]: "79069"
+        - generic [ref=e238]: 금지 카테고리
+        - button "살리기" [ref=e239] [cursor=pointer]
+      - generic [ref=e240]: 금지 카테고리 50010502
+      - generic [ref=e241]: 네이버
+      - generic [ref=e246]: "백조의 노래: 내 여동생 다이애나 양장본"
+      - generic [ref=e247]: 도서>외국도서>인문/사회/종교>철학/심리/역사
+      - generic [ref=e248]: 판매 0 · 리뷰 0 · 50,310원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e250] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/_sollen/products/13744748277
+    - generic [ref=e251]:
+      - generic [ref=e252]:
+        - generic [ref=e253]: "79070"
+        - generic [ref=e254]: 금지 카테고리
+        - button "살리기" [ref=e255] [cursor=pointer]
+      - generic [ref=e256]: 금지 카테고리 50005752
+      - generic [ref=e257]: 네이버
+      - generic [ref=e262]: "[] 일본판 책 3권 전권 일본어 원서 996년판"
+      - generic [ref=e263]: 도서>외국도서>일본도서
+      - generic [ref=e264]: 판매 0 · 리뷰 7 · 98,000원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e266] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/comfortlife/products/9878044501
+    - generic [ref=e267]:
+      - generic [ref=e268]:
+        - generic [ref=e269]: "79071"
+        - generic [ref=e270]: 금지 카테고리
+        - button "살리기" [ref=e271] [cursor=pointer]
+      - generic [ref=e272]: 금지 카테고리 50005752
+      - generic [ref=e273]: 네이버
+      - generic [ref=e278]: HYTERIC INI BIG PUFF HOUDER BAG BOOK - 히릭글래머 잡지부록 퍼프 숄더백 메시 워크 퀼팅
+      - generic [ref=e279]: 도서>외국도서>일본도서
+      - generic [ref=e280]: 판매 0 · 리뷰 6 · 60,200원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e282] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/greenbean_/products/13124129842
+    - generic [ref=e283]:
+      - generic [ref=e284]:
+        - generic [ref=e285]: "79072"
+        - generic [ref=e286]: 금지 카테고리
+        - button "살리기" [ref=e287] [cursor=pointer]
+      - generic [ref=e288]: 금지 카테고리 50005752
+      - generic [ref=e289]: 네이버
+      - generic [ref=e294]: "[] 일본판 H2 책 34권 전권 일본어 원서 992년판"
+      - generic [ref=e295]: 도서>외국도서>일본도서
+      - generic [ref=e296]: 판매 0 · 리뷰 1 · 97,000원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e298] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/comfortlife/products/11450585143
+    - generic [ref=e299]:
+      - generic [ref=e300]:
+        - generic [ref=e301]: "79073"
+        - generic [ref=e302]: 금지 카테고리
+        - button "살리기" [ref=e303] [cursor=pointer]
+      - generic [ref=e304]: 금지 카테고리 50005752
+      - generic [ref=e305]: 네이버
+      - generic [ref=e310]: 오즈 이펙트 원화집 일러스트북
+      - generic [ref=e311]: 도서>외국도서>일본도서
+      - generic [ref=e312]: 판매 0 · 리뷰 0 · 71,600원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e314] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/showmethings/products/12926122663
+    - generic [ref=e315]:
+      - generic [ref=e316]:
+        - generic [ref=e317]: "79074"
+        - generic [ref=e318]: 금지 카테고리
+        - button "살리기" [ref=e319] [cursor=pointer]
+      - generic [ref=e320]: 금지 카테고리 50005752
+      - generic [ref=e321]: 네이버
+      - generic [ref=e326]: 에코 안다리아 뜨개질 가방 만들기 DIY 책 일본어
+      - generic [ref=e327]: 도서>외국도서>일본도서
+      - generic [ref=e328]: 판매 0 · 리뷰 0 · 43,300원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e330] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/showmethings/products/12818601080
+    - generic [ref=e331]:
+      - generic [ref=e332]:
+        - generic [ref=e333]: "79075"
+        - generic [ref=e334]: 금지 카테고리
+        - button "살리기" [ref=e335] [cursor=pointer]
+      - generic [ref=e336]: 금지 카테고리 50005752
+      - generic [ref=e337]: 네이버
+      - generic [ref=e342]: 민츠 사계절 코 뜨개질 패션 템 모자 만들기 책
+      - generic [ref=e343]: 도서>외국도서>일본도서
+      - generic [ref=e344]: 판매 0 · 리뷰 0 · 46,600원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e346] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/showmethings/products/12818584091
+    - generic [ref=e347]:
+      - generic [ref=e348]:
+        - generic [ref=e349]: "79076"
+        - generic [ref=e350]: 금지 카테고리
+        - button "살리기" [ref=e351] [cursor=pointer]
+      - generic [ref=e352]: 금지 카테고리 50005752
+      - generic [ref=e353]: 네이버
+      - generic [ref=e358]: 일식 이야 안주 요리책 특별 일본 레시피북
+      - generic [ref=e359]: 도서>외국도서>일본도서
+      - generic [ref=e360]: 판매 0 · 리뷰 0 · 48,000원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e362] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/12512220827
+    - generic [ref=e363]:
+      - generic [ref=e364]:
+        - generic [ref=e365]: "79077"
+        - generic [ref=e366]: 금지 카테고리
+        - button "살리기" [ref=e367] [cursor=pointer]
+      - generic [ref=e368]: 금지 카테고리 50005752
+      - generic [ref=e369]: 네이버
+      - generic [ref=e374]: 일본 컬러링북 색칠공부
+      - generic [ref=e375]: 도서>외국도서>일본도서
+      - generic [ref=e376]: 판매 0 · 리뷰 0 · 35,500원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e378] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/12839286544
+    - generic [ref=e379]:
+      - generic [ref=e380]:
+        - generic [ref=e381]: "79078"
+        - generic [ref=e382]: 금지 카테고리
+        - button "살리기" [ref=e383] [cursor=pointer]
+      - generic [ref=e384]: 금지 카테고리 50005752
+      - generic [ref=e385]: 네이버
+      - generic [ref=e390]: 비스트로 샐러드 요리책 타블르오기노 셰프 일본 이야 레시피북
+      - generic [ref=e391]: 도서>외국도서>일본도서
+      - generic [ref=e392]: 판매 0 · 리뷰 0 · 47,700원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e394] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/12512258280
+    - generic [ref=e395]:
+      - generic [ref=e396]:
+        - generic [ref=e397]: "79079"
+        - generic [ref=e398]: 금지 카테고리
+        - button "살리기" [ref=e399] [cursor=pointer]
+      - generic [ref=e400]: 금지 카테고리 50005752
+      - generic [ref=e401]: 네이버
+      - generic [ref=e406]: 이야 요리책 토다카 비밀 레시피북 일본
+      - generic [ref=e407]: 도서>외국도서>일본도서
+      - generic [ref=e408]: 판매 0 · 리뷰 0 · 48,900원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e410] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/12512246013
+    - generic [ref=e411]:
+      - generic [ref=e412]:
+        - generic [ref=e413]: "79080"
+        - generic [ref=e414]: 금지 카테고리
+        - button "살리기" [ref=e415] [cursor=pointer]
+      - generic [ref=e416]: 금지 카테고리 50005752
+      - generic [ref=e417]: 네이버
+      - generic [ref=e422]: 일본 셰프의 프랑스 요리책 르망쥬투 레시피북 이야 요리 메뉴
+      - generic [ref=e423]: 도서>외국도서>일본도서
+      - generic [ref=e424]: 판매 0 · 리뷰 0 · 48,000원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e426] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/12512228627
+    - generic [ref=e427]:
+      - generic [ref=e428]:
+        - generic [ref=e429]: "79081"
+        - generic [ref=e430]: 금지 카테고리
+        - button "살리기" [ref=e431] [cursor=pointer]
+      - generic [ref=e432]: 금지 카테고리 50005752
+      - generic [ref=e433]: 네이버
+      - generic [ref=e438]: 비스트로 요리책 고급 이야 레시피북 일본
+      - generic [ref=e439]: 도서>외국도서>일본도서
+      - generic [ref=e440]: 판매 0 · 리뷰 0 · 50,600원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e442] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/12512225456
+    - generic [ref=e443]:
+      - generic [ref=e444]:
+        - generic [ref=e445]: "79082"
+        - generic [ref=e446]: 금지 카테고리
+        - button "살리기" [ref=e447] [cursor=pointer]
+      - generic [ref=e448]: 금지 카테고리 50005752
+      - generic [ref=e449]: 네이버
+      - generic [ref=e454]: 비스트로 요리책 간편한 스피드 요리 이야 일본 레시피북
+      - generic [ref=e455]: 도서>외국도서>일본도서
+      - generic [ref=e456]: 판매 0 · 리뷰 0 · 63,700원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e458] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/12512206344
+    - generic [ref=e459]:
+      - generic [ref=e460]:
+        - generic [ref=e461]: "79083"
+        - generic [ref=e462]: 금지 카테고리
+        - button "살리기" [ref=e463] [cursor=pointer]
+      - generic [ref=e464]: 금지 카테고리 50005752
+      - generic [ref=e465]: 네이버
+      - generic [ref=e470]: 일본 이야 메뉴 요리책 히트메뉴 레시피북
+      - generic [ref=e471]: 도서>외국도서>일본도서
+      - generic [ref=e472]: 판매 0 · 리뷰 0 · 69,200원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e474] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/12512182529
+    - generic [ref=e475]:
+      - generic [ref=e476]:
+        - generic [ref=e477]: "79084"
+        - generic [ref=e478]: 금지 카테고리
+        - button "살리기" [ref=e479] [cursor=pointer]
+      - generic [ref=e480]: 금지 카테고리 50005752
+      - generic [ref=e481]: 네이버
+      - generic [ref=e486]: 일본 가정식 요리책 황금비율 기본 요리 00 이야 레시피북
+      - generic [ref=e487]: 도서>외국도서>일본도서
+      - generic [ref=e488]: 판매 0 · 리뷰 0 · 47,200원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e490] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/12512158259
+    - generic [ref=e491]:
+      - generic [ref=e492]:
+        - generic [ref=e493]: "79085"
+        - generic [ref=e494]: 금지 카테고리
+        - button "살리기" [ref=e495] [cursor=pointer]
+      - generic [ref=e496]: 금지 카테고리 50005752
+      - generic [ref=e497]: 네이버
+      - generic [ref=e502]: 냥코대전쟁 배틀 필승 정보 공략집 설명서 일본어
+      - generic [ref=e503]: 도서>외국도서>일본도서
+      - generic [ref=e504]: 판매 0 · 리뷰 0 · 45,500원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e506] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/11693790577
+    - generic [ref=e507]:
+      - generic [ref=e508]:
+        - generic [ref=e509]: "79086"
+        - generic [ref=e510]: 금지 카테고리
+        - button "살리기" [ref=e511] [cursor=pointer]
+      - generic [ref=e512]: 금지 카테고리 50005752
+      - generic [ref=e513]: 네이버
+      - generic [ref=e518]: 냥코대전쟁 캐릭터 굿즈 스티커 북 프리미엄
+      - generic [ref=e519]: 도서>외국도서>일본도서
+      - generic [ref=e520]: 판매 0 · 리뷰 0 · 33,500원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e522] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thirdpulse/products/11693785629
+    - generic [ref=e523]:
+      - generic [ref=e524]:
+        - generic [ref=e525]: "79087"
+        - generic [ref=e526]: 금지 카테고리
+        - button "살리기" [ref=e527] [cursor=pointer]
+      - generic [ref=e528]: 금지 카테고리 50010561
+      - generic [ref=e529]: 네이버
+      - generic [ref=e534]: 인 InRed 2026년 7월호 잡지 부록 제스프리 루비 키위 인형 에코백
+      - generic [ref=e535]: 도서>잡지>여성/남성/패션
+      - generic [ref=e536]: 판매 0 · 리뷰 3 · 30,500원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e538] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/hocoo_spinoff/products/13636033466
+    - generic [ref=e539]:
+      - generic [ref=e540]:
+        - generic [ref=e541]: "79088"
+        - generic [ref=e542]: 금지 카테고리
+        - button "살리기" [ref=e543] [cursor=pointer]
+      - generic [ref=e544]: 금지 카테고리 50006076
+      - generic [ref=e545]: 네이버
+      - generic [ref=e550]: 눈 깜짝할 사이에 영화 편집에 관점 제2판 기본
+      - generic [ref=e551]: 도서>잡지>연예/영화/만화>방송/연예
+      - generic [ref=e552]: 판매 0 · 리뷰 0 · 44,910원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e554] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/stellashotshot/products/13612574965
+    - generic [ref=e555]:
+      - generic [ref=e556]:
+        - generic [ref=e557]: "79089"
+        - generic [ref=e558]: 금지 카테고리
+        - button "살리기" [ref=e559] [cursor=pointer]
+      - generic [ref=e560]: 금지 카테고리 50006086
+      - generic [ref=e561]: 네이버
+      - generic [ref=e566]: ROCK AND READ 2 Tankobon oftcover 히데 스페셜
+      - generic [ref=e567]: 도서>잡지>외국잡지>기타잡지
+      - generic [ref=e568]: 판매 0 · 리뷰 0 · 39,800원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e570] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/soso_m/products/10326366311
+    - generic [ref=e571]:
+      - generic [ref=e572]:
+        - generic [ref=e573]: "79090"
+        - generic [ref=e574]: 금지 카테고리
+        - button "살리기" [ref=e575] [cursor=pointer]
+      - generic [ref=e576]: 금지 카테고리 50006083
+      - generic [ref=e577]: 네이버
+      - generic [ref=e582]: 최강점프 26년 월호 잡지 나의아카데미아
+      - generic [ref=e583]: 도서>잡지>외국잡지>연예/영화/만화
+      - generic [ref=e584]: 판매 0 · 리뷰 2 · 33,000원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e586] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/japan365/products/12948448713
+    - generic [ref=e587]:
+      - generic [ref=e588]:
+        - generic [ref=e589]: "79091"
+        - generic [ref=e590]: 금지 카테고리
+        - button "살리기" [ref=e591] [cursor=pointer]
+      - generic [ref=e592]: 금지 카테고리 50006085
+      - generic [ref=e593]: 네이버
+      - generic [ref=e598]: CAA BRUTU 까사 브루투스 2026년 0월호 서울 라이프스타일
+      - generic [ref=e599]: 도서>잡지>외국잡지>예술/건축/디자인
+      - generic [ref=e600]: 판매 0 · 리뷰 0 · 33,500원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e602] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/komorumarket/products/13763856887
+    - generic [ref=e603]:
+      - generic [ref=e604]:
+        - generic [ref=e605]: "79092"
+        - generic [ref=e606]: 금지 카테고리
+        - button "살리기" [ref=e607] [cursor=pointer]
+      - generic [ref=e608]: 금지 카테고리 50006082
+      - generic [ref=e609]: 네이버
+      - generic [ref=e614]: CAA BRUTU 까사 브루투스 서울 라이프스타일 2026년 0월호
+      - generic [ref=e615]: 도서>잡지>외국잡지>패션/리빙
+      - generic [ref=e616]: 판매 0 · 리뷰 1 · 31,500원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e618] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/alphamarket1221/products/13795695683
+    - generic [ref=e619]:
+      - generic [ref=e620]:
+        - generic [ref=e621]: "79093"
+        - generic [ref=e622]: 금지 카테고리
+        - button "살리기" [ref=e623] [cursor=pointer]
+      - generic [ref=e624]: 금지 카테고리 50001737
+      - generic [ref=e625]: 네이버
+      - generic [ref=e630]: 스틱 PC 휴대용 크톱 콘솔 사무실 게임 미니 무선
+      - generic [ref=e631]: 디지털/가전>PC>브랜드PC
+      - generic [ref=e632]: 판매 0 · 리뷰 1 · 213,180원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e634] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/thekiwiplace1/products/12159169724
+    - generic [ref=e635]:
+      - generic [ref=e636]:
+        - generic [ref=e637]: "79094"
+        - generic [ref=e638]: 금지 카테고리
+        - button "살리기" [ref=e639] [cursor=pointer]
+      - generic [ref=e640]: 금지 카테고리 50001737
+      - generic [ref=e641]: 네이버
+      - generic [ref=e646]: 스틱 PC W5pro 포켓 사무실용 휴대용 Z8350 미니본체 . 2GB,. 32G
+      - generic [ref=e647]: 디지털/가전>PC>브랜드PC
+      - generic [ref=e648]: 판매 0 · 리뷰 1 · 239,600원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e650] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/ssukssuk24/products/10099692623
+    - generic [ref=e651]:
+      - generic [ref=e652]:
+        - generic [ref=e653]: "79095"
+        - generic [ref=e654]: 금지 카테고리
+        - button "살리기" [ref=e655] [cursor=pointer]
+      - generic [ref=e656]: 금지 카테고리 50001737
+      - generic [ref=e657]: 네이버
+      - generic [ref=e662]: 고사양 게이밍 PC 미니 사무용 게임용 한뼘
+      - generic [ref=e663]: 디지털/가전>PC>브랜드PC
+      - generic [ref=e664]: 판매 0 · 리뷰 0 · 268,900원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e666] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/onogo/products/10828265404
+    - generic [ref=e667]:
+      - generic [ref=e668]:
+        - generic [ref=e669]: "79096"
+        - generic [ref=e670]: 금지 카테고리
+        - button "살리기" [ref=e671] [cursor=pointer]
+      - generic [ref=e672]: 금지 카테고리 50001737
+      - generic [ref=e673]: 네이버
+      - generic [ref=e678]: 코어 i7-355U 미니 PC 주식 채굴 코인 크탑 본체 i7-365U 6G+250G PCIe4.0
+      - generic [ref=e679]: 디지털/가전>PC>브랜드PC
+      - generic [ref=e680]: 판매 0 · 리뷰 0 · 630,700원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e682] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/onogo/products/10828265128
+    - generic [ref=e683]:
+      - generic [ref=e684]:
+        - generic [ref=e685]: "79097"
+        - generic [ref=e686]: 금지 카테고리
+        - button "살리기" [ref=e687] [cursor=pointer]
+      - generic [ref=e688]: 금지 카테고리 50001737
+      - generic [ref=e689]: 네이버
+      - generic [ref=e694]: "[] 이빵 컴퓨터 반제품 NO테스트 PC"
+      - generic [ref=e695]: 디지털/가전>PC>브랜드PC
+      - generic [ref=e696]: 판매 0 · 리뷰 0 · 53,500원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e698] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/useddafarm/products/13763041424
+    - generic [ref=e699]:
+      - generic [ref=e700]:
+        - generic [ref=e701]: "79098"
+        - generic [ref=e702]: 금지 카테고리
+        - button "살리기" [ref=e703] [cursor=pointer]
+      - generic [ref=e704]: 금지 카테고리 50001737
+      - generic [ref=e705]: 네이버
+      - generic [ref=e710]: Dell ini PC OptiPlex 3060 Windows 컴퓨터 크톱 i5-8500T 6GB RA 52GB NVe D A 내장
+      - generic [ref=e711]: 디지털/가전>PC>브랜드PC
+      - generic [ref=e712]: 판매 0 · 리뷰 0 · 575,440원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e714] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/boltmarket2/products/13227186676
+    - generic [ref=e715]:
+      - generic [ref=e716]:
+        - generic [ref=e717]: "79099"
+        - generic [ref=e718]: 금지 카테고리
+        - button "살리기" [ref=e719] [cursor=pointer]
+      - generic [ref=e720]: 금지 카테고리 50001737
+      - generic [ref=e721]: 네이버
+      - generic [ref=e726]: Dell OptiPlex 3070 FF 크탑 코어 i59500 6GB RA 256GB D | CPU 300440GHz UB HDI DP Windows Pro
+      - generic [ref=e727]: 디지털/가전>PC>브랜드PC
+      - generic [ref=e728]: 판매 0 · 리뷰 0 · 465,520원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e730] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/treenain/products/13692284886
+    - generic [ref=e731]:
+      - generic [ref=e732]:
+        - generic [ref=e733]: "79100"
+        - generic [ref=e734]: 금지 카테고리
+        - button "살리기" [ref=e735] [cursor=pointer]
+      - generic [ref=e736]: 금지 카테고리 50001737
+      - generic [ref=e737]: 네이버
+      - generic [ref=e742]: enovo ThinkCentre 90Q Tiny Desktop Computer Win ini PC Intel Core i50500T 6GB RA 256GB
+      - generic [ref=e743]: 디지털/가전>PC>브랜드PC
+      - generic [ref=e744]: 판매 0 · 리뷰 0 · 610,800원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e746] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/treenain/products/13692283886
+    - generic [ref=e747]:
+      - generic [ref=e748]:
+        - generic [ref=e749]: "79101"
+        - generic [ref=e750]: 금지 카테고리
+        - button "살리기" [ref=e751] [cursor=pointer]
+      - generic [ref=e752]: 금지 카테고리 50001737
+      - generic [ref=e753]: 네이버
+      - generic [ref=e758]: enovo ThinkCentre 720s FF 크탑 Windows 컴퓨터 PC Intel Core i58400 40GHz 8GB RA 256GB D
+      - generic [ref=e759]: 디지털/가전>PC>브랜드PC
+      - generic [ref=e760]: 판매 0 · 리뷰 0 · 372,320원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e762] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/treenain/products/13692283713
+    - generic [ref=e763]:
+      - generic [ref=e764]:
+        - generic [ref=e765]: "79102"
+        - generic [ref=e766]: 금지 카테고리
+        - button "살리기" [ref=e767] [cursor=pointer]
+      - generic [ref=e768]: 금지 카테고리 50001737
+      - generic [ref=e769]: 네이버
+      - generic [ref=e774]: 2026 올인원 컴퓨터 pc본체 일체형 간편 사무 가정 크탑
+      - generic [ref=e775]: 디지털/가전>PC>브랜드PC
+      - generic [ref=e776]: 판매 0 · 리뷰 0 · 383,430원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e778] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/smglobalroad/products/12291822673
+    - generic [ref=e779]:
+      - generic [ref=e780]:
+        - generic [ref=e781]: "79103"
+        - generic [ref=e782]: 금지 카테고리
+        - button "살리기" [ref=e783] [cursor=pointer]
+      - generic [ref=e784]: 금지 카테고리 50001738
+      - generic [ref=e785]: 네이버
+      - generic [ref=e790]: BEEINK ER8 8745H 고성능 미니PC 베어본PC AD 라이젠7 O미포함
+      - generic [ref=e791]: 디지털/가전>PC>조립/베어본PC
+      - generic [ref=e792]: 판매 0 · 리뷰 34 · 459,900원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e794] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/zangsayo/products/11028860825
+    - generic [ref=e795]:
+      - generic [ref=e796]:
+        - generic [ref=e797]: "79104"
+        - generic [ref=e798]: 금지 카테고리
+        - button "살리기" [ref=e799] [cursor=pointer]
+      - generic [ref=e800]: 금지 카테고리 50001738
+      - generic [ref=e801]: 네이버
+      - generic [ref=e806]: 비 BEEINK ER8 8745H 미니 PC 크탑 컴퓨터 베어본 하드 없음
+      - generic [ref=e807]: 디지털/가전>PC>조립/베어본PC
+      - generic [ref=e808]: 판매 0 · 리뷰 9 · 446,000원 · 1차 금지 카테고리 탈락
+      - link "네이버" [ref=e810] [cursor=pointer]:
+        - /url: https://smartstore.naver.com/youchen2019/products/11518961125
+  - generic [ref=e811]:
+    - button "◀ 이전 50" [ref=e812] [cursor=pointer]
+    - button "다음 50 ▶" [ref=e813] [cursor=pointer]
+  - contentinfo [ref=e814]:
+    - generic [ref=e815]: 살리기
+    - generic [ref=e816]: 0개
+    - button "번호 복사" [ref=e817] [cursor=pointer]
+    - button "비우기" [ref=e818] [cursor=pointer]
