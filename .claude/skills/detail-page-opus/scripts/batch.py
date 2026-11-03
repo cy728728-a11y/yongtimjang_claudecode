@@ -343,6 +343,12 @@ def main():
         common.write_json(sp, state)
     out = summary(bdir, targets, state)
     log(f"배치 끝 — 요약 {out}")
+    if not args.no_market:
+        # 상세는 이미 돼 있어 건너뛴 상품도 대표 썸네일 워터마크가 없으면 넣고 수정 전송(2026-11-03 용팀장 지시)
+        log("썸네일 워터마크 따라잡기")
+        r = subprocess.run([sys.executable, "-u", str(Path(__file__).with_name("thumb_catchup.py")),
+                            "--targets", str(bdir / "targets.json")], capture_output=True, text=True)
+        log("  " + ((r.stdout.strip().splitlines() or [r.stderr.strip()[-300:]])[-1]))
 
 
 if __name__ == "__main__":
