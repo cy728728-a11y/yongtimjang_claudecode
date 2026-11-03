@@ -6,6 +6,7 @@
 맥북은 광고 API 를 부르지 않는다(입찰·삭제·조회 모두 맥미니 전담).
 
 순서: 광고 우선순위(파일의 '순위' 그대로: A 효자확정 → B 클릭많음 → C 클릭률상위)
+     → 효자상품-작업대장 시트 '전체 현황판'(인덱스 순)
      → 판매 잠금 후보(sold-lock, 최근 잠금일 순, 잠금 → 클릭).
 상품명이 '비즈 ' 로 시작하는 쥬얼리·재봉 부자재는 검수 SMALL 로 전량 탈락해 뺀다. 실시간으로 불사자를 다시 조회해
 이미 가공된 상품(AI 생성 표시 · mcp-assets 직접 업로드 흔적 · 로컬 _opus 결과)은 뺀다.
@@ -33,6 +34,10 @@ def latest_run():
 
 
 SOLD = Path.home() / "python_work/data/sold-lock"
+# 효자상품-작업대장 '전체 현황판' — 광고 우선순위 다음, 판매 잠금 앞(2026-11-04 용팀장 지시). 시트 '상세페이지' 열은 비어 있어 안 쓴다.
+SHEET_ID, SHEET_RANGE = "1yCdXEuMlLSxaWnl7jxjSS0UQwIECKGRchsGN3jxCCNc", "전체 현황판!A2:F"
+SHEET_CACHE = common.BATCH_ROOT / "hyoja_sheet.json"
+SHEET_FROM = date(2026, 11, 9)   # 11/09(월) 광고 우선순위 회차부터 — 그 전 실행엔 시트 후보를 안 넣는다
 
 
 def collect_priority():
@@ -54,6 +59,37 @@ def collect_priority():
     return rows, (doc.get("meta") or {}).get("회차")
 
 
+def collect_sheet(exclude):
+    """효자상품 작업대장 — 시트 인덱스 순. 읽기 실패하면 마지막 사본을 쓴다."""
+    if date.today() < SHEET_FROM:
+        return []
+    import subprocess
+    vals = None
+    try:
+        r = subprocess.run(["gws", "sheets", "spreadsheets", "values", "get", "--params",
+                            json.dumps({"spreadsheetId": SHEET_ID, "range": SHEET_RANGE}, ensure_ascii=False)],
+                           capture_output=True, text=True, timeout=120, cwd=str(Path(__file__).resolve().parents[4]))
+        out = r.stdout[r.stdout.find("{"):]
+        vals = json.loads(out)["values"]
+        common.write_json(SHEET_CACHE, vals)
+    except Exception as e:
+        print(f"  [경고] 효자상품 시트 읽기 실패 {e} — 마지막 사본 사용", flush=True)
+        try:
+            vals = json.loads(SHEET_CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+    rows, seen = [], set(exclude)
+    for i, r in enumerate(vals):
+        code = r[2].strip() if len(r) > 2 else ""
+        if not code or code in seen:
+            continue
+        seen.add(code)
+        idx = int(r[0]) if r and str(r[0]).isdigit() else 100000 + i
+        rows.append({"code": code, "productId": (r[3] if len(r) > 3 else None) or None, "title": r[5] if len(r) > 5 else None,
+                     "market": None, "clk": 0, "purCnt": 0, "rules": ["효자상품 시트"], "src": 1, "rank": idx})
+    return rows
+
+
 def collect_sold(exclude):
     """판매 잠금 기록(new_locks) — 최근 잠금일 순. 광고 후보와 겹치는 코드는 뺀다."""
     by = {}
@@ -70,7 +106,7 @@ def collect_sold(exclude):
             code = r.get("판매자상품코드")
             if code and code not in by and code not in exclude:
                 by[code] = {"code": code, "productId": r.get("불사자ID"), "title": None, "market": r.get("마켓번호"),
-                            "clk": int(day.name.replace("-", "")), "purCnt": 1, "rules": ["판매"], "src": 1, "rank": 0}
+                            "clk": int(day.name.replace("-", "")), "purCnt": 1, "rules": ["판매"], "src": 2, "rank": 0}
     return list(by.values())
 
 
@@ -117,9 +153,10 @@ def main():
     else:
         rows, got = collect_priority()
         label = f"광고 우선순위 {got}"
-    sold = collect_sold({x["code"] for x in rows})
-    print(f"[후보] {label} {len(rows)}건 + 판매 잠금 {len(sold)}건")
-    rows += sold
+    sheet = collect_sheet({x["code"] for x in rows})
+    sold = collect_sold({x["code"] for x in rows + sheet})
+    print(f"[후보] {label} {len(rows)}건 + 효자상품 시트 {len(sheet)}건 + 판매 잠금 {len(sold)}건")
+    rows += sheet + sold
 
     m = common.mcp()
     picked, skipped = [], []
