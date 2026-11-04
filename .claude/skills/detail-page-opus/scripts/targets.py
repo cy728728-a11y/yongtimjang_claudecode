@@ -19,6 +19,7 @@
 import argparse
 import json
 import sys
+import time
 from datetime import date
 from pathlib import Path
 
@@ -133,6 +134,20 @@ def collect_rows(run_dir):
     return list(by.values())
 
 
+def in_progress():
+    """다른 줄이 돌리고 있는 배치(요약 없음·하루 이내)의 상품 — 병렬 줄끼리 같은 상품을 안 집게."""
+    out = {}
+    for f in common.BATCH_ROOT.glob("*/targets.json"):
+        if (f.parent / "summary.md").exists() or time.time() - f.stat().st_mtime > 86400:
+            continue
+        try:
+            for x in json.loads(f.read_text(encoding="utf-8")).get("targets") or []:
+                out[x["productId"]] = f.parent.name
+        except Exception:
+            pass
+    return out
+
+
 def local_done(pid):
     """로컬에 이미 _opus 결과(report.md)가 있으면 그 폴더."""
     for p in common.PAGES.glob(f"*/{pid}/*_opus/report.md"):
@@ -178,6 +193,7 @@ def main():
         rows.sort(key=lambda x: (x["src"], x["rank"], not x["locked"], -x["purCnt"], -x["clk"]))
 
         # 2) 순서대로 상세를 실시간 재확인 — limit 채우면 멈춘다
+        busy = in_progress()
         for x in rows:
             if len(picked) >= args.limit:
                 break
@@ -185,6 +201,8 @@ def main():
                 skipped.append({**x, "skip": "불사자에서 코드 못 찾음"}); continue
             if x["bead"] and not x.get("noInspect"):
                 skipped.append({**x, "skip": "비즈 부자재(검수 SMALL)"}); continue
+            if x["productId"] in busy:
+                skipped.append({**x, "skip": f"다른 줄 작업 중 {busy[x['productId']]}"}); continue
             done = local_done(x["productId"])
             if done:
                 skipped.append({**x, "skip": f"로컬 결과 있음 {done}"}); continue
@@ -228,13 +246,21 @@ def main():
     print(f"[대상] {len(picked)}건 · 건너뜀 {len(skipped)}건 → {out / 'targets.json'}")
 
 
+def locked_main():
+    """병렬 줄이 동시에 대상을 뽑으면 같은 상품을 집는다 — 뽑기는 한 번에 한 줄만."""
+    import fcntl
+    with open(common.BATCH_ROOT / "targets.lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        main()
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
     try:
-        main()
+        locked_main()
     except Exception as e:
         print(f"[오류] {e}")
         sys.exit(1)

@@ -72,6 +72,14 @@ def main():
         todo = todo[:a.limit]
     print(f"[대상] 고퀄 반영 {len(loc)} + 불사자 가공 {len(items) - len(loc)} · 이미 처리 {len(items) - len([k for k in items if k not in seen])} · 이번 {len(todo)}", flush=True)
 
+    # 두 줄 병렬 배치가 동시에 따라잡기를 부르면 같은 상품을 두 번 보낼 수 있다 — 먼저 잡은 쪽만 돈다
+    import fcntl
+    lk = open(LOG.with_suffix(".lock"), "w")
+    try:
+        fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("[건너뜀] 다른 따라잡기가 돌고 있음", flush=True); return
+
     import batch   # market_send 재사용
     sent = []
     for i, x in enumerate(todo, 1):
