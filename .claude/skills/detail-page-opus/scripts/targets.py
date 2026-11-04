@@ -37,7 +37,7 @@ SOLD = Path.home() / "python_work/data/sold-lock"
 # 효자상품-작업대장 '전체 현황판' — 광고 우선순위 다음, 판매 잠금 앞(2026-11-04 용팀장 지시). 시트 '상세페이지' 열은 비어 있어 안 쓴다.
 SHEET_ID, SHEET_RANGE = "1yCdXEuMlLSxaWnl7jxjSS0UQwIECKGRchsGN3jxCCNc", "전체 현황판!A2:F"
 SHEET_CACHE = common.BATCH_ROOT / "hyoja_sheet.json"
-SHEET_FROM = date(2026, 11, 9)   # 11/09(월) 광고 우선순위 회차부터 — 그 전 실행엔 시트 후보를 안 넣는다
+SHEET_FROM = date(2026, 11, 4)   # 11/04 용팀장 승인으로 앞당김(이번 주 광고 우선순위 소진)
 
 
 def collect_priority():
