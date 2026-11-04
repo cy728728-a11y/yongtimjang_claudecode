@@ -70,6 +70,32 @@ def write_brief(t, outdir):
     return p
 
 
+LIMIT_RE = re.compile(r"limit|rate|429|quota|usage|overloaded|resets?|not available|credit|billing|unauthori", re.I)
+BLOCK_WAIT = 900       # 한도에 막히면 15분마다 다시 시도
+BLOCK_MAX = 7 * 3600   # 5시간 창이 풀릴 때까지 넉넉히 — 넘으면 그 상품은 실패로 넘긴다
+
+
+def limit_error(logfile):
+    """Aside CLI 가 'Error …' 로 끝났고 그 문구가 한도·계정 쪽이면 True."""
+    try:
+        tail = Path(logfile).read_text(encoding="utf-8", errors="ignore")[-3000:]
+    except Exception:
+        return False
+    errs = [l for l in tail.splitlines() if "Error" in l]
+    return bool(errs) and bool(LIMIT_RE.search(errs[-1]))
+
+
+def run_aside_waiting(brief, report, logfile):
+    """한도에 막히면 풀릴 때까지 15분 간격으로 같은 상품을 다시 띄운다(2026-11-04 용팀장 지시)."""
+    t0 = time.time()
+    while True:
+        r = run_aside(brief, report, logfile)
+        if r != "blocked" or time.time() - t0 > BLOCK_MAX:
+            return r
+        log(f"  사용량 한도로 막힘 — {BLOCK_WAIT // 60}분 뒤 같은 상품 다시 (막힌 지 {round((time.time() - t0) / 60)}분)")
+        time.sleep(BLOCK_WAIT)
+
+
 def run_aside(brief, report, logfile):
     """Aside 제작. 로그가 STALL_SEC 동안 비면 한 번 다시 띄운다. report.md 가 생기면 성공."""
     for attempt in (1, 2):
@@ -93,6 +119,8 @@ def run_aside(brief, report, logfile):
             if el > MAKE_TIMEOUT:
                 proc.kill()
                 return "timeout"
+            if proc.poll() is not None and not report.exists() and limit_error(logfile):
+                return "blocked"          # 사용량 한도·계정 문제 — 호출한 쪽이 기다렸다 같은 상품을 다시 만든다
             if proc.poll() is not None and el > 60 and not report.exists():
                 # CLI 가 먼저 끊겨도(Replay buffer 등) 앱 세션은 돈다 — report 를 계속 기다린다
                 pass
@@ -312,7 +340,7 @@ def main():
                 outdir.mkdir(parents=True, exist_ok=True)
                 brief = write_brief(t, outdir)
                 t0 = time.time()
-                r = run_aside(brief, outdir / "report.md", bdir / f"aside-{t['code']}.log")
+                r = run_aside_waiting(brief, outdir / "report.md", bdir / f"aside-{t['code']}.log")
                 s["minutes"] = round((time.time() - t0) / 60)
                 s["usage"] = common.aside_usage(t0, time.time())
                 if r != "ok":
