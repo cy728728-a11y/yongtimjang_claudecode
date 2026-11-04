@@ -54,12 +54,15 @@ def write_brief(t, outdir):
         f"- 반영하면 안 될 만큼 불확실한 것(옵션명과 모양의 짝을 모름, 판매 구성과 원본이 다름 등)만 report.md 에 '## 반영 보류 사유' 절로 적는다. 참고 메모는 다른 절에 쓰고 이 제목을 쓰지 않는다.\n"
         f"- 저장: {outdir}/\n"
         f"- 원본: 같은 상품 폴더에 originals/ 가 있으면 재사용, 없으면 불사자 현재 상세 이미지·옵션 이미지를 내려받아 originals/ 에 저장\n"
+        + (f"- **상품검수는 하지 않는다**(효자상품 작업대장 — 판매된 상품이고 이룸님이 이미 확인함, 2026-11-04 용팀장 지시). "
+           f"{outdir}/inspect.json 에 {{\"verdict\":\"pass\",\"reason\":\"OK\",\"note\":\"검수 생략: 효자상품 시트\"}} 만 쓰고 바로 상세를 만든다\n"
+           if t.get("noInspect") else
         f"- **제작 전에 상품검수부터 한다**(용팀장 지시: 상세는 검수 통과 상품만). 기준표 {crit} 를 읽고 "
         f"stage 2 기준(실제로 팔 타오바오 상품 — 원본 썸네일·옵션 사진·타오바오 제목을 직접 보고)으로 판정해 "
         f"{outdir}/inspect.json 에 {{\"verdict\":\"pass|drop\",\"reason\":\"OK|LAW|DANGER|TARGET|IP|FASHION|SHIP|OTHER|SMALL|NOSELL|CATEGORY\",\"note\":\"한 줄\"}} 로 쓴다. "
         f"판매 옵션 구성에 금지 항목이 들어 있으면(예: 수전 포함 세트) 그것도 drop 이다. 애매하면 drop. "
-        f"drop 이면 상세 PNG 를 만들지 말고 report.md 에 '## 검수 탈락' 절(사유·근거)만 쓰고 끝낸다\n"
-        f"- 스타일 C, 보호 표시 넣음\n"
+        f"drop 이면 상세 PNG 를 만들지 말고 report.md 에 '## 검수 탈락' 절(사유·근거)만 쓰고 끝낸다\n")
+        + f"- 스타일 C, 보호 표시 넣음\n"
         f"- verification.json 에 모델명 {common.MODEL} 기록\n"
         f"- 대표 썸네일(첫 번째)에 마켓명 워터마크가 이미 있는지 눈으로 보고 verification.json 에 thumbnailWatermark: true/false 로 남긴다(썸네일은 고치지 않는다)\n"
         f"- 불사자 저장·교체·업로드 금지(반영은 Claude Code 가 한다)\n",
@@ -301,7 +304,7 @@ def main():
                 if r != "ok":
                     s.update(stage=r, note=f"Aside 제작 {r}"); log(f"  제작 실패: {r}"); continue
             ins = inspect_result(outdir)
-            if ins.get("verdict") != "pass":
+            if ins.get("verdict") != "pass" and not t.get("noInspect"):   # 효자상품 시트는 검수 생략
                 s.update(stage="inspect_drop", inspect=ins, note=f"검수 탈락 {ins.get('reason')} {ins.get('note', '')}")
                 mark_priority_done(t)
                 log(f"  {s['note']}"); continue

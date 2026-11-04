@@ -86,7 +86,7 @@ def collect_sheet(exclude):
         seen.add(code)
         idx = int(r[0]) if r and str(r[0]).isdigit() else 100000 + i
         rows.append({"code": code, "productId": (r[3] if len(r) > 3 else None) or None, "title": r[5] if len(r) > 5 else None,
-                     "market": None, "clk": 0, "purCnt": 0, "rules": ["효자상품 시트"], "src": 1, "rank": idx})
+                     "market": None, "clk": 0, "purCnt": 0, "rules": ["효자상품 시트"], "src": 1, "rank": idx, "noInspect": True})
     return rows
 
 
@@ -183,7 +183,7 @@ def main():
                 break
             if not x["found"]:
                 skipped.append({**x, "skip": "불사자에서 코드 못 찾음"}); continue
-            if x["bead"]:
+            if x["bead"] and not x.get("noInspect"):
                 skipped.append({**x, "skip": "비즈 부자재(검수 SMALL)"}); continue
             done = local_done(x["productId"])
             if done:
@@ -199,7 +199,7 @@ def main():
                 skipped.append({**x, "skip": "이미 가공됨(불사자 기록)"}); continue
             if "<img" not in rc:
                 skipped.append({**x, "skip": "상세 이미지 없음"}); continue
-            mj = common.inspect_machine(wd)
+            mj = None if x.get("noInspect") else common.inspect_machine(wd)   # 효자상품 시트는 검수 생략
             if mj:
                 skipped.append({**x, "skip": f"검수 탈락(기계) {mj['reason']} {mj['note']}"}); continue
             gid = wd.get("uploadSelectedMarketGroupId")
