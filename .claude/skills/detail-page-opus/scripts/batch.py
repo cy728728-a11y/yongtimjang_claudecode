@@ -210,9 +210,23 @@ def market_send(t):
             return None, f"확인키 없음 {str(pre)[:300]}"
         r = common.call(m, "bulsaja_market_update", {**args, "confirm": True, "confirmationToken": tok})
         res = (r.get("결과") or [{}])[0]
+        if res.get("taskId"):
+            lock(m, t["productId"])
         return res.get("taskId"), res.get("결과")
     finally:
         m.close()
+
+
+def lock(m, pid):
+    """수정 업로드한 상품은 불사자 잠금(= 숨김) — 물갈이 삭제에 안 휩쓸리게(2026-11-04 용팀장 지시). 실패해도 전송은 유지."""
+    try:
+        args = {"productIds": [pid], "hide": True}
+        tok = common.call(m, "bulsaja_product_hide", args).get("confirmationToken")
+        if tok:
+            common.call(m, "bulsaja_product_hide", {**args, "confirm": True, "confirmationToken": tok})
+        log(f"  잠금 {pid}")
+    except Exception as e:
+        log(f"  [경고] 잠금 실패 {pid} {e}")
 
 
 def wait_tasks(state, timeout=TASK_TIMEOUT, final=True):
