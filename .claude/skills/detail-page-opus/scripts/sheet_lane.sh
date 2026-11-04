@@ -25,7 +25,7 @@ done
 bad=0
 for k in $(seq 1 200); do
   day=$(date +%m%d)
-  last=$(ls -d $B/sheet-$day-${LANE}[0-9][0-9](N) 2>/dev/null | sed -E 's/.*([0-9]{2})$/\1/' | sort -n | tail -1)
+  last=$(print -l $B/sheet-$day-${LANE}[0-9][0-9](N) | sed -E 's/.*([0-9]{2})$/\1/' | sort -n | tail -1)
   N=sheet-$day-${LANE}$(printf %02d $(( ${last:-0} + 1 )))
   $PY -u targets.py --limit 20 --out $N > $B/targets-$N.log 2>&1
   n=$(python3 -c "import json;print(len(json.load(open('$B/$N/targets.json'))['targets']))" 2>/dev/null || echo 0)

@@ -240,6 +240,13 @@ def main():
         m.close()
 
     out = common.BATCH_ROOT / (args.out or date.today().isoformat())
+    if (out / "summary.md").exists():
+        # 끝난 배치 이름을 또 받으면(줄 스크립트 번호 붙이기 실패) 끝난 건 번호 붙여 옮기고 새로 만든다 — 기록 덮어쓰기 방지
+        k = 1
+        while (out.parent / f"{out.name}{k:02d}").exists():
+            k += 1
+        out.rename(out.parent / f"{out.name}{k:02d}")
+        print(f"[보관] 끝난 배치 {out.name} → {out.name}{k:02d}")
     out.mkdir(parents=True, exist_ok=True)
     common.write_json(out / "targets.json", {"adsRun": label, "limit": args.limit,
                                              "targets": picked, "skipped": skipped})
