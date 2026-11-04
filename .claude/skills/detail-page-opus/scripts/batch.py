@@ -131,7 +131,7 @@ def auto_check(outdir):
 
 
 # 429 판정 — 조각 높이(860x1429)·파일명 같은 숫자 속 '429' 를 오류로 읽지 않게 앞뒤가 숫자·x 가 아닐 때만
-RATE = re.compile(r"(?<![\dx])429(?!\d)|Rate limit|Too Many Requests", re.I)
+RATE = re.compile(r"(?<![\dx])429(?!\d)|Rate limit|Too Many Requests|IMAGE_UPLOAD_BUSY", re.I)
 
 
 def mark_priority_done(t):
