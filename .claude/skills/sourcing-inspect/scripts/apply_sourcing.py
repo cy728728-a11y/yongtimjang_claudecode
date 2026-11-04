@@ -29,6 +29,7 @@ import requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sourcing_api as sa  # noqa: E402
+import trash_ledger  # noqa: E402
 
 DATA_ROOT = os.path.expanduser("~/python_work/data/sourcing-inspect/runs")
 CAMPAIGN = "YWfs4MpPnVWHzYW"
@@ -84,10 +85,13 @@ def server_state(tok, ids=()):
 # ---------------- 휴지통 ----------------
 def cmd_trash(a):
     tok = sa.load_token()
-    drop = []
+    drop, why = [], {}
     for r in a.run_dir:
         v = json.load(open(os.path.join(run_path(r), "verdicts.json"), encoding="utf-8"))
-        drop += [i for i, x in v.items() if x.get("verdict") == "drop"]
+        for i, x in v.items():
+            if x.get("verdict") == "drop":
+                drop.append(i)
+                why[i] = (x.get("reason") or "검수 탈락", x.get("note", ""), os.path.basename(run_path(r)))
     live = server_state(tok, drop)
     targets = sorted(set(i for i in drop if i in live))
     print(f"[trash] 판정 drop {len(set(drop))}건 중 서버에 남은 {len(targets)}건")
@@ -110,6 +114,9 @@ def cmd_trash(a):
             bad = {str(x.get("productId") or x.get("id") or x) for x in (res.get("failedItems") or [])}
             for i in chunk:
                 f.write(json.dumps({"id": i, "ok": i not in bad}, ensure_ascii=False) + "\n")
+            # 소싱기 상품엔 메모 칸이 없어 사유는 휴지통 대장에 남긴다(다른 세션이 이유를 찾을 수 있게)
+            trash_ledger.append([{"id": i, "by": "sourcing-inspect 검수(Claude)", "reason": why[i][0],
+                                  "note": why[i][1], "run": why[i][2]} for i in chunk if i not in bad])
             ok += res.get("successCount", 0)
             fail += res.get("failCount", 0)
             print(f"[trash] {min(k + 200, len(todo))}/{len(todo)}  성공 {ok} 실패 {fail}", flush=True)
