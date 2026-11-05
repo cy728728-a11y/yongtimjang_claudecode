@@ -7,6 +7,7 @@ description: 판매자상품코드를 받아 Aside 에서 Claude Opus 5.5 로 �
 
 제작 규칙 정본은 Aside 계정 스킬 `~/.aside/u/0/skills/user/smartstore-detail-page/SKILL.md`(기준 `2026-10-23-opus-v1`)에 있다.
 이 스킬은 **디스패처**다. 규칙을 여기 복제하지 말고, 바꿀 일이 있으면 Aside 스킬을 고친다.
+- 2026-11-04: Aside 스킬 '카피' 절에 "카피 보강 규칙"(타깃 1명·스펙→혜택·숫자 비유·H1 4공식·추가 금지어 등) 추가. 기준 버전명은 일부러 안 올렸다(올리면 sold-lock 중복 방지 키가 바뀌어 기존 완료 상품을 다시 만든다). 근거: `50-resources/reboot-끝판왕-상세템플릿/부록-상세페이지-카피-전자책.md`. 추가 전 백업: `~/.aside/u/0/detail-pages/_brief/SKILL_backup_2026-10-23-opus-v1_before-copy-2026-11-04.md`.
 
 ## 입력
 - 판매자상품코드(필수, 여러 개면 한 개씩 순서대로)
@@ -92,3 +93,7 @@ caffeinate -i env PYTHONIOENCODING=utf-8 $PY -u batch.py --batch <오늘> > <배
 - Aside 를 거치지 않고 Claude Code 가 직접 PNG 를 만드는 것(규칙·폰트·검수가 Aside 스킬에 묶여 있다)
 - 레퍼런스 보드 이미지를 결과물·배포물에 넣는 것(저작권)
 - 네이버 로그인
+
+## 잠금 하지 않음 (2026-11-06 용팀장)
+- 상세 작업(배치 포함)은 불사자 **잠금을 걸지 않는다.** 잠금은 팔린 상품만 — `sold-lock` 스킬이 맡는다.
+- 11/04~11/05 상세 작업 때 건 잠금은 해제했다(원래 잠겨 있던 상품·판매 기록 있는 상품은 그대로).

@@ -46,7 +46,7 @@ def write_brief(t, outdir):
     except Exception as e:
         log(f"  [경고] 검수 기준표 복사 실패 {e}")
     p.write_text(
-        f"계정 스킬 smartstore-detail-page(2026-10-23-opus-v1, 10/27 규칙 2줄 추가본)를 그대로 따른다.\n"
+        f"계정 스킬 smartstore-detail-page(2026-10-23-opus-v1, 10/27 규칙 2줄·11/04 카피 보강 추가본)를 그대로 따른다.\n"
         f"- 판매자상품코드 {t['code']}, 불사자 내부 ID {t['productId']}, 마켓 {t['market']}, 상품명 {t['name']}\n"
         f"- 업로드 마켓그룹 {t.get('marketGroupName')} → 마켓 {t['market']} 로 매핑한다.\n"
         f"- 판매 옵션: {sell}\n"
@@ -238,8 +238,7 @@ def market_send(t):
             return None, f"확인키 없음 {str(pre)[:300]}"
         r = common.call(m, "bulsaja_market_update", {**args, "confirm": True, "confirmationToken": tok})
         res = (r.get("결과") or [{}])[0]
-        if res.get("taskId"):
-            lock(m, t["productId"])
+        # 잠금 안 함(2026-11-06 용팀장): 잠금은 팔린 상품만(sold-lock 담당). 상세 작업은 잠그지 않는다.
         return res.get("taskId"), res.get("결과")
     finally:
         m.close()
