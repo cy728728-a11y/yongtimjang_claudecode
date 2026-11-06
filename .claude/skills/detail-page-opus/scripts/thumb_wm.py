@@ -26,7 +26,7 @@ import bulsaja_client
 PEN = Path(__file__).resolve().parents[1] / "assets/NanumPenScript-Regular.ttf"
 MAP = Path.home() / ".aside/u/0/memory/concepts/smartstore-market-number-map.md"
 ANGLE = 18
-OPACITY, OPACITY_COMPLEX, BUSY_TH = 0.24, 0.30, 0.25   # 썸네일은 제품이 화면 대부분이라 문턱을 낮춘다
+OPACITY, OPACITY_COMPLEX, BUSY_TH = 0.18, 0.23, 0.25   # 2026-11-06 용팀장: 살짝 연하게(0.24·0.30→0.18·0.23). 썸네일은 제품이 화면 대부분이라 문턱을 낮춘다
 DARK, LIGHT = (40, 38, 34), (250, 248, 244)
 MAX_SIZE_FRAC = 0.15   # 글자 크기 상한(사진 폭 대비)
 HALO_PX, HALO_RATIO = 7, 0.8   # 반대색 테두리 두께(홀수 px)·불투명도 비율

@@ -64,7 +64,7 @@ description: 판매자상품코드를 받아 Aside 에서 Claude Opus 5.5 로 �
    $PY thumb_wm.py --code <코드> --outdir $D [--send]    # 업로드 → 대표만 교체 → 재조회 확인(--send 면 스마트스토어 수정 전송)
    ```
    - 이미 있으면 건너뛴다: 우리가 넣은 기록(`thumb/thumb_wm.json`의 주소 = 현재 대표) 또는 Aside `verification.json` 의 `thumbnailWatermark: true`.
-   - 글자 크기는 사진 폭의 15% 상한, 불투명도 24%(무늬 많으면 30%), 반대색 테두리를 옅게 깔아 어떤 배경에서도 읽히게 한다.
+   - 글자 크기는 사진 폭의 15% 상한, 불투명도 18%(무늬 많으면 23%, 2026-11-06 살짝 연하게), 반대색 테두리를 옅게 깔아 어떤 배경에서도 읽히게 한다.
    - 교체 전 목록은 `thumb/before_thumbs.json`. 되돌릴 때는 그 목록을 `bulsaja_thumbnail_update` 로 다시 넣는다.
 6. **보고** — 판매자상품코드로 보고한다.
    - 장수, 컷 활용률, 걸린 시간, 결과 폴더 경로, 원본에서 뺀 정보 요약, 아쉬운 점
