@@ -67,6 +67,7 @@ description: 이 스킬이 언제 트리거되는지 명확히. "X를 언급하�
 | `dashboard-prd` | 대시보드 PRD 대화형 생성 | "대시보드 PRD", "대시보드 기획" |
 | `webapp-prd` | 웹앱 PRD 대화형 생성 | "웹앱 PRD", "앱 설계" |
 | `transcript-organizer` | 긴 녹음 텍스트 구조화 (강의/미팅/인터뷰) | "녹음 정리", "미팅록" |
+| `motion-graphic` | 문장 한 줄로 모션그래픽 MP4 (Remotion, 박자 맞춤·버전 보관) | "모션그래픽 만들어줘", "축하 영상" |
 | `wiki-ingest` | 소스 → 00-wiki 복리 축적 | "wiki-ingest", "위키에 반영" |
 | `wiki-lint` | 00-wiki 헬스체크 | "위키 점검", "wiki-lint" |
 | `doc-updater` | Claude Code CHANGELOG 기반 공식 문서 자동 동기화 | "문서 업데이트", "CHANGELOG 확인" |

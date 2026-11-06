@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>AI 직원 세팅 전자책 (레벨 3단계) — 용팀장</title>
+<style>
+@page { size: 148mm 210mm; margin: 14mm 13mm 15mm 13mm; }
+@page :first { margin: 0; }
+:root{
+  --g:#2E4A3B; --g2:#3F6350; --iv:#F7F3EA; --iv2:#EFE8D8; --ink:#1F2421; --sub:#5E655F;
+  --or:#E2703A; --red:#C2453B; --grn:#2F7A4F; --line:#D9D1BF;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;color:var(--ink);font-size:10.2pt;line-height:1.68;word-break:keep-all;}
+p{margin:0 0 2.4mm}
+b,strong{font-weight:700}
+.hl{background:linear-gradient(transparent 58%,#F6D9B8 58%);font-weight:700}
+
+/* 표지 */
+.cover{width:148mm;height:210mm;background:var(--g);color:var(--iv);padding:20mm 15mm 16mm;position:relative;page-break-after:always;overflow:hidden}
+.cover .tag{display:inline-block;border:1px solid rgba(247,243,234,.5);border-radius:20px;padding:1mm 3.5mm;font-size:8.5pt;letter-spacing:.5px}
+.cover h1{font-size:30pt;line-height:1.22;font-weight:800;margin:14mm 0 6mm;letter-spacing:-.5px}
+.cover h1 em{font-style:normal;color:#F3B07F}
+.cover .lead{font-size:11.5pt;line-height:1.6;opacity:.92}
+.cover .box{position:absolute;left:15mm;right:15mm;bottom:34mm;border-top:1px solid rgba(247,243,234,.35);padding-top:5mm;font-size:9.5pt;line-height:1.75;opacity:.9}
+.cover .who{position:absolute;left:15mm;bottom:16mm;font-size:11pt;font-weight:700}
+.cover .who span{font-weight:400;opacity:.75;font-size:9pt;margin-left:2mm}
+.cover .big{position:absolute;right:-8mm;top:62mm;font-size:120pt;font-weight:900;color:rgba(247,243,234,.06);line-height:1}
+
+/* 장 표지 */
+.chap{page-break-before:always;}
+.chap-head{background:var(--g);color:var(--iv);border-radius:3mm;padding:7mm 7mm 6mm;margin-bottom:6mm}
+.chap-head .no{font-size:9pt;letter-spacing:1.5px;opacity:.75}
+.chap-head h2{font-size:19pt;line-height:1.3;margin:1.5mm 0 2mm;font-weight:800;letter-spacing:-.3px}
+.chap-head .vid{font-size:8.6pt;opacity:.85;border-top:1px solid rgba(247,243,234,.3);padding-top:2mm;margin-top:2mm}
+h3{break-after:avoid;page-break-after:avoid;font-size:12.6pt;color:var(--g);margin:6mm 0 2.5mm;font-weight:800;letter-spacing:-.2px}
+h3 .n{display:inline-block;background:var(--or);color:#fff;border-radius:50%;width:6.4mm;height:6.4mm;line-height:6.4mm;text-align:center;font-size:9.5pt;margin-right:2mm;vertical-align:1px}
+h4{font-size:10.4pt;margin:3.5mm 0 1.5mm;font-weight:700}
+.sub{color:var(--sub);font-size:9pt}
+
+/* 카드·박스 */
+.card{background:var(--iv);border:1px solid var(--line);border-radius:2.5mm;padding:4mm 4.5mm;margin:3mm 0;break-inside:avoid}
+.card.dark{background:var(--g);color:var(--iv);border:none}
+.card .lab{font-size:8.3pt;font-weight:700;letter-spacing:.6px;color:var(--or);margin-bottom:1mm}
+.prompt{background:#fff;border:1.4px dashed var(--g2);border-radius:2.5mm;padding:3.5mm 4mm;margin:2.5mm 0 3mm;break-inside:avoid;font-size:9.6pt;line-height:1.7}
+.prompt .lab{display:inline-block;background:var(--g2);color:#fff;font-size:7.8pt;font-weight:700;border-radius:1.2mm;padding:.3mm 2mm;margin-bottom:1.8mm;letter-spacing:.4px}
+.warn{border-left:3px solid var(--or);background:#FCF1E8;padding:2.5mm 3.5mm;margin:2.5mm 0;font-size:9.3pt;break-inside:avoid;border-radius:0 2mm 2mm 0}
+.warn b{color:#B4561F}
+ul.clean{list-style:none;margin:1mm 0 2.5mm}
+ul.clean li{position:relative;padding-left:4.5mm;margin-bottom:1.2mm}
+ul.clean li:before{content:"";position:absolute;left:.5mm;top:2.5mm;width:1.6mm;height:1.6mm;border-radius:50%;background:var(--or)}
+ol.step{list-style:none;counter-reset:s;margin:1mm 0 3mm}
+ol.step li{counter-increment:s;position:relative;padding-left:8mm;margin-bottom:2mm;break-inside:avoid}
+ol.step li:before{content:counter(s);position:absolute;left:0;top:.3mm;width:5.6mm;height:5.6mm;border-radius:50%;background:var(--g);color:#fff;font-size:8.5pt;font-weight:700;text-align:center;line-height:5.6mm}
+
+/* 표 */
+table{width:100%;border-collapse:collapse;margin:2.5mm 0 3.5mm;font-size:9pt;break-inside:avoid}
+th{background:var(--g);color:var(--iv);font-weight:700;padding:2mm 2.5mm;text-align:left}
+td{border-bottom:1px solid var(--line);padding:2.2mm 2.5mm;vertical-align:top}
+tr:nth-child(even) td{background:#FBF8F1}
+
+/* 레벨 */
+.lv{display:flex;gap:3.5mm;align-items:stretch;margin:3mm 0;break-inside:avoid}
+.lv .badge{flex:0 0 17mm;border-radius:2.5mm;color:#fff;text-align:center;padding-top:3mm;font-weight:800}
+.lv .badge small{display:block;font-size:7.5pt;font-weight:600;opacity:.85;letter-spacing:.5px}
+.lv .badge span{font-size:20pt;line-height:1.1}
+.lv .body{flex:1;background:var(--iv);border:1px solid var(--line);border-radius:2.5mm;padding:3mm 4mm}
+.lv .body h4{margin-top:0}
+
+/* 하수 고수 */
+.vs{border:1px solid var(--line);border-radius:2.5mm;margin:3.5mm 0;overflow:hidden;break-inside:avoid}
+.vs .top{padding:2.6mm 4mm;font-weight:800;font-size:10.4pt;display:flex;justify-content:space-between;align-items:center}
+.vs .top .j{font-size:8.5pt;color:#fff;border-radius:10px;padding:.4mm 3mm}
+.vs.low .top{background:#F8E6E3}.vs.low .j{background:var(--red)}
+.vs.high .top{background:#E3F0E7}.vs.high .j{background:var(--grn)}
+.vs .bd{padding:3mm 4mm 2mm;font-size:9.4pt}
+.vs .bd .go{color:var(--grn);font-weight:700}
+
+/* 타임라인 */
+.tl{border-left:2px solid var(--g2);margin:3mm 0 3mm 2mm;padding-left:5mm}
+.tl .it{position:relative;margin-bottom:3mm;break-inside:avoid}
+.tl .it:before{content:"";position:absolute;left:-7.1mm;top:1.4mm;width:3.2mm;height:3.2mm;border-radius:50%;background:var(--or);border:2px solid #fff}
+.tl .t{font-weight:800;color:var(--g)}
+
+/* 직원 그리드 */
+.grid{display:grid;grid-template-columns:15mm repeat(5,1fr);gap:1mm;font-size:7.6pt;margin:3mm 0;break-inside:avoid}
+.grid div{background:var(--iv);border-radius:1.2mm;padding:1.5mm .8mm;text-align:center;line-height:1.3}
+.grid .h{background:var(--g);color:var(--iv);font-weight:700}
+.grid .r{background:var(--g2);color:#fff;font-weight:700}
+.grid .boss{grid-column:1 / span 6;background:var(--or);color:#fff;font-weight:700;font-size:8.6pt;padding:2mm}
+
+.toc a{color:inherit;text-decoration:none}
+.toc .row{display:flex;justify-content:space-between;border-bottom:1px dotted var(--line);padding:1.6mm 0;font-size:9.8pt}
+.toc .row b{color:var(--g)}
+.foot{font-size:8pt;color:var(--sub);text-align:center;margin-top:6mm}
+.end{page-break-before:always;background:var(--g);color:var(--iv);border-radius:3mm;padding:14mm 9mm;margin-top:0;min-height:178mm}
+.end h2{font-size:18pt;line-height:1.35;margin-bottom:5mm;font-weight:800}
+.end p{opacity:.92}
+.fill{display:inline-block;border:1px dashed rgba(247,243,234,.6);border-radius:1.5mm;padding:.5mm 2.5mm;color:#F3B07F}
+</style>
+</head>
+<body>
+<section class="cover">
+  <div class="big">AI</div>
+  <span class="tag">셀러 AI 활용 레벨 3단계</span>
+  <h1>AI 직원<br><em>세팅 전자책</em></h1>
+  <p class="lead">GPT에 묻고 복사하는 레벨 1에서<br>AI 직원을 부리는 레벨 3까지.</p>
+  <div class="box">
+    · 셀러 AI 레벨 3단계와 3분 자가진단<br>
+    · MCP, 쉽게 말하면<br>
+    · 레벨별 첫 세팅: 묻는 법 · 메일 연결 · 스킬<br>
+    · AI 직원 네 명이 동시에 일하는 구조<br>
+    · 안전 규칙 · 복사해서 쓰는 지시문 5개
+  </div>
+  <div class="who">용팀장 <span>구매대행 셀러 · 실전반 강사</span></div>
+</section>
+
+<section style="margin-top:7mm">
+  <div class="chap-head" style="break-inside:avoid;break-after:avoid">
+    <div class="no">PART 1</div>
+    <h2>셀러 AI 레벨 3단계<br>— 나는 어디쯤인가</h2>
+    <div class="vid">영상 「셀러 AI 활용 레벨 3단계」의 정리본</div>
+  </div>
+
+  <p>AI를 쓰는 셀러는 많은데, 쓰고 나서 일이 줄었다는 셀러는 많지 않아요. 차이는 어떤 AI를 쓰느냐가 아니라 <span class="hl">AI가 어디까지 직접 손을 대느냐</span>에서 납니다.</p>
+
+  <div class="lv">
+    <div class="badge" style="background:#9AA39C"><small>LEVEL</small><span>1</span></div>
+    <div class="body">
+      <h4>묻고, 복사하고, 붙여 넣는 단계</h4>
+      <p>고객 문의를 GPT에 붙여 넣고 "뭐라고 답하지?" 묻습니다. 답이 그럴듯하면 복사해서 고객에게 보내요. 상품명도 같은 방식이고요.</p>
+      <p class="sub" style="margin:0">→ AI는 <b>대답</b>만 해요. 확인, 복사, 등록은 여전히 전부 내 손입니다. 상품이 늘면 내 일도 똑같이 늘어요.</p>
+    </div>
+  </div>
+
+  <div class="lv">
+    <div class="badge" style="background:var(--g2)"><small>LEVEL</small><span>2</span></div>
+    <div class="body">
+      <h4>연결 — AI에 손과 발이 생기는 단계</h4>
+      <p>내 AI에 지메일, 구글 시트, 브라우저 같은 다른 서비스를 이어 붙입니다. 지메일을 붙이면 AI가 메일함을 직접 읽고 급한 것부터 골라 줘요.</p>
+      <p class="sub" style="margin:0">→ 복사, 붙여넣기가 사라집니다. AI가 직접 <b>보고</b>, 직접 <b>가져와요</b>.</p>
+    </div>
+  </div>
+
+  <div class="lv">
+    <div class="badge" style="background:var(--or)"><small>LEVEL</small><span>3</span></div>
+    <div class="body">
+      <h4>AI 직원 — 일하는 순서까지 맡기는 단계</h4>
+      <p>일하는 순서를 한 번 가르쳐 두면 AI 직원 네 명이 상품을 하나씩 맡아 수집, 상품명, 썸네일, 옵션명, 상세페이지까지 동시에 끝냅니다.</p>
+      <p class="sub" style="margin:0">→ 나는 <b>관리자</b>가 돼요. 기준을 정하고, 잘했는지 확인만 합니다.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="lab">MCP가 뭔가요?</div>
+    <p style="margin:0">영상에서 말한 <b>MCP</b>는 AI에 다른 서비스를 꽂는 <b>표준 콘센트</b>라고 생각하면 돼요. 지메일, 구글 시트, 노션처럼 콘센트가 맞는 서비스는 클릭 몇 번으로 AI에 꽂힙니다. 클로드에서는 <b>설정 → 커넥터</b>에서 고르면 되고, 이름은 몰라도 쓸 수 있어요.</p>
+  </div>
+
+  <h3>3분 자가진단</h3>
+  <p class="sub">해당하는 것에 체크해 보세요.</p>
+  <table>
+    <tr><th style="width:9mm">✓</th><th>지금 나는…</th></tr>
+    <tr><td>☐</td><td>AI 답을 복사해서 스토어나 고객 채팅에 붙여 넣는다</td></tr>
+    <tr><td>☐</td><td>같은 지시를 매번 처음부터 다시 쓴다</td></tr>
+    <tr><td>☐</td><td>AI가 내 메일, 시트, 스토어 자료를 직접 못 본다</td></tr>
+    <tr><td>☐</td><td>상품 100개를 고치려면 100번 시켜야 한다</td></tr>
+    <tr><td>☐</td><td>내가 컴퓨터 앞에 없으면 아무 일도 진행되지 않는다</td></tr>
+  </table>
+  <div class="card">
+    <p style="margin:0"><b>3개 이상</b> → 레벨 1이에요. PART 2의 <b>레벨 2 세팅(메일 연결)</b>부터 하세요. 연결 하나만으로 체감이 확 옵니다.<br>
+    <b>1~2개</b> → 레벨 2예요. PART 2의 <b>레벨 3 세팅</b>으로 가세요.<br>
+    <b>0개</b> → 이미 레벨 3이에요. 뒤쪽 안전 규칙으로 사고만 막으면 됩니다.</p>
+  </div>
+
+  <h3>레벨 올리는 순서</h3>
+  <ol class="step">
+    <li><b>1 → 2: 연결부터 하나.</b> 가장 자주 여는 곳(메일, 주문 시트)을 AI에 붙이세요. 여러 개를 한 번에 붙이지 마세요.</li>
+    <li><b>2 → 3: 반복 작업 하나를 스킬로.</b> 매일 하는 일 중 순서가 정해진 것 하나를 골라 AI에게 가르칩니다. (PART 2)</li>
+    <li><b>3에서 굳히기: 예약과 확인.</b> 정해진 시간에 혼자 돌게 하고, 나는 결과만 봅니다. (PART 2, 안전 규칙)</li>
+  </ol>
+</section>
+
+<section style="margin-top:7mm">
+  <div class="chap-head" style="break-inside:avoid;break-after:avoid">
+    <div class="no">PART 2</div>
+    <h2>레벨별<br>첫 세팅</h2>
+    <div class="vid">한 레벨씩 올라가는 데 필요한 세팅 하나씩.</div>
+  </div>
+
+  <h3><span class="n">1</span>레벨 1을 제대로 — 묻는 법부터 바꾸세요</h3>
+  <p>레벨 1에 머물러도 <b>묻는 법</b>만 바꾸면 결과가 확 달라져요. 그냥 "뭐라고 답하지?"가 아니라, 내 상황과 지켜야 할 선을 같이 줍니다. 특히 배송 기간이나 교환·반품처럼 <b>AI가 모르는 사실은 지어내지 말라고</b> 못 박으세요.</p>
+  <div class="prompt"><span class="lab">이렇게 물으세요</span><br>
+  아래 고객 문의에 답장 초안을 써 줘. 나는 해외 구매대행 셀러야. 정중한 존댓말로, 고객이 물은 것에 먼저 답하고, 배송 기간이나 교환·반품처럼 내가 확인해야 하는 사실은 지어내지 말고 [확인 필요]로 비워 둬.<br>문의: ○○</div>
+
+  <h3><span class="n">2</span>레벨 2 세팅 — 메일을 연결하세요</h3>
+  <p>스토어 메일은 하루에 수십 통씩 옵니다. 정산 안내, 광고 메일, 마켓 공지 사이에 <b>경고나 제재 메일</b>이 섞여 있으면 놓치기 쉬워요. 메일을 연결하면 클로드가 직접 읽고 급한 것부터 골라 줍니다.</p>
+  <ol class="step">
+    <li>클로드 <b>설정 → 커넥터</b>에서 Gmail을 연결합니다.</li>
+    <li>스토어가 여러 개면 각 메일 계정에서 <b>메일 하나로 자동 전달</b>을 걸어 두세요. 연결은 한 번만 하면 됩니다. 저는 사업자 계정 17개의 메일을 한 곳에 모아서 봐요.</li>
+    <li>아래 지시문으로 첫 분류를 시켜 봅니다.</li>
+  </ol>
+  <div class="prompt"><span class="lab">이렇게 시작하세요</span><br>
+  오늘 온 메일을 아래 순서로 나눠서 보여 줘.<br>
+  ① 오늘 처리해야 하는 것: 마켓 경고, 판매 제재, 권리침해 신고, 고객 클레임<br>
+  ② 이번 주 안에 볼 것: 정산, 세금, 정책 변경 안내<br>
+  ③ 안 봐도 되는 것: 광고, 뉴스레터<br>
+  ①은 보낸 곳, 핵심 한 줄, 마감일을 적어 줘.</div>
+  <div class="warn"><b>주의.</b> 처음 한두 주는 <b>읽기만</b> 시키세요. 답장 보내기나 삭제는 AI가 분류를 잘하는지 확인한 다음에 맡기는 게 안전합니다.</div>
+
+
+  <h3><span class="n">3</span>레벨 3 세팅 — 내 기준을 스킬로 만드세요</h3>
+  <p><b>스킬</b>은 클로드에게 한 가지 일을 <b>매번 같은 방식으로</b> 하게 가르쳐 두는 기능이에요. 상품명 짓는 순서를 한 번만 가르쳐 두면 상품 백 개를 시켜도 매번 같은 기준으로 지어 줍니다.</p>
+  <div class="prompt"><span class="lab">이렇게 시작하세요</span><br>
+  지금부터 내가 상품명 짓는 순서를 알려 줄게. 다 들으면 이걸 "상품명" 스킬로 만들어 줘. 다음부터 내가 "상품명 지어 줘"라고만 해도 이 순서대로 하면 돼.<br>
+  ① 썸네일을 보고 이 상품이 정확히 뭔지 한 단어로 정한다<br>
+  ② 내가 준 키워드 엑셀에서 그 상품에 맞는 키워드만 고른다<br>
+  ③ 브랜드명, 상표명은 절대 넣지 않는다<br>
+  ④ 50자 안쪽으로, 중요한 키워드를 앞에 둔다</div>
+  <div class="warn"><b>요령.</b> 처음부터 백 개 맡기지 말고 <b>5개로 시험</b>하세요. 마음에 안 드는 결과가 나오면 "이건 이래서 틀렸어, 스킬에 반영해 줘"라고 말하면 됩니다. 이렇게 서너 번 고치면 내 기준이 스킬에 쌓여요.</div>
+
+<div style="break-inside:avoid">  <h3>AI 직원 네 명이 동시에 일하는 구조</h3>
+  <p>직원마다 상품을 하나씩 맡아서 처음부터 끝까지 처리합니다. 한 명이 끝나면 다음 상품을 집어요.</p>
+  <div class="grid">
+    <div class="h">직원</div><div class="h">수집</div><div class="h">상품명</div><div class="h">썸네일</div><div class="h">옵션명</div><div class="h">상세</div>
+    <div class="r">1번</div><div>상품 A</div><div>A</div><div>A</div><div>A</div><div>A</div>
+    <div class="r">2번</div><div>상품 B</div><div>B</div><div>B</div><div>B</div><div>B</div>
+    <div class="r">3번</div><div>상품 C</div><div>C</div><div>C</div><div>C</div><div>C</div>
+    <div class="r">4번</div><div>상품 D</div><div>D</div><div>D</div><div>D</div><div>D</div>
+    <div class="boss">나 = 관리자 · 결과만 보고 OK / 다시</div>
+  </div>
+  <p class="sub">직원 수를 늘린다고 무조건 빨라지지는 않아요. 같은 상품을 두 직원이 동시에 집지 않게 "작업 중" 표시를 해 두는 게 핵심입니다.</p></div>
+</section>
+
+<section class="chap">
+  <div class="chap-head">
+    <div class="no">SAFETY</div>
+    <h2>사고 안 나는<br>안전 규칙 7가지</h2>
+    <div class="vid">AI 직원을 쓰면서 실제로 겪은 사고에서 나온 규칙들</div>
+  </div>
+
+  <p>AI 직원은 빠른 만큼 실수도 빠르게 커져요. 한 번에 수백 개를 처리하니까 잘못된 지시 하나가 수백 개 사고가 됩니다. 아래 규칙은 제가 직접 겪고 만든 것들이에요.</p>
+
+  <h3><span class="n">1</span>미리보기 먼저, 저장은 나중</h3>
+  <p>상품명, 가격, 옵션을 바꾸는 작업은 항상 "<b>바꾸기 전과 후를 표로 먼저 보여 줘</b>"로 시작하세요. 표를 보고 괜찮을 때만 저장시킵니다.</p>
+
+  <h3><span class="n">2</span>바꾸기 전에 원본 백업</h3>
+  <p>상세페이지나 상품명을 교체할 때는 원래 것을 따로 저장해 두게 하세요. 결과가 이상하면 바로 되돌릴 수 있어요.</p>
+
+  <h3><span class="n">3</span>팔린 상품은 잠가 두기</h3>
+  <p>상품을 주기적으로 지우고 다시 올린다면, 팔린 상품이 같이 지워지는 사고가 제일 아픕니다. 리뷰와 판매 기록이 같이 사라지니까요. 매일 밤 자동으로 잠그세요. </p>
+
+  <h3><span class="n">4</span>지울 때는 이유를 남기기</h3>
+  <p>AI가 상품을 지울 때 "언제, 누가, 왜"를 메모에 남기게 하세요. 나중에 "이거 왜 없어졌지?"를 몇 초 만에 찾을 수 있어요.</p>
+
+  <h3><span class="n">5</span>사진은 "변형 금지"를 걸기</h3>
+  <p>AI로 썸네일을 만들면 제품 모양이나 색이 미묘하게 바뀌는 경우가 있어요. 받은 상품이 사진과 다르면 반품이 옵니다. 지시문에 꼭 넣으세요: "<b>제품의 모양, 색, 비율, 개수는 원본 그대로 둘 것</b>."</p>
+
+  <h3><span class="n">6</span>돈 드는 작업은 견적 먼저</h3>
+  <p>크레딧이나 요금이 드는 작업(AI 이미지, 상세페이지 생성 등)은 "<b>몇 개에 얼마 드는지 먼저 알려 줘</b>"로 시작하세요. 금액을 보고 나서 진행시킵니다.</p>
+
+  <h3><span class="n">7</span>"시간 초과"는 실패가 아니다</h3>
+  <p>대량 작업 중에 "시간 초과"가 떠도 실제로는 <b>서버에서 끝까지 처리된 경우가 많아요.</b> 바로 다시 돌리면 같은 작업에 돈을 두 번 냅니다. 다시 돌리기 전에 결과 목록부터 확인하게 하세요.</p>
+
+  <div class="card dark" style="margin-top:5mm">
+    <div class="lab">덤으로 하나</div>
+    <p style="margin:0">상품 하나에 매달리지 마세요. AI 직원이 같은 상품에서 계속 막히면 건너뛰고 다음으로 넘어가게 하는 게 전체 처리량에 훨씬 이득이에요.</p>
+  </div>
+</section>
+
+<section class="chap">
+  <div class="chap-head">
+    <div class="no">APPENDIX</div>
+    <h2>복사해서 바로 쓰는<br>지시문 5개</h2>
+    <div class="vid">○○ 부분만 내 상황에 맞게 바꿔서 붙여 넣으세요.</div>
+  </div>
+  <div class="prompt"><span class="lab">01 · 고객 문의 답장 초안 (레벨 1을 제대로)</span><br>
+  아래 고객 문의에 답장 초안을 써 줘. 나는 해외 구매대행 셀러야. 정중한 존댓말로, 고객이 물은 것에 먼저 답하고, 배송 기간이나 교환·반품처럼 내가 확인해야 하는 사실은 지어내지 말고 [확인 필요]로 비워 둬.<br>문의: ○○</div>
+
+  <div class="prompt"><span class="lab">02 · 메일 분류</span><br>
+  오늘 온 메일 중 ① 오늘 처리할 것(경고, 제재, 권리침해, 클레임) ② 이번 주에 볼 것(정산, 세금, 정책) ③ 안 봐도 되는 것으로 나눠 줘. ①은 보낸 곳, 핵심 한 줄, 마감일까지.</div>
+
+  <div class="prompt"><span class="lab">03 · 스킬 만들기</span><br>
+  내가 ○○ 하는 순서를 알려 줄게. 다 들으면 "○○" 스킬로 만들어 줘. 순서 중에 애매한 게 있으면 만들기 전에 먼저 물어봐 줘.</div>
+
+  <div class="prompt"><span class="lab">04 · 스킬 고치기</span><br>
+  방금 결과에서 ○번이 틀렸어. 이유는 ○○이야. 다음부터 같은 실수를 안 하도록 스킬에 규칙으로 추가해 줘.</div>
+
+  <div class="prompt"><span class="lab">05 · 예약 작업</span><br>
+  "○○" 작업을 매일 ○시 ○분에 자동으로 돌게 예약해 줘. 끝나면 처리한 개수와 실패한 개수를 남기고, 실패한 건 이유를 적어 줘.</div>
+</section>
+
+<section class="end">
+  <h2>여기까지 세팅했다면,<br>이미 상위 셀러입니다.</h2>
+  <p>이 전자책은 <b>무엇을 하고 왜 하는지</b>를 담았어요. 실제로 내 스토어에 AI 직원을 앉히는 과정, 즉 내 기준을 스킬로 옮기고 수집 솔루션에 연결하고 예약을 거는 것까지는 실전반에서 같이 세팅합니다.</p>
+  <p style="margin-top:5mm"><b>용팀장 실전반</b><br>
+  신청·문의: <span class="fill">〔링크 넣을 자리〕</span></p>
+  <p style="margin-top:8mm;font-size:8.6pt;opacity:.7">이 자료는 영상 댓글로 신청하신 분께 드리는 무료 자료입니다. 무단 재배포와 판매를 금지합니다. © 용팀장</p>
+</section>
+</body>
+</html>

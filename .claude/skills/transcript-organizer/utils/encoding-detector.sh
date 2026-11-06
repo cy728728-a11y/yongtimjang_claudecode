@@ -15,7 +15,7 @@ if [ ! -f "$FILE_PATH" ]; then
 fi
 
 # 파일 인코딩 감지
-ENCODING=$(file -I "$FILE_PATH" | grep -oP 'charset=\K[^ ]+')
+ENCODING=$(file -I "$FILE_PATH" | sed -n 's/.*charset=\([^ ]*\).*/\1/p')
 
 echo "Detected encoding: $ENCODING"
 
