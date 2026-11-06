@@ -351,7 +351,7 @@ def main():
                 log(f"  {s['note']}"); continue
             probs, need, pages = auto_check(outdir)
             s["pages"] = pages
-            if probs or need:
+            if probs or (need and not t.get("forceApply")):   # forceApply = 보류 사유를 옵션 정리로 푼 상품(2026-11-07)
                 s.update(stage="held", need=need, note="; ".join(probs) or "보고서 확인 필요")
                 log(f"  보류: {s['note']}"); continue
             if s.get("stage") != "applied":
