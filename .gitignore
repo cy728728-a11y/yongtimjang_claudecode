@@ -61,3 +61,6 @@ package-lock.json
 .planning/phases/05-core-value/evidence/smoke/
 
 .claude/skills/naver-sourcing-bench/runs/
+
+# 깃허브 100MB 제한 초과 파일
+*.fig
