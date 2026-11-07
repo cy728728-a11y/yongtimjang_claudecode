@@ -7,6 +7,22 @@
 
 ## Today
 
+- [ ] 줌 오픈: 실전반4기 온라인보강수업 (19:30 접속 → start_url로 열기)
+  - added: 2026-10-28 13:56
+  - priority: normal
+- [ ] 줌 오픈: [실전반 4기] 줌 2회차 (19:30 접속 → start_url로 열기)
+  - added: 2026-10-21 12:00
+  - priority: normal
+- [ ] 줌 오픈: 실전반4기 온라인1주차 (19:30 접속 → start_url로 열기)
+  - added: 2026-10-14 13:09
+  - priority: normal
+- [ ] 줌 오픈: 용감한용팀장 실전반4기 OT (13:30 접속 → start_url로 열기)
+  - added: 2026-10-09 11:00
+  - priority: normal
+
+- [ ] 할로윈파티 참여비 입금하기
+  - added: 2026-10-07 14:12
+  - priority: high
 - [ ] 아빠가 하라고 하신 일 하기 — YJ컴퍼니 2026-09-30 정산 메모
   - added: 2026-10-24 09:04
   - priority: high
@@ -43,6 +59,12 @@
   - project: 안산아파트
   - due: 2026-12-31
   - 기한 근거: 2026-10 잔금 → 10월 말일부터 2개월 이내 예정신고
+
+- [ ] 11/9(월) 무료 라이브 준비 — PPT 덱 제작(10/6 덱 v8 기반, yong_1109)
+  - added: 2026-10-29 09:37
+  - priority: normal
+  - due: 2026-11-09
+  - project: 무료라이브
 
 ## Backlog
 
