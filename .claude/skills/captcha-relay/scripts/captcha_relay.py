@@ -29,7 +29,16 @@ RELAY_DIR = os.environ.get("CAPTCHA_RELAY_DIR") or os.path.expanduser(
 )
 REQ_DIR = os.path.join(RELAY_DIR, "requests")
 RES_DIR = os.path.join(RELAY_DIR, "responses")
-ASIDE_BIN = os.environ.get("ASIDE_BIN") or os.path.expanduser("~/.local/bin/aside")
+def _default_aside_bin():
+    """OS별 aside CLI 기본 경로 (윈도우: LOCALAPPDATA 아래 Aside/CLI/current/aside.exe)."""
+    import shutil
+    if os.name == "nt":
+        p = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Aside", "CLI", "current", "aside.exe")
+        return p if os.path.exists(p) else (shutil.which("aside") or p)
+    return os.path.expanduser("~/.local/bin/aside")
+
+
+ASIDE_BIN = os.environ.get("ASIDE_BIN") or _default_aside_bin()
 
 KST = timezone(timedelta(hours=9))
 

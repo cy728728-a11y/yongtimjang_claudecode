@@ -18,7 +18,16 @@ import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DRIVER = os.path.join(SCRIPT_DIR, "driver.js")
-ASIDE_BIN = os.environ.get("ASIDE_BIN") or os.path.expanduser("~/.local/bin/aside")
+def _default_aside_bin():
+    """OS별 aside CLI 기본 경로 (윈도우: LOCALAPPDATA 아래 Aside/CLI/current/aside.exe)."""
+    import shutil
+    if os.name == "nt":
+        p = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Aside", "CLI", "current", "aside.exe")
+        return p if os.path.exists(p) else (shutil.which("aside") or p)
+    return os.path.expanduser("~/.local/bin/aside")
+
+
+ASIDE_BIN = os.environ.get("ASIDE_BIN") or _default_aside_bin()
 
 # 재시도해도 의미 없는(=사람이 손봐야 하는) 상태
 DEAD = {"성공"}

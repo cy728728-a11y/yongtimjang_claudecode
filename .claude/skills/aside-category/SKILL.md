@@ -25,7 +25,7 @@ Aside 브라우저로 네이버 가격비교를 열어 **키워드 → 카테고
 
 ## 준비
 
-1. **Aside 브라우저 설치** (macOS 15+ 전용) — `aside.com/download`. CLI 는 `~/.local/bin/aside`.
+1. **Aside 브라우저 설치** (macOS 15+ / 윈도우 2026-09-14~) — `aside.com/download`. CLI 는 `~/.local/bin/aside`.
    다른 경로면 `ASIDE_BIN` 환경변수로 지정한다.
 2. **불사자 확장이 Aside 에 설치**되어 있어야 한다. 카테고리는 네이버가 아니라 이 확장이 계산한다.
 3. **네이버 로그인** 세션이 살아 있어야 한다.
