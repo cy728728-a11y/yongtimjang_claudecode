@@ -64,3 +64,6 @@ package-lock.json
 
 # 깃허브 100MB 제한 초과 파일
 *.fig
+
+# ATOZ 자사몰 강의 자료 (저작권: 개인 학습용, 클라우드 업로드 금지)
+50-resources/atoz-자사몰강의/

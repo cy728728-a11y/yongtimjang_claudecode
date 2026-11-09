@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>커피 룰렛 (백업)</title>
+<style>
+  body{margin:0;font-family:-apple-system,"Apple SD Gothic Neo",sans-serif;background:#1d1b19;color:#f5efe6;display:flex;gap:40px;align-items:center;justify-content:center;min-height:100vh}
+  .panel{width:320px}
+  h1{font-size:28px;margin:0 0 12px}
+  textarea{width:100%;height:320px;font-size:18px;padding:10px;border-radius:10px;border:none;box-sizing:border-box}
+  button{margin-top:12px;width:100%;font-size:24px;padding:14px;border:none;border-radius:10px;background:#e8a33d;color:#1d1b19;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.5}
+  .wrap{position:relative}
+  .pin{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:18px solid transparent;border-right:18px solid transparent;border-top:36px solid #fff;z-index:2}
+  #winner{margin-top:16px;font-size:34px;font-weight:800;color:#e8a33d;min-height:44px;text-align:center}
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1>☕ 커피 룰렛</h1>
+  <textarea id="names" placeholder="채팅 닉네임을 한 줄에 하나씩"></textarea>
+  <button id="spin">돌리기</button>
+  <div id="winner"></div>
+</div>
+<div class="wrap">
+  <div class="pin"></div>
+  <canvas id="wheel" width="560" height="560"></canvas>
+</div>
+<script>
+// 닉네임 목록으로 원판을 그리고, 버튼을 누르면 무작위로 돌려 당첨자를 고른다
+const cv=document.getElementById('wheel'),ctx=cv.getContext('2d');
+const ta=document.getElementById('names'),btn=document.getElementById('spin'),win=document.getElementById('winner');
+const colors=['#e8a33d','#c8553d','#588b8b','#8e7dbe','#6a994e','#bc6c25','#277da1','#d4a373'];
+let angle=0;
+function list(){return ta.value.split('\n').map(s=>s.trim()).filter(Boolean)}
+function draw(){
+  const n=list(),N=n.length||1,r=270,c=280;ctx.clearRect(0,0,560,560);
+  for(let i=0;i<N;i++){
+    const a0=angle+i*2*Math.PI/N,a1=a0+2*Math.PI/N;
+    ctx.beginPath();ctx.moveTo(c,c);ctx.arc(c,c,r,a0,a1);ctx.fillStyle=n.length?colors[i%colors.length]:'#444';ctx.fill();
+    if(n.length){ctx.save();ctx.translate(c,c);ctx.rotate((a0+a1)/2);ctx.fillStyle='#fff';
+      ctx.font=`bold ${N>20?14:20}px sans-serif`;ctx.textAlign='right';ctx.fillText(n[i].slice(0,12),r-14,7);ctx.restore();}
+  }
+}
+ta.addEventListener('input',()=>{win.textContent='';draw()});
+btn.onclick=()=>{
+  const n=list();if(n.length<2){win.textContent='닉네임 2개 이상';return}
+  btn.disabled=true;ta.disabled=true;win.textContent='';
+  const start=angle,total=Math.PI*2*(6+Math.random()*4),dur=5000,t0=performance.now();
+  function step(t){
+    const p=Math.min((t-t0)/dur,1),e=1-Math.pow(1-p,3);angle=start+total*e;draw();
+    if(p<1)return requestAnimationFrame(step);
+    // 위쪽 화살표(-90도)가 가리키는 칸이 당첨
+    const N=n.length,seg=2*Math.PI/N,pos=((-Math.PI/2-angle)%(2*Math.PI)+2*Math.PI)%(2*Math.PI);
+    win.textContent='🎉 '+n[Math.floor(pos/seg)];btn.disabled=false;ta.disabled=false;
+  }
+  requestAnimationFrame(step);
+};
+draw();
+</script>
+</body>
+</html>

@@ -46,3 +46,22 @@
 - enriched: [[자청-마케팅이론-용팀장-적용판]] (9장 보강 — 8/12 결제 클로징 구조, 8/27 조건부 재판매)
 - cross-refs: [[무료강의-공지방-시퀀스]] ↔ [[자청-마케팅이론-용팀장-적용판]]
 - contradictions: 없음 (단, 디노·부자곰 내부 수치 불일치는 페이지에 약점으로 기록)
+## [2026-11-08] ingest | sebia.ai 노션 「질문 한 줄로 60초 애니메이션 만든 프롬프트」 (힉스필드 콘텐츠 팩토리)
+- source: https://app.notion.com/p/60-40206e67232081809cf7e3611a59f9de (공개 페이지, 원문 사본 00-inbox/2026-11-08_힉스필드-…_원문.md)
+- created: [[힉스필드-콘텐츠-팩토리]] (entity — 만약에 숏폼 뼈대 3요소, 프롬프트 갈아 끼울 4자리, 20초 vs 60초 교훈 6가지, 크레딧 예상 vs 실차감 표)
+- cross-refs: motion-graphic 스킬의 "장면 최소 3.5초" 원칙과 같은 결론("각 단계에 여유") → 도구 무관 원칙으로 승격 메모
+- contradictions: 없음
+- 비고: 연동 앱에 미공유 페이지라 노션 API 404 → 공개 페이지용 loadPageChunk 경로로 읽음
+## [2026-11-08] ingest | AI TREND 「바로 해보는 리버스 엔지니어링 프롬프트와 자료집」
+- source: https://aitrend-library.pages.dev/g/reverse-engineering/ (공개 페이지, 원문 사본 00-inbox/2026-11-08_AI트렌드-리버스엔지니어링-프롬프트-REA-replica_원문.md)
+- created: [[리버스-엔지니어링-프롬프트-REA-replica]] (entity — 프롬프트 공식 4칸, 예시 3개, REA·replica 설치·순서, 체크리스트, 10월 말 클로드 제한)
+- cross-refs: [[힉스필드-콘텐츠-팩토리]] (한 문장 프롬프트 계열) · review-analyzer 스킬(= replica entrepreneur 발상) · detail-page-opus 끝판왕 템플릿(변형 생성 통로)
+- contradictions: 없음
+- 비고: 페이지 본문 60만 자 중 글자는 6천 자, 나머지는 이미지 데이터 → 이미지 걷어내고 저장. 적용 판단: REA·replica 본체보다 공식·리뷰불만 발상·체크리스트 3가지가 사업에 유효
+
+## [2026-11-08] ingest | sebia.ai 노션 「클로드 코드가 나한테 전화 걸게 만드는 법」 (call-me)
+- source: https://app.notion.com/p/3fd06e6723208148a80fdf50f9db23f4 (유튜브 쇼츠 고정 댓글, 공개 페이지, 원문 사본 00-inbox/2026-11-08_세비아-클로드코드-전화걸기-call-me_원문.md)
+- created: [[클로드코드-전화-call-me]] (entity — Bland.ai 전화 세팅, 한국 번호 크레딧 $5 함정, 키체인 보안, 귀찮지 않게 하는 5규칙, API 파라미터)
+- cross-refs: auto-watch 카톡 알림(일방향) 대비, "사람 큐를 만들지 마라" 원칙과의 긴장 메모
+- contradictions: 없음
+- 비고: loadPageChunk 경로로 읽음. 한 통 요금 칸은 원문이 비어 있음

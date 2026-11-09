@@ -29,7 +29,10 @@
 ### 도구·자동화
 
 - [[tailscale]] · entity · 블랙노트북·맥실버를 어디서든 같은 망으로 묶는 원격접속 도구 · sources 1, enriched 2026-09-19
+- [[힉스필드-콘텐츠-팩토리]] · entity · "만약에" 질문 한 줄로 숫자가 오르는 60초 애니메이션을 만드는 AI 영상 도구와 프롬프트 뼈대·비용 실측 · sources 1, enriched 2026-11-08
+- [[리버스-엔지니어링-프롬프트-REA-replica]] · entity · 캡처 한 장+한 문장으로 내 버전 도구를 받는 프롬프트 공식, REA·replica 설치 순서, 저작권 체크리스트 · sources 1, enriched 2026-11-08
+- [[클로드코드-전화-call-me]] · entity · 막히면 클로드가 Bland.ai로 내 폰에 전화해 결정을 받고 이어가는 세팅, 한국 번호는 크레딧 $5 구매 필수 · sources 1, enriched 2026-11-08
 
 ---
 
-**Last updated**: 2026-10-02
+**Last updated**: 2026-11-08
