@@ -1,6 +1,0 @@
-.env
-scripts/downloads/
-scripts/runs/
-scripts/__pycache__/
-*.pyc
-runs/

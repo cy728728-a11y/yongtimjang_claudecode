@@ -63,7 +63,7 @@ except Exception:
 # (같은 관용구: product-name/scripts/run_names.py:40-46 · detail_batch.py:47-52)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILLS_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, "..", ".."))
-SKILL_SCRIPTS = os.path.join(SKILLS_DIR, "bulsaja-category-fix", "scripts")
+SKILL_SCRIPTS = os.path.dirname(os.path.abspath(__file__))  # bulsaja_mcp 는 이 폴더로 이관(2026-11-09, 로컬 카테고리 스킬 삭제)
 if SKILL_SCRIPTS not in sys.path:
     sys.path.insert(0, SKILL_SCRIPTS)
 if SCRIPT_DIR not in sys.path:

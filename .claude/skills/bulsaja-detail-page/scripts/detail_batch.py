@@ -47,7 +47,7 @@ except Exception:
 # (같은 관용구: product-name/scripts/run_names.py:40-46)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILLS_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, "..", ".."))
-SKILL_SCRIPTS = os.path.join(SKILLS_DIR, "bulsaja-category-fix", "scripts")
+SKILL_SCRIPTS = os.path.dirname(os.path.abspath(__file__))  # bulsaja_mcp 는 이 폴더로 이관(2026-11-09, 로컬 카테고리 스킬 삭제)
 sys.path.insert(0, SKILL_SCRIPTS)
 from bulsaja_mcp import BulsajaMCP  # noqa: E402
 
