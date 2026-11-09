@@ -8,7 +8,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from run_inspect import abs_url, select_targets, to_view, make_batches, merge_judged, pending_batches, dedupe_views, spread_dups  # noqa: E402
+from run_inspect import abs_url, exclude_dups, select_targets, to_view, make_batches, merge_judged, pending_batches, dedupe_views, spread_dups  # noqa: E402
 
 FAILED = []
 
@@ -63,6 +63,14 @@ fin = {"p1": {"verdict": "drop", "reason": "IP", "note": "로고"}}
 n = spread_dups(fin, dm)
 check("대표 판정 복사(대표 없으면 건너뜀)", n == 1 and fin["p2"]["verdict"] == "drop" and fin["p2"]["dup_of"] == "p1" and "p4" not in fin, fin)
 check("to_view 2차에 tb_item_id", to_view({"id": "x", "taobaoResult": [{"item": {"itemId": 123, "image": "//i"}}]}, 2)["tb_item_id"] == "123")
+
+# 중복 제거 단계(dup_verdicts.json)가 있으면 prep 대상에서 뺀다
+with tempfile.TemporaryDirectory() as _d:
+    with open(os.path.join(_d, "dup_verdicts.json"), "w", encoding="utf-8") as _f:
+        json.dump({"b": {"verdict": "drop", "reason": "DUP_SEEN", "note": "장부", "by": "ledger"}}, _f)
+    _t = exclude_dups([{"id": "a"}, {"id": "b"}, {"id": "c"}], _d)
+    check("dup_verdicts 가 있으면 대상에서 제외", [x["id"] for x in _t] == ["a", "c"], _t)
+    check("dup_verdicts 가 없으면 그대로", len(exclude_dups([{"id": "a"}], os.path.join(_d, "none"))) == 1)
 
 print("\nFAILED:", FAILED if FAILED else "없음")
 sys.exit(1 if FAILED else 0)

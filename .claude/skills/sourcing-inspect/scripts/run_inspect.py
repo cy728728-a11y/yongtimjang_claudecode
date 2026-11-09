@@ -106,6 +106,14 @@ def select_targets(items, stage):
     return out
 
 
+def exclude_dups(targets, run_dir):
+    """<run>/dup_verdicts.json(장부 중복 제거 단계 결과)에 있는 id 는 판정 대상에서 뺀다. 파일 없으면 그대로."""
+    dup = _load(_p(run_dir, "dup_verdicts.json"), {}) or {}
+    if not dup:
+        return targets
+    return [t for t in targets if t.get("id") not in dup]
+
+
 def load_cat_paths(path=MASTER):
     try:
         d = _load(path, {}) or {}
@@ -251,6 +259,10 @@ def cmd_prep(a):
     if items is None:
         sys.exit("snapshot.json 없음 — fetch 먼저")
     targets = select_targets(items, a.stage)
+    n0 = len(targets)
+    targets = exclude_dups(targets, a.run_dir)   # 장부 중복(dedup_stage.py) 은 검수 안 함
+    if n0 != len(targets):
+        print(f"[prep] 중복 제외 {n0 - len(targets)}건")
     # 이미 다른 run-dir 에서 판정한 상품은 빼고 새로 매칭된 것만(2026-10-19)
     for ex in (getattr(a, "exclude_run", None) or []):
         try:
@@ -375,10 +387,17 @@ def cmd_merge(a):
                         final[pid] = {"verdict": want, "reason": "USER" if want == "drop" else "OK",
                                       "note": f"사용자 지정: {label}", "by": "user"}
                         user += 1
+    # 장부 중복(dedup_stage.py) — 판정이 이미 있는 id 는 기존 판정 유지
+    dupv = _load(_p(a.run_dir, "dup_verdicts.json"), {}) or {}
+    n_dup = 0
+    for pid, r in dupv.items():
+        if pid not in final:
+            final[pid] = r
+            n_dup += 1
     _save(_p(a.run_dir, "verdicts.json"), final)
     c = collections.Counter(r["verdict"] for r in final.values())
     rc = collections.Counter(r["reason"] for r in final.values() if r["verdict"] == "drop")
-    print(f"[merge] 최종 {len(final)}건 통과 {c['pass']} / 탈락 {c['drop']}  누락 {len(missing)} 환각 {len(extra)}  사용자지정 {user}")
+    print(f"[merge] 최종 {len(final)}건 통과 {c['pass']} / 탈락 {c['drop']}  누락 {len(missing)} 환각 {len(extra)}  사용자지정 {user}  중복 {n_dup}")
     print(f"  탈락 사유: {dict(rc.most_common())}")
     if missing:
         print(f"  누락 id(앞 10): {missing[:10]}")
@@ -392,6 +411,7 @@ REASON_KO = {
     "KEYWORD_DANGER": "위험물(키워드)", "KEYWORD_OTHER": "기타 금지품(키워드)", "TARGET": "아이·유아·성인 대상", "WATT": "3000W 이상",
     "NO_MATCH": "매칭 없음", "BANNED_CAT": "금지 카테고리 번호", "USER": "사용자 지정 삭제",
     "OTHER": "기타", "OK": "통과",
+    "DUP_SEEN": "이미 본 상품(네이버 번호)", "DUP_TAOBAO": "이미 본 상품(타오바오 번호)",
 }
 
 
