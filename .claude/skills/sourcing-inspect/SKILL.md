@@ -50,6 +50,26 @@ $PY $S/run_inspect.py report --run-dir <R> [--only drop]            # review.htm
 - 같은 run-dir 재실행 시 judged 파일이 있는 배치는 건너뛴다(디스크가 정본).
 - 1차 대상 = 매칭 결과 없음, 2차 대상 = 매칭 결과 있음 또는 match_failed(→ 기계 NO_MATCH).
 
+## 파이프라인(장부·중복·보고) — 2026-11-10 추가
+설계 `docs/superpowers/specs/2026-11-08-sourcing-pipeline-design.md`. 장부 세 개는 `~/python_work/data/sourcing-pipeline/`(git 밖): `markets.jsonl`·`seen_products.jsonl`(네이버 번호)·`seen_taobao.txt`, 내부 번호는 `internal_ids.txt`.
+```bash
+$PY $S/ledger_init.py                                  # 장부 초기값(지난 run 스냅샷 전부). 멱등 — 아무 때나 다시 돌려도 됨
+$PY $S/pilot_select.py                                 # 파일럿 마켓 2,000 → 10-projects/16-…/pilot_markets_YYMMDD.txt
+$PY $S/campaign_watch.py --campaign <C> --run-dir R1 --interval 600 --stable 3   # 수집 완료 감지 → R1/snapshot.json (caffeinate + 완료 감시 필수)
+$PY $S/dedup_stage.py naver  --run-dir R1              # 네이버 번호 중복 → R1/dup_verdicts.json (DUP_SEEN)
+$PY $S/run_inspect.py prep --run-dir R1 --stage 1 --machine-only → merge → $PY $A trash --run-dir R1 → $PY $A match --run-dir R1
+$PY $S/run_inspect.py fetch --run-dir R2 --campaign <C>
+$PY $S/dedup_stage.py taobao --run-dir R2              # 타오바오 번호 중복 → R2/dup_verdicts.json (DUP_TAOBAO)
+$PY $S/run_inspect.py prep --run-dir R2 --stage 2 → batch → pending → Workflow inspect-fanout → merge → report
+$PY $A trash --run-dir R2 → $PY $A collect --run-dir R2
+$PY $S/ledger_commit.py --run-dir R1 --kind 3day --stage 1 ; $PY $S/ledger_commit.py --run-dir R2 --kind 3day --stage 2   # 회차당 1회만
+$PY $S/pipeline_report.py --run1 R1 --run2 R2 [--pilot-meta <json>] --copy-to 10-projects/16-불사자-소싱-파이프라인/
+```
+- `prep` 은 `dup_verdicts.json` 의 id 를 대상에서 빼고, `merge` 가 drop 으로 합친다 → 휴지통은 기존 `trash` 가 처리(사유 DUP_SEEN/DUP_TAOBAO 가 휴지통 대장에 남음). 장부가 정본, 소싱기의 그룹 중복 차단은 3차 안전망.
+- `ledger_commit` 은 run 당 한 번(표식 `ledger_committed.json`). 마켓 상품 수가 누적이라 두 번 돌리면 두 배로 잡힌다. 1차 run 은 `--stage 1`, 2차 run 은 `--stage 2`(타오바오 장부는 2차에서만 추가).
+- 캠페인 모드 용어: 과거 판매 이력 전부 / **3일베스트**(최근 3일 판매). 가격은 모든 캠페인 3만~50만 원(2026-11-10).
+- 아직 없는 것(2단계 계획): 소싱기 화면 자동 조작, 일요일 밤 무인 스케줄·카톡 보고, 신규소싱상품→통과 그룹 변경 자동화, 타오바오 장부 야간 채우기, 옛 9,398개 재검수.
+
 ## 토큰
 - 웹 API 는 MCP 토큰이 아니라 웹 로그인 토큰(헤더 `accesstoken` 7일 + `refreshtoken` 30일)이다.
 - 401 → 크롬(Claude 확장이 붙은 "Default" 프로필)에서 불사자에 **cy17281728** 구글 계정으로 재로그인(이 프로필 기본 자동로그인은 cy728728 이라 '다른 계정 사용' 필요) → `web_token.py` 재실행. 비밀번호는 다루지 않는다.
