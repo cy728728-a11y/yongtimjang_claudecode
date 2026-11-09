@@ -4,7 +4,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from dedup_stage import judge_naver, judge_taobao  # noqa: E402
+from dedup_stage import judge_naver, judge_taobao, late_ids, committed  # noqa: E402
+import tempfile  # noqa: E402
 
 FAILED = []
 
@@ -30,6 +31,17 @@ def TB(i):
 
 r = judge_taobao([{"id": "x", **TB(5)}, {"id": "y", **TB(6)}, {"id": "z", "taobaoResult": []}], {"5"})
 check("타오바오 중복", set(r) == {"x"} and r["x"]["reason"] == "DUP_TAOBAO" and r["x"]["verdict"] == "drop", r)
+
+# C1: 장부에 같은 캠페인으로 들어간 번호는 중복이 아니다(자기 회차 재실행 방어)
+r = judge_naver([{"id": "a", "productId": "10000002"}, {"id": "b", "productId": "10000003"}],
+                {"10000002": "C", "10000003": "OLD"}, campaign="C")
+check("같은 캠페인 장부 기록은 중복 아님", "a" not in r and r.get("b", {}).get("reason") == "DUP_SEEN", r)
+with tempfile.TemporaryDirectory() as d:
+    check("기록 안 된 run 은 통과", committed(d) is False)
+    open(os.path.join(d, "ledger_committed.json"), "w").write("{}")
+    check("이미 장부에 기록한 run 은 거부 대상", committed(d) is True)
+# I2: 1차 스냅샷 뒤에 늦게 들어온 상품
+check("늦게 들어온 상품 id", late_ids([{"id": "a"}, {"id": "z"}], [{"id": "a"}]) == ["z"])
 
 print("FAILED:", FAILED)
 sys.exit(1 if FAILED else 0)

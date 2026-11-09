@@ -4,7 +4,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ledger_init import new_state, ingest_snapshot, add_market_urls, merge_markets  # noqa: E402
+from ledger_init import new_state, ingest_snapshot, add_market_urls, merge_markets, should_ingest  # noqa: E402
+import tempfile  # noqa: E402
 
 FAILED = []
 
@@ -42,6 +43,11 @@ existing = {"a": {**st["markets"]["a"], "products": 5, "last_3day": "2026-11-09"
 merged = merge_markets(existing, st["markets"])
 check("기존 장부와 합치기: 상품 수 큰 쪽, 3일 기록 유지, 새 마켓 추가",
       merged["a"]["products"] == 5 and merged["a"]["last_3day"] == "2026-11-09" and "zzz" in merged)
+
+with tempfile.TemporaryDirectory() as d:
+    check("일반 run 은 초기값에 포함", should_ingest(d) is True)
+    open(os.path.join(d, "ledger_committed.json"), "w").write("{}")
+    check("파이프라인 회차 run 은 초기값에서 제외", should_ingest(d) is False)
 
 print("FAILED:", FAILED)
 sys.exit(1 if FAILED else 0)

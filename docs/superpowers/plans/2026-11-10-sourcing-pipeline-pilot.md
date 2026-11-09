@@ -216,12 +216,12 @@ check("아직 늘면 미완료", not is_complete([10, 50, 60], 3) and not is_com
 **선행:** Task 1~8 완료, 용팀장이 절차서대로 캠페인 생성 후 캠페인 ID 전달. 아래 `C`=캠페인 ID, `D`=YYMMDD, `R1=pilot_D_s1`, `R2=pilot_D_s2`.
 
 - [ ] **Step 1: 토큰** — `web_token.py` (401 이면 절차서의 재로그인 안내).
-- [ ] **Step 2: 완료 감지(백그라운드 + 완료 감시 필수)** — `campaign_watch.py --campaign C --run-dir R1 --interval 600 --stable 3`. `caffeinate -i` 와 함께, 메모리 `never-launch-without-watcher` 대로 감시를 건다.
+- [ ] **Step 2: 완료 감지(백그라운드 + 완료 감시 필수)** — `campaign_watch.py --campaign C --run-dir R1` (기본 30분 무변화). `caffeinate -i` 와 함께, 메모리 `never-launch-without-watcher` 대로 감시를 건다.
 - [ ] **Step 3: 네이버 중복 제거** — `dedup_stage.py naver --run-dir R1` → 중복 수 기록.
 - [ ] **Step 4: 1차(기계만)** — `run_inspect.py prep --run-dir R1 --stage 1 --machine-only` → `merge` → `apply_sourcing.py trash --run-dir R1`(DUP_SEEN 포함 drop 전부 휴지통) → `apply_sourcing.py match --run-dir R1 --workers 3`.
-- [ ] **Step 5: 2차 준비** — `run_inspect.py fetch --run-dir R2 --campaign C` → `dedup_stage.py taobao --run-dir R2` → `prep --run-dir R2 --stage 2` → `batch` → `pending` → Workflow `inspect-fanout`(effort 낮추지 않음) → `merge` → `report`.
+- [ ] **Step 5: 2차 준비** — `run_inspect.py fetch --run-dir R2 --campaign C` → `dedup_stage.py taobao --run-dir R2 --stage1-run R1` → `prep --run-dir R2 --stage 2` → `batch` → `pending` → Workflow `inspect-fanout`(effort 낮추지 않음) → `merge` → `report`.
 - [ ] **Step 6: 반영** — `apply_sourcing.py trash --run-dir R2` → `apply_sourcing.py collect --run-dir R2`(그룹 1007620). 옮기기(신규소싱상품 → 소싱테스트_통과, 그룹 변경만)는 2단계 계획에서 자동화하므로 **이번 회차는 결과 수만 보고하고 옮기지 않는다**(용팀장이 앱에서 그룹 변경, 또는 2단계 완성 후 일괄).
-- [ ] **Step 7: 장부 기록** — `ledger_commit.py --run-dir R1 --kind 3day --stage 1` → `ledger_commit.py --run-dir R2 --kind 3day --stage 2`.
+- [ ] **Step 7: 장부 기록** — `ledger_commit.py --run-dir R2 --kind 3day --stage 2` → `ledger_commit.py --run-dir R1 --kind 3day --stage 1` (2차 먼저 — 최종 판정이 장부에 남게. 최종 검토 I3).
 - [ ] **Step 8: 보고** — `pipeline_report.py --run1 R1 --run2 R2 --pilot-meta <파일> --copy-to 10-projects/16-불사자-소싱-파이프라인/`. 용팀장에게 첫 줄(월 예측 vs 140,000)과 묶음별 마켓당 수율, 재수확 대상을 상위 마켓으로 좁힐 수 있는지 한 줄 판단을 보고한다.
 - [ ] **Step 9: 커밋** — 보고서 사본 커밋. `git commit -m "report(sourcing-pipeline): 재수확 파일럿 R-D 결과"`
 

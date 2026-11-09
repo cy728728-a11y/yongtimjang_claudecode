@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """캠페인 수집 완료 감지 — 상품 수가 더 늘지 않으면 완료로 보고 스냅샷을 저장한다.
 
-  campaign_watch.py --campaign ID --run-dir R [--interval 600] [--stable 3] [--max-hours 48]
+  campaign_watch.py --campaign ID --run-dir R [--interval 600] [--stable 4] [--max-hours 48]
 
-완료 기준: 조회한 상품 수가 1건 이상이고 마지막 --stable 번 연속 같을 때.
+완료 기준: 조회한 상품 수가 1건 이상이고 마지막 --stable 번 연속 같을 때(기본 4회 x 10분 = 30분 동안 변화 없음).
 완료되면 <R>/snapshot.json · run_meta.json({campaign,count,completed_at}) 저장 후 종료코드 0.
   종료코드 2 = 웹 토큰 만료(401) → web_token.py 다시 실행 / 3 = --max-hours 초과.
 조회마다 <R>/watch.log 에 시각·건수를 적는다. 네트워크 실패는 로그만 남기고 다음 주기에 다시 본다.
@@ -16,6 +16,10 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from run_inspect import resolve_run_dir, _save, _p  # noqa: E402
+
+
+DEFAULT_INTERVAL = 600   # 10분마다 조회
+DEFAULT_STABLE = 4        # 같은 값 4회 = 30분 동안 안 늘면 완료(검토 I2: 3회=20분은 소싱 PC 잠깐 멈춤에 속는다)
 
 
 def is_complete(history, stable):
@@ -41,8 +45,8 @@ def main():
     ap = argparse.ArgumentParser(description="캠페인 수집 완료 감지")
     ap.add_argument("--campaign", required=True)
     ap.add_argument("--run-dir", required=True)
-    ap.add_argument("--interval", type=int, default=600, help="조회 간격(초)")
-    ap.add_argument("--stable", type=int, default=3, help="연속 같은 횟수")
+    ap.add_argument("--interval", type=int, default=DEFAULT_INTERVAL, help="조회 간격(초)")
+    ap.add_argument("--stable", type=int, default=DEFAULT_STABLE, help="연속 같은 횟수(창 = (stable-1) x interval)")
     ap.add_argument("--max-hours", type=float, default=48)
     a = ap.parse_args()
     from sourcing_api import fetch_products, load_token

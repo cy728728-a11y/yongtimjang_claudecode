@@ -91,6 +91,18 @@ def load_seen_products(path=SEEN_PRODUCTS):
     return out
 
 
+def load_seen_products_map(path=SEEN_PRODUCTS):
+    """pid → 처음 본 캠페인. 중복 판정 때 자기 캠페인 기록을 걸러내는 데 쓴다."""
+    out = {}
+    for ln in _read_lines(path):
+        try:
+            r = json.loads(ln)
+            out.setdefault(str(r["pid"]), r.get("campaign") or "")
+        except (ValueError, KeyError, TypeError):
+            continue
+    return out
+
+
 def append_seen_products(rows, path=SEEN_PRODUCTS):
     """rows: [{pid,campaign,date,verdict}] — 장부에 없는 pid 만 덧붙이고 추가한 수를 돌려준다."""
     seen = load_seen_products(path)

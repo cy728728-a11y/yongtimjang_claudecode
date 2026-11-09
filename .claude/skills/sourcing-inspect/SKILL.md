@@ -53,20 +53,21 @@ $PY $S/run_inspect.py report --run-dir <R> [--only drop]            # review.htm
 ## 파이프라인(장부·중복·보고) — 2026-11-10 추가
 설계 `docs/superpowers/specs/2026-11-08-sourcing-pipeline-design.md`. 장부 세 개는 `~/python_work/data/sourcing-pipeline/`(git 밖): `markets.jsonl`·`seen_products.jsonl`(네이버 번호)·`seen_taobao.txt`, 내부 번호는 `internal_ids.txt`.
 ```bash
-$PY $S/ledger_init.py                                  # 장부 초기값(지난 run 스냅샷 전부). 멱등 — 아무 때나 다시 돌려도 됨
+$PY $S/ledger_init.py                                  # 장부 초기값(지난 run 스냅샷). 처음 한 번만 — 회차 진행 중엔 돌리지 않는다
 $PY $S/pilot_select.py                                 # 파일럿 마켓 2,000 → 10-projects/16-…/pilot_markets_YYMMDD.txt
-$PY $S/campaign_watch.py --campaign <C> --run-dir R1 --interval 600 --stable 3   # 수집 완료 감지 → R1/snapshot.json (caffeinate + 완료 감시 필수)
+$PY $S/campaign_watch.py --campaign <C> --run-dir R1   # 수집 완료 감지(30분 무변화) → R1/snapshot.json (caffeinate + 완료 감시 필수)
 $PY $S/dedup_stage.py naver  --run-dir R1              # 네이버 번호 중복 → R1/dup_verdicts.json (DUP_SEEN)
 $PY $S/run_inspect.py prep --run-dir R1 --stage 1 --machine-only → merge → $PY $A trash --run-dir R1 → $PY $A match --run-dir R1
 $PY $S/run_inspect.py fetch --run-dir R2 --campaign <C>
-$PY $S/dedup_stage.py taobao --run-dir R2              # 타오바오 번호 중복 → R2/dup_verdicts.json (DUP_TAOBAO)
+$PY $S/dedup_stage.py taobao --run-dir R2 --stage1-run R1   # 타오바오 번호 중복 → R2/dup_verdicts.json (DUP_TAOBAO). 늦게 들어온 상품 있으면 멈춤
 $PY $S/run_inspect.py prep --run-dir R2 --stage 2 → batch → pending → Workflow inspect-fanout → merge → report
 $PY $A trash --run-dir R2 → $PY $A collect --run-dir R2
-$PY $S/ledger_commit.py --run-dir R1 --kind 3day --stage 1 ; $PY $S/ledger_commit.py --run-dir R2 --kind 3day --stage 2   # 회차당 1회만
+$PY $S/ledger_commit.py --run-dir R2 --kind 3day --stage 2 ; $PY $S/ledger_commit.py --run-dir R1 --kind 3day --stage 1   # 2차 먼저, 회차당 1회만
 $PY $S/pipeline_report.py --run1 R1 --run2 R2 [--pilot-meta <json>] --copy-to 10-projects/16-불사자-소싱-파이프라인/
 ```
 - `prep` 은 `dup_verdicts.json` 의 id 를 대상에서 빼고, `merge` 가 drop 으로 합친다 → 휴지통은 기존 `trash` 가 처리(사유 DUP_SEEN/DUP_TAOBAO 가 휴지통 대장에 남음). 장부가 정본, 소싱기의 그룹 중복 차단은 3차 안전망.
-- `ledger_commit` 은 run 당 한 번(표식 `ledger_committed.json`). 마켓 상품 수가 누적이라 두 번 돌리면 두 배로 잡힌다. 1차 run 은 `--stage 1`, 2차 run 은 `--stage 2`(타오바오 장부는 2차에서만 추가).
+- `ledger_commit` 은 run 당 한 번(표식 `ledger_committed.json`), **2차 run 먼저**(최종 판정이 장부에 남게). 마켓 상품 수는 1차 run(`--stage 1`)에서만 더하고, 타오바오 장부는 2차(`--stage 2`)에서만 추가.
+- 안전장치: 표식이 있는 run 은 `dedup_stage` 가 거부하고 `ledger_init` 이 건너뛴다. 네이버 중복 판정은 같은 캠페인으로 기록된 번호를 중복으로 보지 않는다(자기 회차 재실행으로 전량 휴지통 방지).
 - 캠페인 모드 용어: 과거 판매 이력 전부 / **3일베스트**(최근 3일 판매). 가격은 모든 캠페인 3만~50만 원(2026-11-10).
 - 아직 없는 것(2단계 계획): 소싱기 화면 자동 조작, 일요일 밤 무인 스케줄·카톡 보고, 신규소싱상품→통과 그룹 변경 자동화, 타오바오 장부 야간 채우기, 옛 9,398개 재검수.
 

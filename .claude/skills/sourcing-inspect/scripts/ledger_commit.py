@@ -6,7 +6,9 @@
 - 본 상품 장부: 스냅샷의 네이버 번호 상품 전부(판정은 verdicts.json, 없으면 unjudged)
 - 타오바오 장부: --stage 2 일 때만(2차 run 스냅샷에 매칭 번호가 있다)
 - 마켓 장부: mallUrl 별 상품 수 누적, kind=full 이면 full_run, 3day 면 last_3day 갱신
-멱등: 같은 run 을 두 번 기록해도 상품·타오바오는 안 늘고, 마켓 상품 수만 다시 더해지므로 두 번 돌리지 않는다.
+순서: **2차 run 먼저**(--stage 2: 최종 판정·타오바오 기록) → 1차 run(--stage 1: 마켓 갱신·2차까지 못 간 상품).
+  먼저 기록된 판정이 남으므로 2차를 먼저 넣어야 장부 판정이 최종값이 된다(검토 I3).
+멱등: run 당 한 번(ledger_committed.json 표식). 마켓 상품 수는 누적이라 두 번 더하면 안 된다.
 """
 import argparse
 import os
@@ -42,6 +44,11 @@ def market_rows(items, kind, campaign, date, existing):
         else:
             row["last_3day"] = date
     return out
+
+
+def updates_markets(stage):
+    """마켓 상품 수는 1차 run 에서만 더한다. 2차 run 은 같은 캠페인을 다시 받은 것이라 더하면 두 배가 된다(검토 I1)."""
+    return stage == 1
 
 
 def product_rows(items, verdicts, campaign, date):
@@ -83,10 +90,12 @@ def main():
 
     n_p = ledger.append_seen_products(product_rows(items, verdicts, campaign, a.date))
     n_t = ledger.append_seen_taobao(taobao_ids(items)) if a.stage == 2 else 0
-    existing = ledger.load_markets()
-    merged = market_rows(items, a.kind, campaign, a.date, existing)
-    new_m = len(merged) - len(existing)
-    ledger.upsert_markets(merged)
+    new_m = 0
+    if updates_markets(a.stage):
+        existing = ledger.load_markets()
+        merged = market_rows(items, a.kind, campaign, a.date, existing)
+        new_m = len(merged) - len(existing)
+        ledger.upsert_markets(merged)
     try:
         import json
         with open(marker, "w", encoding="utf-8") as f:
@@ -94,7 +103,7 @@ def main():
                        "naver_added": n_p, "taobao_added": n_t, "markets_new": new_m}, f, ensure_ascii=False)
     except OSError as e:
         print(f"[ledger] 기록 표식 저장 실패: {e}", file=sys.stderr)
-    touched = len({ledger.mall_slug(it.get("mallUrl")) for it in items} - {None})
+    touched = len({ledger.mall_slug(it.get("mallUrl")) for it in items} - {None}) if updates_markets(a.stage) else 0
     print(f"[ledger] 네이버 +{n_p} 타오바오 +{n_t} 마켓 갱신 {touched}(새 마켓 {new_m})")
 
 

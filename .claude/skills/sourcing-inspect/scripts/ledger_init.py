@@ -10,6 +10,8 @@
 - mallUrl 별 상품 수 → markets.jsonl. 지금까지의 캠페인은 모두 '과거 판매 이력 전부' 모드였으므로
   스냅샷에 보이는 campaignId 는 전부 full_run 으로 기록한다.
 - 멱등: 두 번 돌려도 수가 변하지 않는다(append 가 중복 제외, 마켓은 큰 값 유지).
+- 처음 한 번만 쓰는 도구다. 파이프라인 회차가 돌기 시작한 뒤에는 돌리지 않는다 — 회차 진행 중(장부 기록 전)에
+  돌리면 그 회차 상품이 '이미 본 상품'으로 잡힌다. 중복 판정이 같은 캠페인 기록은 무시하므로 치명적이진 않지만 피한다.
 """
 import argparse
 import glob
@@ -23,6 +25,12 @@ import ledger  # noqa: E402
 RUNS_DIR = os.path.expanduser("~/python_work/data/sourcing-inspect/runs")
 SEEN_MARKETS = os.path.join(ledger.DATA_DIR, "seen_markets.txt")
 CAMPAIGN_28765 = "kwy9jllI5NICgPo"
+
+
+def should_ingest(run_dir):
+    """파이프라인 회차 run(ledger_committed.json 있음)은 ledger_commit 이 이미 기록했으므로 초기값에 넣지 않는다.
+    특히 기록 전 회차를 여기서 넣으면 그 회차 상품이 전부 '이미 본 상품'이 된다(2026-11-10 검토 C1)."""
+    return not os.path.exists(os.path.join(run_dir, "ledger_committed.json"))
 
 
 def new_state():
@@ -128,6 +136,8 @@ def main():
     snaps = sorted(glob.glob(os.path.join(a.runs_dir, "*", "snapshot.json")))
     for sp in snaps:
         run = os.path.dirname(sp)
+        if not should_ingest(run):
+            continue
         items = _load_json(sp, None)
         if items is None:
             continue
