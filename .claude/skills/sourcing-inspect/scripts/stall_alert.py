@@ -8,8 +8,8 @@
   2) watch.log 의 상품 수가 stall-min 분 동안 그대로인데 '완료' 기록이 없음 → 수집이 멈췄다(맥북 잠듦·탭 닫힘 등)
   3) watch.log 에 조회 실패가 연속 3번 → 불사자 응답 문제
   4) 수집사이트 그룹(키워드 마켓수집 결과) 마켓 수가 stall-min 분 동안 그대로 → 다른 PC 마켓수집이 멈췄다
-  5) watch.log 에 '완료' → 정상 종료 알림
-알림: 출력 한 줄 + 폰 푸시(ntfy, ~/.eroom/ntfy.json 있을 때). 대화 창이 닫혀 있어도 폰으로 간다.
+  5) watch.log 에 '완료' → 정상 종료(출력만, 폰 푸시 없음)
+알림: 출력 한 줄 + 폰 푸시(1~4만)(ntfy, ~/.eroom/ntfy.json 있을 때). 대화 창이 닫혀 있어도 폰으로 간다.
 """
 import argparse
 import os
@@ -21,8 +21,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from run_inspect import resolve_run_dir, _p  # noqa: E402
 
 def notify(text, ok=False):
-    """출력 + 폰 푸시. 푸시 실패는 무시."""
+    """출력 + 폰 푸시. 정상 완료(ok=True)는 푸시하지 않는다 — 폰 알림은 예상 못 한 멈춤만(2026-11-11 용팀장). 푸시 실패는 무시."""
     print(text, flush=True)
+    if ok:
+        return
     try:
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "lib"))
         from eroomlib.ntfy import send
