@@ -9,7 +9,7 @@
   3) watch.log 에 조회 실패가 연속 3번 → 불사자 응답 문제
   4) 수집사이트 그룹(키워드 마켓수집 결과) 마켓 수가 stall-min 분 동안 그대로 → 다른 PC 마켓수집이 멈췄다
   5) watch.log 에 '완료' → 정상 종료 알림
-알림 수단은 호출한 쪽이 정한다(출력 한 줄 = 알림 내용).
+알림: 출력 한 줄 + 폰 푸시(ntfy, ~/.eroom/ntfy.json 있을 때). 대화 창이 닫혀 있어도 폰으로 간다.
 """
 import argparse
 import os
@@ -19,6 +19,18 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from run_inspect import resolve_run_dir, _p  # noqa: E402
+
+def notify(text, ok=False):
+    """출력 + 폰 푸시. 푸시 실패는 무시."""
+    print(text, flush=True)
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "lib"))
+        from eroomlib.ntfy import send
+        send("소싱 수집 완료" if ok else "소싱 수집 확인 필요", text, priority="default" if ok else "high",
+             tags="white_check_mark" if ok else "warning")
+    except Exception:
+        pass
+
 
 LINE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) (.*)$")
 
@@ -88,10 +100,10 @@ def main():
             except FileNotFoundError:
                 v = None
             if v == "DONE":
-                print("[상품수집] 완료 — 검수 단계로 넘어갈 차례", flush=True)
+                notify("[상품수집] 완료 — 검수 단계로 넘어갈 차례", ok=True)
                 return 0
             if v:
-                print(f"[상품수집] {v}", flush=True)
+                notify(f"[상품수집] {v}")
                 return 1
         if a.group_id:
             try:
@@ -100,12 +112,12 @@ def main():
                 if gseen is None or c != gseen[0]:
                     gseen = (c, now)
                 elif now - gseen[1] >= a.stall_min * 60:
-                    print(f"[마켓수집] 그룹 마켓 수가 {int((now - gseen[1]) / 60)}분째 {c:,}개에서 안 늘어남(다른 PC 확인)", flush=True)
+                    notify(f"[마켓수집] 그룹 마켓 수가 {int((now - gseen[1]) / 60)}분째 {c:,}개에서 안 늘어남(다른 PC 확인)")
                     return 1
             except Exception as e:
                 gfail += 1
                 if gfail >= 3:
-                    print(f"[마켓수집] 그룹 조회 3번 연속 실패: {str(e)[:80]}", flush=True)
+                    notify(f"[마켓수집] 그룹 조회 3번 연속 실패: {str(e)[:80]}")
                     return 1
         time.sleep(a.every)
 
