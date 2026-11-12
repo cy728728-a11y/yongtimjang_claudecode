@@ -91,6 +91,30 @@ def collect_sheet(exclude):
     return rows
 
 
+TRAFFIC_DIR = Path.home() / "python_work/data/detail-opus/traffic"
+
+
+def collect_traffic(exclude):
+    """불사자 유입 상위 미가공 상품(2026-11-12 용팀장 지시: 효자 시트 다음, 판매 잠금 앞).
+    최신 traffic-candidates-*.json 을 30일 유입 → 최대 유입 순으로 쓴다. 상세 상태는 main 이 실시간 재확인한다."""
+    try:
+        f = sorted(TRAFFIC_DIR.glob("traffic-candidates-*.json"))[-1]
+        cands = json.loads(f.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  [경고] 유입 후보 파일 읽기 실패 {e}", flush=True)
+        return []
+    rows, seen = [], set(exclude)
+    for i, c in enumerate(cands):
+        code = c.get("code")
+        if not code or code in seen:
+            continue
+        seen.add(code)
+        rows.append({"code": code, "productId": c.get("pid"), "title": c.get("name"), "market": c.get("market"),
+                     "clk": c.get("v30") or 0, "purCnt": 0, "rules": [f"유입 30일 {c.get('v30')} 최대 {c.get('vmax')}"],
+                     "src": 1.5, "rank": i})
+    return rows
+
+
 def collect_sold(exclude):
     """판매 잠금 기록(new_locks) — 최근 잠금일 순. 광고 후보와 겹치는 코드는 뺀다."""
     by = {}
@@ -169,9 +193,10 @@ def main():
         rows, got = collect_priority()
         label = f"광고 우선순위 {got}"
     sheet = collect_sheet({x["code"] for x in rows})
-    sold = collect_sold({x["code"] for x in rows + sheet})
-    print(f"[후보] {label} {len(rows)}건 + 효자상품 시트 {len(sheet)}건 + 판매 잠금 {len(sold)}건")
-    rows += sheet + sold
+    traffic = collect_traffic({x["code"] for x in rows + sheet})
+    sold = collect_sold({x["code"] for x in rows + sheet + traffic})
+    print(f"[후보] {label} {len(rows)}건 + 효자상품 시트 {len(sheet)}건 + 유입 상위 {len(traffic)}건 + 판매 잠금 {len(sold)}건")
+    rows += sheet + traffic + sold
 
     m = common.mcp()
     picked, skipped = [], []
