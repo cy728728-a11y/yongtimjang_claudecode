@@ -213,6 +213,19 @@ def pending_batches(run_dir):
 
 # ---------- 명령 ----------
 
+def drop_judged(items, run_dirs):
+    """이전 run 들의 verdicts.json 에 있는 상품을 뺀다 → (남은 목록, 뺀 건수).
+    같은 캠페인 다음 회차용: 수집 대기 중인 pass 가 캠페인에 남아 있어도 다시 판정·휴지통 안 되게(2026-11-13)."""
+    seen = set()
+    for rd in run_dirs or []:
+        vp = _p(resolve_run_dir(rd), "verdicts.json")
+        if not os.path.exists(vp):
+            sys.exit(f"--exclude-run {rd}: {vp} 없음")
+        seen |= set(_load(vp) or {})
+    kept = [i for i in items if i.get("id") not in seen]
+    return kept, len(items) - len(kept)
+
+
 def cmd_fetch(a):
     if a.from_file:
         raw = _load(a.from_file)
@@ -220,6 +233,9 @@ def cmd_fetch(a):
     else:
         from sourcing_api import fetch_products, load_token
         items = fetch_products(a.campaign, load_token())
+    if getattr(a, "exclude_run", None):
+        items, n = drop_judged(items, a.exclude_run)
+        print(f"[fetch] 이전 run 판정분 {n}건 제외")
     _save(_p(a.run_dir, "snapshot.json"), items)
     meta = _load(_p(a.run_dir, "run_meta.json"), {}) or {}
     meta.update({"campaign": a.campaign, "count": len(items)})
@@ -546,6 +562,7 @@ def main():
     ap = argparse.ArgumentParser(description="불사자 소싱기 상품검수 (판정 단계)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     f = sub.add_parser("fetch"); f.add_argument("--campaign", required=True); f.add_argument("--from-file")
+    f.add_argument("--exclude-run", action="append", help="이 run 에서 이미 판정한 상품은 스냅샷에서 뺀다(같은 캠페인 다음 회차, 반복 가능)")
     p = sub.add_parser("prep"); p.add_argument("--stage", type=int, choices=[1, 2], required=True)
     p.add_argument("--limit", type=int); p.add_argument("--sample", choices=["random", "head"], default="head")
     p.add_argument("--exclude-run", action="append", help="이 run-dir 에서 이미 판정한 상품 제외(반복 가능)")

@@ -66,6 +66,7 @@ $PY $S/ledger_commit.py --run-dir R2 --kind 3day --stage 2 ; $PY $S/ledger_commi
 $PY $S/pipeline_report.py --run1 R1 --run2 R2 [--pilot-meta <json>] --copy-to 10-projects/16-불사자-소싱-파이프라인/
 ```
 - `prep` 은 `dup_verdicts.json` 의 id 를 대상에서 빼고, `merge` 가 drop 으로 합친다 → 휴지통은 기존 `trash` 가 처리(사유 DUP_SEEN/DUP_TAOBAO 가 휴지통 대장에 남음). 장부가 정본, 소싱기의 그룹 중복 차단은 3차 안전망.
+- **같은 캠페인 다음 회차**(수집이 끝없이 이어질 때 끊어서 회차로 돌림, 2026-11-13 용팀장): 새 R1 은 `fetch --campaign C --run-dir R1' --exclude-run <이전 R1>`, 새 R2 는 `fetch ... --exclude-run <이전 R2>` 로 받는다. 수집 대기 중인 이전 pass 가 캠페인에 남아 있어 그대로 받으면 타오바오 중복으로 휴지통에 간다. 이전 회차 매칭 429 건은 이전 R1 에서 `match --retry-429` 후 새 R2 에 자연히 들어온다. 1차 뒤 늦게 들어온 상품은 매칭 전이라 2차 대상이 아니므로 `dedup_stage taobao --allow-late` 로 진행해도 된다.
 - `ledger_commit` 은 run 당 한 번(표식 `ledger_committed.json`), **2차 run 먼저**(최종 판정이 장부에 남게). 마켓 상품 수는 1차 run(`--stage 1`)에서만 더하고, 타오바오 장부는 2차(`--stage 2`)에서만 추가.
 - 안전장치: 표식이 있는 run 은 `dedup_stage` 가 거부하고 `ledger_init` 이 건너뛴다. 네이버 중복 판정은 같은 캠페인으로 기록된 번호를 중복으로 보지 않는다(자기 회차 재실행으로 전량 휴지통 방지).
 - 캠페인 모드 용어: 과거 판매 이력 전부 / **3일베스트**(최근 3일 판매). 가격은 모든 캠페인 3만~50만 원(2026-11-10).

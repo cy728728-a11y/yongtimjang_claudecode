@@ -72,5 +72,17 @@ with tempfile.TemporaryDirectory() as _d:
     check("dup_verdicts 가 있으면 대상에서 제외", [x["id"] for x in _t] == ["a", "c"], _t)
     check("dup_verdicts 가 없으면 그대로", len(exclude_dups([{"id": "a"}], os.path.join(_d, "none"))) == 1)
 
+# 다음 회차 fetch 는 이전 run 에서 판정한 상품(수집 대기 중 pass 포함)을 스냅샷에서 뺀다(2026-11-13)
+with tempfile.TemporaryDirectory() as _d:
+    with open(os.path.join(_d, "verdicts.json"), "w", encoding="utf-8") as _f:
+        json.dump({"a": {"verdict": "pass"}, "c": {"verdict": "drop"}}, _f)
+    try:
+        from run_inspect import drop_judged
+        _k, _n = drop_judged([{"id": "a"}, {"id": "b"}, {"id": "c"}], [_d])
+        check("이전 run 판정분은 fetch 에서 제외", [x["id"] for x in _k] == ["b"] and _n == 2, (_k, _n))
+    except ImportError as e:
+        check("이전 run 판정분은 fetch 에서 제외", False, e)
+
 print("\nFAILED:", FAILED if FAILED else "없음")
 sys.exit(1 if FAILED else 0)
+
