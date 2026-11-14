@@ -70,7 +70,15 @@ def work(mk):
         s = status(mk)
         remain = 300 - s["스토어_비즈"]
         rec["삭제"] = 0
-        if s["스토어_비즈"] == 0 and s["빈자리"] < 350:
+        prev_deleted = os.path.exists(os.path.join(LOGD, f"{mk}.log")) and "삭제 실행 접수" in open(os.path.join(LOGD, f"{mk}.log"), errors="ignore").read()
+        if s["스토어_비즈"] == 0 and prev_deleted and s["빈자리"] < 300:
+            # 앞서 지우기를 이미 접수한 마켓: 또 지우지 않고(이중 삭제 방지) 스스 반영만 기다린다
+            for _ in range(30):
+                time.sleep(120); s = status(mk)
+                if s["빈자리"] >= 300: break
+            if s["빈자리"] < 300:
+                rec["결과"] = "보류"; rec["메모"] = f"지우기 접수 후 60분 기다렸지만 빈자리 {s['빈자리']}"; return rec
+        elif s["스토어_비즈"] == 0 and s["빈자리"] < 350:
             out = run(mk, "free_slots.py", "run")
             m = re.search(r"지울 개수 (\d+)", out)
             if "삭제 실행" not in out:

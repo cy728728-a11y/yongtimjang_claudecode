@@ -39,7 +39,7 @@ WS_ROOT = os.path.dirname(CLAUDE_DIR)
 LIB_DIR = os.path.join(CLAUDE_DIR, "lib")
 SOLD_LOCK_DIR = os.path.join(SKILLS_DIR, "sold-lock", "scripts")
 ATTR_TAG_DIR = os.path.join(SKILLS_DIR, "attr-tag", "scripts")
-CATFIX_DIR = os.path.join(SKILLS_DIR, "bulsaja-category-fix", "scripts")
+CATFIX_DIR = os.path.join(SKILLS_DIR, "bulsaja-detail-page", "scripts")  # category_gate 이전 (2026-11-09)
 MAIL_DIR = os.path.join(WS_ROOT, "10-projects", "이메일-자동화")
 APPEAL_PATH = os.path.join(SKILL_DIR, "references", "소명문구.txt")
 STORES_PATH = os.path.expanduser("~/.eroom/naver-commerce-stores.json")
@@ -1086,6 +1086,10 @@ def run(args, deps):
                 continue
             if rc and rc in seen:
                 continue
+            if rc and rc in {x.strip() for x in (getattr(args, "skip_receipts", "") or "").split(",") if x.strip()}:
+                log(f"[재시도 소진] {rc} 건너뜀 — 사람 확인 필요")
+                seen.add(rc)
+                continue
             if rc and not args.receipt and ledger_should_skip(rows, rc):
                 log(f"[대장] {rc} 대장 done — 건너뜀")
                 seen.add(rc)
@@ -1123,6 +1127,7 @@ def build_parser():
     ap.add_argument("--since-days", type=int, default=14, help="수집함 조회 기간(일)")
     ap.add_argument("--receipt", help="이 대표접수번호만 처리 (대장 done 무시)")
     ap.add_argument("--mark-done", metavar="RECEIPT", help="대장에 수동 처리 완료(done) 1행 기록")
+    ap.add_argument("--skip-receipts", default="", help="쉼표로 구분한 대표접수번호는 건너뜀(재시도 소진분)")
     ap.add_argument("--no-browser", action="store_true", help="Aside 단계 전부 생략")
     ap.add_argument("--expect-nick", default="부킹", help="기대 불사자 계정 닉네임")
     return ap

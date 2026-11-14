@@ -33,8 +33,9 @@ JOBS = [
     #  "cmd": [PY, ".claude/skills/naver-ads-weekly/scripts/weekly_monday.py"], "caffeinate": True},
     {"name": "auto-watch", "kind": "daily", "at": "07:30",
      "cmd": [PY, ".claude/skills/auto-watch/scripts/watch.py"]},
-    {"name": "rights-claim", "kind": "daily", "at": "09:00",
-     "cmd": [PY, ".claude/skills/rights-claim/scripts/run_rights_claim.py", "--apply"], "caffeinate": True},
+    # 2026-11-14: 매시 감시로 변경 — 실패 시 1시간 뒤 재시도 2번, 그래도 실패하면 폰 전화(watch_rights_claim.py)
+    {"name": "rights-claim", "kind": "hourly",
+     "cmd": [PY, ".claude/skills/rights-claim/scripts/watch_rights_claim.py"], "caffeinate": True},
 ]
 
 

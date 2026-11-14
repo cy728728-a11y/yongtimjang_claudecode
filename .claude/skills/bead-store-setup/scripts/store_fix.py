@@ -16,9 +16,9 @@ def setup(api):
     dom = [a for a in ab if not a.get("overseasAddress") and a.get("addressType") in ("GENERAL", "RELEASE") and "출고" in (a.get("name") or "")]
     bg = [g for g in api._request(mk, "GET", "/v1/product-delivery-info/bundle-groups", params={"page": 1, "size": 50})["contents"]
           if g.get("baseGroup") and g.get("usable")]
-    # 국내 출고지가 여러 개여도 주소가 전부 같으면 문제없다: "상품출고지" 우선, 없으면 첫 번째
-    if len(dom) > 1 and len({a.get("baseAddress") for a in dom}) == 1:
-        dom = [next((a for a in dom if a.get("name") == "상품출고지"), dom[0])]
+    # 국내 출고지가 여러 개면(주소가 같든 다르든) 목록에서 먼저 나오는 것을 쓴다(용팀장 지시 11/13: 국내 주소면 아무거나, 먼저 나오는 것)
+    if len(dom) > 1:
+        dom = [dom[0]]
     if len(dom) != 1 or len(bg) != 1:
         raise RuntimeError(f"국내 출고지 {[a['name'] for a in dom]} / 기본 묶음그룹 {[g['name'] for g in bg]} — 하나로 안 정해짐, 사람 확인")
     return dom[0], bg[0]

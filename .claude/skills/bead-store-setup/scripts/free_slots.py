@@ -24,6 +24,13 @@ try:
         print(f"보류: 한도 {limit}인데 현재 {cnt}, 지울 개수 {need} — 시트 한도가 틀렸거나 매출 영향이 큼. 사람 확인"); sys.exit()
     items = pages(m, "bulsaja_market_group_products", {"groupId": g["groupId"]})
     cand = [i for i in items if i.get("상태코드") == 4 and not i.get("잠금") and norm(i["상품명"]) not in names]
+    # 유령 상품 걸러내기: 불사자엔 "업로드 완료"인데 스마트스토어엔 이미 없는 상품은 지워도 등록 수가 안 줄고(빈자리가 안 생김),
+    # 유입도 0으로 잡혀 맨 먼저 뽑힌다 → 스토어에 실제로 있는 상품(이름 기준)만 후보로 둔다.
+    in_store = {norm(ch.get("name")) for c in store_products(api, mk) for ch in (c.get("channelProducts") or [])[:1]}
+    ghost = [i for i in cand if norm(i["상품명"]) not in in_store]
+    cand = [i for i in cand if norm(i["상품명"]) in in_store]
+    print(f"후보 {len(cand)}개 (불사자엔 업로드 완료인데 스토어에 없는 유령 {len(ghost)}개는 제외)", flush=True)
+    json.dump([{"id": i["productId"], "이름": i["상품명"]} for i in ghost], open(os.path.join(DATA_DIR, f"ghost_{mk}.json"), "w"), ensure_ascii=False)
     rows = {r["id"]: r for r in json.load(open(cache))} if os.path.exists(cache) else {}
     for n, i in enumerate(cand):
         if i["productId"] in rows: continue
