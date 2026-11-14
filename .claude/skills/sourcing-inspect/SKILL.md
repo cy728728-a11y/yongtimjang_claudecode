@@ -70,7 +70,8 @@ $PY $S/pipeline_report.py --run1 R1 --run2 R2 [--pilot-meta <json>] --copy-to 10
 - `ledger_commit` 은 run 당 한 번(표식 `ledger_committed.json`), **2차 run 먼저**(최종 판정이 장부에 남게). 마켓 상품 수는 1차 run(`--stage 1`)에서만 더하고, 타오바오 장부는 2차(`--stage 2`)에서만 추가.
 - 안전장치: 표식이 있는 run 은 `dedup_stage` 가 거부하고 `ledger_init` 이 건너뛴다. 네이버 중복 판정은 같은 캠페인으로 기록된 번호를 중복으로 보지 않는다(자기 회차 재실행으로 전량 휴지통 방지).
 - 캠페인 모드 용어: 과거 판매 이력 전부 / **3일베스트**(최근 3일 판매). 가격은 모든 캠페인 3만~50만 원(2026-11-10).
-- 아직 없는 것(2단계 계획): 소싱기 화면 자동 조작, 일요일 밤 무인 스케줄·카톡 보고, 신규소싱상품→통과 그룹 변경 자동화, 타오바오 장부 야간 채우기, 옛 9,398개 재검수.
+- 아직 없는 것(2단계 계획): 소싱기 화면 자동 조작, 일요일 밤 무인 스케줄·카톡 보고, 타오바오 장부 야간 채우기.
+- 옛 9,398개 재검수(2026-11-14, run `old_1007620_recheck`): 그룹 상품 상세는 `fetch_group.to_item` 으로 스냅샷 → prep stage 2 → 팬아웃 → merge. 통과분 `transfer_group.py --dst-group 1008216`, 탈락분 `trash_group_drops.py --run-dir R` (메모 맨 앞 `[삭제] 날짜 · 작업명(Claude) · 사유` 저장 후 SOURCE_ONLY 휴지통 + 휴지통 대장, 이어받기 `trash_group.jsonl`). 결과 통과 6,636 / 탈락 2,762.
 
 ## 토큰
 - 웹 API 는 MCP 토큰이 아니라 웹 로그인 토큰(헤더 `accesstoken` 7일 + `refreshtoken` 30일)이다.
