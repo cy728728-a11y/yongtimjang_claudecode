@@ -17,6 +17,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from leveldb_read import ldb_blocks  # noqa: E402
+
 CHROME = os.path.expanduser("~/Library/Application Support/Google/Chrome")
 OUT = os.path.expanduser("~/.eroom/bulsaja-web.json")
 JWT = re.compile(rb"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")
@@ -39,9 +42,15 @@ def scan(chrome_dir=CHROME):
             data = open(fp, "rb").read()
         except Exception:
             continue
-        if b"bulsaja" not in data:
+        bufs = [data]
+        if fp.endswith(".ldb"):  # 블록이 snappy 압축이면 토큰이 쪼개져 안 보인다 → 풀어서 본다
+            try:
+                bufs = list(ldb_blocks(data)) + [data]
+            except Exception:
+                pass
+        if not any(b"bulsaja" in b for b in bufs):
             continue
-        for m in JWT.finditer(data):
+        for m in (mm for b in bufs for mm in JWT.finditer(b)):
             tok = m.group(0).decode()
             c = claims_of(tok)
             if c and "exp" in c and "iat" in c and "email" in c:
