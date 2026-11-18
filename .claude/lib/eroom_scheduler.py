@@ -36,6 +36,9 @@ JOBS = [
     # 2026-11-14: 매시 감시로 변경 — 실패 시 1시간 뒤 재시도 2번, 그래도 실패하면 폰 전화(watch_rights_claim.py)
     {"name": "rights-claim", "kind": "hourly",
      "cmd": [PY, ".claude/skills/rights-claim/scripts/watch_rights_claim.py"], "caffeinate": True},
+    # 2026-11-19 용팀장: KC인증 민원 메일 → 신고 상품 삭제만(소명 메일 안 보냄). 실패는 다음날 재시도 + 폰 알림
+    {"name": "kc-claim", "kind": "daily", "at": "09:00",
+     "cmd": [PY, ".claude/skills/kc-claim/scripts/run_kc_claim.py", "--apply"], "caffeinate": True},
 ]
 
 

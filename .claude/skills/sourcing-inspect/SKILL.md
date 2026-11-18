@@ -14,6 +14,7 @@ description: 불사자 "엔잡곰소싱기" 캠페인 상품을 자동 검수한
 - 2차는 **타오바오 상품만** 본다. 네이버 썸네일·상품명은 판정에 영향 0(2026-10-19). 왼쪽(네이버)과 같은 상품인지는 안 따진다(오매칭이어도 팔 만하면 pass).
 - 판정 단계(`run_inspect.py`)는 읽기만 한다. 불사자 쓰기는 **`apply_sourcing.py` 에서만** 한다(아래 §반영).
 - 기준 수정은 `rules/` 파일에서만: `banned_cats.txt`(금지 카테고리), `banned_keywords.json`(확실한 금지어 — 상품명만 봄), `worker-prompt.md`(AI 판정 기준표).
+- **검수 시작 전에 KC 민원 대기열부터 반영한다** (2026-11-19). `kc-claim` 이 네이버 KC인증 민원으로 지운 상품을 `~/python_work/data/kc-claim/inspect_queue.jsonl` 에 `reflected:false` 로 쌓는다. 하나라도 있으면: 상품명으로 품목을 판단해 `banned_keywords.json`(LAW, 오탐 적은 확실한 단어만 — `_설명` 에 날짜·사유 한 줄)이나 `worker-prompt.md` LAW 칸(넓은 개념)에 넣고, `test_rules.py` 에 사례 추가 → 그 줄을 `reflected:true, rule:"<넣은 규칙>"` 로 바꾼다. 이미 규칙에 있으면 rule 에 기존 규칙만 적고 true. 전파인증(무선·블루투스·수신기)·전기안전(충전기·어댑터)·어린이제품이 주 원인.
 
 ## 캠페인
 | 이름 | campaignId |
