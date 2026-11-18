@@ -1,6 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "compare", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", "C:/Users/workspace/10-projects/상세페이지-GPTs지침-테스트"], "port": 8765 }
+    { "name": "compare", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "8770", "--bind", "127.0.0.1", "--directory", "C:/Users/workspace/10-projects/상세페이지-GPTs지침-테스트"], "port": 8770 }
   ]
 }

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>촬영 화면</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#121417;--card:#1d2026;--line:#2c313a;--ink:#f3f1ec;--mute:#9aa1ad;--acc:#ff8a3d;--ok:#4cc38a;--bad:#ff5d5d}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:'Noto Sans KR',sans-serif;overflow:hidden}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:5vh 6vw}
+.s{width:100%;max-width:1500px;text-align:center}
+.tag{display:inline-block;font-weight:700;color:var(--acc);letter-spacing:.2em;font-size:2.2vw;margin-bottom:2vh}
+h1{font-weight:900;font-size:6vw;line-height:1.2}
+h2{font-weight:900;font-size:4vw;line-height:1.3;margin-bottom:5vh}
+.sub{color:var(--mute);font-size:2vw;margin-top:3vh}
+.row{display:flex;gap:2.5vw;justify-content:center;align-items:stretch}
+.box{flex:1;background:var(--card);border:2px solid var(--line);border-radius:28px;padding:4vh 2vw}
+.box .ic{font-size:8vw;line-height:1.1}
+.box .k{font-weight:900;font-size:3.2vw;margin-top:2vh}
+.box .v{color:var(--mute);font-size:1.7vw;margin-top:1vh}
+.box .eq{color:var(--acc);font-weight:900;font-size:2.4vw;margin-top:1.5vh}
+.box.off{opacity:.35;filter:grayscale(1)}
+.x{color:var(--bad);font-weight:900;font-size:2vw;margin-top:1vh}
+.list{text-align:left;display:grid;gap:2vh;font-size:2.6vw;font-weight:700;max-width:1100px;margin:0 auto}
+.list.two{grid-template-columns:1fr 1fr;font-size:2.2vw;max-width:1400px}
+.list div{background:var(--card);border-left:8px solid var(--acc);border-radius:14px;padding:1.6vh 1.6vw}
+.list b{color:var(--acc);margin-right:1vw}
+.prompt{text-align:left;background:#0b0d10;border:2px solid var(--line);border-radius:20px;padding:4vh 3vw;font-size:2.4vw;line-height:1.7;max-width:1300px;margin:0 auto}
+.prompt::before{content:"> ";color:var(--acc);font-weight:900}
+.term{text-align:left;background:#0b0d10;border-radius:16px;padding:3vh 2.5vw;font-family:Consolas,monospace;font-size:1.9vw;line-height:1.7;border:2px solid var(--line)}
+.term .e{color:var(--bad)}
+.ph{border:3px dashed var(--acc);border-radius:20px;padding:4vh 3vw;font-size:2.2vw;color:var(--acc)}
+.key{display:inline-block;background:var(--ink);color:var(--bg);font-weight:900;border-radius:14px;padding:1.5vh 2vw;font-size:4vw;box-shadow:0 8px 0 #888}
+#bar{position:fixed;left:0;right:0;bottom:0;height:6px;background:var(--line)}#bar i{display:block;height:100%;background:var(--acc)}
+#menu{position:fixed;inset:0;background:rgba(10,11,13,.96);display:none;overflow:auto;padding:4vh 4vw;columns:3;font-size:15px}
+#menu a{display:block;color:var(--ink);text-decoration:none;padding:4px 0}#menu a:hover{color:var(--acc)}
+</style></head><body>
+<div id="stage"></div><div id="bar"><i></i></div><div id="menu"></div>
+<script>
+const S=[
+['level','레벨1 vs 레벨3',`<h2>AI를 쓰는 세 단계</h2><div class="row">
+<div class="box off"><div class="k">레벨 1</div><div class="v">채팅창에 묻고<br>답을 복사·붙여넣기</div></div>
+<div class="box off"><div class="k">레벨 2</div><div class="v">파일을 올려서<br>같이 보며 작업</div></div>
+<div class="box" style="border-color:var(--acc)"><div class="k" style="color:var(--acc)">레벨 3</div><div class="v">내 폴더를 맡기고<br>결과 파일을 받는다</div><div class="eq">= 클로드 코드</div></div></div>`],
+['three','직원 / 사무실 / 매뉴얼',`<div class="tag">오늘 기억할 세 단어</div><div class="row" style="margin-top:3vh">
+<div class="box"><div class="ic">🧑‍💼</div><div class="k">직원</div><div class="eq">= 클로드</div><div class="v">일 잘하는 신입</div></div>
+<div class="box"><div class="ic">🏢</div><div class="k">사무실</div><div class="eq">= 작업 폴더</div><div class="v">여기서 파일을 읽고 만든다</div></div>
+<div class="box"><div class="ic">📘</div><div class="k">업무 매뉴얼</div><div class="eq">= CLAUDE.md</div><div class="v">출근하면 제일 먼저 읽는 종이</div></div></div>`],
+['three-empty','처음 깐 상태 (사무실·매뉴얼 없음)',`<h2>처음 깔면 이런 상태</h2><div class="row">
+<div class="box"><div class="ic">🧑‍💼</div><div class="k">직원</div><div class="v" style="color:var(--ok)">뽑았음 ✔</div></div>
+<div class="box off"><div class="ic">🏢</div><div class="k">사무실</div><div class="x">없음</div></div>
+<div class="box off"><div class="ic">📘</div><div class="k">업무 매뉴얼</div><div class="x">없음</div></div></div>
+<p class="sub">일 잘하는 사람이 와도 뭘 해야 할지 모른다</p>`],
+['toc','여섯 단계 목차',`<h2>오늘의 순서</h2><div class="list two">
+<div><b>1</b>깔기</div><div><b>2</b>세팅 — 사무실과 매뉴얼</div><div><b>3</b>남이 만든 도구 들여오기</div>
+<div><b>4</b>막혔을 때 묻는 법</div><div><b>5</b>꼭 알아야 할 용어 8개</div><div><b>6</b>상세페이지 검수 직원 만들기</div></div>`],
+['step1','STEP 1 깔기',`<div class="tag">STEP 1</div><h1>깔기</h1>`],
+['price','요금제',`<h2>클로드 코드는 유료 요금제에 포함</h2><div class="row">
+<div class="box off"><div class="k">무료</div><div class="x">클로드 코드 ✕</div></div>
+<div class="box" style="border-color:var(--acc)"><div class="k" style="color:var(--acc)">프로</div><div class="eq">월 20달러</div><div class="v">+ 부가세 · 처음엔 이걸로</div></div>
+<div class="box"><div class="k">맥스</div><div class="v">하루 종일 돌리게 되면<br>그때 보기</div></div></div>`],
+['copy3','복사·붙여넣기·엔터',`<h2>오늘 하는 건 이 세 개가 거의 전부</h2><div class="row"><div class="box"><div class="k">복사</div></div><div class="box"><div class="k">붙여넣기</div></div><div class="box"><div class="k">엔터</div></div></div>`],
+['stuck','여기서 많이 막힙니다',`<div class="tag">주의</div><h1>여기서 많이 막힙니다</h1><p class="sub">① 명령어가 없다고 나올 때 &nbsp;·&nbsp; ② 로그인</p>`],
+['err','"명령어 없음" 오류',`<div class="row"><div class="box term"><div style="color:var(--mute)">맥</div>$ claude<br><span class="e">zsh: command not found: claude</span></div>
+<div class="box term"><div style="color:var(--mute)">윈도우</div>PS&gt; claude<br><span class="e">'claude' 용어가 cmdlet, 함수… 이름으로 인식되지 않습니다.</span></div></div>
+<p class="sub" style="font-size:2.6vw;color:var(--ink);font-weight:700">→ 터미널 창을 <span style="color:var(--acc)">완전히 닫고 새로 열기</span></p>`],
+['login-fail','로그인 창 안 열릴 때',`<h2>인터넷 창이 안 열리면</h2><div class="prompt" style="font-size:2vw">터미널에 찍힌 긴 주소(https://…)를 복사<br>→ 인터넷 창 주소줄에 붙여넣기 → 승인</div>`],
+['hired','직원은 뽑았다',`<h1>직원은 뽑았습니다</h1><p class="sub" style="font-size:3vw">그런데 아직 사무실이 없어요</p>`],
+['step2','STEP 2 세팅',`<div class="tag">STEP 2</div><h1>세팅</h1><p class="sub">사무실과 매뉴얼</p>`],
+['folder','전용 폴더',`<h2>사무실 = 전용 폴더 하나</h2><div class="row"><div class="box"><div class="ic">📁</div><div class="k">문서 › 셀러작업</div><div class="v" style="color:var(--ok)">띄어쓰기 없이</div></div>
+<div class="box off"><div class="ic">🖥️</div><div class="k">바탕화면</div><div class="x">파일 전부가 책상 위에 ✕</div></div></div>`],
+['open-term','폴더에서 터미널 열기',`<h2>그 폴더에서 터미널 열기</h2><div class="list"><div><b>맥</b>폴더 오른쪽 클릭 › 서비스 › 폴더에서 새로운 터미널 열기</div><div><b>윈도우</b>폴더 안 빈 곳 오른쪽 클릭 › 터미널에서 열기</div><div><b>그다음</b>claude 입력 → 이 폴더가 사무실</div></div>`],
+['manual-read','매뉴얼 읽는 직원',`<div class="ic" style="font-size:12vw">🧑‍💼📘</div><h2 style="margin-top:3vh">출근하면 제일 먼저 읽는 종이 = CLAUDE.md</h2><p class="sub">대화를 시작할 때마다 읽는다 · 한 번만 적어 두면 끝</p>`],
+['manual-prompt','매뉴얼 지시문',`<div class="tag">붙여 넣을 지시문</div><div class="prompt">이 폴더에 CLAUDE.md 를 만들어 줘.<br>나는 스마트스토어 구매대행 셀러야.<br>나는 개발자가 아니니까 쉬운 말로 설명해 줘.<br>항상 한국어로 답하고,<br>파일을 지우거나 덮어쓰기 전에는 꼭 먼저 물어봐.</div>`],
+['approve','승인 선택지 세 개',`<h2>클로드는 하기 전에 물어본다</h2><div class="list"><div><b>1</b>예</div><div><b>2</b>이번 작업 동안은 계속 예</div><div style="border-color:var(--bad)"><b style="color:var(--bad)">3</b>아니오</div></div><p class="sub">처음엔 하나씩 예 — 뭘 하려는지 읽어 보기</p>`],
+['shifttab','Shift+Tab 모드',`<div><span class="key">Shift</span> <span style="font-size:4vw">+</span> <span class="key">Tab</span></div><div class="list" style="margin-top:6vh"><div><b>기본</b>하나씩 물어보고 한다</div><div><b>자동 수정</b>파일 고치는 건 묻지 말고 해라</div><div><b>계획 모드</b>계획만 세우고 손대지 마라</div></div>`],
+['esc','ESC 멈춤',`<span class="key" style="font-size:7vw">ESC</span><h1 style="margin-top:6vh">이상하면 바로 멈춤</h1>`],
+['step3','STEP 3 도구 들여오기',`<div class="tag">STEP 3</div><h1>남이 만든 도구 들여오기</h1>`],
+['tools','스킬 / 플러그인 / 커넥터',`<div class="row"><div class="box"><div class="ic">📄</div><div class="k">스킬</div><div class="v">일 하나 하는 법을 적은 매뉴얼<br>상품명 짓기, 배송비 계산</div></div>
+<div class="box"><div class="ic">📦</div><div class="k">플러그인</div><div class="v">스킬+도구를 한 상자에<br>/plugin 으로 받기</div></div>
+<div class="box"><div class="ic">🔌</div><div class="k">커넥터 (MCP)</div><div class="v">다른 서비스 꽂는 콘센트<br>구글 시트, 지메일</div></div></div>`],
+['install','스킬 설치 말하기',`<div class="tag">이렇게 말하기</div><div class="prompt">다운로드 폴더에 있는 이 스킬, 이 사무실에 설치해 줘.</div>`],
+['before','받기 전에 한 줄',`<div class="tag">받기 전에 한 줄</div><div class="prompt">이 스킬이 뭘 하는지, 위험한 부분은 없는지<br>읽고 쉬운 말로 설명해 줘.</div><p class="sub">출처 모르는 건 받지 않기</p>`],
+['step4','STEP 4 묻는 법',`<div class="tag">STEP 4</div><h1>막혔을 때 묻는 법</h1>`],
+['ask-err','오류 질문 지시문',`<div class="tag">오류 통째로 붙여 넣고</div><div class="prompt">이 오류가 났어. 나는 개발자가 아니야.<br>원인을 쉬운 말로 설명하고,<br>고칠 방법을 <span style="color:var(--acc)">하나만</span> 추천해 줘.</div>`],
+['ask-frame','질문 틀 세 줄',`<h2>질문 잘하는 틀</h2><div class="list"><div><b>1</b>뭘 하려고 했는지</div><div><b>2</b>뭘 눌렀는지</div><div><b>3</b>무슨 메시지가 나왔는지</div></div>`],
+['offline','중간 안내 — 특강',`<div class="tag">혼자 하다 막히면</div><h1>오프라인 AI 특강</h1><p class="sub" style="font-size:2.6vw">노트북 들고 오면 그 자리에서 같이 깔고, 직원까지 만들어 갑니다</p><div class="ph" style="margin-top:4vh">[촬영 전 확정: 일정·신청 방법]</div>`],
+['step5','STEP 5 용어',`<div class="tag">STEP 5</div><h1>꼭 알아야 할 용어 8개</h1>`],
+...[['터미널','글자로 컴퓨터한테 일을 시키는 창','클로드 코드가 사는 곳','⌨️'],['작업 폴더','직원의 사무실','여기서 읽고·만들고·고친다','🏢'],['CLAUDE.md','업무 매뉴얼','대화 시작할 때마다 읽는다','📘'],['프롬프트','내가 하는 지시','신입한테 말하듯 구체적으로','💬'],['컨텍스트','직원 머릿속에 든 대화','일 끝나면 /clear 로 새로 시작','🧠'],['사용량 한도','요금제마다 쓸 수 있는 양','/usage 로 확인','⏳'],['스킬','업무 하나의 매뉴얼','오늘 마지막에 직접 만든다','📄'],['커넥터 (MCP)','다른 서비스 꽂는 콘센트','구글 시트, 지메일','🔌']].map((t,i)=>['term'+(i+1),'용어 '+(i+1)+' '+t[0],`<div class="tag">용어 ${i+1} / 8</div><div style="font-size:9vw">${t[3]}</div><h1>${t[0]}</h1><p class="sub" style="font-size:3vw;color:var(--ink)">${t[1]}</p><p class="sub">${t[2]}</p>`]),
+['prompt-ex','프롬프트 예시',`<div class="row"><div class="box off"><div class="v" style="font-size:2.4vw">상품명 만들어 줘</div><div class="x">✕</div></div><div class="box" style="border-color:var(--ok)"><div class="v" style="font-size:2.4vw;color:var(--ink)">이 상품 정보로 50자 안쪽<br>상품명 세 개 만들어 줘</div><div class="eq" style="color:var(--ok)">○</div></div></div>`],
+['keys','단축키 두 개',`<div class="row"><div class="box"><span class="key">ESC</span><div class="k">멈춤</div></div><div class="box"><span class="key">Shift+Tab</span><div class="k">모드 바꾸기</div></div></div>`],
+['step6','STEP 6 검수 직원',`<div class="tag">STEP 6</div><h1>상세페이지 검수 직원 만들기</h1>`],
+['risk','올리기 전 걱정 4가지',`<h2>하나 잘못 올라가면 판매 중지</h2><div class="list two"><div><b>中</b>중국어가 그대로</div><div><b>!</b>최고·일등 과장 문구</div><div><b>+</b>"치료된다" 효능 문구</div><div><b>®</b>남의 브랜드 로고</div></div>`],
+['qc-prompt','검수 직원 지시문',`<div class="tag">붙여 넣을 지시문</div><div class="prompt">상세페이지 검수 스킬을 만들어 줘.<br>'검수할-상세' 폴더의 이미지를 한 장씩 읽고,<br>여덟 가지 항목을 점검해서 표로 정리해 줘.<br>고치지는 말고, 의심되는 것만 표시해 줘.</div>`],
+['qc8','점검 항목 8개',`<h2>점검 항목 8개</h2><div class="list two"><div><b>1</b>중국어·외국어 잔존</div><div><b>2</b>과장 문구</div><div><b>3</b>효능 문구</div><div><b>4</b>중국 쇼핑몰 흔적</div><div><b>5</b>남의 브랜드·캐릭터</div><div><b>6</b>근거 없는 인증 마크</div><div><b>7</b>상품명·옵션과 다른 내용</div><div><b>8</b>사이즈·소재 표기</div></div>`],
+['qc-result','검수 결과 표',`<h2>검수 결과</h2><div class="ph">[촬영 전 확정: 실제 결과 화면 — 시연 후 채움]</div>`],
+['judge','판단은 사람이',`<h1>직원이 일한 결과도,<br><span style="color:var(--acc)">판단은 사람이</span> 합니다</h1><p class="sub">AI는 그럴듯하게 틀릴 때가 있다</p>`],
+['todo3','오늘 할 일 3개',`<h2>오늘 할 일 3개</h2><div class="list"><div><b>1</b>클로드 코드 깔고 로그인까지</div><div><b>2</b>사무실 폴더 + CLAUDE.md 매뉴얼</div><div><b>3</b>검수 직원 만들어 내 상품 하나 돌려 보기</div></div>`],
+['kit','자료 표지',`<div style="font-size:10vw">🎒</div><div class="tag">무료 자료</div><h1>AI 직원 첫 출근 키트</h1><p class="sub">설치 명령어 · 지시문 · 검수 직원 원본 · 막힐 때 해결법 · 첫 일주일</p>`],
+];
+const st=document.getElementById('stage'),bar=document.querySelector('#bar i'),menu=document.getElementById('menu');
+menu.innerHTML=S.map((s,i)=>`<a href="#${s[0]}">${i+1}. ${s[1]}</a>`).join('');
+function show(){let id=location.hash.slice(1),i=Math.max(0,S.findIndex(s=>s[0]===id));st.innerHTML=`<div class="s">${S[i][2]}</div>`;bar.style.width=((i+1)/S.length*100)+'%';document.title=S[i][1];menu.style.display='none';cur=i}
+let cur=0;addEventListener('hashchange',show);
+addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')location.hash=S[Math.min(cur+1,S.length-1)][0];if(e.key==='ArrowLeft')location.hash=S[Math.max(cur-1,0)][0];if(e.key==='m')menu.style.display=menu.style.display==='block'?'none':'block'});
+show();
+</script></body></html>
