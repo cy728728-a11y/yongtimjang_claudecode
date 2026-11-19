@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>구매대행 상품 검수 기준</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  @page {
+    size: A4;
+    margin: 16mm 15mm 18mm 15mm;
+    @bottom-right {
+      content: counter(page) " / " counter(pages);
+      font-family: 'Noto Sans KR', sans-serif;
+      font-size: 9pt;
+      color: #888;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+    color: #1f2328; font-size: 10.5pt; line-height: 1.6; margin: 0; background: #fff;
+  }
+  .cover {
+    border-bottom: 3px solid #1f2328; padding-bottom: 10px; margin-bottom: 18px;
+  }
+  .cover .kicker { font-size: 9.5pt; color: #b42318; font-weight: 700; letter-spacing: .05em; }
+  .cover h1 { font-size: 24pt; font-weight: 900; margin: 4px 0 6px; letter-spacing: -.02em; }
+  .cover p { margin: 0; color: #555; }
+  h2 {
+    font-size: 14pt; font-weight: 900; margin: 22px 0 8px; padding: 6px 10px;
+    border-left: 6px solid #1f2328; background: #f3f4f6; break-after: avoid;
+  }
+  h2 .tag { font-size: 9pt; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-left: 6px; vertical-align: 2px; }
+  .red { background: #fde8e8; color: #b42318; }
+  .ora { background: #fff1db; color: #b54708; }
+  .blu { background: #e6efff; color: #1d4ed8; }
+  h3 { font-size: 11.5pt; margin: 14px 0 4px; break-after: avoid; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 4px; font-size: 9.8pt; }
+  th, td { border: 1px solid #d0d4da; padding: 6px 8px; vertical-align: top; text-align: left; }
+  th { background: #f6f7f9; font-weight: 700; }
+  tr { break-inside: avoid; }
+  td:first-child { font-weight: 700; white-space: nowrap; }
+  .flow { display: flex; gap: 8px; margin: 8px 0 4px; }
+  .flow div { flex: 1; border: 1.5px solid #1f2328; border-radius: 8px; padding: 8px 10px; font-size: 9.8pt; }
+  .flow b { display: block; font-size: 10.5pt; margin-bottom: 2px; }
+  .box { border: 1.5px dashed #9aa1ab; border-radius: 8px; padding: 10px 12px; margin: 8px 0; background: #fafafa; break-inside: avoid; }
+  .prompt { font-family: 'Noto Sans KR', sans-serif; white-space: pre-wrap; font-size: 9.6pt; background: #1f2328; color: #f3f4f6; border-radius: 8px; padding: 12px 14px; margin: 8px 0; }
+  ul { margin: 4px 0; padding-left: 20px; }
+  li { margin: 2px 0; }
+  .note { font-size: 7.5pt; color: #8a8f98; margin-top: 26px; border-top: 1px solid #e3e5e8; padding-top: 6px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="kicker">용팀장 · AI로 셀링하는 사람들</div>
+  <h1>구매대행 상품 검수 기준 (기본편)</h1>
+  <p>해외 구매대행으로 <b>팔면 안 되는 상품</b>을 걸러 내는 기본 체크리스트입니다. 사람이 보든 AI에게 맡기든 이 순서대로 보면 됩니다.</p>
+</div>
+
+<h2>검수 순서 한눈에</h2>
+<div class="flow">
+  <div><b>① 법으로 막힌 것</b>통관 금지·판매 불가 품목이면 바로 탈락</div>
+  <div><b>② 인증·허가가 필요한 것</b>KC·식품·의료기기 등 구매대행으로 못 파는 품목 탈락</div>
+  <div><b>③ 남의 권리</b>브랜드 로고·캐릭터·가품이면 탈락</div>
+  <div><b>④ 배송·정책 주의</b>배송이 막히거나 스마트스토어 정책에 걸리는지 확인</div>
+</div>
+<p style="margin:4px 0 0">하나라도 걸리면 탈락입니다. <b>애매하면 탈락</b>이 기본값입니다. 상품 하나 놓치는 것보다 계정 제재 한 번이 훨씬 비쌉니다.</p>
+
+<h2>① 판매·통관 자체가 안 되는 상품 <span class="tag red">무조건 탈락</span></h2>
+<table>
+  <tr><th style="width:24%">구분</th><th>예시</th></tr>
+  <tr><td>무기·흉기류</td><td>총포·모의총포(진짜와 비슷한 장난감총 포함), 석궁, 전자충격기, 가스분사기, 도검(칼날이 긴 칼·접이식 나이프류), 너클, 화약·폭죽류</td></tr>
+  <tr><td>마약·담배·주류</td><td>대마 성분(CBD 포함) 제품, 담배, 전자담배 기기·니코틴 액상, 주류, 흡연 보조 기구 일부</td></tr>
+  <tr><td>동식물·검역 대상</td><td>살아 있는 동물·곤충, 식물·묘목, 씨앗·종자, 흙, 육류·유제품 가공품, 동물 박제·가죽 원피</td></tr>
+  <tr><td>불법·유해물</td><td>음란물, 위조 지폐·신분증, 도청기·위장형(몰래) 카메라, 불법 해킹·복제 장치, 군용품·경찰 제복·계급장</td></tr>
+  <tr><td>개인정보·금융</td><td>상품권·기프트카드, 휴대폰 유심, 계정·회원권, 복권</td></tr>
+</table>
+
+<h2>② 인증·허가가 있어야 하는 상품 <span class="tag red">구매대행 불가</span></h2>
+<p style="margin:2px 0 6px">구매대행 셀러는 수입자처럼 인증을 받을 수 없어서, 아래 품목은 사실상 판매가 막혀 있습니다.</p>
+<table>
+  <tr><th style="width:24%">구분</th><th>예시</th><th style="width:28%">판단 요령</th></tr>
+  <tr><td>식품·건강기능식품</td><td>과자·차·커피·소스, 영양제·비타민·다이어트 보조제, 반려동물 사료·간식</td><td>입에 들어가면 탈락</td></tr>
+  <tr><td>의약품·의약외품</td><td>상비약, 연고, 파스, 염색약, 생리대·마스크(의약외품 표시), 모기기피제, 탈모 치료제</td><td>효능·치료를 말하면 탈락</td></tr>
+  <tr><td>의료기기</td><td>콘택트렌즈·컬러렌즈, 체온계, 혈압계, 보청기, 임신테스트기, 저주파 치료기, 교정기·자세교정 의료용</td><td>"치료·교정·측정" 표현 주의</td></tr>
+  <tr><td>전기용품 (KC 안전인증)</td><td>콘센트에 꽂는 제품 다수: 전기히터·전기장판·전기포트·헤어드라이어·멀티탭·충전기(어댑터)·전기자전거 배터리</td><td>220V 플러그가 달렸으면 일단 의심</td></tr>
+  <tr><td>어린이제품</td><td>카시트, 유모차, 보행기, 유아용 침대, 어린이용 완구·학용품 일부</td><td>만 13세 이하 대상이면 일단 의심</td></tr>
+  <tr><td>농약·비료·화학제품</td><td>살충제, 제초제, 비료, 살균·소독제, 방향제·세정제 원액</td><td>뿌리고 죽이는 것은 탈락</td></tr>
+</table>
+<div class="box">
+  <b>애매할 때 확인하는 곳</b>
+  <ul>
+    <li>전기·생활·어린이용품 인증: <b>제품안전정보센터(safetykorea.kr)</b> → 품목 검색</li>
+    <li>통관 금지·제한 품목: <b>관세청 UNI-PASS 해외직구 안내</b></li>
+    <li>무선(블루투스·와이파이) 제품: 구매대행 1대는 전파인증이 면제되지만, 드론·무전기처럼 출력이 큰 무선기기는 따로 확인</li>
+  </ul>
+</div>
+
+<h2>③ 남의 권리를 건드리는 상품 <span class="tag red">탈락</span></h2>
+<table>
+  <tr><th style="width:24%">구분</th><th>예시</th></tr>
+  <tr><td>브랜드 로고·이름</td><td>나이키·아디다스·애플·샤넬 등 상표가 박힌 상품, 상품명에 브랜드명을 넣은 것("○○ 스타일", "○○ 호환" 포함)</td></tr>
+  <tr><td>캐릭터</td><td>디즈니, 산리오, 포켓몬, 짱구, 마블, 아이돌 굿즈 등 캐릭터·연예인 얼굴이 들어간 상품</td></tr>
+  <tr><td>디자인 카피·가품</td><td>명품 가방·지갑 디자인을 그대로 베낀 것, "정품급·레플리카·미러급" 표현이 붙은 상품</td></tr>
+  <tr><td>사진 도용</td><td>다른 셀러·브랜드의 상세페이지 사진을 그대로 쓴 상품 (원본 판매자 사진만 사용)</td></tr>
+</table>
+<p style="margin:4px 0 0">가품은 세관에서 압류되고, 스마트스토어에서는 <b>권리침해 신고 → 상품 삭제 → 계정 제재</b>로 이어집니다. 사진에 로고가 작게라도 보이면 탈락입니다.</p>
+
+<h2>④ 배송·스마트스토어 정책 주의 <span class="tag ora">확인 후 판단</span></h2>
+<table>
+  <tr><th style="width:24%">구분</th><th>예시</th><th style="width:30%">이유</th></tr>
+  <tr><td>항공 위험물</td><td>보조배터리·리튬배터리 단독, 라이터·가스, 스프레이(에어로졸), 인화성 액체(향수 원액·매니큐어 리무버)</td><td>배송대행지에서 반송·폐기</td></tr>
+  <tr><td>성인용품</td><td>성인용품·속옷 노출 이미지</td><td>스마트스토어 19세 인증·별도 기준 필요</td></tr>
+  <tr><td>화장품</td><td>기초·색조 화장품, 향수</td><td>성분·표시 규정이 까다로움, 사용 후기 클레임 많음</td></tr>
+  <tr><td>과장 광고 문구</td><td>"살 빠지는", "탈모 치료", "암 예방", "100% 항균"</td><td>상품은 괜찮아도 문구 때문에 제재</td></tr>
+  <tr><td>대형·초중량</td><td>가구, 운동기구, 대형 가전</td><td>배송비·파손·반품비 감당 어려움</td></tr>
+</table>
+
+<h2>AI에게 이 기준을 주는 방법 <span class="tag blu">실전 적용</span></h2>
+<p style="margin:2px 0 6px">AI는 알아서 배우지 않습니다. <b>사람 직원에게 업무 매뉴얼을 주듯</b> 역할·기준·판정 방법·보고 형식을 정해서 알려 줘야 매번 같은 품질로 판정합니다. 기준을 한 번 잘 만들어 두면, 그다음부터는 상품만 넣으면 됩니다.</p>
+
+<h3>STEP 1. 지시문의 4가지 구성 요소</h3>
+<table>
+  <tr><th style="width:22%">요소</th><th>들어갈 내용</th><th style="width:34%">빠지면 생기는 일</th></tr>
+  <tr><td>① 역할</td><td>"너는 구매대행 상품 검수 담당자야"처럼 누구인지 정해 줌</td><td>일반 상식 수준으로 대충 답함</td></tr>
+  <tr><td>② 탈락 기준</td><td>이 문서의 ①~④ 항목을 번호와 예시까지 붙여서 줌</td><td>사람마다, 날마다 판정이 달라짐</td></tr>
+  <tr><td>③ 판정 규칙</td><td>"애매하면 탈락", "사진도 반드시 확인" 같은 원칙</td><td>위험한 상품을 통과시킴</td></tr>
+  <tr><td>④ 보고 형식</td><td>표 모양, 이유 적는 방식, 확신도 표시</td><td>결과를 다시 읽고 정리하느라 시간 낭비</td></tr>
+</table>
+
+<h3>STEP 2. 복사해서 쓰는 검수 지시문</h3>
+<div class="prompt">## 역할
+너는 해외 구매대행(타오바오·1688·알리익스프레스) 상품을 국내 오픈마켓에 올리기 전에
+"팔아도 되는 상품인지" 걸러 내는 검수 담당자야.
+내가 주는 상품명·상품 사진·상세 설명을 보고 아래 기준으로 판정해.
+
+## 탈락 기준 (하나라도 해당하면 탈락)
+[A] 판매·통관 금지
+  - 총포·모의총포·도검·전자충격기·석궁·화약류
+  - 대마(CBD)·담배·전자담배 기기·니코틴 액상·주류
+  - 살아 있는 동식물·씨앗·흙·육류/유제품 가공품
+  - 음란물·위조 신분증·몰래카메라·도청기·군용품·제복
+  - 상품권·기프트카드·유심·계정류
+[B] 인증·허가 필요 (구매대행 불가)
+  - 식품·건강기능식품·영양제·반려동물 사료와 간식
+  - 의약품·의약외품(마스크·생리대·염색약·모기기피제 등)
+  - 의료기기(콘택트렌즈·체온계·혈압계·저주파 치료기 등)
+  - 콘센트(220V)에 꽂는 전기용품, 충전 어댑터
+  - 만 13세 이하 어린이가 쓰는 제품(카시트·유모차·완구 등)
+  - 농약·살충제·비료·소독제 원액
+[C] 지식재산권 침해
+  - 브랜드 로고·브랜드명이 사진이나 상품명에 보이는 상품
+  - 캐릭터·연예인 얼굴이 들어간 상품
+  - 명품 디자인 카피, "정품급·레플리카·미러급" 표현
+[D] 배송·정책 문제
+  - 보조배터리·리튬배터리 단독, 라이터·가스·스프레이·인화성 액체
+  - 성인용품, 치료·다이어트·질병 예방 효과를 내세우는 상품
+
+## 판정 규칙
+1. 상품명만 보지 말고 사진도 반드시 확인해. 로고·캐릭터는 사진에서 주로 걸린다.
+2. 상품명이 애매하면 "이 물건이 실제로 무엇에 쓰이는지"로 판단해.
+3. 확신이 없으면 탈락으로 판정하고, 이유에 "확인 필요"라고 적어.
+4. 기준에 없는 이유로 탈락시키지 마. 기준 밖이면 통과로 두고 메모만 남겨.
+
+## 보고 형식
+| 번호 | 상품명 | 판정(통과/탈락) | 걸린 기준(A~D) | 이유 한 줄 | 확신도(상/중/하) |
+마지막 줄에 "통과 ○건 / 탈락 ○건 / 확인 필요 ○건"으로 합계를 적어.</div>
+
+<h3 style="break-before: avoid">STEP 3. 결과는 이렇게 나옵니다 <span style="font-weight:400;color:#666;font-size:9.5pt">(예시)</span></h3>
+<table>
+  <tr><th style="width:8%;white-space:nowrap">번호</th><th>상품명</th><th style="width:10%">판정</th><th style="width:9%">기준</th><th>이유</th><th style="width:9%">확신도</th></tr>
+  <tr><td>1</td><td style="font-weight:400">접이식 캠핑 의자 경량 알루미늄</td><td>통과</td><td>-</td><td>해당 기준 없음</td><td>상</td></tr>
+  <tr><td>2</td><td style="font-weight:400">미니 전기 히터 220V 사무실용</td><td style="color:#b42318">탈락</td><td>B</td><td>콘센트에 꽂는 전기용품(KC 대상)</td><td>상</td></tr>
+  <tr><td>3</td><td style="font-weight:400">캐릭터 프린팅 아동 물병</td><td style="color:#b42318">탈락</td><td>B·C</td><td>어린이용품 + 캐릭터 이미지</td><td>상</td></tr>
+  <tr><td>4</td><td style="font-weight:400">휴대용 미니 선풍기 USB 충전식</td><td style="color:#b54708">탈락</td><td>D</td><td>배터리 내장, 확인 필요</td><td>하</td></tr>
+</table>
+
+<h3>STEP 4. 더 잘 쓰는 요령</h3>
+<div class="box" style="border-style:solid">
+  <ul>
+    <li><b>한 번에 너무 많이 넣지 않기</b> — 20~30개씩 나눠서 넣어야 판정이 꼼꼼해집니다. 양이 많으면 여러 창에 나눠 동시에 돌리면 됩니다.</li>
+    <li><b>사진은 꼭 같이</b> — 상품명만으로는 로고·캐릭터·플러그 모양을 못 봅니다. 대표 사진과 상세 사진을 함께 주세요.</li>
+    <li><b>"확인 필요"만 사람이 본다</b> — 확신도 "상"은 그대로 믿고, "중·하"와 확인 필요 건만 직접 보면 검수 시간이 크게 줄어듭니다.</li>
+    <li><b>틀린 판정은 기준에 다시 넣기</b> — AI가 잘못 통과시킨 상품이 나오면 그 유형을 탈락 기준에 한 줄 추가하세요. 이렇게 쌓인 기준이 곧 나만의 검수 매뉴얼이 됩니다.</li>
+    <li><b>기준은 파일로 저장해 두기</b> — 매번 새로 쓰지 말고 메모장·노션에 저장해 두고 복사해서 쓰세요. 기준이 바뀌면 그 파일만 고치면 됩니다.</li>
+  </ul>
+</div>
+
+<div class="note">※ 이 문서는 구매대행에서 일반적으로 걸러야 할 상품을 정리한 <b>기본 검수 기준</b>입니다. 판매 채널·카테고리·본인 운영 방향에 따라 기준을 더하고 빼서, 개인적으로 더 디벨롭해서 사용하셔야 합니다. 법령·플랫폼 정책은 바뀔 수 있으니 애매한 품목은 위 확인처에서 최신 내용을 확인하세요.</div>
+
+</body>
+</html>

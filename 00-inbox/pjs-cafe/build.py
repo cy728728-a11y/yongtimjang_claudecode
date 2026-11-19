@@ -1,10 +1,10 @@
 # PJS 세미나 1·2부 정리본 -> 카페 게시용 HTML (이름 가림, 개인 메모 제외)
 import re, markdown
 SRC = ['../2026-11-14_PJS-세미나-1부-정리.md', '../2026-11-14_PJS-세미나-2부-정리.md']
-NAMES = ['임광찬','한정화','임재현','이승민','박용덕','나석진','김현경','윤형석','김화영','배종현','조은영',
+NAMES = ['임광찬','한정화','임재현','위승민','박용덕','나석진','김현경','윤형석','김화영','배종현','조은영',
          '고두영','전수영','나은아','전민수','박민환','배정현','전대성','마선미','배창식','김교현','안정란']
 def mask(t):
-    for n in NAMES: t = t.replace(n, n[0] + '○○')
+    return t  # 실명 유지(회원 카페용)
     t = t.replace('광찬 씨', '○○ 씨').replace('준택 과장', '○ 과장')
     return t
 def clean(t):
@@ -50,7 +50,7 @@ footer{{margin-top:48px;color:var(--sub);font-size:14px;border-top:1px solid var
 </style></head><body><main>
 <header class="top"><h1>PJS 세미나 정리</h1>
 <p>2026년 11월 14일(토) · 박정수 대표 세미나 · 1부 약 2시간 7분, 2부 약 1시간 57분</p>
-<p>현장 녹음을 받아쓴 뒤 정리한 내용입니다. 회원·직원 이름은 가렸습니다.</p>
+<p>현장 녹음을 받아쓴 뒤 정리한 내용입니다.</p>
 <nav class="toc"><a href="#p1">1부 바로가기</a><a href="#p2">2부 바로가기</a></nav></header>
 {''.join(parts)}
 <footer>PJS 세미나(2026-11-14) 정리본</footer>

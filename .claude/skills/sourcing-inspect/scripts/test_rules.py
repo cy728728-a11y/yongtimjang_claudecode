@@ -64,5 +64,20 @@ r = machine_judge({"catId": "1", "productName": "전기 그릴",
                    "taobaoResult": [{"item": {"title": "商用 5000W 电炉"}}]}, 2, cats, kws)
 check("2차 타오바오 제목 와트", r and r["reason"] == "WATT", r)
 
+
+# 2026-11-18 수집 금지 타오바오 상품·판매자
+btb = ({"655606666878"}, {"2200803896099"})
+r = machine_judge({"catId": "1", "productName": "태양광 투광등",
+                   "taobaoResult": [{"item": {"itemId": 655606666878, "title": "太阳能灯", "image": "//img/x.jpg"}}]}, 2, cats, kws, btb)
+check("금지 타오바오 상품번호 drop", r and r["reason"] == "BANNED_TAOBAO")
+r = machine_judge({"catId": "1", "productName": "환풍기",
+                   "taobaoResult": [{"item": {"itemId": 1, "title": "排气扇", "image": "https://img.alicdn.com/O1_!!2200803896099.jpg"}}]}, 2, cats, kws, btb)
+check("금지 판매자(이미지 번호) drop", r and r["reason"] == "BANNED_TAOBAO")
+r = machine_judge({"catId": "1", "productName": "환풍기",
+                   "taobaoResult": [{"item": {"itemId": 2, "title": "排气扇", "image": "https://img.alicdn.com/O1_!!99.jpg"}}]}, 2, cats, kws, btb)
+check("금지 아닌 상품은 통과", r is None)
+from rules import load_banned_taobao
+check("실제 목록에 655606666878", "655606666878" in load_banned_taobao()[0])
+
 print("\nFAILED:", FAILED if FAILED else "없음")
 sys.exit(1 if FAILED else 0)

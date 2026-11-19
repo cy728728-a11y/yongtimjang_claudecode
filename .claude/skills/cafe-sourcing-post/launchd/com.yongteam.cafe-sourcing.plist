@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  카페 소싱데이터 자동 게시 — 맥북 예약 실행(매주 월요일 09:00).
+  __WORKSPACE__ 는 설치할 때 맥북 워크스페이스 절대경로로 바꾼다(SKILL.md '맥북 이전' 참고).
+  요일·시각은 아래 StartCalendarInterval 한 곳에서만 바꾼다(Weekday 1 = 월요일).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.yongteam.cafe-sourcing</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__WORKSPACE__/.venv/bin/python</string>
+    <string>__WORKSPACE__/.claude/skills/cafe-sourcing-post/scripts/run.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__WORKSPACE__</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <!-- 주의: GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file 을 넣지 말 것.
+         맥북에서 gws 로그인이 지워진 사고가 있었음(2026-11-02 detail-opus 기록). -->
+    <key>PYTHONIOENCODING</key>
+    <string>utf-8</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/tmp/cafe-sourcing.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/cafe-sourcing.log</string>
+</dict>
+</plist>

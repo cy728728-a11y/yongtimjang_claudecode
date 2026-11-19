@@ -34,6 +34,23 @@
       "Bash(.venv/bin/python3 .claude/skills/bulsaja-thumbnail/scripts/run_thumbs.py:*)",
       "mcp__bulsaja__bulsaja_market_delete",
       "Bash(PYTHONPATH=.claude/lib .venv/bin/python3 .claude/skills/bulsaja-category-fix/scripts/category_gate.py:*)"
+    ],
+    "deny": [
+      "Edit(00-system/판매금지-기준/**)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/00-system/scripts/sync_banned_rules.py\" --quiet",
+            "timeout": 45,
+            "statusMessage": "판매금지 기준 확인 중"
+          }
+        ]
+      }
     ]
   }
 }

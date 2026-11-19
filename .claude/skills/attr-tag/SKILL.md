@@ -100,3 +100,9 @@ dry-run 은 `revert_dryrun_*.json`, 실행은 `reverted_*.json` (오늘 날짜 r
 ```bash
 cd .claude/skills/attr-tag/scripts && ../../../../.venv/bin/python3 -m unittest test_attr_tag
 ```
+
+## 태그 대장·재주입 (2026-11-16)
+- 불사자 수정 전송이 스스 태그·속성을 덮어쓴다. 상품별 가장 최근 `after_*.json` 이 대장이다.
+- `attr_tag.py recheck [--market N] [--commit]` — 대장과 대조해 빠진 태그 code·속성 seq 를 다시 넣는다(기본 dry-run, 결과 `<오늘>/recheck.json`·`reinject_*.json`). 예약관리자 `tag-recheck` 매일 06:30 실행. `--channel-no <스스상품번호>` 로 한 상품만 점검. **상세 배치(batch.py)·옵션이미지 배치(opt_batch.py)는 전송 결과가 '성공'으로 확인되면 그 상품만 바로 `recheck --market --channel-no --commit` 을 부른다**(2026-11-16) — 06:30 점검은 놓친 것 보충용.
+- 고퀄 상세 배치가 전송한 상품은 `<data_root>/attr-tag/queue.json` 에 쌓인다 → `prep --input <그 파일>` 로 재료를 모은다.
+- 커머스 키 로드 버그 수정: 처음 쓴 마켓 키만 올라와 다른 마켓이 '키 없음'으로 실패하던 것.

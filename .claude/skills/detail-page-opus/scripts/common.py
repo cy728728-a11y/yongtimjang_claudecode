@@ -7,6 +7,17 @@ import sys
 import time
 from pathlib import Path
 
+# ── 비즈 부자재 절대 제외(2026-11-19 용팀장) ──────────────────────────────
+# 마켓마다 비즈 상품이 약 300개씩 있다(100원·전시중지 세팅). 고퀄 상세·옵션이미지를 만들면 토큰만 버린다.
+# 11/14·11/19 마켓 지정 배치에서 비즈 51개에 상세를 만들어 약 $180 낭비 → 후보 뽑기·제작 직전·옵션이미지 세 곳에서 막는다.
+# 이 함수와 호출부를 지우거나 우회 옵션을 붙이지 마라. 바꾸려면 용팀장 확인 필수.
+_BEAD = re.compile(r"^\s*\[?\s*비즈(\s|\]|$)")
+
+
+def is_bead(name):
+    """상품명이 '비즈 ' 로 시작하면 비즈 부자재(쥬얼리·재봉 DIY)."""
+    return bool(_BEAD.match(str(name or "")))
+
 ROOT = Path(__file__).resolve().parents[4]                      # 워크스페이스 루트
 REMIX = ROOT / ".claude/skills/bulsaja-detail-remix/scripts"     # 반영 스크립트(run.py)·MCP 클라이언트
 sys.path.insert(0, str(REMIX))
@@ -78,14 +89,20 @@ def market_no(group_name):
     return mt.group(1) if mt else None
 
 
-def aside_usage(start_ts, end_ts):
-    """그 시간대에 시작한 Aside 턴의 토큰·비용 합(API 환산). 다른 Aside 작업이 겹치면 과대 계상된다."""
+def aside_usage(start_ts, end_ts, match=None):
+    """그 시간대에 시작한 Aside 턴의 토큰·비용 합(API 환산).
+    match(예: 지시서 파일명)를 주면 그 지시서로 시작한 세션의 턴만 센다 — 두 줄이 겹쳐 돌 때 남의 것까지 세던 과대 계상을 막는다(2026-11-19)."""
     try:
         con = sqlite3.connect(f"file:{ASIDE_DB}?mode=ro", uri=True)
-        row = con.execute(
-            "select count(*), sum(json_extract(token_usage,'$.totalTokens')),"
-            " sum(json_extract(token_usage,'$.cost.total')) from session_turns"
-            " where started_at between ? and ?", (int(start_ts), int(end_ts))).fetchone()
+        q = ("select count(*), sum(json_extract(token_usage,'$.totalTokens')),"
+             " sum(json_extract(token_usage,'$.cost.total')) from session_turns"
+             " where started_at between ? and ?")
+        args = [int(start_ts), int(end_ts)]
+        if match:
+            q += (" and session_id in (select session_id from session_turns"
+                  " where started_at between ? and ? and user_message like ?)")
+            args += [int(start_ts), int(end_ts), f"%{match}%"]
+        row = con.execute(q, args).fetchone()
         con.close()
         return {"turns": row[0] or 0, "tokens": int(row[1] or 0), "cost_usd": round(row[2] or 0, 2)}
     except Exception as e:

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<title>카테고리 자동 정렬 세팅법</title>
+<style>
+@page{size:A4;margin:16mm 15mm 16mm;@bottom-right{content:counter(page) " / " counter(pages);font-size:9pt;color:#666}}
+body{font-family:"Apple SD Gothic Neo","Noto Sans KR",sans-serif;color:#1a1a1a;font-size:10.5pt;line-height:1.65;margin:0}
+h1{font-size:20pt;margin:0 0 4px}
+.sub{color:#666;margin:0 0 18px;font-size:10pt}
+h2{font-size:13pt;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid #1a1a1a}
+.box{background:#f4f1ea;border-left:4px solid #6b4a2b;padding:10px 14px;margin:10px 0}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:10pt}
+th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}
+th{background:#eee}
+ol,ul{margin:6px 0;padding-left:22px}
+li{margin:3px 0}
+.flow{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.flow span{background:#1a1a1a;color:#fff;padding:5px 10px;border-radius:4px;font-size:9.5pt}
+pre{background:#f7f7f7;border:1px solid #ddd;padding:10px 12px;white-space:pre-wrap;font-size:9.5pt;line-height:1.55;font-family:inherit}
+.avoid{page-break-inside:avoid}
+</style></head><body>
+
+<h1>카테고리 자동 정렬 세팅법</h1>
+<p class="sub">구매대행 상품 수백~수천 개의 카테고리를 AI로 한 번에 바로잡는 방법 · 용팀장</p>
+
+<div class="box"><b>한 줄 요약</b> — 사람이 상품명을 하나씩 검색하지 말고, <b>"네이버가 이 상품을 어느 카테고리로 보는가"</b>를 AI가 대신 조회해서, 확신이 높은 것만 자동 저장하고 애매한 것만 따로 모은다.</div>
+
+<h2>1. 왜 카테고리부터 잡아야 하나</h2>
+<ul>
+<li>카테고리가 어긋나면 상품을 아무리 많이 올려도 검색 노출이 거의 안 된다.</li>
+<li>사람이 한 건씩 검색해서 맞추면 수백 개 기준 하루가 통째로 날아간다.</li>
+<li>대형 스토어들은 이미 자동으로 맞춘다. 수작업으로 따라가면 소싱 속도에서 밀린다.</li>
+</ul>
+
+<h2>2. 핵심 원리: 정답은 네이버가 이미 알고 있다</h2>
+<p>네이버 쇼핑 가격비교에 검색어를 넣으면, 그 상품들이 모여 있는 카테고리 경로가 나온다.<br>
+예) <b>생활/건강 &gt; 공구 &gt; 원예공구 &gt; 농기계</b></p>
+<p>이 경로가 곧 스마트스토어 카테고리와 같은 체계라서, <b>이 경로를 그대로 내 상품에 넣으면</b> 된다. 사람이 판단할 게 아니라 네이버의 답을 받아 적는 일이다.</p>
+
+<div class="flow"><span>① 상품 정체 확인</span><span>② 대표 검색어 만들기</span><span>③ 네이버 카테고리 조회</span><span>④ 확신도별 자동 저장</span><span>⑤ 애매한 것만 따로</span></div>
+
+<h2>3. 단계별 방법</h2>
+
+<div class="avoid">
+<h3>① 상품명을 믿지 말고 "실물"을 먼저 확인</h3>
+<p>번역·가공된 한글 상품명은 틀리는 경우가 많다. 아래 4가지를 같이 보고 이 상품이 진짜 뭔지 정한다.</p>
+<table>
+<tr><th>증거</th><th>왜 보나</th></tr>
+<tr><td>한글 상품명</td><td>기본 참고용. 단독으로 믿지 않는다</td></tr>
+<tr><td>중국어 원문 상품명</td><td>가공 전 원본이라 실물에 가장 가깝다</td></tr>
+<tr><td>옵션명</td><td>옵션 구성을 보면 세트인지 단품인지 드러난다</td></tr>
+<tr><td>대표 이미지</td><td>글로 애매할 때 눈으로 확정</td></tr>
+</table>
+<p>네 가지가 서로 안 맞고 판단이 애매하면 <b>억지로 정하지 말고 "보류"</b>로 빼 둔다. 틀린 카테고리에 넣는 게 비워 두는 것보다 나쁘다.</p>
+</div>
+
+<div class="avoid">
+<h3>② 대표 검색어는 "분야 + 상품" 2단어 이상</h3>
+<p>단어 하나만 넣으면 엉뚱한 대중 분야(자동차·주방·미용 등)로 튄다. 분야를 못 박아야 정확도가 오른다.</p>
+<table>
+<tr><th>검색어</th><th>네이버 확신도</th></tr>
+<tr><td>1인용소파</td><td>34% (여기저기 흩어짐)</td></tr>
+<tr><td>원목 라운지체어</td><td>100%</td></tr>
+</table>
+<p>원문 상품명을 통째로 넣지 말고, 확인한 실물 기준으로 짧고 분명하게 만든다. 상품명에 없는 속성을 지어내지 않는다.</p>
+</div>
+
+<div class="avoid">
+<h3>③ 네이버 가격비교에서 카테고리 조회</h3>
+<ul>
+<li>검색 결과 1페이지 상품들이 어느 카테고리에 몰려 있는지 본다. 가장 많이 몰린 경로 = 정답 후보, 몰린 비율 = <b>확신도</b>.</li>
+<li>AI 에이전트(클로드 코드 등)에 브라우저를 붙여 이 조회를 자동으로 돌린다.</li>
+<li><b>주의:</b> 한 번에 너무 많이 조회하면 보안확인(캡챠)이 뜬다. 간격만 늘리는 것보다 <b>몇 건마다 몇 분씩 쉬게</b> 하는 게 효과가 크다.</li>
+</ul>
+</div>
+
+<div class="avoid">
+<h3>④ 확신도 기준으로 나눠서 처리</h3>
+<table>
+<tr><th>조회 결과</th><th>처리</th></tr>
+<tr><td>확신도 70% 이상</td><td>바로 저장</td></tr>
+<tr><td>70% 미만</td><td>같은 실물로 검색어를 2개 더 만들어 조회 → <b>3개 중 2개가 같은 경로</b>면 그걸로 저장</td></tr>
+<tr><td>그래도 갈림</td><td>검색어 문제가 아니라 <b>실물 판단이 틀렸을 가능성</b>. 이미지(썸네일 2·3장, 옵션 이미지)를 더 보고 다시 판단</td></tr>
+<tr><td>끝까지 애매</td><td>보류 목록으로. 사람은 이것만 본다</td></tr>
+</table>
+</div>
+
+<div class="avoid">
+<h3>⑤ 결과는 시트에 기록</h3>
+<p>상품마다 <b>이전 카테고리 / 사용한 검색어 / 새 카테고리 / 확신도 / 처리 상태</b>를 남긴다. 중간에 끊겨도 상태가 비어 있는 상품만 이어서 돌리면 되고, 나중에 "왜 이 카테고리로 갔지?"를 바로 확인할 수 있다.</p>
+</div>
+
+<h2>4. 자주 빠지는 함정</h2>
+<ul>
+<li><b>확신도 100%라도 틀릴 수 있다.</b> 검색어를 잘못 고르면 틀린 카테고리에 100%로 꽂힌다. 그래서 ①실물 확인이 먼저다.</li>
+<li><b>마지막 칸 이름만으로 고르지 마라.</b> "기타" 같은 이름은 네이버 전체에 19개나 있다. 이름이 아니라 <b>전체 경로</b>로 맞춰야 엉뚱한 대분류에 안 들어간다.</li>
+<li><b>처음엔 3~5개로 시험</b>하고 결과를 눈으로 확인한 뒤 전체로 늘린다.</li>
+<li><b>보류를 부끄러워하지 마라.</b> 전체의 대부분을 자동으로 끝내고 애매한 소수만 사람이 보는 게 목표다.</li>
+</ul>
+
+<h2>5. AI에게 이렇게 시키면 된다 (예시)</h2>
+<pre>내 상품 목록(상품명·중국어 원문명·옵션명·대표이미지)을 줄게.
+상품마다
+1) 네 가지 정보를 같이 보고 실물이 뭔지 한 줄로 정하고, 애매하면 "보류"로 표시해.
+2) 실물 기준으로 "분야 + 상품" 2단어 이상의 대표 검색어를 만들어.
+3) 네이버 쇼핑 가격비교에서 그 검색어를 조회해서, 1페이지 상품이 가장 많이 몰린
+   카테고리 전체 경로와 그 비율(확신도)을 적어.
+4) 확신도 70% 이상은 "저장", 미만이면 검색어 2개를 더 만들어 3개 중 2개가 같은
+   경로면 "저장", 아니면 "보류".
+결과는 표로: 상품 / 실물 / 검색어 / 카테고리 경로 / 확신도 / 처리.
+조회는 몇 건마다 잠깐씩 쉬어 가면서 해.</pre>
+
+<p style="margin-top:20px;color:#666;font-size:9.5pt">이 방식으로 수백 개 단위 카테고리 정리를 사람 손 거의 없이 한 번에 끝냈다. 실제 사용하는 자동화 도구는 각자 환경(불사자 연동, 브라우저 등)에 맞게 붙이면 된다.</p>
+
+</body></html>

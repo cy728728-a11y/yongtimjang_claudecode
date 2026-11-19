@@ -49,7 +49,7 @@ while _d and _d != os.path.dirname(_d):
 else:
     WORKSPACE = os.getcwd()
 
-from rules import load_banned_cats, load_keywords, machine_judge, taobao_item  # noqa: E402
+from rules import load_banned_cats, load_keywords, load_banned_taobao, machine_judge, taobao_item  # noqa: E402
 
 WORKER_PROMPT = os.path.join(SKILL_DIR, "rules", "worker-prompt.md")
 MASTER = os.path.join(WORKSPACE, "30-knowledge", "39-naver-category", "naver-category-master.json")
@@ -295,11 +295,11 @@ def cmd_prep(a):
         random.Random(a.seed).shuffle(targets)
     if a.limit:
         targets = targets[:a.limit]
-    cats, kws = load_banned_cats(), load_keywords()
+    cats, kws, btb = load_banned_cats(), load_keywords(), load_banned_taobao()
     cat_paths = load_cat_paths()
     machine, views = {}, []
     for it in targets:
-        r = machine_judge(it, a.stage, cats, kws)
+        r = machine_judge(it, a.stage, cats, kws, btb)
         if r:
             machine[it["id"]] = {**r, "by": "machine"}
         else:
@@ -448,12 +448,12 @@ def cmd_remachine(a):
     items = {i["id"]: i for i in (_load(_p(a.run_dir, "snapshot.json"), []) or [])}
     stage = (_load(_p(a.run_dir, "run_meta.json"), {}) or {}).get("stage", 1)
     targets = _load(_p(a.run_dir, "targets.json"), []) or []
-    cats, kws = load_banned_cats(), load_keywords()
+    cats, kws, btb = load_banned_cats(), load_keywords(), load_banned_taobao()
     old = _load(_p(a.run_dir, "machine.json"), {}) or {}
     machine = {}
     for pid in targets:
         it = items.get(pid)
-        r = machine_judge(it, stage, cats, kws) if it else None
+        r = machine_judge(it, stage, cats, kws, btb) if it else None
         if r:
             machine[pid] = {**r, "by": "machine"}
     _save(_p(a.run_dir, "machine.json"), machine)

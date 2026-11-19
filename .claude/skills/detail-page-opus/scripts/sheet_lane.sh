@@ -10,7 +10,7 @@ B=~/python_work/data/detail-opus/batches; PY=../../../../.venv/bin/python3; expo
 : ${LANE:?LANE 필요}
 
 run_batch() {   # $1 = 배치 이름
-  caffeinate -i $PY -u batch.py --batch $1 >> $B/$1/batch.log 2>&1
+  caffeinate -i $PY -u batch.py --batch $1 ${BATCH_FLAGS} >> $B/$1/batch.log 2>&1
   sed -n 3,4p $B/$1/summary.md 2>/dev/null
 }
 

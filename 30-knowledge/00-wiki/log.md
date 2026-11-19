@@ -78,3 +78,19 @@
 - enriched: [[유튜브-쇼츠-자동화]] (사진 3장+복제 목소리로 말하는 영상 만드는 4단계·설정값·크레딧 실측·주의사항)
 - cross-refs: [[유튜브-쇼츠-자동화]] ↔ [[힉스필드-콘텐츠-팩토리]] (Higgsfield 립싱크)
 - contradictions: 없음
+
+## [2026-11-17] ingest | 프레스런 오리나 "네이버 홈판 애드포스트 마스터 클래스"
+- source: presslearn.co.kr/courses/797 (영상 97개 자막·전자책 435쪽·영상 화면·첨부 4종)
+- created: [[네이버-홈판-블로그-수익화]] (상세는 50-resources/attachments/오리나-홈판마스터클래스/오리나-홈판-총정리.md)
+- cross-refs: [[네이버-홈판-블로그-수익화]] ↔ [[유튜브-쇼츠-자동화]] (클립·캡컷)
+- contradictions: 자료 내부 숫자 불일치는 총정리 10장에 기록
+
+## [2026-11-17] ingest | 오리나 무료 라이브 특강(유튜브 셀링링, 2026-11-16)
+- source: youtube.com/watch?v=5ybdiBg2-1A (자동 자막 4:40)
+- enriched: [[네이버-홈판-블로그-수익화]] (핵심 갱신·근거 추가·적용)
+- contradictions: GPT 복붙·하루 발행 수·글자수 — 마스터클래스와 어긋남, [!contradiction] 표시
+
+## [2026-11-19] ingest | 오션 라이브 배포 전자책 0~5권 + 부록1·2
+- source: .orca/drops/ (PDF·xlsx → 같은 이름 md 변환)
+- created: [[오션-구매대행-전자책-분석]]
+- contradictions: 마진율(업계 5~15% vs 오션 30%+) — [!contradiction] 표시

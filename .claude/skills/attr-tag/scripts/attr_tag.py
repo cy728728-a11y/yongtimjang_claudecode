@@ -124,8 +124,11 @@ class CommerceApi:
     def _token(self, market):
         if market in self._tokens:
             return self._tokens[market]
-        if self._stores is None:
+        if self._stores is None or market not in self._stores:
+            # 처음 쓴 마켓 키만 올라와 있던 버그(2026-11-16) — 없는 마켓은 더 불러와 합친다
+            prev = self._stores or {}
             self.load([market])
+            self._stores = {**prev, **(self._stores or {})}
         st = (self._stores or {}).get(market)
         if not st:
             raise RuntimeError(f"{market} 커머스 키 없음")
@@ -565,6 +568,78 @@ def run_revert(args, api=None, data_root=None, log=None):
 
 
 # ---------------------------------------------------------------------------
+# recheck — 태그 대장(가장 최근 after_*.json)과 지금 스스를 대조해 빠진 태그·속성을 다시 넣는다
+# 불사자 수정 전송이 스스 태그·속성을 덮어쓰기 때문(2026-11-16 용팀장).
+# ---------------------------------------------------------------------------
+def ledger(attr_root):
+    """{(market,no): after 경로} — 상품마다 가장 최근 날짜의 저장 후 재조회본이 대장이다."""
+    out = {}
+    for f in sorted(glob.glob(os.path.join(attr_root, "*", "after_*.json"))):
+        k = os.path.basename(f)[len("after_"):-len(".json")]
+        if "_" not in k:
+            continue
+        m, no = k.rsplit("_", 1)
+        out[(m, no)] = f          # 날짜순 정렬이라 나중 것이 이긴다
+    return out
+
+
+def _codes(prod):
+    return {str(t.get("code")) for t in A.current_tags(prod) if t.get("code") not in (None, "")}
+
+
+def _seqs(prod):
+    return {(a.get("attributeSeq"), a.get("attributeValueSeq")) for a in A.current_attributes(prod)}
+
+
+def run_recheck(args, api=None, data_root=None, log=None):
+    secrets = []
+    log = log or _Log(secrets)
+    data_root = data_root or _data_root()
+    attr_root = os.path.join(data_root, "attr-tag")
+    led = ledger(attr_root)
+    if args.market:
+        led = {k: v for k, v in led.items() if k[0] == args.market}
+    if getattr(args, "channel_no", None):   # 전송 직후 그 상품만 점검(2026-11-16)
+        led = {k: v for k, v in led.items() if k[1] == str(args.channel_no)}
+    api = api or _default_api(secrets)
+    out_dir = os.path.join(attr_root, today_kst())
+    rows, fixed, lost, fails = [], 0, 0, 0
+    for (m, no), f in led.items():
+        want = _read_json(f)
+        if not isinstance(want, dict):
+            continue
+        try:
+            cur = api.get_product(m, no)
+            miss_t = _codes(want) - _codes(cur)
+            miss_a = _seqs(want) - _seqs(cur)
+            if not miss_t and not miss_a:
+                rows.append({"market": m, "no": no, "status": "ok"}); continue
+            lost += 1
+            log(f"  {m} {no}: 태그 {len(miss_t)}개·속성 {len(miss_a)}개 빠짐")
+            if not args.commit:
+                rows.append({"market": m, "no": no, "status": "missing", "tags": len(miss_t), "attrs": len(miss_a)}); continue
+            body = A.build_body(cur, tags=A.current_tags(want), attributes=A.current_attributes(want))
+            api.put_product(m, no, body)
+            after = api.get_product(m, no)
+            probs = A.verify_applied(after, body)
+            inv = A.invariant_diff(cur, after)
+            if inv:
+                probs.append({"what": "invariant_changed", "fields": inv})
+            _write_json(os.path.join(out_dir, f"reinject_{_key(m, no)}.json"), {"ledger": f, "problems": probs}, secrets)
+            if probs:
+                fails += 1
+            else:
+                fixed += 1
+            rows.append({"market": m, "no": no, "status": "reinjected" if not probs else "unverified"})
+        except Exception as e:
+            fails += 1
+            rows.append({"market": m, "no": no, "status": "failed", "error": SR.redact(str(e), secrets)[:200]})
+    _write_json(os.path.join(out_dir, "recheck.json"), rows, secrets)
+    log(f"[점검] 대장 {len(led)}건 · 빠짐 {lost} · 다시 넣음 {fixed} · 실패 {fails}" + ("" if args.commit else " (dry-run)"))
+    return 0 if not fails else 4
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def build_parser():
@@ -588,6 +663,11 @@ def build_parser():
     r.add_argument("--channel-no", required=True)
     r.add_argument("--date", default=None, help="백업 날짜 (기본: 가장 이른 백업)")
     r.add_argument("--commit", action="store_true")
+
+    c = sub.add_parser("recheck", help="태그 대장과 대조해 빠진 태그·속성 다시 넣기 (기본 dry-run)")
+    c.add_argument("--market", default=None)
+    c.add_argument("--channel-no", default=None, help="이 스스상품번호 하나만")
+    c.add_argument("--commit", action="store_true")
     return ap
 
 
@@ -616,6 +696,8 @@ def main(argv=None):
             args.date = args.date or _plan_date(args.plan) or today_kst()
             SR.day_range_kst(args.date)
             return run_apply(args)
+        if args.cmd == "recheck":
+            return run_recheck(args)
         args.date_given = args.date is not None
         if args.date_given:
             SR.day_range_kst(args.date)

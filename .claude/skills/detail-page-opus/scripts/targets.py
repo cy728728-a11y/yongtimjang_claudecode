@@ -224,7 +224,7 @@ def main():
                 break
             if not x["found"]:
                 skipped.append({**x, "skip": "불사자에서 코드 못 찾음"}); continue
-            if x["bead"] and not x.get("noInspect"):
+            if x["bead"] or common.is_bead(x.get("name")):  # 마켓 지정(검수 생략) 모드에서도 비즈는 뺀다 — 11/14·11/19 비즈 51개에 상세 낭비(용팀장)
                 skipped.append({**x, "skip": "비즈 부자재(검수 SMALL)"}); continue
             if x["productId"] in busy:
                 skipped.append({**x, "skip": f"다른 줄 작업 중 {busy[x['productId']]}"}); continue

@@ -31,6 +31,9 @@ JOBS = [
     # 2026-10-27 용팀장 지시로 일시정지 — 와이프 PC 와 광고 작업 중복. 재개 지시 전까지 켜지 마라.
     # {"name": "ads-weekly", "kind": "weekly", "weekday": 0, "at": "07:00",
     #  "cmd": [PY, ".claude/skills/naver-ads-weekly/scripts/weekly_monday.py"], "caffeinate": True},
+    # 2026-11-16 용팀장: 불사자 수정 전송이 스스 태그·속성을 덮어쓴다 → 매일 태그 대장과 대조해 빠진 것 다시 넣기
+    {"name": "tag-recheck", "kind": "daily", "at": "06:30",
+     "cmd": [PY, ".claude/skills/attr-tag/scripts/attr_tag.py", "recheck", "--commit"]},
     {"name": "auto-watch", "kind": "daily", "at": "07:30",
      "cmd": [PY, ".claude/skills/auto-watch/scripts/watch.py"]},
     # 2026-11-14: 매시 감시로 변경 — 실패 시 1시간 뒤 재시도 2번, 그래도 실패하면 폰 전화(watch_rights_claim.py)

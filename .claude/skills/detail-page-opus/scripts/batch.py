@@ -23,6 +23,8 @@ from PIL import Image
 
 import common
 import thumb_wm
+import opt_img
+import prep
 
 STALL_SEC = 300        # Aside 로그가 이 시간 동안 0바이트면 멈춘 것으로 보고 한 번 다시 띄운다
 MAKE_TIMEOUT = 3600    # 제작 상한
@@ -33,7 +35,7 @@ def log(msg):
     print(f"[{datetime.now():%H:%M:%S}] {msg}", flush=True)
 
 
-def write_brief(t, outdir):
+def write_brief(t, outdir, tools=False):
     """작업지시서 — 계정 스킬을 그대로 따르게 하고, 상품별 사실만 적는다."""
     today = date.today().isoformat()
     p = common.BRIEF_DIR / f"작업지시서-{t['code']}-{today}.md"
@@ -53,7 +55,11 @@ def write_brief(t, outdir):
         f"- 판매 제외 옵션(상세에 넣지 않는다): {excl}\n"
         f"- 반영하면 안 될 만큼 불확실한 것(옵션명과 모양의 짝을 모름, 판매 구성과 원본이 다름 등)만 report.md 에 '## 반영 보류 사유' 절로 적는다. 참고 메모는 다른 절에 쓰고 이 제목을 쓰지 않는다.\n"
         f"- 저장: {outdir}/\n"
-        f"- 원본: 같은 상품 폴더에 originals/ 가 있으면 재사용, 없으면 불사자 현재 상세 이미지·옵션 이미지를 내려받아 originals/ 에 저장\n"
+        + (f"- **고정 도구 모드**: 원본·상품 정보·모음 사진은 {outdir.parent}/originals/ 에 이미 준비돼 있고(먼저 _facts.md), "
+           f"도구는 {outdir}/work/ 에 복사돼 있다. **{outdir}/work/README.md 를 먼저 읽고 그 순서·금지 사항대로 한다**"
+           f"(예전 작업 폴더·불사자 탭·도구 재작성 금지). 규칙·판단 기준은 계정 스킬 그대로.\n"
+           if tools else
+        f"- 원본: 같은 상품 폴더에 originals/ 가 있으면 재사용, 없으면 불사자 현재 상세 이미지·옵션 이미지를 내려받아 originals/ 에 저장\n")
         + (f"- **상품검수는 하지 않는다**(효자상품 작업대장 — 판매된 상품이고 이룸님이 이미 확인함, 2026-11-04 용팀장 지시). "
            f"{outdir}/inspect.json 에 {{\"verdict\":\"pass\",\"reason\":\"OK\",\"note\":\"검수 생략: 효자상품 시트\"}} 만 쓰고 바로 상세를 만든다\n"
            if t.get("noInspect") else
@@ -65,9 +71,23 @@ def write_brief(t, outdir):
         + f"- 스타일 C, 보호 표시 넣음\n"
         f"- verification.json 에 모델명 {common.MODEL} 기록\n"
         f"- 대표 썸네일(첫 번째)에 마켓명 워터마크가 이미 있는지 눈으로 보고 verification.json 에 thumbnailWatermark: true/false 로 남긴다(썸네일은 고치지 않는다)\n"
-        f"- 불사자 저장·교체·업로드 금지(반영은 Claude Code 가 한다)\n",
+        f"- 불사자 저장·교체·업로드 금지(반영은 Claude Code 가 한다)\n"
+        + opt_brief(t, outdir),
         encoding="utf-8")
     return p
+
+
+def opt_brief(t, outdir):
+    """옵션이미지 지시 — 실패해도 상세 지시서는 그대로 나간다."""
+    try:
+        m = common.mcp()
+        try:
+            return opt_img.brief_lines(m, t["productId"], outdir)
+        finally:
+            m.close()
+    except Exception as e:
+        log(f"  [경고] 옵션이미지 지시 생략 {e}")
+        return ""
 
 
 LIMIT_RE = re.compile(r"limit|rate|429|quota|usage|overloaded|resets?|not available|credit|billing|unauthori", re.I)
@@ -244,6 +264,48 @@ def market_send(t):
         m.close()
 
 
+def queue_attr_tag(t):
+    """전송한 상품을 속성·태그 대기열에 올린다(attr-tag prep --input 형식). 실패해도 배치는 계속."""
+    try:
+        m = common.mcp()
+        try:
+            no = ((common.call(m, "bulsaja_product_workdata", {"productId": t["productId"], "mode": "full"}).get("data") or {})
+                  .get("uploadedSuccessUrl") or {}).get("smartstore")
+        finally:
+            m.close()
+        if not no:
+            return None
+        q = Path.home() / "python_work/data/attr-tag/queue.json"
+        rows = json.loads(q.read_text(encoding="utf-8")) if q.exists() else []
+        if not any(r.get("스스상품번호") == str(no) for r in rows):
+            rows.append({"마켓번호": t["market"], "스스상품번호": str(no), "판매자상품코드": t.get("code"), "상품명": t.get("name")})
+            common.write_json(q, rows)
+        return str(no)
+    except Exception as e:
+        log(f"  [경고] 속성·태그 대기열 등록 실패 {e}")
+        return None
+
+
+ATTR_TAG = Path(__file__).resolve().parents[2] / "attr-tag/scripts/attr_tag.py"
+
+
+def recheck_sent(state, targets_by_code):
+    """전송 '성공'이 확인된 상품만 바로 속성·태그 재점검(불사자 수정 전송이 스스 태그·속성을 덮어씀, 2026-11-16 용팀장).
+    태그 대장에 없는 상품은 recheck 가 알아서 0건으로 끝난다. 실패해도 배치는 계속, 06:30 정기 점검이 다시 잡는다."""
+    for code, s in state.items():
+        if s.get("taskStatus") != "성공" or s.get("rechecked") or not s.get("ssNo"):
+            continue
+        t = targets_by_code.get(code) or {}
+        try:
+            r = subprocess.run([sys.executable, str(ATTR_TAG), "recheck", "--market", t.get("market", ""),
+                                "--channel-no", s["ssNo"], "--commit"], capture_output=True, text=True, timeout=300)
+            last = (r.stdout.strip().splitlines() or [""])[-1]
+            s["rechecked"] = last[:200] or f"종료코드 {r.returncode}"
+            log(f"  속성·태그 재점검 {code}: {s['rechecked']}")
+        except Exception as e:
+            log(f"  [경고] 속성·태그 재점검 실패 {code} {e}")
+
+
 def lock(m, pid):
     """수정 업로드한 상품은 불사자 잠금(= 숨김) — 물갈이 삭제에 안 휩쓸리게(2026-11-04 용팀장 지시). 실패해도 전송은 유지."""
     try:
@@ -283,20 +345,22 @@ def wait_tasks(state, timeout=TASK_TIMEOUT, final=True):
 
 def summary(bdir, targets, state):
     lines = [f"# 고퀄 상세 배치 요약 — {bdir.name}", ""]
-    done = [c for c, s in state.items() if s.get("stage") == "sent"]
+    done = [c for c, s in state.items() if s.get("stage") == "sent" and s.get("taskStatus") == "성공"]   # 실패도 '완료'로 세던 오류(11/19)
+    sent_bad = [c for c, s in state.items() if s.get("stage") == "sent" and s.get("taskStatus") != "성공"]
+    bead = [c for c, s in state.items() if s.get("stage") == "bead_skip"]
     held = [c for c, s in state.items() if s.get("stage") == "held"]
     drop = [c for c, s in state.items() if s.get("stage") == "inspect_drop"]
     fail = [c for c, s in state.items() if s.get("stage") in ("failed", "timeout", "stalled")]
     tok = sum((s.get("usage") or {}).get("tokens", 0) for s in state.values())
     cost = sum((s.get("usage") or {}).get("cost_usd", 0) for s in state.values())
     mins = [s.get("minutes") for s in state.values() if s.get("minutes")]
-    lines += [f"- 완료(스마트스토어 전송) {len(done)} · 검수 탈락 {len(drop)} · 보류(확인 필요) {len(held)} · 실패 {len(fail)} / 대상 {len(targets)}",
+    lines += [f"- 전송 성공 {len(done)} · 전송 실패/미확인 {len(sent_bad)} · 비즈 제외 {len(bead)} · 검수 탈락 {len(drop)} · 보류(확인 필요) {len(held)} · 실패 {len(fail)} / 대상 {len(targets)}",
               f"- 제작 시간 평균 {round(sum(mins)/len(mins)) if mins else '-'}분 · 토큰 합 {tok:,} · API 환산 ${cost:.2f}",
               "", "| 판매자상품코드 | 마켓 | 상품명 | 결과 | 장수 | 분 | 토큰 | 메모 |", "|---|---|---|---|---|---|---|---|"]
     for t in targets:
         s = state.get(t["code"], {})
         u = s.get("usage") or {}
-        res = {"sent": f"✅ 전송 {s.get('taskStatus', '')}", "held": "🟡 보류", "inspect_drop": "⛔ 검수 탈락", "applied": "반영만", "made": "⏸ 제작완료·반영 미룸"}.get(
+        res = {"sent": ("✅" if s.get("taskStatus") == "성공" else "⚠️") + f" 전송 {s.get('taskStatus', '')}", "bead_skip": "🚫 비즈 제외", "held": "🟡 보류", "inspect_drop": "⛔ 검수 탈락", "applied": "반영만", "made": "⏸ 제작완료·반영 미룸"}.get(
             s.get("stage"), f"❌ {s.get('stage', '미실행')}")
         lines.append(f"| {t['code']} | {t['market']} | {t['name']} | {res} | {s.get('pages', '')} | "
                      f"{s.get('minutes', '')} | {u.get('tokens', ''):,} | {s.get('note', '')[:120]} |"
@@ -314,6 +378,8 @@ def main():
     ap = argparse.ArgumentParser(description="고퀄 상세 밤 배치")
     ap.add_argument("--batch", default=date.today().isoformat())
     ap.add_argument("--no-market", action="store_true", help="스마트스토어 전송은 하지 않는다")
+    ap.add_argument("--py", action="store_true", help="파이썬 대장(detail_py) 으로 제작 — Aside 대신 Claude 판단 2~4회(2026-11-19, 상품당 약 1/3 비용)")
+    ap.add_argument("--tools", action="store_true", help="고정 도구 모드: 원본·모음을 미리 준비하고 Aside 는 tools/ 를 쓴다")
     args = ap.parse_args()
 
     bdir = common.BATCH_ROOT / args.batch
@@ -325,6 +391,11 @@ def main():
     for deferred_pass, i, t in [(False, i, t) for i, t in enumerate(targets, 1)] + \
                                [(True, i, t) for i, t in enumerate(targets, 1)]:
         s = state.setdefault(t["code"], {})
+        if common.is_bead(t.get("name")) and s.get("stage") not in ("sent", "held", "inspect_drop"):
+            # 비즈 부자재는 어떤 모드·옵션이어도 제작·반영·전송 안 한다(2026-11-19 용팀장, common.is_bead 참조)
+            if s.get("stage") != "bead_skip":
+                s.update(stage="bead_skip", note="비즈 부자재 — 고퀄 상세 제외"); log(f"  [비즈 제외] {t['code']} {t['name']}")
+            continue
         if s.get("stage") in ("sent", "held", "inspect_drop") or (args.no_market and s.get("stage") == "applied"):
             continue
         if deferred_pass and s.get("stage") not in ("made", "applied"):
@@ -337,13 +408,30 @@ def main():
         try:
             if not (outdir / "report.md").exists():
                 outdir.mkdir(parents=True, exist_ok=True)
-                brief = write_brief(t, outdir)
-                t0 = time.time()
-                r = run_aside_waiting(brief, outdir / "report.md", bdir / f"aside-{t['code']}.log")
-                s["minutes"] = round((time.time() - t0) / 60)
-                s["usage"] = common.aside_usage(t0, time.time())
-                if r != "ok":
-                    s.update(stage=r, note=f"Aside 제작 {r}"); log(f"  제작 실패: {r}"); continue
+                if args.py:   # 파이썬 대장 — 결과 파일 형식이 같아서 아래 검수·반영·전송은 그대로
+                    import detail_py
+                    brief = write_brief(t, outdir)
+                    res = detail_py.make(t, outdir, brief, log=log, inspect=not t.get("noInspect"))
+                    s["maker"] = "detail_py"
+                    s["minutes"] = round(res.get("minutes") or 0)
+                    s["usage"] = {"calls": res.get("calls"), "cost_usd": round(res.get("cost") or 0, 2)}
+                    if res.get("result") != "ok":
+                        s.update(stage="failed", note=f"파이썬 대장 {res.get('result')} {str(res.get('problems') or res.get('detail') or '')[:200]}")
+                        log(f"  제작 실패: {s['note']}"); continue
+                    log(f"  [파이썬 대장] {res.get('pages', '-')}장 · ${res.get('cost', 0):.2f} · {s['minutes']}분")
+                tools = False
+                if args.tools and not args.py:   # 고정 도구 모드(2026-11-19 토큰 절약) — 준비 실패면 예전 방식
+                    bp = common.BRIEF_DIR / f"작업지시서-{t['code']}-{date.today().isoformat()}.md"
+                    tools = prep.run(t, outdir, bp, common.MODEL, log=log)
+                if not args.py:
+                    brief = write_brief(t, outdir, tools=tools)
+                    s["tools"] = tools
+                    t0 = time.time()
+                    r = run_aside_waiting(brief, outdir / "report.md", bdir / f"aside-{t['code']}.log")
+                    s["minutes"] = round((time.time() - t0) / 60)
+                    s["usage"] = common.aside_usage(t0, time.time(), match=brief.name)
+                    if r != "ok":
+                        s.update(stage=r, note=f"Aside 제작 {r}"); log(f"  제작 실패: {r}"); continue
             ins = inspect_result(outdir)
             if ins.get("verdict") != "pass" and not t.get("noInspect"):   # 효자상품 시트는 검수 생략
                 s.update(stage="inspect_drop", inspect=ins, note=f"검수 탈락 {ins.get('reason')} {ins.get('note', '')}")
@@ -369,13 +457,24 @@ def main():
                 else:
                     s["thumb"] = tr
                 s["thumbNote"] = tn; log(f"  썸네일: {tn}")
+            if not s.get("optImg") and (outdir / "option-images/option-images.json").exists():
+                # 옵션이미지 — 실패해도 상세 전송은 그대로 한다
+                try:
+                    orr, on, _ = opt_img.run(outdir)
+                except Exception as e:
+                    orr, on = "failed", f"예외 {e}"
+                s["optImg"] = orr; s["optImgNote"] = on; log(f"  옵션이미지: {on}")
             if not args.no_market:
                 tid, res = market_send(t)
                 if not tid:
                     s.update(stage="failed", note=f"전송 접수 실패 {res}"); log(f"  전송 접수 실패 {res}"); continue
                 s.update(stage="sent", taskId=str(tid)); log(f"  스마트스토어 전송 접수 {res}")
+                no = queue_attr_tag(t)
+                if no:
+                    s["ssNo"] = no
                 mark_priority_done(t)
                 wait_tasks(state, timeout=300, final=False)   # 최근 30건에서 밀려나기 전에 결과 확인
+                recheck_sent(state, {x["code"]: x for x in targets})
         except Exception as e:
             s.update(stage="failed", note=f"예외 {e}"); log(f"  예외: {e}")
         finally:
@@ -384,6 +483,7 @@ def main():
     if not args.no_market:
         log("스마트스토어 전송 결과 대기")
         wait_tasks(state)
+        recheck_sent(state, {x["code"]: x for x in targets})
         common.write_json(sp, state)
     out = summary(bdir, targets, state)
     log(f"배치 끝 — 요약 {out}")

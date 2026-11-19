@@ -11,6 +11,36 @@ import re
 RULES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "rules")
 CATS_PATH = os.path.join(RULES_DIR, "banned_cats.txt")
 KWS_PATH = os.path.join(RULES_DIR, "banned_keywords.json")
+TB_PATH = os.path.join(RULES_DIR, "banned_taobao.json")
+_SELLER_IN_IMG = re.compile(r"!!(\d+)")
+
+
+def load_banned_taobao(path=None):
+    """수집 금지 타오바오 (상품번호 집합, 판매자번호 집합). 파일 없으면 빈 집합."""
+    try:
+        with open(path or TB_PATH, encoding="utf-8") as f:
+            raw = json.load(f)
+        return {str(k) for k in raw.get("items", {})}, {str(k) for k in raw.get("sellers", {})}
+    except FileNotFoundError:
+        return set(), set()
+    except (json.JSONDecodeError, AttributeError) as e:
+        print(f"[경고] 금지 타오바오 목록 로드 실패: {e}")
+        return set(), set()
+
+
+def banned_taobao_hit(tb, banned):
+    """타오바오 매칭이 금지 목록에 걸리면 설명 문자열, 아니면 None."""
+    try:
+        items, sellers = banned or (set(), set())
+        iid = str(tb.get("itemId") or "")
+        if iid and iid in items:
+            return f"수집 금지 타오바오 상품 {iid}"
+        m = _SELLER_IN_IMG.search(str(tb.get("image") or ""))
+        if m and m.group(1) in sellers:
+            return f"수집 금지 타오바오 판매자 {m.group(1)}"
+    except Exception as e:
+        print(f"[경고] 금지 타오바오 대조 예외: {e}")
+    return None
 
 
 def load_banned_cats(path=None):
@@ -67,7 +97,7 @@ def taobao_item(item):
         return None
 
 
-def machine_judge(item, stage, cats, kws):
+def machine_judge(item, stage, cats, kws, banned_tb=None):
     """확실한 탈락이면 {'verdict':'drop','reason','note'}, 아니면 None."""
     try:
         cat = str(item.get("catId") or "").strip()
@@ -77,6 +107,9 @@ def machine_judge(item, stage, cats, kws):
         if stage == 2:
             if item.get("taobao_match_status") == "match_failed" or not taobao_item(item):
                 return {"verdict": "drop", "reason": "NO_MATCH", "note": "타오바오 매칭 실패/없음"}
+            hit = banned_taobao_hit(taobao_item(item), banned_tb if banned_tb is not None else load_banned_taobao())
+            if hit:
+                return {"verdict": "drop", "reason": "BANNED_TAOBAO", "note": hit}
 
         # 와트는 네이버 상품명(사용자 기준) + 2차면 타오바오 제목도 본다
         texts = [item.get("productName")]
