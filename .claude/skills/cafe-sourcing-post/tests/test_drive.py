@@ -101,3 +101,25 @@ def test_other_error_is_drive_error_not_auth(monkeypatch):
 
 def test_link_format():
     assert drive.file_link("F123") == "https://drive.google.com/file/d/F123/view?usp=drive_link"
+
+
+def test_find_by_name_returns_file_with_description(monkeypatch):
+    fake = FakeRun(stdout=json.dumps({"files": [{"id": "F9", "name": "n.zip", "description": "게시: U"}]}))
+    monkeypatch.setattr(drive.subprocess, "run", fake)
+    f = drive.find_by_name("FOLDER", "n.zip")
+    assert f["id"] == "F9" and f["description"] == "게시: U"
+    q = json.loads(fake.calls[0][fake.calls[0].index("--params") + 1])["q"]
+    assert "name='n.zip'" in q and "'FOLDER' in parents" in q
+
+
+def test_find_by_name_none_when_missing(monkeypatch):
+    monkeypatch.setattr(drive.subprocess, "run", FakeRun(stdout=json.dumps({"files": []})))
+    assert drive.find_by_name("FOLDER", "n.zip") is None
+
+
+def test_set_description(monkeypatch):
+    fake = FakeRun(stdout=json.dumps({"id": "F9"}))
+    monkeypatch.setattr(drive.subprocess, "run", fake)
+    drive.set_description("F9", "게시: U")
+    cmd = fake.calls[0]
+    assert json.loads(cmd[cmd.index("--json") + 1]) == {"description": "게시: U"}
