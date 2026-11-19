@@ -457,18 +457,29 @@ def make(t, outdir, brief, log=log, inspect=True):
                 J["pages"] = sorted(pages_all, key=lambda p: p["n"])
             J = merge_pages(J, review)
             probs = render(work, J, orig)
-            if probs:
-                fix = parse_json(chat.ask([{"type": "text", "text": "그리기 문제다. 해당 장만 고쳐 {\"pages\":[고친 장], \"cuts\":{…}} 로 답해:\n" + "\n".join(probs)}]))
+            for _ in range(2):   # 눈 검수 뒤 높이 넘침 등은 2번까지 되묻는다(1번이면 17px 넘침으로 상품을 버렸다, 11-19)
+                if not probs:
+                    break
+                fix = parse_json(chat.ask([{"type": "text", "text": "그리기 문제다. 해당 장만 고쳐 {\"pages\":[고친 장], \"cuts\":{…}} 로 답해. 높이 넘침(TALL)이면 본문 줄·칸 수를 줄이거나 사진 장을 둘로 나눈다:\n" + "\n".join(probs)}]))
                 J = merge_pages(J, fix)
                 probs = render(work, J, orig)
-                if probs:
-                    return {"result": "render_fail", "cost": chat.cost, "calls": chat.calls, "problems": probs}
+            if probs:
+                return {"result": "render_fail", "cost": chat.cost, "calls": chat.calls, "problems": probs}
             rc, out = run_tool(work, "protect.py")
         n = len(J["pages"])
         (work / "claude_plan.json").write_text(json.dumps(J, ensure_ascii=False, indent=1), encoding="utf-8")
         # 옵션이미지 기록이 없으면 빈 목록(옵션이미지는 opt_py 가 따로 맡는다)
         oi = outdir / "option-images"; oi.mkdir(exist_ok=True)
         rc, out = run_tool(work, "finalize.py")
+        if rc != 0 and ("금지어" in out or "한자" in out or "중국어" in out):
+            # 마지막 금지어·한자 검사에 걸리면 문구만 고쳐 한 번 더(예전엔 상품을 통째로 버리고 다음 라운드에 처음부터 다시 만들었다, 11-19)
+            log(f"  [마감 검사 걸림] {out.strip().splitlines()[-1][:200]}")
+            fix = parse_json(chat.ask([{"type": "text", "text": "마지막 검사에서 금지어·한자가 걸렸다. 걸린 장의 문구만 바꿔 {\"pages\":[고친 장]} 로 답해:\n" + out.strip().splitlines()[-1][:800]}]))
+            J = merge_pages(J, fix)
+            probs = render(work, J, orig)
+            if not probs:
+                run_tool(work, "protect.py")
+                rc, out = run_tool(work, "finalize.py")
         if rc != 0:
             return {"result": "finalize_fail", "detail": out[-600:], "cost": chat.cost}
         minutes = (time.time() - t0) / 60

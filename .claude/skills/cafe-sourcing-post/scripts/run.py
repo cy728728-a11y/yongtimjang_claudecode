@@ -41,9 +41,9 @@ class DownloadError(Exception):
 
 
 def download_zip(out_dir: str) -> str:
-    """기존 download.py 를 창 없이 실행해 받은 zip 경로를 돌려준다."""
+    """기존 download.py 로 받은 zip 경로를 돌려준다. 창 없는(headless) 크롬은 구글이 로그인을 막아서 창을 띄운다."""
     try:
-        p = subprocess.run([sys.executable, DL_SCRIPT, "--headless", "--out-dir", out_dir],
+        p = subprocess.run([sys.executable, DL_SCRIPT, "--out-dir", out_dir],
                            capture_output=True, text=True, encoding="utf-8", timeout=1800)
     except Exception as e:
         raise DownloadError(f"다운로드 실행 실패: {e}") from e

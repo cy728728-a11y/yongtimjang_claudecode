@@ -161,3 +161,18 @@ def test_unexpected_error_still_mails(env, monkeypatch, tmp_path):
     monkeypatch.setattr(run, "download_zip", lambda out_dir: str(bad))
     assert run.run(TODAY) == "failed"
     assert env["mails"] and "unknown" in env["mails"][-1][0]
+
+
+def test_download_runs_visible_chrome(monkeypatch, tmp_path):
+    # 창 없는(headless) 크롬은 구글이 로그인을 막는다(2026-11-19 맥북 실측) → 창을 띄워 받는다
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["cmd"] = cmd
+        import subprocess as sp
+        return sp.CompletedProcess(cmd, 0, stdout=f"###ARTIFACT###\n{tmp_path / 'x.zip'}\n", stderr="")
+
+    (tmp_path / "x.zip").write_bytes(b"z")
+    monkeypatch.setattr(run.subprocess, "run", fake_run)
+    assert run.download_zip(str(tmp_path)) == str(tmp_path / "x.zip")
+    assert "--headless" not in seen["cmd"]

@@ -37,7 +37,10 @@ GOOGLE_BTN_TEXTS = ["구글로 시작하기", "구글로 로그인", "Sign in wi
 ALL_EXCEL_CSS = "button.all-excel"
 DOWNLOAD_BTN_HINTS = ["전체 카테고리 엑셀 다운로드", "전체 카테고리 엑셀", "엑셀 다운로드"]
 
-DOWNLOAD_TIMEOUT = 180  # ZIP 이 클 수 있다
+DOWNLOAD_TIMEOUT = 900  # ZIP 이 240MB 안팎 — 서버 생성+전송에 3분을 넘길 수 있다
+BTN_WAIT = 30           # 다운로드 버튼이 뜰 때까지 기다리는 최대 초
+CONSENT_WAIT = 15       # 클릭 후 동의 창을 기다리는 최대 초
+CONSENT_BTN_TEXTS = ["동의 후 다운로드", "동의하고 다운로드", "동의 후 다운"]
 
 
 def js(driver, script, *args):
@@ -289,17 +292,34 @@ def click_download(driver, dl_dir, out_dir, base_name):
     os.makedirs(dl_dir, exist_ok=True)
     before = set(glob.glob(os.path.join(dl_dir, "*")))
 
-    # CSS(button.all-excel) 우선 -> 텍스트 폴백
-    got_btn = js(driver, """
-        var b = document.querySelector(arguments[0]);
-        if (b && b.offsetParent !== null) { b.click(); return arguments[0]; }
-        return null;
-    """, ALL_EXCEL_CSS)
+    # CSS(button.all-excel) 우선 -> 텍스트 폴백. 화면이 늦게 뜰 수 있어 최대 BTN_WAIT 초 기다린다
+    got_btn = None
+    for _ in range(BTN_WAIT):
+        got_btn = js(driver, """
+            var b = document.querySelector(arguments[0]);
+            if (b && b.offsetParent !== null) { b.click(); return arguments[0]; }
+            return null;
+        """, ALL_EXCEL_CSS)
+        if got_btn:
+            break
+        time.sleep(1)
     if not got_btn:
         got_btn = click_text(driver, DOWNLOAD_BTN_HINTS)
     if not got_btn:
         raise RuntimeError("'전체 카테고리 엑셀 다운로드' 버튼을 찾지 못했습니다. --probe 로 확인하세요.")
-    print(f"다운로드 버튼 클릭: {got_btn!r} — 최대 {DOWNLOAD_TIMEOUT}초 대기")
+    print(f"다운로드 버튼 클릭: {got_btn!r}")
+
+    # 2026-11 부터 '데이터 다운로드 안내' 동의 창이 뜬다 → '동의 후 다운로드' 클릭(용팀장 승인 2026-11-19)
+    agreed = None
+    for _ in range(CONSENT_WAIT):
+        time.sleep(1)
+        agreed = click_text(driver, CONSENT_BTN_TEXTS, tags="button, a")
+        if agreed:
+            print(f"동의 창 클릭: {agreed!r}")
+            break
+    if not agreed:
+        print("동의 창이 안 보여서 그대로 진행")
+    print(f"다운로드 대기 — 최대 {DOWNLOAD_TIMEOUT}초")
 
     got = wait_for_download(dl_dir, before)
     if not got:

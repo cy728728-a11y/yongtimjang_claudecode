@@ -61,8 +61,8 @@ def _encode(text: str) -> str:
 
 
 def make_content(link: str) -> str:
-    """본문: 드라이브 링크 한 줄(누르면 열리게)."""
-    return f'<a href="{link}">{link}</a>'
+    """본문: 드라이브 링크 주소 한 줄. <a> 태그를 넣으면 네이버가 999 오류로 거절한다(2026-11-19 실측)."""
+    return link
 
 
 def post_article(cfg: dict, subject: str, content: str) -> str:

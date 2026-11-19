@@ -19,7 +19,7 @@ description: 셀러라이프 '전체 카테고리 엑셀' zip 을 받아 구글 
 
 ## 하는 일
 
-1. `sellerlife-keyword/scripts/download.py --headless` 로 전체 카테고리 zip 받기
+1. `sellerlife-keyword/scripts/download.py` 로 전체 카테고리 zip 받기(크롬 창이 1~2분 떴다 닫힘 — 창 없는 방식은 구글이 로그인을 막음)
 2. zip 안 날짜(= 데이터 날짜)로 이미 올린 회차인지 확인 → 올렸으면 끝
 3. **rclone** 으로 드라이브 `cy728728@gmail.com` 폴더(`1tHxVObirOwYoxAZAcslA24mV_VctmJXB`)에 `SellarSourcingAll_<날짜>.zip` 업로드, 링크 공개. 게시 후 같은 폴더에 `posted_SellarSourcingAll_<날짜>.txt`(글 주소)를 남겨 어느 PC에서든 중복 게시를 막는다
 4. 네이버 공식 카페 API 로 실전반 소통방에 게시(제목 = 게시한 날 `YYYY년 M월 D일 최신화`, 본문 = 링크)

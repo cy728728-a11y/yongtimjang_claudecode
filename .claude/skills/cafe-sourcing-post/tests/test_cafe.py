@@ -82,7 +82,8 @@ def test_other_failure_is_cafe_error(monkeypatch, tmp_path):
 
 
 def test_make_content_is_link():
-    assert cafe.make_content("https://x/y") == '<a href="https://x/y">https://x/y</a>'
+    # 네이버가 <a> 태그 본문을 999 오류로 거절(2026-11-19 실측) → 주소만 적는다
+    assert cafe.make_content("https://x/y") == "https://x/y"
 
 
 def test_article_id_without_url_still_success(monkeypatch, tmp_path):
